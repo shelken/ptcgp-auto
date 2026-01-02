@@ -1,3 +1,7 @@
+# AGENTS.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # PTCGP Auto - AI 助手指引
 
 ## 项目概述
@@ -47,26 +51,30 @@ PTCGPAuto
 - 排除条件
 ```
 
-## 使用方法
+## 常用命令
 
 ```bash
-# 默认连接 127.0.0.1:5555
-python main.py
+# 环境初始化
+nix develop                    # 推荐，自动创建 venv 并安装依赖
+direnv allow                   # 或使用 direnv
+pip install -r requirements.txt  # 手动安装（需 Python 3.10+）
 
-# 指定 ADB 地址
-python main.py -a 5556
-python main.py -a 127.0.0.1:5556
+# 运行主程序
+python main.py                 # 默认连接 127.0.0.1:5555
+python main.py -a 5556         # 指定端口
+python main.py -a 192.168.1.100:5555  # 指定完整地址
 
 # 调试工具
-python debug_tool.py
+python debug_tool.py           # 交互式调试（OCR 测试、截图、滑动等）
 python debug_tool.py -a 5556
+
+# 重置进度
+rm /tmp/ptcgp_auto_5555/state.json
 ```
 
 ## 多设备支持
 
-- 每个设备使用独立的临时目录：`/tmp/ptcgp_auto_{port}/`
-- 状态文件：`/tmp/ptcgp_auto_{port}/state.json`
-- 调试截图：`/tmp/ptcgp_auto_{port}/*.png`
+每个设备使用独立的临时目录 `/tmp/ptcgp_auto_{port}/`，包含 `state.json` 和调试截图。
 
 ## 配置说明
 
@@ -75,18 +83,6 @@ python debug_tool.py -a 5556
 - `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔（默认10秒）
 - `PAGES` - 界面识别规则（优先级、标识符、动作）
 
-## 开发环境
-
-使用 Nix Flake 管理开发环境：
-
-```bash
-# 进入开发环境
-nix develop
-
-# 或使用 direnv
-direnv allow
-```
-
 ## 调试技巧
 
 1. 使用 `debug_tool.py` 进行交互式调试
@@ -94,9 +90,18 @@ direnv allow
 3. OCR 结果格式：`"文字"@(x, y)`
 4. 模板匹配会显示最高置信度
 
+## 扩展新页面
+
+1. 在 `config.py` 的 `PAGES` 中添加识别规则（identifiers/templates、action、priority）
+2. 在 `actions.py` 中实现对应的动作方法
+
 ## 注意事项
 
+- **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
 - BlueStacks Air 的 ADB 端口通常是 5555，但可能有所不同
 - 模板图片通过 debug_tool.py 的自动检测功能截取
-- OCR 使用 Apple Vision Framework，原生支持 Apple Silicon GPU 加速
 - 状态文件保存在临时目录，重启系统后可能被清理
+
+## 参考文档
+
+- `docs/design.md`: 详细设计文档（游戏界面结构、状态机流程、界面优先级表）
