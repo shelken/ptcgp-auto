@@ -1,5 +1,5 @@
 """
-识别器 - OCR + 模板匹配
+识别器 - OCR + 模板匹配 (使用 PaddleOCR)
 """
 
 import os
@@ -13,62 +13,28 @@ from PIL import Image
 
 import config
 
-# 延迟加载 easyocr（初始化较慢）
+# 延迟加载 PaddleOCR（初始化较慢）
 _ocr_reader = None
-
-
-def _check_mps_available() -> bool:
-    """检查 MPS (Metal Performance Shaders) 是否可用"""
-    try:
-        import torch
-        return torch.backends.mps.is_available()
-    except Exception:
-        return False
-
-
-def _check_cuda_available() -> bool:
-    """检查 CUDA 是否可用"""
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except Exception:
-        return False
 
 
 def get_ocr_reader():
     """获取 OCR 读取器（延迟初始化）"""
     global _ocr_reader
     if _ocr_reader is None:
-        import easyocr
+        from paddleocr import PaddleOCR
 
         use_gpu = config.OCR_USE_GPU
 
-        # 检测可用的 GPU 后端
-        if use_gpu:
-            if _check_cuda_available():
-                print("检测到 CUDA GPU，使用 CUDA 加速...")
-                gpu_flag = True
-            elif _check_mps_available():
-                print("检测到 Apple Silicon (MPS)，使用 MPS 加速...")
-                # EasyOCR 不直接支持 MPS，但 PyTorch 会自动使用
-                # 设置环境变量让某些操作使用 MPS
-                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                gpu_flag = False  # EasyOCR 的 gpu 参数只针对 CUDA
-            else:
-                print("未检测到 GPU，使用 CPU...")
-                gpu_flag = False
-        else:
-            print("GPU 已禁用，使用 CPU...")
-            gpu_flag = False
+        print(f"初始化 PaddleOCR (语言: {config.OCR_LANG}, GPU: {use_gpu})...")
 
-        print("初始化 OCR 引擎（首次加载需要下载模型）...")
-        _ocr_reader = easyocr.Reader(
-            config.OCR_LANGUAGES,
-            gpu=gpu_flag,
-            model_storage_directory=str(Path.home() / ".easyocr"),
-            download_enabled=True
+        _ocr_reader = PaddleOCR(
+            lang=config.OCR_LANG,
+            use_angle_cls=config.OCR_USE_ANGLE_CLS,
+            use_gpu=use_gpu,
+            show_log=config.OCR_SHOW_LOG,
         )
-        print("OCR 引擎初始化完成")
+
+        print("PaddleOCR 初始化完成")
     return _ocr_reader
 
 
@@ -114,7 +80,8 @@ class Recognizer:
             匹配到的区域 (x1, y1, x2, y2)，未找到返回 None
         """
         if template_name not in self.templates:
-            print(f"警告: 模板不存在: {template_name}")
+            if config.DEBUG:
+                print(f"警告: 模板不存在: {template_name}")
             return None
 
         threshold = threshold or config.TEMPLATE_THRESHOLD
@@ -226,13 +193,25 @@ class Recognizer:
         reader = get_ocr_reader()
         screen = self.pil_to_cv2(screenshot)
 
-        results = reader.readtext(screen)
+        # PaddleOCR 返回格式: [[[box], (text, confidence)], ...]
+        results = reader.ocr(screen, cls=config.OCR_USE_ANGLE_CLS)
 
         parsed = []
-        for (box, text, confidence) in results:
-            # box 是四个角的坐标，转换为矩形
-            x_coords = [p[0] for p in box]
-            y_coords = [p[1] for p in box]
+
+        # PaddleOCR 可能返回 None 或空列表
+        if not results or not results[0]:
+            if config.DEBUG:
+                print("OCR 未识别到任何文本")
+            return parsed
+
+        for line in results[0]:
+            box_points = line[0]  # [[x1,y1], [x2,y1], [x2,y2], [x1,y2]]
+            text = line[1][0]
+            confidence = line[1][1]
+
+            # 转换为矩形坐标
+            x_coords = [p[0] for p in box_points]
+            y_coords = [p[1] for p in box_points]
             x1, x2 = int(min(x_coords)), int(max(x_coords))
             y1, y2 = int(min(y_coords)), int(max(y_coords))
 
