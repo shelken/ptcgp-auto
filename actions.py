@@ -59,9 +59,10 @@ class ActionHandler:
     def action_click_cancel(self, screenshot, match_info: Dict):
         """点击取消按钮（用于战败弹窗等）"""
         ocr_results = match_info.get("ocr_results", [])
+        cancel_variants = config.TEXT_VARIANTS.get("cancel", ["取消", "Cancel"])
         for item in ocr_results:
             text = item['text'].strip()
-            if text == "取消":
+            if text in cancel_variants:
                 print("  -> 点击取消")
                 self.adb.tap_center(item['box'])
                 return
@@ -102,12 +103,16 @@ class ActionHandler:
         # 检查自动模式状态
         auto_box = None
         has_off = False
+        auto_variants = config.TEXT_VARIANTS.get("auto", ["自動", "Auto", "AUTO"])
 
         for item in ocr_results:
-            text = item['text'].strip().upper()
-            if '自動' in item['text'] or 'AUTO' in text:
-                auto_box = item['box']
-            if 'OFF' in text:
+            text = item['text'].strip()
+            text_upper = text.upper()
+            for variant in auto_variants:
+                if variant in text or variant.upper() in text_upper:
+                    auto_box = item['box']
+                    break
+            if 'OFF' in text_upper:
                 has_off = True
 
         # 如果自动模式是 OFF，先点击开启
@@ -220,13 +225,15 @@ class ActionHandler:
         """在单人对战主页寻找未完成任务"""
         ocr_results = match_info.get("ocr_results", [])
 
-        # 查找分级对战入口（优先）
+        # 查找分级对战入口（优先，使用 TEXT_VARIANTS）
+        ranked_variants = config.TEXT_VARIANTS.get("ranked_battle", [])
         for item in ocr_results:
             text = item['text'].strip()
-            if '分級對戰' in text:
-                print("  -> 进入分级对战")
-                self.adb.tap_center(item['box'])
-                return
+            for variant in ranked_variants:
+                if variant in text or text in variant:
+                    print("  -> 进入分级对战")
+                    self.adb.tap_center(item['box'])
+                    return
 
         # 查找有进度数字的任务
         for item in ocr_results:
@@ -242,13 +249,15 @@ class ActionHandler:
         """在主菜单点击单人对战"""
         ocr_results = match_info.get("ocr_results", [])
 
-        # 查找单人对战入口
+        # 查找单人对战入口（使用 TEXT_VARIANTS）
+        solo_variants = config.TEXT_VARIANTS.get("solo_battle", [])
         for item in ocr_results:
             text = item['text'].strip()
-            if '單人對戰' in text:
-                print("  -> 点击单人对战")
-                self.adb.tap_center(item['box'])
-                return
+            for variant in solo_variants:
+                if variant in text or text in variant:
+                    print("  -> 点击单人对战")
+                    self.adb.tap_center(item['box'])
+                    return
 
         print("  -> 未找到单人对战入口")
 
@@ -296,11 +305,13 @@ class ActionHandler:
             if current_level and self.state.is_pack_complete(current_level, pack_name):
                 print(f"  -> {pack_name} 在 {current_level} 已完成，进入扩充组选择其他卡包")
                 # 点击擴充組进入扩充组选择页面
+                expansion_variants = config.TEXT_VARIANTS.get("expansion_button", ["擴充組", "Expansion"])
                 for item in ocr_results:
                     text = item['text'].strip()
-                    if '擴充組' in text:
-                        self.adb.tap_center(item['box'])
-                        return
+                    for variant in expansion_variants:
+                        if variant in text:
+                            self.adb.tap_center(item['box'])
+                            return
                 # 如果没找到擴充組按钮，再返回
                 self._go_back(screenshot)
                 return
@@ -341,12 +352,14 @@ class ActionHandler:
             print(f"  [状态] 标记 {self.current_pack_name} 在 {current_level} 完成")
 
         # 点击扩充组查看更多卡包
+        expansion_variants = config.TEXT_VARIANTS.get("expansion_button", ["擴充組", "Expansion"])
         for item in ocr_results:
             text = item['text'].strip()
-            if '擴充組' in text:
-                print("  -> 点击擴充組查看更多卡包")
-                self.adb.tap_center(item['box'])
-                return
+            for variant in expansion_variants:
+                if variant in text:
+                    print("  -> 点击擴充組查看更多卡包")
+                    self.adb.tap_center(item['box'])
+                    return
 
         # 都没找到，返回
         print("  -> 当前等级已完成，返回")
@@ -389,13 +402,26 @@ class ActionHandler:
                 text = item['text'].strip()
 
                 # 记录系列按钮位置
-                if 'A系列' in text:
-                    has_series_button["A"] = item['box']
-                if 'B系列' in text:
-                    has_series_button["B"] = item['box']
+                series_a_variants = config.TEXT_VARIANTS.get("series_a", ["A系列", "Series A"])
+                series_b_variants = config.TEXT_VARIANTS.get("series_b", ["B系列", "Series B"])
+                for variant in series_a_variants:
+                    if variant in text:
+                        has_series_button["A"] = item['box']
+                        break
+                for variant in series_b_variants:
+                    if variant in text:
+                        has_series_button["B"] = item['box']
+                        break
 
                 # 跳过标题和系列选择
-                if '選擇擴充組' in text or '系列' in text:
+                select_expansion_variants = config.TEXT_VARIANTS.get("select_expansion", ["選擇擴充組", "Select Expansion"])
+                series_variants = config.TEXT_VARIANTS.get("series", ["系列", "Series"])
+                skip = False
+                for variant in select_expansion_variants + series_variants:
+                    if variant in text:
+                        skip = True
+                        break
+                if skip:
                     continue
 
                 # 检查是否是 CLEAR!（当前等级已完成）

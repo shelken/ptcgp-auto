@@ -111,33 +111,23 @@ TEXT_VARIANTS = {
         "點擊以繼續",
         "點擊繼續",
         "繼續",
-        "Tap to continue",
-        "Continue",
-        "TAP TO CONTINUE",
     ],
     "battle": [
         "對戰！",
         "對戰",
-        "Battle!",
-        "Battle",
-        "BATTLE",
     ],
     "solo_battle": [
         "單人對戰",
-        "Solo Battle",
     ],
     "ranked_battle": [
         "分級對戰",
-        "Ranked Battle",
     ],
     "elite_battle": [
         "精英對戰",
-        "Elite Battle",
     ],
     "expansion": [
         "擴充包",
         "擴充組",
-        "Expansion",
     ],
     "complete": [
         "Complete",
@@ -149,7 +139,23 @@ TEXT_VARIANTS = {
     ],
     "auto": [
         "自動",
-        "Auto",
-        "AUTO",
+    ],
+    "cancel": [
+        "取消",
+    ],
+    "expansion_button": [
+        "擴充組",
+    ],
+    "series_a": [
+        "A系列",
+    ],
+    "series_b": [
+        "B系列",
+    ],
+    "select_expansion": [
+        "選擇擴充組",
+    ],
+    "series": [
+        "系列",
     ],
 }

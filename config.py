@@ -1,10 +1,11 @@
 """
 PTCGP 自动化脚本配置
 """
+
 from importlib import import_module
 
 # 语言配置（可选: "zh_Hant", "en_US"）
-LANGUAGE = "zh_Hant"
+LANGUAGE = "en_US"
 
 # ADB 连接配置
 ADB_HOST = "127.0.0.1"
