@@ -1,4 +1,21 @@
-# PTCGP Auto
+<h3 align="center">
+<img src="https://wsrv.nl?url=https://avatars.githubusercontent.com/u/33972006?fit=cover&mask=circle&maxage=7d" width="100" alt="Logo"/><br/>
+PTCGP Auto
+</h3>
+
+<p align="center">
+  🇨🇳 中文 | <a href="README_EN.md">🇺🇸 English</a>
+</p>
+
+<div align="center">
+
+[![Python](https://img.shields.io/badge/Python-3.10+-8AADF4?style=for-the-badge&logo=python&logoColor=white&labelColor=363a4f)]()
+[![macOS](https://img.shields.io/badge/macOS-only-CAD3F5?style=for-the-badge&logo=apple&logoColor=white&labelColor=363a4f)]()
+[![License](https://img.shields.io/badge/License-MIT-A6DA95?style=for-the-badge&labelColor=363a4f)]()
+
+</div>
+
+---
 
 Pokemon TCG Pocket 单人对战自动化脚本，支持任何可通过 ADB 连接的 Android 设备或模拟器。
 
@@ -18,7 +35,7 @@ Pokemon TCG Pocket 单人对战自动化脚本，支持任何可通过 ADB 连�
 ## 前置条件
 
 - 设备需开启 ADB 调试
-- 游戏语言需设为**繁体中文**
+- 游戏语言需设为**繁体中文**（或配置对应语言）
 - **启动前需手动进入游戏对战页面**（能看到"單人對戰"按钮的界面）
 
 ## 安装
@@ -64,8 +81,8 @@ python debug_tool.py -a 5556
 编辑 `config.py`：
 
 ```python
-# 等级遍历顺序
-BATTLE_LEVELS = ["精英", "高級", "中級", "初級"]
+# 语言配置（可选: "zh_Hant", "en_US"）
+LANGUAGE = "zh_Hant"
 
 # 对战中检测间隔（秒）
 WAIT_BATTLE_CHECK_INTERVAL = 10
@@ -96,6 +113,9 @@ ptcgp-auto/
 ├── adb_controller.py   # ADB 控制
 ├── recognizer.py       # OCR + 模板匹配
 ├── config.py           # 配置
+├── locales/            # 多语言配置
+│   ├── zh_Hant.py      # 繁体中文
+│   └── en_US.py        # 英文
 ├── debug_tool.py       # 调试工具
 └── templates/          # 模板图片
 ```
@@ -103,7 +123,7 @@ ptcgp-auto/
 ## 注意事项
 
 - 目前仅支持 macOS（依赖 Apple Vision Framework），后续计划支持其他平台
-- 游戏语言需设为繁体中文
+- 游戏语言需与 `config.py` 中的 `LANGUAGE` 配置一致
 - 启动脚本前，请确保游戏已进入对战菜单页面
 
 ## License
