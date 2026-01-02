@@ -59,9 +59,16 @@ class AdbController:
 
         try:
             # 使用 adbutils 的截图功能
-            png_data = self.device.screenshot()
-            image = Image.open(io.BytesIO(png_data))
-            return image
+            result = self.device.screenshot()
+
+            # adbutils 可能返回 PIL Image 或 bytes，需要兼容处理
+            if isinstance(result, Image.Image):
+                return result
+            elif isinstance(result, bytes):
+                return Image.open(io.BytesIO(result))
+            else:
+                # 尝试作为 bytes 处理
+                return Image.open(io.BytesIO(bytes(result)))
 
         except Exception as e:
             print(f"截图失败: {e}")
