@@ -9,8 +9,8 @@ ADB_PORT = 5555  # BlueStacks Air 默认端口，可能需要根据实际情况�
 # 等待时间配置（秒）
 WAIT_AFTER_CLICK = 0.5  # 点击后等待
 WAIT_PAGE_TRANSITION = 1.5  # 页面切换等待
-WAIT_BATTLE_CHECK_INTERVAL = 10  # 对局中检测间隔（默认10秒）
-WAIT_BATTLE_TIMEOUT = 300  # 对局超时时间（5分钟）
+WAIT_BATTLE_CHECK_INTERVAL = 5  # 对局中检测间隔（默认10秒）
+WAIT_BATTLE_TIMEOUT = 600  # 对局超时时间（10分钟）
 
 # 屏幕分辨率（BlueStacks 默认）
 SCREEN_WIDTH = 1080
@@ -43,42 +43,36 @@ PAGES = {
         "priority": 1,
         "exact_match": True,  # 必须精确匹配
     },
-
     # 战败提示弹窗 - 点击取消
     "battle_defeat_popup": {
         "identifiers": ["前往任務"],
         "action": "click_cancel",  # 点击取消按钮
         "priority": 2,
     },
-
     # 对战结果页面 - 需要点击继续
     "battle_result_continue": {
         "identifiers": ["點擊來繼續", "點擊以繼續", "點擊繼續", "Tap to continue"],
         "action": "click_identifier",
         "priority": 10,
     },
-
     # 继续按钮
     "continue_button": {
         "identifiers": ["繼續"],
         "action": "click_identifier",
         "priority": 11,
     },
-
     # 对战记录页面
     "battle_record": {
         "identifiers": ["對戰紀錄"],
         "action": "click_continue",  # 点击屏幕继续
         "priority": 15,
     },
-
     # 经验值结算页面
     "exp_result": {
         "identifiers": ["玩家經驗值", "EXP"],
         "action": "click_continue",
         "priority": 16,
     },
-
     # 对战中 - 等待
     "battle_in_progress": {
         "identifiers": [
@@ -90,21 +84,18 @@ PAGES = {
         "action": "wait",  # 等待对战结束
         "priority": 20,
     },
-
     # 牌组详情页面 - 有对战按钮
     "deck_detail": {
         "identifiers": ["對戰！"],
         "action": "start_battle",  # 开启自动并点击对战
         "priority": 30,
     },
-
     # 扩充组选择页面（选择哪个卡包）
     "expansion_select": {
         "identifiers": ["選擇擴充組"],
         "action": "handle_expansion_select",  # 选择未完成的卡包
         "priority": 42,
     },
-
     # 牌组列表页面 - 在某个卡包内，有擴充組按钮可以进入扩充组
     "deck_list": {
         "identifiers": ["擴充組"],  # 牌组列表页面有这个按钮
@@ -113,7 +104,6 @@ PAGES = {
         "priority": 45,
         "exclude_identifiers": ["選擇擴充組"],  # 排除扩充组选择页面
     },
-
     # 分级对战选择页面（等级选择）
     "ranked_battle_select": {
         "identifiers": ["分級對戰"],
@@ -121,14 +111,12 @@ PAGES = {
         "priority": 50,
         "exclude_identifiers": ["擴充組"],  # 排除牌组列表页面
     },
-
     # 主对战菜单 - 需要点击单人对战
     "battle_menu": {
         "identifiers": ["與他人對戰"],  # 只有主菜单有这个
         "action": "click_solo_battle",  # 点击单人对战入口
         "priority": 55,
     },
-
     # 单人对战主页（显示各种任务）
     "solo_battle_main": {
         "identifiers": ["單人對戰"],
