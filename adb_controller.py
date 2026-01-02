@@ -11,6 +11,7 @@ from adbutils import adb, AdbDevice
 from PIL import Image
 
 import config
+from utils import get_data_dir
 
 
 class AdbController:
@@ -20,6 +21,8 @@ class AdbController:
         self.host = host or config.ADB_HOST
         self.port = port or config.ADB_PORT
         self.device: Optional[AdbDevice] = None
+        # 使用统一的数据目录
+        self.data_dir = get_data_dir(self.port)
 
     def connect(self) -> bool:
         """连接到 ADB 设备"""
@@ -28,13 +31,8 @@ class AdbController:
             output = adb.connect(addr)
             print(f"ADB 连接: {output}")
 
-            # 获取设备
-            devices = adb.device_list()
-            if not devices:
-                print("错误: 未找到 ADB 设备")
-                return False
-
-            self.device = devices[0]
+            # 获取指定地址的设备
+            self.device = adb.device(serial=addr)
             print(f"已连接设备: {self.device.serial}")
             return True
 
@@ -153,11 +151,7 @@ class AdbController:
         """保存截图到文件（用于调试）"""
         image = self.screenshot()
         if image:
-            # 确保调试目录存在
-            debug_dir = Path(config.DEBUG_DIR)
-            debug_dir.mkdir(exist_ok=True)
-
-            filepath = debug_dir / filename
+            filepath = self.data_dir / filename
             image.save(filepath)
             print(f"截图已保存: {filepath}")
             return str(filepath)
