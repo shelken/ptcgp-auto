@@ -25,7 +25,8 @@ OCR_LANGUAGES = ["zh-Hant", "en-US"]  # 繁体中文 + 英文
 TEMPLATE_THRESHOLD = 0.8
 
 # 等级列表（按顺序遍历，繁体中文）
-BATTLE_LEVELS = ["初級", "中級", "高級", "菁英"]
+# 注意：游戏中显示的是 "分級對戰 - 中級" 这样的格式
+BATTLE_LEVELS = ["初級", "中級", "高級", "精英"]
 
 # 多语言文本映射（用于识别界面元素）
 # 每个键对应一个功能，值是可能出现的所有文本变体
@@ -50,7 +51,17 @@ TEXT_VARIANTS = {
         "單人對戰",
         "Solo Battle",
     ],
-    # 扩充组
+    # 分级对战（等级选择界面的标题）
+    "ranked_battle": [
+        "分級對戰",
+        "Ranked Battle",
+    ],
+    # 精英对战
+    "elite_battle": [
+        "精英對戰",
+        "Elite Battle",
+    ],
+    # 扩充组/扩充包
     "expansion": [
         "擴充包",
         "擴充組",
