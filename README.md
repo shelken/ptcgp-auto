@@ -1,10 +1,11 @@
 # PTCGP Auto
 
-Pokemon TCG Pocket 单人对战自动化脚本，运行在 Mac + BlueStacks Air 模拟器。
+Pokemon TCG Pocket 单人对战自动化脚本，支持任何可通过 ADB 连接的 Android 设备或模拟器。
 
 ## 功能
 
-- 自动单人对战
+- 自动单人对战（分级对战）
+- 按优先级自动遍历等级和卡包
 - 支持多设备同时控制
 
 ## 技术栈
@@ -13,6 +14,12 @@ Pokemon TCG Pocket 单人对战自动化脚本，运行在 Mac + BlueStacks Air 
 - **OCR**: Apple Vision Framework (GPU 加速)
 - **模板匹配**: OpenCV
 - **状态管理**: JSON
+
+## 前置条件
+
+- 设备需开启 ADB 调试
+- 游戏语言需设为**繁体中文**
+- **启动前需手动进入游戏对战页面**（能看到"單人對戰"按钮的界面）
 
 ## 安装
 
@@ -95,9 +102,9 @@ ptcgp-auto/
 
 ## 注意事项
 
-- 需要 BlueStacks Air 开启 ADB 调试
+- 目前仅支持 macOS（依赖 Apple Vision Framework），后续计划支持其他平台
 - 游戏语言需设为繁体中文
-- 仅支持 macOS (Apple Vision Framework)
+- 启动脚本前，请确保游戏已进入对战菜单页面
 
 ## License
 
