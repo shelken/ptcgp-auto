@@ -16,11 +16,10 @@ WAIT_BATTLE_TIMEOUT = 300  # 对局超时时间（5分钟）
 SCREEN_WIDTH = 1080
 SCREEN_HEIGHT = 1920
 
-# OCR 配置 (PaddleOCR)
-OCR_LANG = "chinese_cht"  # PaddleOCR 语言：chinese_cht=繁体中文, en=英文, ch=简体中文
-OCR_USE_GPU = True  # 是否使用 GPU（Mac M 系列自动使用 MPS）
-OCR_USE_ANGLE_CLS = False  # 是否使用方向分类器（游戏界面通常不需要）
-OCR_SHOW_LOG = False  # 是否显示 PaddleOCR 日志
+# OCR 配置 (Apple Vision Framework)
+# Vision Framework 原生支持 Apple Silicon 硬件加速，无需额外配置
+OCR_RECOGNITION_LEVEL = "accurate"  # "accurate" 或 "fast"
+OCR_LANGUAGES = ["zh-Hant", "en-US"]  # 繁体中文 + 英文
 
 # 模板匹配阈值（0-1，越高越严格）
 TEMPLATE_THRESHOLD = 0.8
