@@ -92,16 +92,16 @@ PAGES = {
     },
     # Main battle menu - click solo battle
     "battle_menu": {
-        "identifiers": ["Battle Others"],
+        "identifiers": ["Versus"],  # 主菜单有 Versus 按钮
         "action": "click_solo_battle",
         "priority": 55,
     },
     # Solo battle main page (shows various missions)
     "solo_battle_main": {
-        "identifiers": ["Solo Battle"],
+        "identifiers": ["Solo"],
         "action": "find_incomplete",
         "priority": 60,
-        "exclude_identifiers": ["Battle Others"],
+        "exclude_identifiers": ["Versus"],  # 排除主菜单（同时有 Versus 和 Solo）
     },
 }
 
@@ -145,5 +145,25 @@ TEXT_VARIANTS = {
     "auto": [
         "Auto",
         "AUTO",
+    ],
+    "cancel": [
+        "Cancel",
+        "CANCEL",
+    ],
+    "expansion_button": [
+        "Expansion",
+        "EXPANSION",
+    ],
+    "series_a": [
+        "Series A",
+    ],
+    "series_b": [
+        "Series B",
+    ],
+    "select_expansion": [
+        "Select Expansion",
+    ],
+    "series": [
+        "Series",
     ],
 }
