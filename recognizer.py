@@ -167,12 +167,12 @@ class Recognizer:
             x2, y2 = x1 + w, y1 + h
 
             if config.DEBUG:
-                print(f"找到模板 {template_name}: ({x1}, {y1}, {x2}, {y2}), 置信度: {max_val:.2f}")
+                print(f"[模板] 找到 {template_name}: ({x1},{y1})-({x2},{y2}) 置信度={max_val:.2f}")
 
             return (x1, y1, x2, y2)
 
         if config.DEBUG:
-            print(f"未找到模板 {template_name}, 最高置信度: {max_val:.2f}")
+            print(f"[模板] 未找到 {template_name}, 最高置信度={max_val:.2f} (阈值={threshold})")
         return None
 
     def find_all_templates(
@@ -263,7 +263,8 @@ class Recognizer:
         results = perform_ocr(screenshot)
 
         if config.DEBUG:
-            print(f"OCR 识别到 {len(results)} 个文本区域")
+            texts = [f'"{item["text"]}"@({item["box"][0]},{item["box"][1]})' for item in results]
+            print(f"OCR({len(results)}): {', '.join(texts)}")
 
         return results
 
@@ -306,14 +307,14 @@ class Recognizer:
         self,
         screenshot: Image.Image,
         variant_key: str,
-        partial: bool = True
+        partial: bool = False  # 默认改为精确匹配
     ) -> Optional[Tuple[int, int, int, int]]:
         """在截图中查找多语言文本变体
 
         Args:
             screenshot: 截图
             variant_key: config.TEXT_VARIANTS 中的键名
-            partial: 是否部分匹配
+            partial: 是否部分匹配（默认精确匹配）
 
         Returns:
             找到的区域，未找到返回 None
@@ -325,18 +326,23 @@ class Recognizer:
         variants = config.TEXT_VARIANTS[variant_key]
         ocr_results = self.ocr_full_screen(screenshot)
 
+        # 先尝试精确匹配
         for item in ocr_results:
-            text = item['text']
+            text = item['text'].strip()
             for variant in variants:
-                if partial:
-                    if variant.lower() in text.lower():
+                if variant.lower().strip() == text.lower():
+                    if config.DEBUG:
+                        print(f"找到文字变体(精确) '{variant}' = '{text}'")
+                    return item['box']
+
+        # 如果允许部分匹配且精确匹配失败，再尝试部分匹配
+        if partial:
+            for item in ocr_results:
+                text = item['text'].strip()
+                for variant in variants:
+                    if variant.lower().strip() in text.lower():
                         if config.DEBUG:
-                            print(f"找到文字变体 '{variant}' 在 '{text}'")
-                        return item['box']
-                else:
-                    if variant.lower() == text.lower():
-                        if config.DEBUG:
-                            print(f"找到文字变体 '{variant}'")
+                            print(f"找到文字变体(部分) '{variant}' 在 '{text}'")
                         return item['box']
 
         if config.DEBUG:

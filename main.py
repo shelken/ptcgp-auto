@@ -2,21 +2,34 @@
 PTCGP 单人对战自动化脚本 - 主入口
 """
 
+import argparse
 import time
 import sys
-from pathlib import Path
 
 import config
-from adb_controller import get_controller, AdbController
-from recognizer import get_recognizer, Recognizer
+from utils import get_data_dir
+from adb_controller import AdbController
+from recognizer import get_recognizer
+from state_manager import get_state_manager
+from page_detector import PageDetector
+from actions import ActionHandler
 
 
 class PTCGPAuto:
-    """PTCGP 单人对战自动化"""
+    """PTCGP 单人对战自动化 - 状态机版本"""
 
-    def __init__(self):
-        self.adb = get_controller()
+    def __init__(self, host: str = None, port: int = None):
+        self.host = host or config.ADB_HOST
+        self.port = port or config.ADB_PORT
+        self.adb = AdbController(host, port)
         self.recognizer = get_recognizer()
+        # 使用统一的数据目录
+        data_dir = get_data_dir(self.port)
+        state_file = str(data_dir / "state.json")
+        self.state = get_state_manager(state_file)
+        self.page_detector = PageDetector(self.recognizer)
+        self.action_handler = ActionHandler(self.adb, self.recognizer, self.state)
+        self.running = True
 
     def start(self):
         """启动自动化"""
@@ -30,10 +43,13 @@ class PTCGPAuto:
             return False
 
         print("\n开始自动化流程...")
-        print("提示: 请确保游戏已经在单人对战界面\n")
+        print("提示: 脚本会自动识别当前界面并执行相应操作")
+
+        # 显示当前进度
+        self.state.print_status()
 
         try:
-            self.run_main_loop()
+            self.main_loop()
         except KeyboardInterrupt:
             print("\n用户中断，退出...")
         except Exception as e:
@@ -42,273 +58,68 @@ class PTCGPAuto:
                 import traceback
                 traceback.print_exc()
         finally:
+            self.state.save()
             self.adb.disconnect()
 
         return True
 
-    def run_main_loop(self):
-        """主循环 - 遍历所有等级"""
-        for level in config.BATTLE_LEVELS:
-            print(f"\n{'='*30}")
-            print(f"检查等级: {level}")
-            print(f"{'='*30}")
+    def main_loop(self):
+        """主循环 - 状态机"""
+        no_action_count = 0
 
-            if not self.process_level(level):
-                print(f"等级 {level} 已完成或无法进入，跳过")
+        while self.running:
+            # 截图
+            screenshot = self.adb.screenshot()
+            if not screenshot:
+                print("截图失败，等待重试...")
+                time.sleep(1)
                 continue
 
-        print("\n所有等级处理完毕!")
+            # 识别当前界面
+            page_name, page_info, match_info = self.page_detector.detect(screenshot)
 
-    def process_level(self, level_name: str) -> bool:
-        """处理单个等级
+            if page_name:
+                no_action_count = 0
+                print(f"\n[界面] {page_name}")
 
-        Args:
-            level_name: 等级名称（初级/中级/高级/精英）
+                # 执行对应动作
+                action = page_info.get("action", "unknown")
+                self.action_handler.execute(action, screenshot, match_info)
 
-        Returns:
-            是否成功处理
-        """
-        screenshot = self.adb.screenshot()
-        if not screenshot:
-            return False
-
-        # 检查是否已完成
-        status = self.recognizer.check_complete_status(screenshot)
-        if status['complete']:
-            print(f"{level_name} 已全部完成 (Complete)")
-            return False
-
-        # 查找并点击等级入口
-        level_box = self.recognizer.find_text(screenshot, level_name)
-        if not level_box:
-            print(f"未找到 {level_name} 入口")
-            return False
-
-        self.adb.tap_center(level_box)
-        time.sleep(config.WAIT_PAGE_TRANSITION)
-
-        # 处理当前卡包的所有牌组
-        self.process_current_pack()
-
-        # 处理扩充组
-        self.process_expansion_packs()
-
-        # 返回上一级
-        self.adb.back()
-        time.sleep(config.WAIT_PAGE_TRANSITION)
-
-        return True
-
-    def process_current_pack(self):
-        """处理当前卡包的所有牌组"""
-        print("处理当前卡包...")
-
-        while True:
-            screenshot = self.adb.screenshot()
-            if not screenshot:
-                break
-
-            # 查找可点击的牌组（非 CLEAR 状态）
-            # 这里需要根据实际界面调整识别逻辑
-            deck_box = self.find_available_deck(screenshot)
-            if not deck_box:
-                print("当前卡包已无可挑战的牌组")
-                break
-
-            # 点击牌组
-            self.adb.tap_center(deck_box)
-            time.sleep(config.WAIT_PAGE_TRANSITION)
-
-            # 开始对战
-            if not self.start_battle():
-                # 如果无法开始对战，返回
-                self.adb.back()
+                # 等待页面切换
                 time.sleep(config.WAIT_PAGE_TRANSITION)
-                break
-
-            # 等待对战结束
-            self.wait_battle_end()
-
-            # 点击继续
-            self.click_continue()
-
-            # 等待回到牌组列表
-            time.sleep(config.WAIT_PAGE_TRANSITION)
-
-    def process_expansion_packs(self):
-        """处理扩充组中的历史卡包"""
-        print("检查扩充组...")
-
-        screenshot = self.adb.screenshot()
-        if not screenshot:
-            return
-
-        # 使用多语言变体查找"扩充组"按钮
-        expansion_box = self.recognizer.find_text_variants(screenshot, 'expansion')
-        if not expansion_box:
-            print("未找到扩充组入口")
-            return
-
-        self.adb.tap_center(expansion_box)
-        time.sleep(config.WAIT_PAGE_TRANSITION)
-
-        # 处理 A/B 系列
-        for series in ["A", "B"]:
-            self.process_series(series)
-
-        # 返回
-        self.adb.back()
-        time.sleep(config.WAIT_PAGE_TRANSITION)
-
-    def process_series(self, series_name: str):
-        """处理某个系列（A/B）的所有卡包"""
-        print(f"检查 {series_name} 系列...")
-
-        screenshot = self.adb.screenshot()
-        if not screenshot:
-            return
-
-        # 查找系列标签
-        series_box = self.recognizer.find_text(screenshot, series_name)
-        if not series_box:
-            print(f"未找到 {series_name} 系列")
-            return
-
-        self.adb.tap_center(series_box)
-        time.sleep(config.WAIT_PAGE_TRANSITION)
-
-        # 遍历该系列的所有卡包
-        self.process_all_packs_in_series()
-
-    def process_all_packs_in_series(self):
-        """处理当前系列的所有卡包"""
-        max_scrolls = 10  # 最大滑动次数，防止无限循环
-
-        for _ in range(max_scrolls):
-            screenshot = self.adb.screenshot()
-            if not screenshot:
-                break
-
-            # 查找未完成的卡包（非 CLEAR）
-            pack_box = self.find_available_pack(screenshot)
-            if not pack_box:
-                # 尝试向下滑动查看更多
-                self.adb.swipe_up()
-                time.sleep(config.WAIT_PAGE_TRANSITION)
-
-                # 再次检查
-                screenshot = self.adb.screenshot()
-                pack_box = self.find_available_pack(screenshot)
-                if not pack_box:
-                    print("当前系列已无可挑战的卡包")
-                    break
-
-            # 点击卡包
-            self.adb.tap_center(pack_box)
-            time.sleep(config.WAIT_PAGE_TRANSITION)
-
-            # 处理该卡包的所有牌组
-            self.process_current_pack()
-
-            # 返回系列列表
-            self.adb.back()
-            time.sleep(config.WAIT_PAGE_TRANSITION)
-
-    def find_available_deck(self, screenshot) -> tuple:
-        """查找可挑战的牌组
-
-        Returns:
-            牌组区域坐标，未找到返回 None
-        """
-        # TODO: 根据实际界面实现
-        # 这里需要识别牌组列表，排除已 CLEAR 的
-        # 暂时使用模板匹配查找牌组按钮
-        deck_box = self.recognizer.find_template(screenshot, "btn_deck")
-        return deck_box
-
-    def find_available_pack(self, screenshot) -> tuple:
-        """查找可挑战的卡包（非 CLEAR）
-
-        Returns:
-            卡包区域坐标，未找到返回 None
-        """
-        # TODO: 根据实际界面实现
-        # 需要识别卡包列表，找到显示数字（如 3/5）而非 CLEAR 的
-        ocr_results = self.recognizer.ocr_full_screen(screenshot)
-
-        for item in ocr_results:
-            text = item['text']
-            # 查找进度格式 "X/Y"
-            if '/' in text and 'CLEAR' not in text.upper():
-                import re
-                if re.match(r'\d+\s*/\s*\d+', text):
-                    return item['box']
-
-        return None
-
-    def start_battle(self) -> bool:
-        """开始对战
-
-        Returns:
-            是否成功开始
-        """
-        screenshot = self.adb.screenshot()
-        if not screenshot:
-            return False
-
-        # 使用多语言变体查找"对战"按钮
-        battle_btn = self.recognizer.find_template(screenshot, "btn_battle")
-        if not battle_btn:
-            battle_btn = self.recognizer.find_text_variants(screenshot, 'battle')
-
-        if not battle_btn:
-            print("未找到对战按钮")
-            return False
-
-        self.adb.tap_center(battle_btn)
-        time.sleep(config.WAIT_PAGE_TRANSITION)
-        return True
-
-    def wait_battle_end(self):
-        """等待对战结束"""
-        print("等待对战结束...")
-
-        # 使用多语言变体等待"继续"提示
-        found = self.recognizer.wait_for_text_variants(
-            self.adb,
-            'continue',
-            timeout=config.WAIT_BATTLE_TIMEOUT,
-            check_interval=config.WAIT_BATTLE_CHECK_INTERVAL
-        )
-
-        if found:
-            print("对战结束!")
-        else:
-            print("等待对战结束超时")
-
-    def click_continue(self):
-        """点击继续按钮"""
-        screenshot = self.adb.screenshot()
-        if not screenshot:
-            return
-
-        # 使用多语言变体查找继续按钮
-        continue_btn = self.recognizer.find_text_variants(screenshot, 'continue')
-        if not continue_btn:
-            continue_btn = self.recognizer.find_template(screenshot, "btn_continue")
-
-        if continue_btn:
-            self.adb.tap_center(continue_btn)
-        else:
-            # 如果找不到，点击屏幕中央
-            self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
-
-        time.sleep(config.WAIT_PAGE_TRANSITION)
+            else:
+                no_action_count += 1
+                if no_action_count >= 5:
+                    print("连续多次无法识别界面，可能需要手动干预")
+                    no_action_count = 0
+                time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
 
 
 def main():
     """主入口"""
-    auto = PTCGPAuto()
+    parser = argparse.ArgumentParser(description='PTCGP 单人对战自动化脚本')
+    parser.add_argument(
+        '-a', '--address',
+        type=str,
+        default=None,
+        help='ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)'
+    )
+    args = parser.parse_args()
+
+    # 解析地址
+    host = None
+    port = None
+    if args.address:
+        if ':' in args.address:
+            parts = args.address.split(':')
+            host = parts[0]
+            port = int(parts[1])
+        else:
+            # 只有端口号
+            port = int(args.address)
+
+    auto = PTCGPAuto(host, port)
     auto.start()
 
 
