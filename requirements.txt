@@ -1,6 +1,6 @@
 adbutils>=2.0.0
 opencv-python>=4.8.0
-easyocr>=1.7.0
+paddlepaddle>=2.5.0  # PaddlePaddle 深度学习框架
+paddleocr>=2.7.0     # PaddleOCR，对中文识别更优
 Pillow>=10.0.0
 numpy>=1.24.0
-torch>=2.0.0  # 需要 2.0+ 以支持 Apple Silicon MPS
