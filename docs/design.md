@@ -9,7 +9,7 @@
 - **ADB 控制**: `adbutils` - 截图、点击、滑动
 - **OCR 识别**: Apple Vision Framework - 原生 GPU 加速，支持繁体中文
 - **模板匹配**: OpenCV - 识别图标按钮
-- **状态管理**: JSON 文件持久化
+- **状态管理**: JSON 文件持久化（临时目录）
 
 ## 游戏界面结构
 
@@ -53,6 +53,7 @@
 | 优先级 | 界面名称 | 识别标识 | 动作 |
 |--------|----------|----------|------|
 | 1 | popup_ok | "OK", "確定" (精确) | click_identifier |
+| 2 | battle_defeat_popup | "前往任務" | click_cancel |
 | 10 | battle_result_continue | "點擊來繼續" | click_identifier |
 | 11 | continue_button | "繼續" | click_identifier |
 | 15 | battle_record | "對戰紀錄" | click_continue |
@@ -70,13 +71,17 @@
 | 模板名 | 用途 | 阈值 |
 |--------|------|------|
 | btn_back.png | 返回按钮 | 0.6 |
-| btn_battle.png | 对战按钮 | 0.8 |
-| btn_continue.png | 继续按钮 | 0.8 |
-| shalou.png | 沙漏图标（表示有可领取奖励） | 0.6 |
+| btn_close.png | 关闭按钮 (X) | 0.6 |
+| shalou.png | 沙漏图标（表示有未完成牌组） | 0.6 |
 
 ## 状态管理 (state_manager.py)
 
-### 状态结构 (state.json)
+### 状态文件位置
+
+每个设备使用独立的临时目录：
+- `/tmp/ptcgp_auto_{port}/state.json`
+
+### 状态结构
 
 ```json
 {
@@ -87,8 +92,8 @@
     "初級": {
       "complete": false,
       "packs": {
-        "毽子花": true,
-        "呱頭蛙": false
+        "高級擴充包ex": true,
+        "未域": false
       }
     },
     "中級": { ... },
@@ -100,9 +105,9 @@
 
 ### 状态判断逻辑
 
-1. **等级完成判断**: 单人对战页面显示 "Complete" → 该等级所有卡包完成
+1. **等级完成判断**: 分级对战页面显示 "Complete" → 该等级所有卡包完成
 2. **卡包完成判断**: 进入卡包后滑动查找沙漏，无沙漏 → 该卡包当前等级完成
-3. **卡包名称识别**: 在卡包牌组列表页面识别标题（如 "毽子花牌組"）
+3. **卡包名称识别**: 从 "毽子花牌組（高級擴充包ex）" 中提取 "高級擴充包ex"
 
 ## 核心流程
 
@@ -120,14 +125,15 @@ while running:
 
 1. **click_identifier**: 点击识别到的文字位置
 2. **click_continue**: 点击屏幕中央
-3. **click_template**: 点击模板匹配位置
-4. **wait**: 对战中等待
-5. **start_battle**: 开启自动模式 + 点击对战
-6. **select_level**: 选择未完成的等级（检查进度数字）
-7. **find_incomplete**: 在单人对战主页寻找未完成任务
-8. **click_solo_battle**: 点击单人对战入口
-9. **handle_deck_list**: 处理牌组列表（找沙漏或进扩充组）
-10. **handle_expansion_select**: 处理扩充组选择（找未完成卡包，切换系列）
+3. **click_cancel**: 点击取消按钮
+4. **click_template**: 点击模板匹配位置
+5. **wait**: 对战中等待
+6. **start_battle**: 开启自动模式 + 点击对战
+7. **select_level**: 按配置顺序选择未完成等级（支持滑动）
+8. **find_incomplete**: 在单人对战主页寻找未完成任务
+9. **click_solo_battle**: 点击单人对战入口
+10. **handle_deck_list**: 处理牌组列表（找沙漏或进扩充组）
+11. **handle_expansion_select**: 处理扩充组选择（找未完成卡包，切换系列）
 
 ### 对战流程
 
@@ -139,6 +145,8 @@ while running:
   ↓ 等待...
 对战结果 (显示 "勝利!" + "點擊來繼續")
   ↓ 点击继续
+[如果战败: 显示 "前往任務" + "取消"]
+  ↓ 点击取消
 对战记录 (显示 "對戰紀錄")
   ↓ 点击继续
 经验值结算 (显示 "玩家經驗值")
@@ -151,47 +159,61 @@ while running:
 ```
 牌组列表页 (有 "擴充組" 按钮)
   ↓ 查找沙漏
-  ↓ 无沙漏 → 点击 "擴充組"
+  ↓ 有沙漏 → 点击进入对战
+  ↓ 无沙漏 → 标记当前卡包完成 → 点击 "擴充組"
 扩充组选择页 (显示 "選擇擴充組")
   ↓ 查找进度数字 (如 "21/30")
-  ↓ 有未完成 → 点击进入
-  ↓ 都是 CLEAR → 滑动查看更多
+  ↓ 有未完成且未尝试 → 记录并点击进入
+  ↓ 都已尝试或 CLEAR → 滑动查看更多
   ↓ 还没有 → 切换 A/B 系列
   ↓ 全部完成 → 点击 X 关闭
 卡包牌组列表页
   ↓ 识别卡包标题
   ↓ 查找沙漏
   ↓ 有沙漏 → 点击进入对战
-  ↓ 无沙漏 → 标记该卡包完成，返回扩充组选择
+  ↓ 无沙漏 → 标记该卡包完成，点击擴充組继续
 ```
 
 ## 文件结构
 
 ```
 ptcgp-auto/
-├── config.py           # 配置文件（ADB、等待时间、界面识别、文本变体）
-├── main.py             # 主程序（状态机、动作执行）
+├── main.py             # 主程序入口（状态机、命令行参数）
 ├── adb_controller.py   # ADB 控制封装
 ├── recognizer.py       # OCR 和模板匹配
+├── page_detector.py    # 页面检测器
+├── actions.py          # 动作处理器
 ├── state_manager.py    # 状态管理
+├── config.py           # 配置文件（ADB、等待时间、界面识别）
+├── utils.py            # 工具函数
 ├── debug_tool.py       # 调试工具（交互式测试）
 ├── requirements.txt    # Python 依赖
 ├── flake.nix           # Nix 开发环境
-├── state.json          # 状态文件（运行时生成）
+├── AGENTS.md           # AI 助手指引
 ├── templates/          # 模板图片目录
 │   ├── btn_back.png
-│   ├── btn_battle.png
-│   ├── btn_continue.png
+│   ├── btn_close.png
 │   └── shalou.png
-└── debug_output/       # 调试输出目录
+└── docs/
+    └── design.md       # 本设计文档
 ```
 
-## 待完成功能
+## 多设备支持
 
-1. **卡包标题识别**: 在卡包牌组列表页面识别标题，用于状态记录
-2. **X 按钮模板**: 添加扩充组选择页面的关闭按钮模板
-3. **完整流程测试**: 验证整个自动化流程
-4. **异常处理**: 网络断开、游戏卡死等情况
+```bash
+# 同时控制多个模拟器
+python main.py -a 5555  # 第一个模拟器
+python main.py -a 5556  # 第二个模拟器
+
+# 每个设备有独立的数据目录
+/tmp/ptcgp_auto_5555/
+├── state.json
+└── *.png
+
+/tmp/ptcgp_auto_5556/
+├── state.json
+└── *.png
+```
 
 ## 使用说明
 
@@ -200,12 +222,14 @@ ptcgp-auto/
 ```bash
 cd /Users/shelken/Code/MyRepo/ptcgp-auto
 python main.py
+python main.py -a 5556  # 指定端口
 ```
 
 ### 调试工具
 
 ```bash
 python debug_tool.py
+python debug_tool.py -a 5556
 ```
 
 功能列表：
@@ -222,4 +246,7 @@ python debug_tool.py
 
 ### 重置状态
 
-删除 `state.json` 文件即可重置所有进度。
+删除对应端口的状态文件即可：
+```bash
+rm /tmp/ptcgp_auto_5555/state.json
+```
