@@ -17,13 +17,57 @@ import config
 _ocr_reader = None
 
 
+def _check_mps_available() -> bool:
+    """检查 MPS (Metal Performance Shaders) 是否可用"""
+    try:
+        import torch
+        return torch.backends.mps.is_available()
+    except Exception:
+        return False
+
+
+def _check_cuda_available() -> bool:
+    """检查 CUDA 是否可用"""
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
 def get_ocr_reader():
     """获取 OCR 读取器（延迟初始化）"""
     global _ocr_reader
     if _ocr_reader is None:
         import easyocr
-        print("初始化 OCR 引擎（首次加载需要一些时间）...")
-        _ocr_reader = easyocr.Reader(config.OCR_LANGUAGES, gpu=False)
+
+        use_gpu = config.OCR_USE_GPU
+
+        # 检测可用的 GPU 后端
+        if use_gpu:
+            if _check_cuda_available():
+                print("检测到 CUDA GPU，使用 CUDA 加速...")
+                gpu_flag = True
+            elif _check_mps_available():
+                print("检测到 Apple Silicon (MPS)，使用 MPS 加速...")
+                # EasyOCR 不直接支持 MPS，但 PyTorch 会自动使用
+                # 设置环境变量让某些操作使用 MPS
+                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+                gpu_flag = False  # EasyOCR 的 gpu 参数只针对 CUDA
+            else:
+                print("未检测到 GPU，使用 CPU...")
+                gpu_flag = False
+        else:
+            print("GPU 已禁用，使用 CPU...")
+            gpu_flag = False
+
+        print("初始化 OCR 引擎（首次加载需要下载模型）...")
+        _ocr_reader = easyocr.Reader(
+            config.OCR_LANGUAGES,
+            gpu=gpu_flag,
+            model_storage_directory=str(Path.home() / ".easyocr"),
+            download_enabled=True
+        )
         print("OCR 引擎初始化完成")
     return _ocr_reader
 
