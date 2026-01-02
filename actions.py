@@ -26,6 +26,7 @@ class ActionHandler:
         self.state = state
         self.current_pack_name = None  # 当前卡包名称
         self.tried_expansion_progress = set()  # 本轮已尝试的进度文本（如 "29/114"）
+        self.needs_state_init = state.needs_initialization()  # 是否需要初始化状态
 
     def execute(self, action: str, screenshot, match_info: Dict):
         """执行动作
@@ -86,6 +87,18 @@ class ActionHandler:
         """开始对战 - 先开启自动，再点击对战按钮"""
         ocr_results = match_info.get("ocr_results", [])
 
+        # 如果需要初始化状态且当前等级未设置，返回上级页面
+        if self.needs_state_init and not self.state.get_current_level():
+            print("  -> 需要初始化状态，返回上级页面")
+            self._go_back(screenshot)
+            return
+
+        # 检查是否应该切换到更高优先级的等级
+        if self._should_switch_to_higher_priority_level():
+            print("  -> 返回上级页面以选择更高优先级等级")
+            self._go_back(screenshot)
+            return
+
         # 检查自动模式状态
         auto_box = None
         has_off = False
@@ -115,6 +128,18 @@ class ActionHandler:
         """选择未完成的等级（按配置顺序优先）"""
         ocr_results = match_info.get("ocr_results", [])
 
+        # 如果需要初始化，先同步所有等级状态
+        if self.needs_state_init:
+            self._sync_level_complete_status(ocr_results, screenshot)
+            self.needs_state_init = False
+
+        # 检查是否应该切换到更高优先级的等级（基于 state 文件中的状态）
+        if self._should_switch_to_higher_priority_level():
+            print("  -> 返回上级页面以选择更高优先级等级")
+            self.state.set_current_level(None)
+            self._go_back(screenshot)
+            return
+
         # 按优先级逐个查找等级
         for level in config.BATTLE_LEVELS:
             # 跳过已标记为完成的等级
@@ -135,7 +160,10 @@ class ActionHandler:
         Returns:
             True 如果找到并点击了，False 如果没找到
         """
-        for attempt in range(3):  # 最多尝试3次（包括滑动）
+        max_attempts = 10  # 最多滑动次数
+        last_texts = set()  # 上次看到的文字集合
+
+        for attempt in range(max_attempts):
             if attempt > 0:
                 # 滑动查看更多等级
                 print(f"  -> 滑动查找 {level} (第{attempt}次)")
@@ -147,6 +175,9 @@ class ActionHandler:
                     ocr_results = self.recognizer.ocr_full_screen(screenshot)
                 else:
                     continue
+
+            # 收集当前文字
+            current_texts = set(item['text'].strip() for item in ocr_results)
 
             # 在当前 OCR 结果中查找该等级
             for item in ocr_results:
@@ -172,6 +203,13 @@ class ActionHandler:
                                 self.state.set_current_level(level)
                                 self.adb.tap_center(item['box'])
                                 return True
+
+            # 检测是否到底（内容不变）
+            if attempt > 0 and current_texts == last_texts:
+                print(f"  -> 已滑动到底部，未找到 {level}")
+                break
+
+            last_texts = current_texts
 
         # 滑动多次后仍未找到该等级
         return False
@@ -221,12 +259,32 @@ class ActionHandler:
         ocr_results = match_info.get("ocr_results", [])
         current_level = self.state.get_current_level()
 
-        # 如果 current_level 未设置，尝试从页面上识别
+        # 如果需要初始化状态且当前等级未设置，返回上级页面
+        if self.needs_state_init and not current_level:
+            print("  -> 需要初始化状态，返回上级页面")
+            self._go_back(screenshot)
+            return
+
+        # 尝试从页面识别当前等级
+        detected_level = self._detect_level_from_ocr(ocr_results)
+        if detected_level:
+            if current_level and detected_level != current_level:
+                print(f"  [等级] 检测到等级不一致: state={current_level}, 实际={detected_level}")
+                print(f"  -> 更新 current_level 为 {detected_level}")
+            current_level = detected_level
+            self.state.set_current_level(current_level)
+
+        # 如果 current_level 仍未设置，返回上级重新选择
         if not current_level:
-            current_level = self._detect_level_from_ocr(ocr_results)
-            if current_level:
-                print(f"  [等级] 从页面识别: {current_level}")
-                self.state.set_current_level(current_level)
+            print("  -> 无法识别当前等级，返回上级重新选择")
+            self._go_back(screenshot)
+            return
+
+        # 检查是否应该切换到更高优先级的等级
+        if self._should_switch_to_higher_priority_level():
+            print("  -> 返回上级页面以选择更高优先级等级")
+            self._go_back(screenshot)
+            return
 
         # 尝试识别当前卡包名称（从标题中提取）
         pack_name = self._extract_pack_name(ocr_results)
@@ -247,26 +305,35 @@ class ActionHandler:
                 self._go_back(screenshot)
                 return
 
-        # 优先查找沙漏图标（有未完成的牌组）
-        shalou_box = self.recognizer.find_template(screenshot, "shalou", threshold=0.6)
-        if shalou_box:
-            print("  -> 找到沙漏，点击未完成牌组")
-            self.adb.tap_center(shalou_box)
-            return
+        # 循环滑动查找沙漏图标
+        max_attempts = 10
+        last_texts = set()
 
-        # 没有沙漏，尝试滑动查看更多
-        print("  -> 未找到沙漏，尝试滑动查看更多")
-        self.adb.swipe_up(distance=400)
-        time.sleep(0.8)
+        for attempt in range(max_attempts):
+            if attempt > 0:
+                print(f"  -> 第{attempt}次滑动查找沙漏")
+                self.adb.swipe_up(distance=400)
+                time.sleep(0.8)
+                screenshot = self.adb.screenshot()
+                if screenshot:
+                    ocr_results = self.recognizer.ocr_full_screen(screenshot)
 
-        # 再次检查
-        screenshot2 = self.adb.screenshot()
-        if screenshot2:
-            shalou_box = self.recognizer.find_template(screenshot2, "shalou", threshold=0.6)
+            # 查找沙漏图标
+            shalou_box = self.recognizer.find_template(screenshot, "shalou", threshold=0.6)
             if shalou_box:
-                print("  -> 滑动后找到沙漏")
+                print("  -> 找到沙漏，点击未完成牌组")
                 self.adb.tap_center(shalou_box)
                 return
+
+            # 收集当前文字用于底部检测
+            current_texts = set(item['text'].strip() for item in ocr_results)
+
+            # 检测是否到底
+            if attempt > 0 and current_texts == last_texts:
+                print("  -> 已滑动到底部，未找到沙漏")
+                break
+
+            last_texts = current_texts
 
         # 没有沙漏，标记当前卡包为完成
         if current_level and self.current_pack_name:
@@ -293,85 +360,123 @@ class ActionHandler:
         current_series = self.state.get_current_series()
         current_level = self.state.get_current_level()
 
-        # 收集所有进度数字和对应位置
-        progress_items = []
-        has_series_button = {"A": None, "B": None}
-
-        for item in ocr_results:
-            text = item['text'].strip()
-
-            # 记录系列按钮位置
-            if 'A系列' in text:
-                has_series_button["A"] = item['box']
-            if 'B系列' in text:
-                has_series_button["B"] = item['box']
-
-            # 跳过标题和系列选择
-            if '選擇擴充組' in text or '系列' in text:
-                continue
-
-            # 检查是否是进度数字（如 "21/30"）
-            progress_match = re.search(r'(\d+)\s*/\s*(\d+)', text)
-            if progress_match:
-                current_val = int(progress_match.group(1))
-                total = int(progress_match.group(2))
-                # 规范化进度文本作为标识
-                progress_key = f"{current_val}/{total}"
-
-                if current_val < total:  # 未完成
-                    # 检查是否已在本轮尝试过
-                    if progress_key in self.tried_expansion_progress:
-                        print(f"  [跳过] {progress_key} (已尝试)")
-                        continue
-
-                    progress_items.append({
-                        'text': text,
-                        'box': item['box'],
-                        'remaining': total - current_val,
-                        'progress_key': progress_key
-                    })
-
-        # 按剩余数量排序，优先处理剩余多的
-        progress_items.sort(key=lambda x: x['remaining'], reverse=True)
-
-        if progress_items:
-            item = progress_items[0]
-            print(f"  -> 选择未完成卡包: {item['progress_key']} (剩余 {item['remaining']})")
-            # 记录已尝试的进度
-            self.tried_expansion_progress.add(item['progress_key'])
-            self.adb.tap_center(item['box'])
+        # 检查是否应该切换到更高优先级的等级
+        if self._should_switch_to_higher_priority_level():
+            print("  -> 返回上级页面以选择更高优先级等级")
+            self._close_expansion_select(screenshot, ocr_results)
             return
 
-        # 没有找到未完成的，尝试滑动
-        print("  -> 当前页面都已尝试或 CLEAR，尝试滑动查看更多")
-        self.adb.swipe_up(distance=400)
-        time.sleep(0.8)
+        max_scroll_attempts = 5  # 最多滑动5次
+        last_progress_keys = set()  # 上一次看到的进度数字集合
+        has_series_button = {"A": None, "B": None}
+        seen_clear = False  # 是否看到过 CLEAR!
+        seen_incomplete = False  # 是否看到过未完成的进度
 
-        # 再次检查（滑动后重新识别）
-        screenshot2 = self.adb.screenshot()
-        if screenshot2:
-            ocr_results2 = self.recognizer.ocr_full_screen(screenshot2)
-            for item in ocr_results2:
+        for scroll_attempt in range(max_scroll_attempts):
+            if scroll_attempt > 0:
+                print(f"  -> 第{scroll_attempt}次滑动查找卡包")
+                self.adb.swipe_up(distance=400)
+                time.sleep(0.8)
+                screenshot = self.adb.screenshot()
+                if screenshot:
+                    ocr_results = self.recognizer.ocr_full_screen(screenshot)
+
+            # 收集当前屏幕的进度数字
+            current_progress_keys = set()
+            progress_items = []
+
+            for item in ocr_results:
                 text = item['text'].strip()
+
+                # 记录系列按钮位置
+                if 'A系列' in text:
+                    has_series_button["A"] = item['box']
+                if 'B系列' in text:
+                    has_series_button["B"] = item['box']
+
                 # 跳过标题和系列选择
                 if '選擇擴充組' in text or '系列' in text:
                     continue
 
+                # 检查是否是 CLEAR!（当前等级已完成）
+                if 'CLEAR' in text.upper():
+                    seen_clear = True
+                    continue
+
+                # 检查是否是进度数字（如 "21/30"）
                 progress_match = re.search(r'(\d+)\s*/\s*(\d+)', text)
                 if progress_match:
                     current_val = int(progress_match.group(1))
                     total = int(progress_match.group(2))
                     progress_key = f"{current_val}/{total}"
+                    item_x = (item['box'][0] + item['box'][2]) // 2
+                    item_y = (item['box'][1] + item['box'][3]) // 2
 
-                    if current_val < total:
-                        # 检查是否已尝试过
-                        if progress_key in self.tried_expansion_progress:
-                            continue
+                    current_progress_keys.add(progress_key)
 
-                        print(f"  -> 滑动后找到未完成卡包: {progress_key}")
-                        self.tried_expansion_progress.add(progress_key)
-                        self.adb.tap_center(item['box'])
-                        return
+                    # 收集进度信息，稍后按行分组判断左右
+                    progress_items.append({
+                        'text': text,
+                        'box': item['box'],
+                        'x': item_x,
+                        'y': item_y,
+                        'current_val': current_val,
+                        'total': total,
+                        'progress_key': progress_key
+                    })
+
+            # 按 Y 坐标分组，找出每行中 x 较小的（当前等级进度）
+            left_progress_items = []
+            if progress_items:
+                # 按 Y 坐标排序分组
+                progress_items.sort(key=lambda x: x['y'])
+                row_items = []
+                last_y = None
+
+                for item in progress_items:
+                    if last_y is None or abs(item['y'] - last_y) < 100:
+                        row_items.append(item)
+                    else:
+                        # 新的一行，处理上一行
+                        if row_items:
+                            # 取 x 最小的作为当前等级进度
+                            left_item = min(row_items, key=lambda x: x['x'])
+                            left_progress_items.append(left_item)
+                        row_items = [item]
+                    last_y = item['y']
+
+                # 处理最后一行
+                if row_items:
+                    left_item = min(row_items, key=lambda x: x['x'])
+                    left_progress_items.append(left_item)
+
+            # 找到未完成的卡包（只看左侧进度）
+            incomplete_items = []
+            for item in left_progress_items:
+                if item['current_val'] < item['total']:
+                    seen_incomplete = True
+                    if item['progress_key'] not in self.tried_expansion_progress:
+                        incomplete_items.append({
+                            'text': item['text'],
+                            'box': item['box'],
+                            'remaining': item['total'] - item['current_val'],
+                            'progress_key': item['progress_key']
+                        })
+
+            if incomplete_items:
+                incomplete_items.sort(key=lambda x: x['remaining'], reverse=True)
+                item = incomplete_items[0]
+                print(f"  -> 选择未完成卡包: {item['progress_key']} (剩余 {item['remaining']})")
+                self.tried_expansion_progress.add(item['progress_key'])
+                self.adb.tap_center(item['box'])
+                return
+
+            # 检测是否到底（没有新内容）
+            if scroll_attempt > 0 and current_progress_keys == last_progress_keys:
+                print(f"  -> 已滑动到底部（第{scroll_attempt}次滑动后无新内容）")
+                break
+
+            last_progress_keys = current_progress_keys
 
         # 尝试切换到另一个系列
         other_series = "B" if current_series == "A" else "A"
@@ -383,14 +488,96 @@ class ActionHandler:
             self.adb.tap_center(has_series_button[other_series])
             return
 
-        # 全部完成，关闭页面
-        print("  -> 所有卡包已完成，关闭扩充组选择")
+        # 所有系列都遍历完了
+        # 如果看到过 CLEAR! 但没有看到未完成的进度，说明当前等级完成
+        if seen_clear and not seen_incomplete and current_level:
+            print(f"  -> 所有卡包当前等级都已 CLEAR，标记 {current_level} 为完成")
+            self.state.set_level_complete(current_level, True)
+            self.state.set_current_level(None)
+
+        # 关闭页面
+        print("  -> 关闭扩充组选择")
         self.state.set_current_series("A")
         # 清空已尝试记录，准备下一轮
         self.tried_expansion_progress.clear()
         self._close_expansion_select(screenshot, ocr_results)
 
     # ==================== 辅助方法 ====================
+
+    def _should_switch_to_higher_priority_level(self) -> bool:
+        """检查是否应该切换到更高优先级的等级
+
+        Returns:
+            True 如果当前等级不是最高优先级的未完成等级，应该返回重新选择
+        """
+        current_level = self.state.get_current_level()
+        if not current_level:
+            return False
+
+        # 找到最高优先级的未完成等级
+        for level in config.BATTLE_LEVELS:
+            if not self.state.is_level_complete(level):
+                # 这是最高优先级的未完成等级
+                if level != current_level:
+                    print(f"  [优先级检查] 当前 {current_level}，但 {level} 未完成且优先级更高")
+                    return True
+                else:
+                    # 当前等级就是最高优先级，不需要切换
+                    return False
+
+        return False
+
+    def _sync_level_complete_status(self, ocr_results: List[Dict], screenshot):
+        """同步所有等级的完成状态"""
+        print("  [初始化] 正在同步等级完成状态...")
+
+        synced_levels = set()
+        max_attempts = 10
+        last_texts = set()
+
+        for attempt in range(max_attempts):
+            if attempt > 0:
+                self.adb.swipe_up(distance=400)
+                time.sleep(0.8)
+                screenshot = self.adb.screenshot()
+                if screenshot:
+                    ocr_results = self.recognizer.ocr_full_screen(screenshot)
+
+            # 收集当前文字用于底部检测
+            current_texts = set(item['text'].strip() for item in ocr_results)
+
+            for item in ocr_results:
+                text = item['text'].strip()
+                for level in config.BATTLE_LEVELS:
+                    if level in text and level not in synced_levels:
+                        level_y = (item['box'][1] + item['box'][3]) // 2
+                        is_complete = False
+                        # 检查同一行是否有 COMPLETE
+                        for other in ocr_results:
+                            other_y = (other['box'][1] + other['box'][3]) // 2
+                            if abs(other_y - level_y) < 150:
+                                if 'COMPLETE' in other['text'].upper():
+                                    is_complete = True
+                                    break
+                        if is_complete:
+                            self.state.set_level_complete(level, True)
+                            print(f"  [初始化] {level} = COMPLETE")
+                        else:
+                            print(f"  [初始化] {level} = 进行中")
+                        synced_levels.add(level)
+
+            # 检测是否到底
+            if attempt > 0 and current_texts == last_texts:
+                print("  [初始化] 已滑动到底部")
+                break
+
+            last_texts = current_texts
+
+        # 滑动回顶部
+        self.adb.swipe_down(distance=800)
+        time.sleep(0.5)
+
+        print(f"  [初始化] 同步完成，共 {len(synced_levels)} 个等级")
 
     def _detect_level_from_ocr(self, ocr_results: List[Dict]) -> Optional[str]:
         """从 OCR 结果中检测当前等级"""

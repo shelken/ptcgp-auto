@@ -118,19 +118,29 @@ class AdbController:
         except Exception as e:
             print(f"滑动失败: {e}")
 
-    def swipe_up(self, distance: int = 500):
-        """向上滑动（用于查看更多内容）"""
+    def swipe_up(self, distance: int = 500, duration: int = 500):
+        """向上滑动（用于查看更多内容）
+
+        Args:
+            distance: 滑动距离
+            duration: 滑动持续时间（毫秒），越大越慢
+        """
         center_x = config.SCREEN_WIDTH // 2
         start_y = config.SCREEN_HEIGHT // 2 + distance // 2
         end_y = config.SCREEN_HEIGHT // 2 - distance // 2
-        self.swipe(center_x, start_y, center_x, end_y)
+        self.swipe(center_x, start_y, center_x, end_y, duration)
 
-    def swipe_down(self, distance: int = 500):
-        """向下滑动"""
+    def swipe_down(self, distance: int = 500, duration: int = 500):
+        """向下滑动
+
+        Args:
+            distance: 滑动距离
+            duration: 滑动持续时间（毫秒），越大越慢
+        """
         center_x = config.SCREEN_WIDTH // 2
         start_y = config.SCREEN_HEIGHT // 2 - distance // 2
         end_y = config.SCREEN_HEIGHT // 2 + distance // 2
-        self.swipe(center_x, start_y, center_x, end_y)
+        self.swipe(center_x, start_y, center_x, end_y, duration)
 
     def back(self):
         """按返回键"""
