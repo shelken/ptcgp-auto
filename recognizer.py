@@ -238,6 +238,83 @@ class Recognizer:
             print(f"未找到文字: {target_text}")
         return None
 
+    def find_text_variants(
+        self,
+        screenshot: Image.Image,
+        variant_key: str,
+        partial: bool = True
+    ) -> Optional[Tuple[int, int, int, int]]:
+        """在截图中查找多语言文本变体
+
+        Args:
+            screenshot: 截图
+            variant_key: config.TEXT_VARIANTS 中的键名
+            partial: 是否部分匹配
+
+        Returns:
+            找到的区域，未找到返回 None
+        """
+        if variant_key not in config.TEXT_VARIANTS:
+            print(f"警告: 未知的文本变体键: {variant_key}")
+            return None
+
+        variants = config.TEXT_VARIANTS[variant_key]
+        ocr_results = self.ocr_full_screen(screenshot)
+
+        for item in ocr_results:
+            text = item['text']
+            for variant in variants:
+                if partial:
+                    if variant.lower() in text.lower():
+                        if config.DEBUG:
+                            print(f"找到文字变体 '{variant}' 在 '{text}'")
+                        return item['box']
+                else:
+                    if variant.lower() == text.lower():
+                        if config.DEBUG:
+                            print(f"找到文字变体 '{variant}'")
+                        return item['box']
+
+        if config.DEBUG:
+            print(f"未找到任何 '{variant_key}' 变体")
+        return None
+
+    def wait_for_text_variants(
+        self,
+        adb_controller,
+        variant_key: str,
+        timeout: int = None,
+        check_interval: int = None
+    ) -> bool:
+        """等待多语言文本变体出现
+
+        Args:
+            adb_controller: ADB 控制器实例
+            variant_key: config.TEXT_VARIANTS 中的键名
+            timeout: 超时时间（秒）
+            check_interval: 检查间隔（秒）
+
+        Returns:
+            是否找到
+        """
+        import time
+
+        timeout = timeout or config.WAIT_BATTLE_TIMEOUT
+        check_interval = check_interval or config.WAIT_BATTLE_CHECK_INTERVAL
+
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            screenshot = adb_controller.screenshot()
+            if screenshot and self.find_text_variants(screenshot, variant_key):
+                return True
+
+            time.sleep(check_interval)
+
+        if config.DEBUG:
+            print(f"等待 '{variant_key}' 变体超时")
+        return False
+
     def check_complete_status(self, screenshot: Image.Image) -> Dict[str, bool]:
         """检查界面上的完成状态
 

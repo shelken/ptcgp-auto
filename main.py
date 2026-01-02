@@ -143,11 +143,8 @@ class PTCGPAuto:
         if not screenshot:
             return
 
-        # 查找并点击"扩充组"按钮
-        expansion_box = self.recognizer.find_text(screenshot, "扩充组")
-        if not expansion_box:
-            # 尝试英文
-            expansion_box = self.recognizer.find_text(screenshot, "Expansion")
+        # 使用多语言变体查找"扩充组"按钮
+        expansion_box = self.recognizer.find_text_variants(screenshot, 'expansion')
         if not expansion_box:
             print("未找到扩充组入口")
             return
@@ -259,12 +256,10 @@ class PTCGPAuto:
         if not screenshot:
             return False
 
-        # 查找"对战"按钮
+        # 使用多语言变体查找"对战"按钮
         battle_btn = self.recognizer.find_template(screenshot, "btn_battle")
         if not battle_btn:
-            battle_btn = self.recognizer.find_text(screenshot, "对战")
-        if not battle_btn:
-            battle_btn = self.recognizer.find_text(screenshot, "Battle")
+            battle_btn = self.recognizer.find_text_variants(screenshot, 'battle')
 
         if not battle_btn:
             print("未找到对战按钮")
@@ -278,22 +273,13 @@ class PTCGPAuto:
         """等待对战结束"""
         print("等待对战结束...")
 
-        # 等待出现"点击来继续"或类似提示
-        found = self.recognizer.wait_for_text(
+        # 使用多语言变体等待"继续"提示
+        found = self.recognizer.wait_for_text_variants(
             self.adb,
-            "继续",  # 或 "Tap to continue"
+            'continue',
             timeout=config.WAIT_BATTLE_TIMEOUT,
             check_interval=config.WAIT_BATTLE_CHECK_INTERVAL
         )
-
-        if not found:
-            # 尝试其他可能的结束提示
-            found = self.recognizer.wait_for_text(
-                self.adb,
-                "continue",
-                timeout=30,
-                check_interval=config.WAIT_BATTLE_CHECK_INTERVAL
-            )
 
         if found:
             print("对战结束!")
@@ -306,10 +292,8 @@ class PTCGPAuto:
         if not screenshot:
             return
 
-        # 尝试多种方式查找继续按钮
-        continue_btn = self.recognizer.find_text(screenshot, "继续")
-        if not continue_btn:
-            continue_btn = self.recognizer.find_text(screenshot, "continue")
+        # 使用多语言变体查找继续按钮
+        continue_btn = self.recognizer.find_text_variants(screenshot, 'continue')
         if not continue_btn:
             continue_btn = self.recognizer.find_template(screenshot, "btn_continue")
 

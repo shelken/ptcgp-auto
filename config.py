@@ -17,13 +17,60 @@ SCREEN_WIDTH = 1080
 SCREEN_HEIGHT = 1920
 
 # OCR 配置
-OCR_LANGUAGES = ['en', 'ch_sim']  # 英文 + 简体中文
+OCR_LANGUAGES = ['en', 'ch_tra']  # 英文 + 繁体中文
 
 # 模板匹配阈值（0-1，越高越严格）
 TEMPLATE_THRESHOLD = 0.8
 
-# 等级列表（按顺序遍历）
-BATTLE_LEVELS = ['初级', '中级', '高级', '精英']
+# 等级列表（按顺序遍历，繁体中文）
+BATTLE_LEVELS = ['初級', '中級', '高級', '菁英']
+
+# 多语言文本映射（用于识别界面元素）
+# 每个键对应一个功能，值是可能出现的所有文本变体
+TEXT_VARIANTS = {
+    # 继续按钮的各种形式
+    'continue': [
+        '點擊以繼續',
+        '點擊繼續',
+        '繼續',
+        'Tap to continue',
+        'Continue',
+        'TAP TO CONTINUE',
+    ],
+    # 对战按钮
+    'battle': [
+        '對戰',
+        'Battle',
+        'BATTLE',
+    ],
+    # 单人对战
+    'solo_battle': [
+        '單人對戰',
+        'Solo Battle',
+    ],
+    # 扩充组
+    'expansion': [
+        '擴充包',
+        '擴充組',
+        'Expansion',
+    ],
+    # 完成状态
+    'complete': [
+        'Complete',
+        'COMPLETE',
+    ],
+    # 通关状态
+    'clear': [
+        'CLEAR',
+        'Clear',
+    ],
+    # 自动模式
+    'auto': [
+        '自動',
+        'Auto',
+        'AUTO',
+    ],
+}
 
 # 调试模式
 DEBUG = True  # 开启后会保存截图和识别结果
