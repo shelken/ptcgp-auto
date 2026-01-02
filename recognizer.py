@@ -1,8 +1,7 @@
 """
-识别器 - OCR + 模板匹配 (使用 PaddleOCR)
+识别器 - OCR + 模板匹配 (使用 Apple Vision Framework)
 """
 
-import os
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import re
@@ -13,29 +12,99 @@ from PIL import Image
 
 import config
 
-# 延迟加载 PaddleOCR（初始化较慢）
-_ocr_reader = None
 
+def perform_ocr(image: Image.Image) -> List[Dict]:
+    """使用 Apple Vision Framework 进行 OCR
 
-def get_ocr_reader():
-    """获取 OCR 读取器（延迟初始化）"""
-    global _ocr_reader
-    if _ocr_reader is None:
-        from paddleocr import PaddleOCR
+    Args:
+        image: PIL Image 对象
 
-        use_gpu = config.OCR_USE_GPU
+    Returns:
+        识别结果列表，每项包含 text, box, confidence
+    """
+    import Vision
+    import Quartz
+    from Foundation import NSData
 
-        print(f"初始化 PaddleOCR (语言: {config.OCR_LANG}, GPU: {use_gpu})...")
+    # 将 PIL Image 转换为 CGImage
+    # 先转为 PNG bytes
+    import io
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG')
+    png_data = buffer.getvalue()
 
-        _ocr_reader = PaddleOCR(
-            lang=config.OCR_LANG,
-            use_angle_cls=config.OCR_USE_ANGLE_CLS,
-            use_gpu=use_gpu,
-            show_log=config.OCR_SHOW_LOG,
-        )
+    # 创建 NSData 和 CGImage
+    ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
+    image_source = Quartz.CGImageSourceCreateWithData(ns_data, None)
+    cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
 
-        print("PaddleOCR 初始化完成")
-    return _ocr_reader
+    if cg_image is None:
+        print("无法创建 CGImage")
+        return []
+
+    # 获取图像尺寸
+    width = image.width
+    height = image.height
+
+    # 创建 OCR 请求
+    request = Vision.VNRecognizeTextRequest.alloc().init()
+
+    # 设置识别级别
+    if config.OCR_RECOGNITION_LEVEL == "fast":
+        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
+    else:
+        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+
+    # 设置识别语言
+    request.setRecognitionLanguages_(config.OCR_LANGUAGES)
+
+    # 自动检测语言
+    request.setAutomaticallyDetectsLanguage_(True)
+
+    # 创建请求处理器
+    handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
+        cg_image, None
+    )
+
+    # 执行请求
+    success = handler.performRequests_error_([request], None)
+
+    if not success:
+        print("OCR 请求执行失败")
+        return []
+
+    # 解析结果
+    results = []
+    observations = request.results()
+
+    if observations:
+        for observation in observations:
+            # 获取最佳候选文本
+            top_candidate = observation.topCandidates_(1)
+            if top_candidate and len(top_candidate) > 0:
+                text = top_candidate[0].string()
+                confidence = top_candidate[0].confidence()
+
+                # 获取边界框（Vision 使用归一化坐标，原点在左下角）
+                bounding_box = observation.boundingBox()
+                x = bounding_box.origin.x
+                y = bounding_box.origin.y
+                w = bounding_box.size.width
+                h = bounding_box.size.height
+
+                # 转换为像素坐标（原点在左上角）
+                x1 = int(x * width)
+                y1 = int((1 - y - h) * height)  # 翻转 Y 轴
+                x2 = int((x + w) * width)
+                y2 = int((1 - y) * height)
+
+                results.append({
+                    'text': text,
+                    'box': (x1, y1, x2, y2),
+                    'confidence': confidence
+                })
+
+    return results
 
 
 class Recognizer:
@@ -45,6 +114,7 @@ class Recognizer:
         self.templates_dir = Path(templates_dir)
         self.templates: Dict[str, np.ndarray] = {}
         self._load_templates()
+        print("使用 Apple Vision Framework 进行 OCR（原生 Apple Silicon 加速）")
 
     def _load_templates(self):
         """加载所有模板图片"""
@@ -190,41 +260,12 @@ class Recognizer:
         Returns:
             识别结果列表，每项包含 text, box, confidence
         """
-        reader = get_ocr_reader()
-        screen = self.pil_to_cv2(screenshot)
-
-        # PaddleOCR 返回格式: [[[box], (text, confidence)], ...]
-        results = reader.ocr(screen, cls=config.OCR_USE_ANGLE_CLS)
-
-        parsed = []
-
-        # PaddleOCR 可能返回 None 或空列表
-        if not results or not results[0]:
-            if config.DEBUG:
-                print("OCR 未识别到任何文本")
-            return parsed
-
-        for line in results[0]:
-            box_points = line[0]  # [[x1,y1], [x2,y1], [x2,y2], [x1,y2]]
-            text = line[1][0]
-            confidence = line[1][1]
-
-            # 转换为矩形坐标
-            x_coords = [p[0] for p in box_points]
-            y_coords = [p[1] for p in box_points]
-            x1, x2 = int(min(x_coords)), int(max(x_coords))
-            y1, y2 = int(min(y_coords)), int(max(y_coords))
-
-            parsed.append({
-                'text': text,
-                'box': (x1, y1, x2, y2),
-                'confidence': confidence
-            })
+        results = perform_ocr(screenshot)
 
         if config.DEBUG:
-            print(f"OCR 识别到 {len(parsed)} 个文本区域")
+            print(f"OCR 识别到 {len(results)} 个文本区域")
 
-        return parsed
+        return results
 
     def find_text(
         self,
