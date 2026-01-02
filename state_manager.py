@@ -138,6 +138,10 @@ class StateManager:
 
     # ===== 工具方法 =====
 
+    def needs_initialization(self) -> bool:
+        """判断是否需要初始化状态（回单人对战主页读取）"""
+        return self.state.get("current_level") is None
+
     def get_next_incomplete_level(self) -> Optional[str]:
         """获取下一个未完成的等级"""
         for level in config.BATTLE_LEVELS:

@@ -74,7 +74,7 @@ rm /tmp/ptcgp_auto_5555/state.json
 
 ## 多设备支持
 
-每个设备使用独立的临时目录 `/tmp/ptcgp_auto_{port}/`，包含 `state.json` 和调试截图。
+每个设备使用独立的数据目录 `/tmp/ptcgp_auto_{port}/`，包含 `state.json` 和调试截图。
 
 ## 配置说明
 
@@ -100,7 +100,7 @@ rm /tmp/ptcgp_auto_5555/state.json
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
 - BlueStacks Air 的 ADB 端口通常是 5555，但可能有所不同
 - 模板图片通过 debug_tool.py 的自动检测功能截取
-- 状态文件保存在临时目录，重启系统后可能被清理
+- 状态文件保存在系统临时目录，重启系统后可能被清理
 
 ## 参考文档
 
