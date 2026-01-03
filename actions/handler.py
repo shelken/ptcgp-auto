@@ -8,6 +8,7 @@ from recognizer import Recognizer
 from state_manager import StateManager
 from .base import BaseActions
 from .battle import BattleActions
+from .deck import DeckActions
 from .level import LevelActions
 
 
@@ -36,6 +37,10 @@ class ActionHandler:
             self._should_switch_to_higher_priority_level
         )
         self._level = LevelActions(
+            adb, recognizer, state,
+            self._should_switch_to_higher_priority_level
+        )
+        self._deck = DeckActions(
             adb, recognizer, state,
             self._should_switch_to_higher_priority_level
         )
@@ -96,3 +101,20 @@ class ActionHandler:
             self.all_packs_checked = False
             self.tried_expansion_series.clear()
         self._level.select_level(screenshot, match_info, self.needs_state_init, on_init_complete, reset_pack_state)
+
+    # ==================== 牌组列表动作（委托） ====================
+
+    def action_handle_deck_list(self, screenshot, match_info: Dict):
+        def set_all_packs_checked(val: bool):
+            self.all_packs_checked = val
+        def set_current_pack_name(name: str):
+            self.current_pack_name = name
+        self._deck.handle_deck_list(
+            screenshot, match_info,
+            self.needs_state_init,
+            self.all_packs_checked,
+            self.current_pack_total,
+            self.current_pack_name,
+            set_all_packs_checked,
+            set_current_pack_name
+        )
