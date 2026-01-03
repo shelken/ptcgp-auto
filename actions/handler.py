@@ -10,6 +10,7 @@ from .base import BaseActions
 from .battle import BattleActions
 from .deck import DeckActions
 from .expansion import ExpansionActions
+from .home import HomeActions
 from .level import LevelActions
 
 
@@ -49,6 +50,7 @@ class ActionHandler:
             adb, recognizer, state,
             self._should_switch_to_higher_priority_level
         )
+        self._home = HomeActions(adb)
 
     def execute(self, action: str, screenshot, match_info: Dict):
         """执行动作"""
@@ -140,3 +142,11 @@ class ActionHandler:
             set_all_packs_checked,
             set_current_pack_total
         )
+
+    # ==================== 主页动作（委托） ====================
+
+    def action_find_incomplete(self, screenshot, match_info: Dict):
+        self._home.find_incomplete(screenshot, match_info)
+
+    def action_click_solo_battle(self, screenshot, match_info: Dict):
+        self._home.click_solo_battle(screenshot, match_info)
