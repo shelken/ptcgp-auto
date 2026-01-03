@@ -32,6 +32,12 @@ class StateManager:
                         self.state_file.unlink()
                         return self._create_default_state()
 
+                    # 检查是否需要迁移（旧格式使用单一数字作为 key）
+                    if self._needs_migration(state):
+                        print("检测到旧版本状态格式（单一分母），重置状态文件...")
+                        self.state_file.unlink()
+                        return self._create_default_state()
+
                     print(f"已加载状态: {self.state_file}")
                     return state
             except Exception as e:
@@ -39,6 +45,18 @@ class StateManager:
 
         # 初始化默认状态
         return self._create_default_state()
+
+    def _needs_migration(self, state: Dict) -> bool:
+        """检测是否需要迁移（旧格式使用单一数字作为卡包 key，新格式使用 左分母_右分母）"""
+        levels = state.get("levels", {})
+        for level_data in levels.values():
+            packs = level_data.get("packs", {})
+            for key in packs.keys():
+                # 如果 key 是纯数字（旧格式），需要迁移
+                # 新格式是 "数字_数字" 的形式
+                if key.isdigit():
+                    return True
+        return False
 
     def _create_default_state(self) -> Dict:
         """创建默认状态"""
