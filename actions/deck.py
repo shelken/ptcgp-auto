@@ -23,8 +23,8 @@ class DeckActions:
         match_info: Dict,
         needs_state_init: bool,
         all_packs_checked: bool,
-        current_pack_total: Optional[str],
-        current_pack_name: Optional[str],
+        current_pack_id: Optional[str],     # 组合 ID
+        current_pack_name: Optional[str],   # 卡包名称（用于显示）
         set_all_packs_checked: Callable[[bool], None],
         set_current_pack_name: Callable[[str], None]
     ):
@@ -73,9 +73,9 @@ class DeckActions:
             for variant in no_battles_variants:
                 if variant.lower() in text:
                     print("  -> 当前难度没有可用对战，标记卡包完成并返回")
-                    if current_level and current_pack_total:
+                    if current_level and current_pack_id:
                         pack_name = self._extract_pack_name(ocr_results) or ""
-                        self.state.set_pack_complete(current_level, current_pack_total, pack_name, True)
+                        self.state.set_pack_complete(current_level, current_pack_id, pack_name, True)
                     # 点击扩充组查看更多卡包
                     expansion_item = find_text_by_variants(ocr_results, "expansion_button")
                     if expansion_item:
@@ -91,9 +91,9 @@ class DeckActions:
             print(f"  [卡包] {pack_name}")
 
         # 检查当前卡包是否已标记为完成
-        if current_level and current_pack_total:
-            if self.state.is_pack_complete(current_level, current_pack_total):
-                print(f"  -> {current_pack_name or current_pack_total} 在 {current_level} 已完成，进入扩充组选择其他卡包")
+        if current_level and current_pack_id:
+            if self.state.is_pack_complete(current_level, current_pack_id):
+                print(f"  -> {current_pack_name or current_pack_id} 在 {current_level} 已完成，进入扩充组选择其他卡包")
                 expansion_item = find_text_by_variants(ocr_results, "expansion_button")
                 if expansion_item:
                     self.adb.tap_center(expansion_item['box'])
@@ -132,9 +132,9 @@ class DeckActions:
             last_texts = current_texts
 
         # 没有沙漏，标记当前卡包为完成
-        if current_level and current_pack_total:
+        if current_level and current_pack_id:
             pack_name_final = current_pack_name or ""
-            self.state.set_pack_complete(current_level, current_pack_total, pack_name_final, True)
+            self.state.set_pack_complete(current_level, current_pack_id, pack_name_final, True)
 
         # 点击扩充组查看更多卡包
         expansion_item = find_text_by_variants(ocr_results, "expansion_button")
