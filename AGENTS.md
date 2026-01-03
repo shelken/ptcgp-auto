@@ -101,6 +101,7 @@ rm /tmp/ptcgp_auto_5555/state.json
 - BlueStacks Air 的 ADB 端口通常是 5555，但可能有所不同
 - 模板图片通过 debug_tool.py 的自动检测功能截取
 - 状态文件保存在系统临时目录，重启系统后可能被清理
+- 更新 README 时需同步更新 `README_EN.md`
 - 新功能开发使用 git worktree 创建独立分支，完成后提交 PR 合并
 
 ## 参考文档
