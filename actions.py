@@ -24,8 +24,10 @@ class ActionHandler:
         self.adb = adb
         self.recognizer = recognizer
         self.state = state
-        self.current_pack_name = None  # 当前卡包名称
-        self.tried_expansion_progress = set()  # 本轮已尝试的进度文本（如 "29/114"）
+        self.current_pack_name = None  # 当前卡包名称（用于日志显示）
+        self.current_pack_total = None  # 当前卡包分母（用于状态存储）
+        self.tried_expansion_series = set()  # 在扩充组选择页面已尝试过的系列
+        self.all_packs_checked = False  # 所有卡包都已检查完毕，需要返回上级
         self.needs_state_init = state.needs_initialization()  # 是否需要初始化状态
 
     def execute(self, action: str, screenshot, match_info: Dict):
@@ -59,7 +61,7 @@ class ActionHandler:
     def action_click_cancel(self, screenshot, match_info: Dict):
         """点击取消按钮（用于战败弹窗等）"""
         ocr_results = match_info.get("ocr_results", [])
-        cancel_variants = config.TEXT_VARIANTS.get("cancel", ["取消", "Cancel"])
+        cancel_variants = config.TEXT_VARIANTS.get("cancel", [])
         for item in ocr_results:
             text = item['text'].strip()
             if text in cancel_variants:
@@ -103,7 +105,7 @@ class ActionHandler:
         # 检查自动模式状态
         auto_box = None
         has_off = False
-        auto_variants = config.TEXT_VARIANTS.get("auto", ["自動", "Auto", "AUTO"])
+        auto_variants = config.TEXT_VARIANTS.get("auto", [])
 
         for item in ocr_results:
             text = item['text'].strip()
@@ -132,6 +134,10 @@ class ActionHandler:
     def action_select_level(self, screenshot, match_info: Dict):
         """选择未完成的等级（按配置顺序优先）"""
         ocr_results = match_info.get("ocr_results", [])
+
+        # 重置卡包检查标志（进入等级选择页面时）
+        self.all_packs_checked = False
+        self.tried_expansion_series.clear()
 
         # 如果需要初始化，先同步所有等级状态
         if self.needs_state_init:
@@ -268,6 +274,13 @@ class ActionHandler:
         ocr_results = match_info.get("ocr_results", [])
         current_level = self.state.get_current_level()
 
+        # 如果所有卡包都已检查完毕，返回上级页面
+        if self.all_packs_checked:
+            print("  -> 所有卡包都已检查，返回上级页面")
+            self.all_packs_checked = False
+            self._go_back(screenshot)
+            return
+
         # 如果需要初始化状态且当前等级未设置，返回上级页面
         if self.needs_state_init and not current_level:
             print("  -> 需要初始化状态，返回上级页面")
@@ -295,17 +308,39 @@ class ActionHandler:
             self._go_back(screenshot)
             return
 
-        # 尝试识别当前卡包名称（从标题中提取）
+        # 检查是否没有可用对战（如 "There are no battles available at this difficulty."）
+        no_battles_variants = config.TEXT_VARIANTS.get("no_battles_available", [])
+        for item in ocr_results:
+            text = item['text'].strip().lower()
+            for variant in no_battles_variants:
+                if variant.lower() in text:
+                    print("  -> 当前难度没有可用对战，标记卡包完成并返回")
+                    if current_level and self.current_pack_total:
+                        pack_name = self._extract_pack_name(ocr_results) or ""
+                        self.state.set_pack_complete(current_level, self.current_pack_total, pack_name, True)
+                    # 点击扩充组查看更多卡包
+                    expansion_variants = config.TEXT_VARIANTS.get("expansion_button", [])
+                    for exp_item in ocr_results:
+                        exp_text = exp_item['text'].strip()
+                        for exp_variant in expansion_variants:
+                            if exp_variant in exp_text:
+                                self.adb.tap_center(exp_item['box'])
+                                return
+                    self._go_back(screenshot)
+                    return
+
+        # 尝试识别当前卡包名称（从标题中提取，用于日志显示）
         pack_name = self._extract_pack_name(ocr_results)
         if pack_name:
             self.current_pack_name = pack_name
             print(f"  [卡包] {pack_name}")
 
-            # 检查是否已标记为完成 - 进入扩充组选择其他卡包
-            if current_level and self.state.is_pack_complete(current_level, pack_name):
-                print(f"  -> {pack_name} 在 {current_level} 已完成，进入扩充组选择其他卡包")
+        # 检查当前卡包是否已标记为完成（使用分母判断）
+        if current_level and self.current_pack_total:
+            if self.state.is_pack_complete(current_level, self.current_pack_total):
+                print(f"  -> {self.current_pack_name or self.current_pack_total} 在 {current_level} 已完成，进入扩充组选择其他卡包")
                 # 点击擴充組进入扩充组选择页面
-                expansion_variants = config.TEXT_VARIANTS.get("expansion_button", ["擴充組", "Expansion"])
+                expansion_variants = config.TEXT_VARIANTS.get("expansion_button", [])
                 for item in ocr_results:
                     text = item['text'].strip()
                     for variant in expansion_variants:
@@ -346,13 +381,13 @@ class ActionHandler:
 
             last_texts = current_texts
 
-        # 没有沙漏，标记当前卡包为完成
-        if current_level and self.current_pack_name:
-            self.state.set_pack_complete(current_level, self.current_pack_name, True)
-            print(f"  [状态] 标记 {self.current_pack_name} 在 {current_level} 完成")
+        # 没有沙漏，标记当前卡包为完成（使用分母）
+        if current_level and self.current_pack_total:
+            pack_name = self.current_pack_name or ""
+            self.state.set_pack_complete(current_level, self.current_pack_total, pack_name, True)
 
         # 点击扩充组查看更多卡包
-        expansion_variants = config.TEXT_VARIANTS.get("expansion_button", ["擴充組", "Expansion"])
+        expansion_variants = config.TEXT_VARIANTS.get("expansion_button", [])
         for item in ocr_results:
             text = item['text'].strip()
             for variant in expansion_variants:
@@ -370,12 +405,28 @@ class ActionHandler:
     def action_handle_expansion_select(self, screenshot, match_info: Dict):
         """处理扩充组选择页面 - 选择未完成的卡包"""
         ocr_results = match_info.get("ocr_results", [])
-        current_series = self.state.get_current_series()
         current_level = self.state.get_current_level()
 
         # 检查是否应该切换到更高优先级的等级
         if self._should_switch_to_higher_priority_level():
             print("  -> 返回上级页面以选择更高优先级等级")
+            self.tried_expansion_series.clear()
+            self._close_expansion_select(screenshot, ocr_results)
+            return
+
+        # 根据 tried_expansion_series 判断当前系列
+        # 每次打开 expansion_select 默认显示 A 系列
+        if not self.tried_expansion_series:
+            # 首次进入，默认在 A 系列
+            current_series = "A"
+        elif "A" in self.tried_expansion_series and "B" not in self.tried_expansion_series:
+            # A 已检查，点击了 B Series，当前应该在 B 系列
+            current_series = "B"
+        else:
+            # 两个系列都检查过了，关闭页面
+            print("  -> 所有系列都已检查，关闭扩充组选择")
+            self.tried_expansion_series.clear()
+            self.state.set_current_series("A")
             self._close_expansion_select(screenshot, ocr_results)
             return
 
@@ -402,8 +453,8 @@ class ActionHandler:
                 text = item['text'].strip()
 
                 # 记录系列按钮位置
-                series_a_variants = config.TEXT_VARIANTS.get("series_a", ["A系列", "Series A"])
-                series_b_variants = config.TEXT_VARIANTS.get("series_b", ["B系列", "Series B"])
+                series_a_variants = config.TEXT_VARIANTS.get("series_a", [])
+                series_b_variants = config.TEXT_VARIANTS.get("series_b", [])
                 for variant in series_a_variants:
                     if variant in text:
                         has_series_button["A"] = item['box']
@@ -414,8 +465,8 @@ class ActionHandler:
                         break
 
                 # 跳过标题和系列选择
-                select_expansion_variants = config.TEXT_VARIANTS.get("select_expansion", ["選擇擴充組", "Select Expansion"])
-                series_variants = config.TEXT_VARIANTS.get("series", ["系列", "Series"])
+                select_expansion_variants = config.TEXT_VARIANTS.get("select_expansion", [])
+                series_variants = config.TEXT_VARIANTS.get("series", [])
                 skip = False
                 for variant in select_expansion_variants + series_variants:
                     if variant in text:
@@ -451,49 +502,92 @@ class ActionHandler:
                         'progress_key': progress_key
                     })
 
-            # 按 Y 坐标分组，找出每行中 x 较小的（当前等级进度）
-            left_progress_items = []
+            # 按 Y 坐标分组，每行找出左边（当前等级进度）和右边（总进度）
+            # 用右边的分母作为卡包唯一标识符
+            row_data = []  # 每行的数据: {'left': 左边进度, 'right': 右边进度}
             if progress_items:
                 # 按 Y 坐标排序分组
                 progress_items.sort(key=lambda x: x['y'])
                 row_items = []
-                last_y = None
+                row_start_y = None  # 用行起始 Y 判断，避免漂移
 
                 for item in progress_items:
-                    if last_y is None or abs(item['y'] - last_y) < 100:
+                    if row_start_y is None or abs(item['y'] - row_start_y) < 100:
                         row_items.append(item)
+                        if row_start_y is None:
+                            row_start_y = item['y']
                     else:
                         # 新的一行，处理上一行
-                        if row_items:
-                            # 取 x 最小的作为当前等级进度
-                            left_item = min(row_items, key=lambda x: x['x'])
-                            left_progress_items.append(left_item)
+                        if len(row_items) >= 2:
+                            # 按 x 排序，取最左和最右
+                            row_items.sort(key=lambda x: x['x'])
+                            row_data.append({
+                                'left': row_items[0],   # 当前等级进度
+                                'right': row_items[-1]  # 总进度（用分母作为标识符）
+                            })
+                        elif len(row_items) == 1:
+                            # 只有一个数字，可能是只有总进度
+                            row_data.append({
+                                'left': None,
+                                'right': row_items[0]
+                            })
                         row_items = [item]
-                    last_y = item['y']
+                        row_start_y = item['y']
 
                 # 处理最后一行
-                if row_items:
-                    left_item = min(row_items, key=lambda x: x['x'])
-                    left_progress_items.append(left_item)
+                if len(row_items) >= 2:
+                    row_items.sort(key=lambda x: x['x'])
+                    row_data.append({
+                        'left': row_items[0],
+                        'right': row_items[-1]
+                    })
+                elif len(row_items) == 1:
+                    row_data.append({
+                        'left': None,
+                        'right': row_items[0]
+                    })
 
-            # 找到未完成的卡包（只看左侧进度）
+            # 找到未完成的卡包
+            # - 使用右边的分母作为卡包唯一标识符
+            # - 使用左边的进度判断当前等级是否需要处理
             incomplete_items = []
-            for item in left_progress_items:
-                if item['current_val'] < item['total']:
-                    seen_incomplete = True
-                    if item['progress_key'] not in self.tried_expansion_progress:
+            for row in row_data:
+                right = row['right']
+                left = row['left']
+
+                if not right:
+                    continue
+
+                # 用右边的分母作为标识符
+                total_str = str(right['total'])
+
+                # 检查是否已标记为完成
+                if current_level and self.state.is_pack_complete(current_level, total_str):
+                    continue
+
+                # 如果左边存在且是数字进度，表示当前等级需要处理
+                # 如果左边不存在或已满，可能需要点进去确认
+                if left:
+                    # 左边进度未满，说明当前等级未完成
+                    if left['current_val'] < left['total']:
+                        seen_incomplete = True
                         incomplete_items.append({
-                            'text': item['text'],
-                            'box': item['box'],
-                            'remaining': item['total'] - item['current_val'],
-                            'progress_key': item['progress_key']
+                            'text': f"{left['progress_key']} | {right['progress_key']}",
+                            'box': left['box'],  # 点击左边的位置
+                            'remaining': left['total'] - left['current_val'],
+                            'total': right['total'],  # 用右边的分母作为标识符
+                            'progress_key': right['progress_key']
                         })
 
             if incomplete_items:
                 incomplete_items.sort(key=lambda x: x['remaining'], reverse=True)
                 item = incomplete_items[0]
                 print(f"  -> 选择未完成卡包: {item['progress_key']} (剩余 {item['remaining']})")
-                self.tried_expansion_progress.add(item['progress_key'])
+                # 记录当前选择的分母，用于后续标记
+                self.current_pack_total = str(item['total'])
+                # 成功找到卡包，清理状态
+                self.tried_expansion_series.clear()
+                self.all_packs_checked = False
                 self.adb.tap_center(item['box'])
                 return
 
@@ -504,28 +598,24 @@ class ActionHandler:
 
             last_progress_keys = current_progress_keys
 
-        # 尝试切换到另一个系列
+        # 当前系列没有未完成的卡包，记录已检查
+        self.tried_expansion_series.add(current_series)
+
+        # 尝试切换到另一个系列（只切换到未检查过的系列）
         other_series = "B" if current_series == "A" else "A"
-        if has_series_button[other_series]:
-            print(f"  -> 当前系列 {current_series} 已完成，切换到 {other_series} 系列")
+        if other_series not in self.tried_expansion_series and has_series_button[other_series]:
+            print(f"  -> {current_series} 系列无可用卡包，切换到 {other_series} 系列")
             self.state.set_current_series(other_series)
-            # 切换系列后清空已尝试记录
-            self.tried_expansion_progress.clear()
             self.adb.tap_center(has_series_button[other_series])
             return
 
-        # 所有系列都遍历完了
-        # 如果看到过 CLEAR! 但没有看到未完成的进度，说明当前等级完成
-        if seen_clear and not seen_incomplete and current_level:
-            print(f"  -> 所有卡包当前等级都已 CLEAR，标记 {current_level} 为完成")
-            self.state.set_level_complete(current_level, True)
-            self.state.set_current_level(None)
+        # 所有系列都遍历完了，设置标志并关闭页面
+        self.tried_expansion_series.clear()
+        self.all_packs_checked = True  # 告诉 deck_list 需要返回上级
 
         # 关闭页面
-        print("  -> 关闭扩充组选择")
+        print("  -> 所有系列都已检查，关闭扩充组选择")
         self.state.set_current_series("A")
-        # 清空已尝试记录，准备下一轮
-        self.tried_expansion_progress.clear()
         self._close_expansion_select(screenshot, ocr_results)
 
     # ==================== 辅助方法 ====================
@@ -617,14 +707,36 @@ class ActionHandler:
     def _extract_pack_name(self, ocr_results: List[Dict]) -> Optional[str]:
         """从 OCR 结果中提取卡包名称
 
-        格式如: "毽子花牌組（高級擴充包ex）" -> 提取 "高級擴充包ex"
+        使用 config.DECK_KEYWORD 匹配格式如:
+        - 中文: "毽子花牌組（高級擴充包ex）" -> 提取 "高級擴充包ex"
+        - 英文: "Carnivine Deck (Triumphant Light)" -> 提取 "Triumphant Light"
+        - 跨行: "Darkrai Deck" + "(Space-Time Smackdown)" -> 提取 "Space-Time Smackdown"
         """
+        deck_keyword = config.DECK_KEYWORD
+
         for item in ocr_results:
             text = item['text'].strip()
-            # 匹配 "xxx牌組（卡包名）" 格式
-            match = re.search(r'牌組[（(](.+?)[）)]', text)
+
+            # 情况1: 同一行包含完整格式 "xxx Deck (卡包名)"
+            pattern = rf'{re.escape(deck_keyword)}\s*[（(](.+?)[）)]'
+            match = re.search(pattern, text)
             if match:
                 return match.group(1).strip()
+
+            # 情况2: 当前行以 Deck 结尾，卡包名在下一行（以括号开头）
+            if text.endswith(deck_keyword):
+                item_y = (item['box'][1] + item['box'][3]) // 2
+                # 查找 Y 坐标接近的下一行（以括号开头）
+                for other_item in ocr_results:
+                    other_text = other_item['text'].strip()
+                    other_y = (other_item['box'][1] + other_item['box'][3]) // 2
+                    # Y 坐标接近（在下方 100 像素内）且以括号开头
+                    if 0 < other_y - item_y < 150 and (other_text.startswith('(') or other_text.startswith('（')):
+                        # 提取括号内的内容
+                        pack_match = re.search(r'[（(](.+?)[）)]', other_text)
+                        if pack_match:
+                            return pack_match.group(1).strip()
+
         return None
 
     def _go_back(self, screenshot):
