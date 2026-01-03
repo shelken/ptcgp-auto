@@ -5,7 +5,7 @@ import time
 from typing import Dict, List, Optional, Callable
 
 import config
-from .utils import go_back, find_text_by_variants, close_popup
+from .utils import go_back, find_text_by_variants, close_popup, detect_and_close_popup
 
 
 class DeckActions:
@@ -74,8 +74,7 @@ class DeckActions:
                 if variant.lower() in text:
                     print("  -> 当前难度没有可用对战，标记卡包完成并返回")
                     if current_level and current_pack_id:
-                        pack_name = self._extract_pack_name(ocr_results) or ""
-                        self.state.set_pack_complete(current_level, current_pack_id, pack_name, True)
+                        self.state.set_pack_complete(current_level, current_pack_id, True)
                     # 点击扩充组查看更多卡包
                     expansion_item = find_text_by_variants(ocr_results, "expansion_button")
                     if expansion_item:
@@ -109,17 +108,14 @@ class DeckActions:
             if attempt > 0:
                 print(f"  -> 第{attempt}次滑动查找沙漏")
                 self.adb.swipe_up(distance=400)
-                time.sleep(0.8)
+                time.sleep(1.2)
                 screenshot = self.adb.screenshot()
                 if screenshot:
                     ocr_results = self.recognizer.ocr_full_screen(screenshot)
 
-            # 检测是否有弹窗遮挡（精确匹配 "OK"）
-            for item in ocr_results:
-                if item['text'].strip() == "OK":
-                    print("  -> 检测到弹窗，点击 OK 关闭")
-                    self.adb.tap_center(item['box'])
-                    return  # 返回主循环重新检测页面
+            # 检测是否有弹窗遮挡
+            if detect_and_close_popup(self.adb, ocr_results):
+                return  # 返回主循环重新检测页面
 
             # 查找沙漏图标
             shalou_box = self.recognizer.find_template(screenshot, "shalou", threshold=0.6)
@@ -140,8 +136,7 @@ class DeckActions:
 
         # 没有沙漏，标记当前卡包为完成
         if current_level and current_pack_id:
-            pack_name_final = current_pack_name or ""
-            self.state.set_pack_complete(current_level, current_pack_id, pack_name_final, True)
+            self.state.set_pack_complete(current_level, current_pack_id, True)
 
         # 点击扩充组查看更多卡包
         expansion_item = find_text_by_variants(ocr_results, "expansion_button")
