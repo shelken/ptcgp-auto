@@ -105,7 +105,19 @@ def main():
         default=None,
         help='ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)'
     )
+    parser.add_argument(
+        '-l', '--language',
+        type=str,
+        choices=['zh_Hant', 'en_US'],
+        default=None,
+        help='界面语言 (默认: zh_Hant)'
+    )
     args = parser.parse_args()
+
+    # 加载语言配置
+    if args.language:
+        config.load_language(args.language)
+        print(f"语言设置: {args.language}")
 
     # 解析地址
     host = None

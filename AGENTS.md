@@ -60,9 +60,10 @@ direnv allow                   # 或使用 direnv
 pip install -r requirements.txt  # 手动安装（需 Python 3.10+）
 
 # 运行主程序
-python main.py                 # 默认连接 127.0.0.1:5555
+python main.py                 # 默认连接 127.0.0.1:5555，繁体中文
 python main.py -a 5556         # 指定端口
-python main.py -a 192.168.1.100:5555  # 指定完整地址
+python main.py -l en_US        # 使用英文界面
+python main.py -a 5556 -l en_US  # 指定端口和语言
 
 # 调试工具
 python debug_tool.py           # 交互式调试（OCR 测试、截图、滑动等）
