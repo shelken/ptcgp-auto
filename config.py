@@ -29,13 +29,29 @@ OCR_LANGUAGES = ["zh-Hant", "en-US"]  # 繁体中文 + 英文
 # 模板匹配阈值（0-1，越高越严格）
 TEMPLATE_THRESHOLD = 0.8
 
-# 动态加载语言配置
-_locale = import_module(f"locales.{LANGUAGE}")
-BATTLE_LEVELS = _locale.BATTLE_LEVELS
-PAGES = _locale.PAGES
-TEXT_VARIANTS = _locale.TEXT_VARIANTS
-DECK_KEYWORD = _locale.DECK_KEYWORD
-
 # 调试模式
 DEBUG = True  # 开启后会保存截图和识别结果
 DEBUG_DIR = "debug_output"
+
+# 动态加载语言配置
+_locale = None
+BATTLE_LEVELS = None
+PAGES = None
+TEXT_VARIANTS = None
+DECK_KEYWORD = None
+
+
+def load_language(lang: str = None):
+    """加载语言配置"""
+    global LANGUAGE, _locale, BATTLE_LEVELS, PAGES, TEXT_VARIANTS, DECK_KEYWORD
+    if lang:
+        LANGUAGE = lang
+    _locale = import_module(f"locales.{LANGUAGE}")
+    BATTLE_LEVELS = _locale.BATTLE_LEVELS
+    PAGES = _locale.PAGES
+    TEXT_VARIANTS = _locale.TEXT_VARIANTS
+    DECK_KEYWORD = _locale.DECK_KEYWORD
+
+
+# 默认加载
+load_language()
