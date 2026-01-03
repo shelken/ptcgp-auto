@@ -27,8 +27,8 @@ class ActionHandler:
         self.recognizer = recognizer
         self.state = state
         # 状态变量
-        self.current_pack_name = None
-        self.current_pack_total = None
+        self.current_pack_name = None      # 当前卡包名称（用于显示）
+        self.current_pack_id = None        # 当前卡包 ID（左分母_右分母）
         self.tried_expansion_series = set()
         self.all_packs_checked = False
         self.needs_state_init = state.needs_initialization()
@@ -120,7 +120,7 @@ class ActionHandler:
             screenshot, match_info,
             self.needs_state_init,
             self.all_packs_checked,
-            self.current_pack_total,
+            self.current_pack_id,
             self.current_pack_name,
             set_all_packs_checked,
             set_current_pack_name
@@ -133,14 +133,14 @@ class ActionHandler:
             self.tried_expansion_series = val
         def set_all_packs_checked(val: bool):
             self.all_packs_checked = val
-        def set_current_pack_total(val: str):
-            self.current_pack_total = val
+        def set_current_pack_id(val: str):
+            self.current_pack_id = val
         self._expansion.handle_expansion_select(
             screenshot, match_info,
             self.tried_expansion_series,
             set_tried_expansion_series,
             set_all_packs_checked,
-            set_current_pack_total
+            set_current_pack_id
         )
 
     # ==================== 主页动作（委托） ====================
