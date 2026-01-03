@@ -24,7 +24,7 @@ class ExpansionActions:
         tried_expansion_series: Set[str],
         set_tried_expansion_series: Callable[[Set[str]], None],
         set_all_packs_checked: Callable[[bool], None],
-        set_current_pack_total: Callable[[str], None]
+        set_current_pack_id: Callable[[str], None]
     ):
         """处理扩充组选择页面 - 选择未完成的卡包"""
         ocr_results = match_info.get("ocr_results", [])
@@ -157,29 +157,39 @@ class ExpansionActions:
                 print(f"  [DEBUG] row_data 共 {len(row_data)} 行")
 
             for row in row_data:
-                right = row['right']
-                left = row['left']
+                right = row['right']  # 卡片收集进度
+                left = row['left']    # 牌组完成进度
                 if not right:
                     continue
 
-                total_str = str(right['total'])
+                # 如果左侧为空或者是 CLEAR，跳过该卡包（已完成所有牌组）
+                if not left:
+                    if config.DEBUG:
+                        print(f"  [DEBUG] 跳过: 左侧进度为空 (right={right['progress_key']})")
+                    continue
+
+                # 生成组合 ID: 左分母_右分母
+                left_total = str(left['total'])
+                right_total = str(right['total'])
+                pack_id = f"{left_total}_{right_total}"
 
                 if config.DEBUG:
-                    left_str = f"{left['current_val']}/{left['total']}" if left else "None"
-                    print(f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}")
+                    left_str = f"{left['current_val']}/{left['total']}"
+                    print(f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}, pack_id={pack_id}")
 
-                if current_level and self.state.is_pack_complete(current_level, total_str):
+                if current_level and self.state.is_pack_complete(current_level, pack_id):
                     if config.DEBUG:
                         print(f"  [DEBUG]   -> 已标记为完成，跳过")
                     continue
 
-                if left and left['current_val'] < left['total']:
+                # 使用左侧进度判断是否未完成
+                if left['current_val'] < left['total']:
                     incomplete_items.append({
                         'text': f"{left['progress_key']} | {right['progress_key']}",
                         'box': left['box'],
                         'remaining': left['total'] - left['current_val'],
-                        'total': right['total'],
-                        'progress_key': right['progress_key']
+                        'pack_id': pack_id,
+                        'progress_key': f"{left['progress_key']} | {right['progress_key']}"
                     })
                     if config.DEBUG:
                         print(f"  [DEBUG]   -> 未完成，加入候选")
@@ -187,8 +197,8 @@ class ExpansionActions:
             if incomplete_items:
                 incomplete_items.sort(key=lambda x: x['remaining'], reverse=True)
                 item = incomplete_items[0]
-                print(f"  -> 选择未完成卡包: {item['progress_key']} (剩余 {item['remaining']})")
-                set_current_pack_total(str(item['total']))
+                print(f"  -> 选择未完成卡包: {item['progress_key']} (pack_id={item['pack_id']}, 剩余 {item['remaining']})")
+                set_current_pack_id(item['pack_id'])
                 set_tried_expansion_series(set())
                 set_all_packs_checked(False)
                 self.adb.tap_center(item['box'])
