@@ -33,6 +33,9 @@ TEMPLATE_THRESHOLD = 0.8
 DEBUG = True  # 开启后会保存截图和识别结果
 DEBUG_DIR = "debug_output"
 
+# 弹窗按钮文字（用于滚动循环中检测遮挡弹窗）
+POPUP_BUTTONS = ["OK", "确认", "確認", "取消"]
+
 # 动态加载语言配置
 _locale = None
 BATTLE_LEVELS = None

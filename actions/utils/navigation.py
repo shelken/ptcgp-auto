@@ -2,6 +2,8 @@
 
 from typing import List, Dict
 
+import config
+
 
 def go_back(adb, recognizer, screenshot):
     """返回上一页
@@ -36,3 +38,18 @@ def close_popup(adb, recognizer, screenshot, ocr_results: List[Dict]):
 
     # 使用返回键
     go_back(adb, recognizer, screenshot)
+
+
+def detect_and_close_popup(adb, ocr_results: List[Dict]) -> bool:
+    """检测并关闭遮挡弹窗（OK/确认/取消按钮），返回是否处理了弹窗
+
+    注意：此函数用于滚动循环中检测遮挡内容的弹窗。
+    与 close_popup 不同，close_popup 用于关闭 X 按钮类型的弹窗。
+    """
+    for item in ocr_results:
+        text = item['text'].strip()
+        if text in config.POPUP_BUTTONS:
+            print(f"  -> 检测到弹窗按钮 '{text}'，点击关闭")
+            adb.tap_center(item['box'])
+            return True
+    return False
