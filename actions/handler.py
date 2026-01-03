@@ -8,6 +8,7 @@ from recognizer import Recognizer
 from state_manager import StateManager
 from .base import BaseActions
 from .battle import BattleActions
+from .level import LevelActions
 
 
 class ActionHandler:
@@ -31,6 +32,10 @@ class ActionHandler:
         # 子模块
         self._base = BaseActions(adb, recognizer)
         self._battle = BattleActions(
+            adb, recognizer, state,
+            self._should_switch_to_higher_priority_level
+        )
+        self._level = LevelActions(
             adb, recognizer, state,
             self._should_switch_to_higher_priority_level
         )
@@ -81,3 +86,13 @@ class ActionHandler:
 
     def action_start_battle(self, screenshot, match_info: Dict):
         self._battle.start_battle(screenshot, match_info, self.needs_state_init)
+
+    # ==================== 等级选择动作（委托） ====================
+
+    def action_select_level(self, screenshot, match_info: Dict):
+        def on_init_complete():
+            self.needs_state_init = False
+        def reset_pack_state():
+            self.all_packs_checked = False
+            self.tried_expansion_series.clear()
+        self._level.select_level(screenshot, match_info, self.needs_state_init, on_init_complete, reset_pack_state)
