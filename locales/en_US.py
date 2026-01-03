@@ -26,6 +26,13 @@ PAGES = {
         "priority": 1,
         "exact_match": True,
     },
+    # Network error popup - click retry
+    "network_error_popup": {
+        "identifiers": ["Retry", "Try Again"],
+        "action": "click_identifier",
+        "priority": 1,
+        "exact_match": True,
+    },
     # Battle defeat popup - click cancel
     "battle_defeat_popup": {
         "identifiers": ["To Missions"],
