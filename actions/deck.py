@@ -5,7 +5,7 @@ import time
 from typing import Dict, List, Optional, Callable
 
 import config
-from .utils import go_back, find_text_by_variants
+from .utils import go_back, find_text_by_variants, close_popup
 
 
 class DeckActions:
@@ -113,6 +113,13 @@ class DeckActions:
                 screenshot = self.adb.screenshot()
                 if screenshot:
                     ocr_results = self.recognizer.ocr_full_screen(screenshot)
+
+            # 检测是否有弹窗遮挡（精确匹配 "OK"）
+            for item in ocr_results:
+                if item['text'].strip() == "OK":
+                    print("  -> 检测到弹窗，点击 OK 关闭")
+                    self.adb.tap_center(item['box'])
+                    return  # 返回主循环重新检测页面
 
             # 查找沙漏图标
             shalou_box = self.recognizer.find_template(screenshot, "shalou", threshold=0.6)
