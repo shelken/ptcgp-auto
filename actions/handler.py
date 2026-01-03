@@ -9,6 +9,7 @@ from state_manager import StateManager
 from .base import BaseActions
 from .battle import BattleActions
 from .deck import DeckActions
+from .expansion import ExpansionActions
 from .level import LevelActions
 
 
@@ -41,6 +42,10 @@ class ActionHandler:
             self._should_switch_to_higher_priority_level
         )
         self._deck = DeckActions(
+            adb, recognizer, state,
+            self._should_switch_to_higher_priority_level
+        )
+        self._expansion = ExpansionActions(
             adb, recognizer, state,
             self._should_switch_to_higher_priority_level
         )
@@ -117,4 +122,21 @@ class ActionHandler:
             self.current_pack_name,
             set_all_packs_checked,
             set_current_pack_name
+        )
+
+    # ==================== 扩充组选择动作（委托） ====================
+
+    def action_handle_expansion_select(self, screenshot, match_info: Dict):
+        def set_tried_expansion_series(val: set):
+            self.tried_expansion_series = val
+        def set_all_packs_checked(val: bool):
+            self.all_packs_checked = val
+        def set_current_pack_total(val: str):
+            self.current_pack_total = val
+        self._expansion.handle_expansion_select(
+            screenshot, match_info,
+            self.tried_expansion_series,
+            set_tried_expansion_series,
+            set_all_packs_checked,
+            set_current_pack_total
         )
