@@ -50,8 +50,9 @@ class PageDetector:
                     continue
 
             # 检查文字标识符
+            match_all = page_info.get("match_all", False)
             match_info = self._check_text_identifiers(
-                identifiers, ocr_results, exact_match
+                identifiers, ocr_results, exact_match, match_all
             )
             if match_info:
                 match_info["ocr_results"] = ocr_results
@@ -76,27 +77,58 @@ class PageDetector:
         self,
         identifiers: List[str],
         ocr_results: List[Dict],
+        exact_match: bool,
+        match_all: bool = False
+    ) -> Optional[Dict]:
+        """检查文字标识符匹配
+
+        Args:
+            identifiers: 要匹配的文字列表
+            ocr_results: OCR 识别结果
+            exact_match: 是否精确匹配
+            match_all: 是否要求所有 identifiers 都匹配（默认 False，任意一个匹配即可）
+        """
+        if match_all:
+            # AND 逻辑：所有 identifiers 都必须匹配
+            matched_items = []
+            for identifier in identifiers:
+                found = self._find_identifier(identifier, ocr_results, exact_match)
+                if not found:
+                    return None  # 有一个没找到就失败
+                matched_items.append(found)
+            # 所有都找到了，返回第一个匹配项的信息
+            return matched_items[0] if matched_items else None
+        else:
+            # OR 逻辑：任意一个匹配即可（原有行为）
+            for identifier in identifiers:
+                found = self._find_identifier(identifier, ocr_results, exact_match)
+                if found:
+                    return found
+            return None
+
+    def _find_identifier(
+        self,
+        identifier: str,
+        ocr_results: List[Dict],
         exact_match: bool
     ) -> Optional[Dict]:
-        """检查文字标识符匹配"""
-        for identifier in identifiers:
-            for ocr_item in ocr_results:
-                ocr_text = ocr_item['text'].strip()
+        """查找单个标识符"""
+        for ocr_item in ocr_results:
+            ocr_text = ocr_item['text'].strip()
 
-                # 根据 exact_match 决定匹配方式
-                if exact_match:
-                    matched = identifier.lower() == ocr_text.lower()
-                else:
-                    matched = (identifier.lower() == ocr_text.lower() or
-                               identifier.lower() in ocr_text.lower())
+            if exact_match:
+                matched = identifier.lower() == ocr_text.lower()
+            else:
+                matched = (identifier.lower() == ocr_text.lower() or
+                           identifier.lower() in ocr_text.lower())
 
-                if matched:
-                    return {
-                        "type": "text",
-                        "identifier": identifier,
-                        "matched_text": ocr_text,
-                        "box": ocr_item['box'],
-                    }
+            if matched:
+                return {
+                    "type": "text",
+                    "identifier": identifier,
+                    "matched_text": ocr_text,
+                    "box": ocr_item['box'],
+                }
         return None
 
     def _check_templates(
