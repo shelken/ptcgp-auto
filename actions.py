@@ -414,27 +414,60 @@ class ActionHandler:
             self._close_expansion_select(screenshot, ocr_results)
             return
 
-        # 根据 tried_expansion_series 判断当前系列
-        # 每次打开 expansion_select 默认显示 A 系列
+        # 根据 tried_expansion_series 判断状态
+        # 策略：首次进入先点击 A 按钮确保在 A 系列，然后遍历 A，再点击 B 遍历 B
         if not self.tried_expansion_series:
-            # 首次进入，默认在 A 系列
-            current_series = "A"
+            # 首次进入，需要先点击 A 按钮
+            current_series = "init"
         elif "A" in self.tried_expansion_series and "B" not in self.tried_expansion_series:
-            # A 已检查，点击了 B Series，当前应该在 B 系列
+            # A 已检查完，正在检查 B
             current_series = "B"
-        else:
+        elif "A" in self.tried_expansion_series and "B" in self.tried_expansion_series:
             # 两个系列都检查过了，关闭页面
             print("  -> 所有系列都已检查，关闭扩充组选择")
             self.tried_expansion_series.clear()
-            self.state.set_current_series("A")
+            self.all_packs_checked = True
             self._close_expansion_select(screenshot, ocr_results)
             return
+        else:
+            # 正在检查 A 系列
+            current_series = "A"
 
         max_scroll_attempts = 5  # 最多滑动5次
         last_progress_keys = set()  # 上一次看到的进度数字集合
         has_series_button = {"A": None, "B": None}
         seen_clear = False  # 是否看到过 CLEAR!
         seen_incomplete = False  # 是否看到过未完成的进度
+
+        # 先扫描一遍找到系列按钮
+        for item in ocr_results:
+            text = item['text'].strip()
+            series_a_variants = config.TEXT_VARIANTS.get("series_a", [])
+            series_b_variants = config.TEXT_VARIANTS.get("series_b", [])
+            for variant in series_a_variants:
+                if variant in text:
+                    has_series_button["A"] = item['box']
+                    break
+            for variant in series_b_variants:
+                if variant in text:
+                    has_series_button["B"] = item['box']
+                    break
+
+        # 如果是 init 状态，先点击 A 按钮确保在 A 系列
+        if current_series == "init":
+            if has_series_button["A"]:
+                print("  -> 点击 A 系列按钮确保在 A 系列")
+                self.tried_expansion_series.add("clicked_A")
+                self.adb.tap_center(has_series_button["A"])
+                return
+            else:
+                # 没有 A 按钮，直接开始检查
+                current_series = "A"
+                self.tried_expansion_series.add("clicked_A")
+
+        # 如果刚点击了 A 按钮，现在开始遍历 A 系列
+        if "clicked_A" in self.tried_expansion_series and "A" not in self.tried_expansion_series:
+            current_series = "A"
 
         for scroll_attempt in range(max_scroll_attempts):
             if scroll_attempt > 0:
@@ -600,12 +633,12 @@ class ActionHandler:
 
         # 当前系列没有未完成的卡包，记录已检查
         self.tried_expansion_series.add(current_series)
+        self.tried_expansion_series.discard("clicked_A")  # 清理临时标记
 
         # 尝试切换到另一个系列（只切换到未检查过的系列）
         other_series = "B" if current_series == "A" else "A"
         if other_series not in self.tried_expansion_series and has_series_button[other_series]:
             print(f"  -> {current_series} 系列无可用卡包，切换到 {other_series} 系列")
-            self.state.set_current_series(other_series)
             self.adb.tap_center(has_series_button[other_series])
             return
 
@@ -615,7 +648,6 @@ class ActionHandler:
 
         # 关闭页面
         print("  -> 所有系列都已检查，关闭扩充组选择")
-        self.state.set_current_series("A")
         self._close_expansion_select(screenshot, ocr_results)
 
     # ==================== 辅助方法 ====================
