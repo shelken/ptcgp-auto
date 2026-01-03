@@ -32,9 +32,9 @@ class StateManager:
                         self.state_file.unlink()
                         return self._create_default_state()
 
-                    # 检查是否需要迁移（旧格式使用单一数字作为 key）
+                    # 检查是否需要迁移（旧格式）
                     if self._needs_migration(state):
-                        print("检测到旧版本状态格式（单一分母），重置状态文件...")
+                        print("检测到旧版本状态格式，重置状态文件...")
                         self.state_file.unlink()
                         return self._create_default_state()
 
@@ -47,14 +47,20 @@ class StateManager:
         return self._create_default_state()
 
     def _needs_migration(self, state: Dict) -> bool:
-        """检测是否需要迁移（旧格式使用单一数字作为卡包 key，新格式使用 左分母_右分母）"""
+        """检测是否需要迁移
+        - 旧格式1: 使用单一数字作为卡包 key
+        - 旧格式2: 使用 {"name": ..., "done": bool} 作为值
+        - 新格式: 使用 "数字_数字" 作为 key，bool 作为值
+        """
         levels = state.get("levels", {})
         for level_data in levels.values():
             packs = level_data.get("packs", {})
-            for key in packs.keys():
-                # 如果 key 是纯数字（旧格式），需要迁移
-                # 新格式是 "数字_数字" 的形式
+            for key, value in packs.items():
+                # 如果 key 是纯数字（旧格式1），需要迁移
                 if key.isdigit():
+                    return True
+                # 如果 value 是 dict（旧格式2），需要迁移
+                if isinstance(value, dict):
                     return True
         return False
 
@@ -121,7 +127,7 @@ class StateManager:
         self.save()
 
     # ===== 卡包状态 =====
-    # packs 结构: {"左分母_右分母": {"name": 卡包名, "done": bool}, ...}
+    # packs 结构: {"左分母_右分母": bool, ...}
     # 使用左右分母组合作为 key（如 "20_81"），因为不同卡包可能有相同的单一分母
     # 左分母 = 总牌组数，右分母 = 总卡数
 
@@ -129,37 +135,23 @@ class StateManager:
         """检查指定等级的卡包是否完成（使用左右分母组合作为标识，如 '20_81'）"""
         if level in self.state["levels"]:
             packs = self.state["levels"][level].get("packs", {})
-            pack_info = packs.get(pack_id, {})
-            return pack_info.get("done", False)
+            return packs.get(pack_id, False)
         return False
 
-    def set_pack_complete(self, level: str, pack_id: str, name: str = "", complete: bool = True):
+    def set_pack_complete(self, level: str, pack_id: str, complete: bool = True):
         """标记卡包完成状态（使用左右分母组合作为标识，如 '20_81'）"""
         if level not in self.state["levels"]:
             self.state["levels"][level] = {"complete": False, "packs": {}}
-        if pack_id not in self.state["levels"][level]["packs"]:
-            self.state["levels"][level]["packs"][pack_id] = {"name": name, "done": False}
-        self.state["levels"][level]["packs"][pack_id]["done"] = complete
-        if name:
-            self.state["levels"][level]["packs"][pack_id]["name"] = name
+        self.state["levels"][level]["packs"][pack_id] = complete
         if complete:
-            pack_name = self.state["levels"][level]["packs"][pack_id].get("name", pack_id)
-            print(f"[状态] {level} - {pack_name}({pack_id}) 已标记为完成")
+            print(f"[状态] {level} - {pack_id} 已标记为完成")
         self.save()
-
-    def get_pack_name(self, level: str, pack_id: str) -> Optional[str]:
-        """获取卡包名称（通过左右分母组合）"""
-        if level in self.state["levels"]:
-            packs = self.state["levels"][level].get("packs", {})
-            pack_info = packs.get(pack_id, {})
-            return pack_info.get("name")
-        return None
 
     def get_incomplete_packs(self, level: str) -> list:
         """获取指定等级未完成的卡包 ID 列表（左右分母组合）"""
         if level in self.state["levels"]:
             packs = self.state["levels"][level].get("packs", {})
-            return [pack_id for pack_id, info in packs.items() if not info.get("done", False)]
+            return [pack_id for pack_id, done in packs.items() if not done]
         return []
 
     # ===== 系列状态 =====
@@ -203,7 +195,8 @@ class StateManager:
             level_state = self.state["levels"].get(level, {})
             complete = "✓ Complete" if level_state.get("complete") else "进行中"
             packs = level_state.get("packs", {})
-            done_count = sum(1 for v in packs.values() if v)
+            # 兼容新旧格式：新格式直接是 bool，旧格式是 dict
+            done_count = sum(1 for v in packs.values() if (v is True) or (isinstance(v, dict) and v.get("done")))
             total_count = len(packs)
             print(f"  {level}: {complete} ({done_count}/{total_count} 卡包)")
         print("=" * 40 + "\n")
