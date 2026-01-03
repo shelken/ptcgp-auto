@@ -162,8 +162,13 @@ class ActionHandler:
             if found:
                 return
 
-        print("  -> 未找到未完成的等级，尝试返回")
-        self._go_back(screenshot)
+        # 所有等级都已完成，退出程序
+        print("  -> 所有等级都已完成！")
+        print("=" * 50)
+        print("恭喜！所有分级对战任务已完成！")
+        print("=" * 50)
+        import sys
+        sys.exit(0)
 
     def _find_and_click_level(self, level: str, ocr_results: List[Dict], screenshot) -> bool:
         """查找并点击指定等级，如果需要会滑动查找
@@ -236,7 +241,8 @@ class ActionHandler:
         for item in ocr_results:
             text = item['text'].strip()
             for variant in ranked_variants:
-                if variant in text or text in variant:
+                # 只检查 variant 是否在 text 中
+                if variant in text:
                     print("  -> 进入分级对战")
                     self.adb.tap_center(item['box'])
                     return
@@ -260,7 +266,8 @@ class ActionHandler:
         for item in ocr_results:
             text = item['text'].strip()
             for variant in solo_variants:
-                if variant in text or text in variant:
+                # 只检查 variant 是否在 text 中，避免 "對戰" 匹配到 "單人對戰"
+                if variant in text:
                     print("  -> 点击单人对战")
                     self.adb.tap_center(item['box'])
                     return
@@ -433,8 +440,8 @@ class ActionHandler:
             # 正在检查 A 系列
             current_series = "A"
 
-        max_scroll_attempts = 5  # 最多滑动5次
         last_progress_keys = set()  # 上一次看到的进度数字集合
+        scroll_count = 0  # 滑动次数（仅用于日志）
         has_series_button = {"A": None, "B": None}
         seen_clear = False  # 是否看到过 CLEAR!
         seen_incomplete = False  # 是否看到过未完成的进度
@@ -469,9 +476,9 @@ class ActionHandler:
         if "clicked_A" in self.tried_expansion_series and "A" not in self.tried_expansion_series:
             current_series = "A"
 
-        for scroll_attempt in range(max_scroll_attempts):
-            if scroll_attempt > 0:
-                print(f"  -> 第{scroll_attempt}次滑动查找卡包")
+        while True:
+            if scroll_count > 0:
+                print(f"  -> 第{scroll_count}次滑动查找卡包")
                 self.adb.swipe_up(distance=400)
                 time.sleep(0.8)
                 screenshot = self.adb.screenshot()
@@ -584,6 +591,8 @@ class ActionHandler:
             # - 使用右边的分母作为卡包唯一标识符
             # - 使用左边的进度判断当前等级是否需要处理
             incomplete_items = []
+            if config.DEBUG:
+                print(f"  [DEBUG] row_data 共 {len(row_data)} 行")
             for row in row_data:
                 right = row['right']
                 left = row['left']
@@ -594,8 +603,14 @@ class ActionHandler:
                 # 用右边的分母作为标识符
                 total_str = str(right['total'])
 
+                if config.DEBUG:
+                    left_str = f"{left['current_val']}/{left['total']}" if left else "None"
+                    print(f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}, total_str={total_str}")
+
                 # 检查是否已标记为完成
                 if current_level and self.state.is_pack_complete(current_level, total_str):
+                    if config.DEBUG:
+                        print(f"  [DEBUG]   -> 已标记为完成，跳过")
                     continue
 
                 # 如果左边存在且是数字进度，表示当前等级需要处理
@@ -611,6 +626,10 @@ class ActionHandler:
                             'total': right['total'],  # 用右边的分母作为标识符
                             'progress_key': right['progress_key']
                         })
+                        if config.DEBUG:
+                            print(f"  [DEBUG]   -> 未完成，加入候选")
+                    elif config.DEBUG:
+                        print(f"  [DEBUG]   -> 左边已满 ({left['current_val']}>={left['total']})，跳过")
 
             if incomplete_items:
                 incomplete_items.sort(key=lambda x: x['remaining'], reverse=True)
@@ -625,11 +644,12 @@ class ActionHandler:
                 return
 
             # 检测是否到底（没有新内容）
-            if scroll_attempt > 0 and current_progress_keys == last_progress_keys:
-                print(f"  -> 已滑动到底部（第{scroll_attempt}次滑动后无新内容）")
+            if scroll_count > 0 and current_progress_keys == last_progress_keys:
+                print(f"  -> 已滑动到底部（第{scroll_count}次滑动后无新内容）")
                 break
 
             last_progress_keys = current_progress_keys
+            scroll_count += 1
 
         # 当前系列没有未完成的卡包，记录已检查
         self.tried_expansion_series.add(current_series)
