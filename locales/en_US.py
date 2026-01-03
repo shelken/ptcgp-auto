@@ -5,7 +5,11 @@ TODO: Fill in actual English text from the game UI
 
 # Battle levels (traverse order, customize as needed)
 # Default from Elite to Beginner, to challenge higher difficulty first
-BATTLE_LEVELS = ["Elite", "Advanced", "Intermediate", "Beginner"]
+BATTLE_LEVELS = ["Expert", "Advanced", "Intermediate", "Beginner"]
+
+# Deck keyword (used to extract pack name from title)
+# Format: "Carnivine Deck (Triumphant Light)"
+DECK_KEYWORD = "Deck"
 
 # Page detection configuration
 # Each page definition:
@@ -24,44 +28,44 @@ PAGES = {
     },
     # Battle defeat popup - click cancel
     "battle_defeat_popup": {
-        "identifiers": ["Go to Missions"],
+        "identifiers": ["To Missions"],
         "action": "click_cancel",
         "priority": 2,
     },
     # Battle result page - tap to continue
     "battle_result_continue": {
-        "identifiers": ["Tap to continue", "TAP TO CONTINUE"],
+        "identifiers": ["Tap to Proceed"],
         "action": "click_identifier",
         "priority": 10,
     },
     # Continue button
     "continue_button": {
-        "identifiers": ["Continue"],
+        "identifiers": ["Next", "Continue"],
         "action": "click_identifier",
         "priority": 11,
+        "exclude_identifiers": ["next turn"],
     },
     # Battle record page
     "battle_record": {
-        "identifiers": ["Battle Record"],
+        "identifiers": ["Battle Log"],
         "action": "click_continue",
         "priority": 15,
     },
     # EXP result page
     "exp_result": {
-        "identifiers": ["Player EXP", "EXP"],
+        "identifiers": ["Player EXP"],
         "action": "click_continue",
         "priority": 16,
     },
     # Battle in progress - wait
     "battle_in_progress": {
         "identifiers": [
-            "Place a Basic Pokémon",
-            "You go first",
-            "You go second",
             "Opponent",
         ],
         "action": "wait",
         "priority": 20,
+        "exact_match": True,
+        # "exclude_identifiers": ["Knock Out your opponent's Active"],
     },
     # Deck detail page - has battle button
     "deck_detail": {
@@ -77,7 +81,7 @@ PAGES = {
     },
     # Deck list page - in a card pack, has Expansion button
     "deck_list": {
-        "identifiers": ["Expansion"],
+        "identifiers": ["Expansions"],
         "templates": ["shalou"],
         "action": "handle_deck_list",
         "priority": 45,
@@ -85,7 +89,7 @@ PAGES = {
     },
     # Ranked battle select page (level selection)
     "ranked_battle_select": {
-        "identifiers": ["Ranked Battle"],
+        "identifiers": ["Step-Up Battle"],
         "action": "select_level",
         "priority": 50,
         "exclude_identifiers": ["Expansion"],
@@ -119,16 +123,10 @@ TEXT_VARIANTS = {
         "BATTLE",
     ],
     "solo_battle": [
-        "Solo Battle",
-        "SOLO BATTLE",
+        "Solo",
     ],
     "ranked_battle": [
-        "Ranked Battle",
-        "RANKED BATTLE",
-    ],
-    "elite_battle": [
-        "Elite Battle",
-        "ELITE BATTLE",
+        "Step-Up Battle",
     ],
     "expansion": [
         "Expansion",
@@ -147,17 +145,18 @@ TEXT_VARIANTS = {
         "AUTO",
     ],
     "cancel": [
-        "Cancel",
-        "CANCEL",
+        "Back"
     ],
     "expansion_button": [
         "Expansion",
         "EXPANSION",
     ],
     "series_a": [
+        "A Series",
         "Series A",
     ],
     "series_b": [
+        "B Series",
         "Series B",
     ],
     "select_expansion": [
@@ -165,5 +164,9 @@ TEXT_VARIANTS = {
     ],
     "series": [
         "Series",
+    ],
+    "no_battles_available": [
+        "no battles available",
+        "There are no battles",
     ],
 }

@@ -6,6 +6,10 @@
 # 默认从精英开始到初级，这样可以先打高难度
 BATTLE_LEVELS = ["精英", "高級", "中級", "初級"]
 
+# 牌组关键词（用于从标题提取卡包名）
+# 格式如: "毽子花牌組（高級擴充包ex）"
+DECK_KEYWORD = "牌組"
+
 # 界面识别配置
 # 每个界面定义：
 #   - identifiers: 识别该界面的文字列表（任意一个匹配即可）
@@ -16,7 +20,7 @@ BATTLE_LEVELS = ["精英", "高級", "中級", "初級"]
 PAGES = {
     # 弹窗 - 最高优先级（精确匹配，避免误匹配 POKéMON）
     "popup_ok": {
-        "identifiers": ["OK", "確定", "确定"],
+        "identifiers": ["OK"],
         "action": "click_identifier",
         "priority": 1,
         "exact_match": True,
@@ -29,7 +33,7 @@ PAGES = {
     },
     # 对战结果页面 - 需要点击继续
     "battle_result_continue": {
-        "identifiers": ["點擊來繼續", "點擊以繼續", "點擊繼續", "Tap to continue"],
+        "identifiers": ["點擊來繼續", "點擊以繼續"],
         "action": "click_identifier",
         "priority": 10,
     },
@@ -47,7 +51,7 @@ PAGES = {
     },
     # 经验值结算页面
     "exp_result": {
-        "identifiers": ["玩家經驗值", "EXP"],
+        "identifiers": ["玩家經驗值"],
         "action": "click_continue",
         "priority": 16,
     },
@@ -122,9 +126,6 @@ TEXT_VARIANTS = {
     "ranked_battle": [
         "分級對戰",
     ],
-    "elite_battle": [
-        "精英對戰",
-    ],
     "expansion": [
         "擴充包",
         "擴充組",
@@ -157,5 +158,8 @@ TEXT_VARIANTS = {
     ],
     "series": [
         "系列",
+    ],
+    "no_battles_available": [
+        "沒有可挑戰的對戰",
     ],
 }

@@ -34,6 +34,7 @@ _locale = import_module(f"locales.{LANGUAGE}")
 BATTLE_LEVELS = _locale.BATTLE_LEVELS
 PAGES = _locale.PAGES
 TEXT_VARIANTS = _locale.TEXT_VARIANTS
+DECK_KEYWORD = _locale.DECK_KEYWORD
 
 # 调试模式
 DEBUG = True  # 开启后会保存截图和识别结果
