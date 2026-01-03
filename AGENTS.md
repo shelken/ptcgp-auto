@@ -14,7 +14,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `adb_controller.py` - ADB 封装（截图、点击、滑动）
 - `recognizer.py` - Apple Vision OCR + OpenCV 模板匹配
 - `page_detector.py` - 页面检测器，识别当前游戏界面
-- `actions.py` - 动作处理器，处理各种界面操作
+- `actions/` - 动作处理器模块（模块化架构）
+  - `handler.py` - ActionHandler 门面类
+  - `base.py` - 基础动作（点击、等待等）
+  - `battle.py` - 对战相关动作
+  - `level.py` - 等级选择动作
+  - `deck.py` - 牌组列表动作
+  - `expansion.py` - 扩充组选择动作
+  - `home.py` - 主页动作
+  - `utils/` - 工具模块（滚动、OCR辅助、导航）
 - `state_manager.py` - 状态管理器，保存和加载自动化进度
 - `config.py` - 配置常量和界面识别规则
 - `utils.py` - 工具函数
@@ -33,8 +41,15 @@ PTCGPAuto
     │       Apple Vision OCR、OpenCV 模板匹配
     ├── PageDetector (page_detector.py)
     │       根据 OCR 和模板识别当前界面
-    ├── ActionHandler (actions.py)
+    ├── ActionHandler (actions/)
     │       执行各界面对应的动作
+    │       ├── BaseActions - 基础动作
+    │       ├── BattleActions - 对战动作
+    │       ├── LevelActions - 等级选择
+    │       ├── DeckActions - 牌组列表
+    │       ├── ExpansionActions - 扩充组选择
+    │       ├── HomeActions - 主页动作
+    │       └── utils/ - 工具（滚动、OCR、导航）
     └── StateManager (state_manager.py)
             保存/加载等级和卡包完成状态
 ```
@@ -94,7 +109,7 @@ rm /tmp/ptcgp_auto_5555/state.json
 ## 扩展新页面
 
 1. 在 `config.py` 的 `PAGES` 中添加识别规则（identifiers/templates、action、priority）
-2. 在 `actions.py` 中实现对应的动作方法
+2. 在 `actions/` 对应模块中实现动作方法，并在 `actions/handler.py` 中添加委托方法
 
 ## 注意事项
 

@@ -107,7 +107,19 @@ rm /tmp/ptcgp_auto_5555/state.json
 ```
 ptcgp-auto/
 ├── main.py             # Main entry point
-├── actions.py          # Action handler
+├── actions/            # Action handler module
+│   ├── __init__.py     # Exports ActionHandler
+│   ├── handler.py      # Facade class
+│   ├── base.py         # Base actions
+│   ├── battle.py       # Battle actions
+│   ├── level.py        # Level selection
+│   ├── deck.py         # Deck list
+│   ├── expansion.py    # Expansion selection
+│   ├── home.py         # Home actions
+│   └── utils/          # Utility modules
+│       ├── scroll.py       # Scroll helper
+│       ├── ocr_helpers.py  # OCR utilities
+│       └── navigation.py   # Navigation utilities
 ├── page_detector.py    # Page detector
 ├── state_manager.py    # State management
 ├── adb_controller.py   # ADB controller
