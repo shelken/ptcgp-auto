@@ -23,6 +23,15 @@ class StateManager:
             try:
                 with open(self.state_file, 'r', encoding='utf-8') as f:
                     state = json.load(f)
+
+                    # 检查语言是否一致，不一致则重置
+                    saved_lang = state.get("language")
+                    if saved_lang and saved_lang != config.LANGUAGE:
+                        print(f"语言已变更: {saved_lang} -> {config.LANGUAGE}")
+                        print("重置状态文件...")
+                        self.state_file.unlink()
+                        return self._create_default_state()
+
                     print(f"已加载状态: {self.state_file}")
                     return state
             except Exception as e:
@@ -34,6 +43,7 @@ class StateManager:
     def _create_default_state(self) -> Dict:
         """创建默认状态"""
         state = {
+            "language": config.LANGUAGE,  # 保存当前语言
             "last_updated": datetime.now().isoformat(),
             "current_level": None,  # 当前正在处理的等级
             "current_series": "A",  # 当前系列 A/B
