@@ -93,28 +93,45 @@ class StateManager:
         self.save()
 
     # ===== 卡包状态 =====
+    # packs 结构: {"分母": {"name": "卡包名", "done": bool}, ...}
+    # 使用分母作为 key，因为在扩充包选择页面可以直接看到进度如 "30/81"
 
-    def is_pack_complete(self, level: str, pack_name: str) -> bool:
-        """检查指定等级的卡包是否完成"""
+    def is_pack_complete(self, level: str, total: str) -> bool:
+        """检查指定等级的卡包是否完成（使用分母作为标识）"""
         if level in self.state["levels"]:
             packs = self.state["levels"][level].get("packs", {})
-            return packs.get(pack_name, False)
+            pack_info = packs.get(str(total), {})
+            return pack_info.get("done", False)
         return False
 
-    def set_pack_complete(self, level: str, pack_name: str, complete: bool = True):
-        """标记卡包完成状态"""
+    def set_pack_complete(self, level: str, total: str, name: str = "", complete: bool = True):
+        """标记卡包完成状态（使用分母作为标识）"""
         if level not in self.state["levels"]:
             self.state["levels"][level] = {"complete": False, "packs": {}}
-        self.state["levels"][level]["packs"][pack_name] = complete
+        total_str = str(total)
+        if total_str not in self.state["levels"][level]["packs"]:
+            self.state["levels"][level]["packs"][total_str] = {"name": name, "done": False}
+        self.state["levels"][level]["packs"][total_str]["done"] = complete
+        if name:
+            self.state["levels"][level]["packs"][total_str]["name"] = name
         if complete:
-            print(f"[状态] {level} - {pack_name} 已标记为完成")
+            pack_name = self.state["levels"][level]["packs"][total_str].get("name", total_str)
+            print(f"[状态] {level} - {pack_name}({total_str}) 已标记为完成")
         self.save()
 
-    def get_incomplete_packs(self, level: str) -> list:
-        """获取指定等级未完成的卡包列表"""
+    def get_pack_name(self, level: str, total: str) -> Optional[str]:
+        """获取卡包名称（通过分母）"""
         if level in self.state["levels"]:
             packs = self.state["levels"][level].get("packs", {})
-            return [name for name, done in packs.items() if not done]
+            pack_info = packs.get(str(total), {})
+            return pack_info.get("name")
+        return None
+
+    def get_incomplete_packs(self, level: str) -> list:
+        """获取指定等级未完成的卡包分母列表"""
+        if level in self.state["levels"]:
+            packs = self.state["levels"][level].get("packs", {})
+            return [total for total, info in packs.items() if not info.get("done", False)]
         return []
 
     # ===== 系列状态 =====
