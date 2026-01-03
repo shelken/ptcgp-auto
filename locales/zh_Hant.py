@@ -25,6 +25,13 @@ PAGES = {
         "priority": 1,
         "exact_match": True,
     },
+    # 网络错误弹窗 - 点击重试
+    "network_error_popup": {
+        "identifiers": ["再試一次"],
+        "action": "click_identifier",
+        "priority": 1,
+        "exact_match": True,
+    },
     # 战败提示弹窗 - 点击取消
     "battle_defeat_popup": {
         "identifiers": ["前往任務"],
