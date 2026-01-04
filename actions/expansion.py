@@ -55,17 +55,20 @@ class ExpansionActions:
         scroll_count = 0
         has_series_button = {"A": None, "B": None}
 
+        # 获取 patterns（只获取一次，避免循环内重复获取）
+        series_a_patterns = config.TEXT_PATTERNS.get("series_a", [])
+        series_b_patterns = config.TEXT_PATTERNS.get("series_b", [])
+        skip_titles = config.TEXT_PATTERNS.get("skip_titles", [])
+
         # 先扫描一遍找到系列按钮
         for item in ocr_results:
             text = item['text'].strip()
-            series_a_variants = config.TEXT_VARIANTS.get("series_a", [])
-            series_b_variants = config.TEXT_VARIANTS.get("series_b", [])
-            for variant in series_a_variants:
-                if variant in text:
+            for pattern in series_a_patterns:
+                if pattern in text:
                     has_series_button["A"] = item['box']
                     break
-            for variant in series_b_variants:
-                if variant in text:
+            for pattern in series_b_patterns:
+                if pattern in text:
                     has_series_button["B"] = item['box']
                     break
 
@@ -109,23 +112,19 @@ class ExpansionActions:
                 text = item['text'].strip()
 
                 # 记录系列按钮位置
-                series_a_variants = config.TEXT_VARIANTS.get("series_a", [])
-                series_b_variants = config.TEXT_VARIANTS.get("series_b", [])
-                for variant in series_a_variants:
-                    if variant in text:
+                for pattern in series_a_patterns:
+                    if pattern in text:
                         has_series_button["A"] = item['box']
                         break
-                for variant in series_b_variants:
-                    if variant in text:
+                for pattern in series_b_patterns:
+                    if pattern in text:
                         has_series_button["B"] = item['box']
                         break
 
                 # 跳过标题和系列选择
-                select_expansion_variants = config.TEXT_VARIANTS.get("select_expansion", [])
-                series_variants = config.TEXT_VARIANTS.get("series", [])
                 skip = False
-                for variant in select_expansion_variants + series_variants:
-                    if variant in text:
+                for pattern in skip_titles:
+                    if pattern in text:
                         skip = True
                         break
                 if skip:

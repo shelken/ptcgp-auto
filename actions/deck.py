@@ -67,11 +67,11 @@ class DeckActions:
             return
 
         # 检查是否没有可用对战
-        no_battles_variants = config.TEXT_VARIANTS.get("no_battles_available", [])
+        no_battles_patterns = config.TEXT_PATTERNS.get("no_battles", [])
         for item in ocr_results:
             text = item['text'].strip().lower()
-            for variant in no_battles_variants:
-                if variant.lower() in text:
+            for pattern in no_battles_patterns:
+                if pattern.lower() in text:
                     print("  -> 当前难度没有可用对战，标记卡包完成并返回")
                     if current_level and current_pack_id:
                         self.state.set_pack_complete(current_level, current_pack_id, True)
