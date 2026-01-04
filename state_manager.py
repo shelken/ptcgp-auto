@@ -63,8 +63,9 @@ class StateManager:
                 # 如果 value 是 dict（旧格式2），需要迁移
                 if isinstance(value, dict):
                     return True
-                # 如果 key 不以 a_ 或 b_ 开头（旧格式3），需要迁移
-                if not (key.startswith("a_") or key.startswith("b_")):
+                # 检查 key 是否以任一已配置系列的小写前缀开头
+                valid_prefixes = [f"{s.lower()}_" for s in config.SERIES]
+                if not any(key.startswith(prefix) for prefix in valid_prefixes):
                     return True
         return False
 
@@ -74,7 +75,7 @@ class StateManager:
             "language": config.LANGUAGE,  # 保存当前语言
             "last_updated": datetime.now().isoformat(),
             "current_level": None,  # 当前正在处理的等级
-            "current_series": "A",  # 当前系列 A/B
+            "current_series": config.SERIES[0] if config.SERIES else "A",  # 当前系列
             "levels": {}
         }
 
@@ -162,7 +163,8 @@ class StateManager:
 
     def get_current_series(self) -> str:
         """获取当前系列"""
-        return self.state.get("current_series", "A")
+        default = config.SERIES[0] if config.SERIES else "A"
+        return self.state.get("current_series", default)
 
     def set_current_series(self, series: str):
         """设置当前系列"""
@@ -172,10 +174,15 @@ class StateManager:
     def switch_to_next_series(self) -> Optional[str]:
         """切换到下一个系列，返回新系列名，如果没有更多系列返回 None"""
         current = self.get_current_series()
-        if current == "A":
-            self.set_current_series("B")
-            return "B"
-        return None  # B 之后没有更多系列
+        try:
+            current_index = config.SERIES.index(current)
+            if current_index + 1 < len(config.SERIES):
+                next_series = config.SERIES[current_index + 1]
+                self.set_current_series(next_series)
+                return next_series
+        except ValueError:
+            pass
+        return None  # 没有更多系列
 
     # ===== 工具方法 =====
 
