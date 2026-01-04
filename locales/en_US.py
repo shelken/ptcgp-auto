@@ -72,7 +72,7 @@ PAGES = {
         "identifiers": [
             "Opponent",
         ],
-        "action": "wait",
+        "action": "wait_battle",
         "priority": 20,
         "exact_match": True,
         # "exclude_identifiers": ["Knock Out your opponent's Active"],
