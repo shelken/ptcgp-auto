@@ -39,11 +39,27 @@ class BaseActions:
         self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
 
     def click_template(self, screenshot, match_info: Dict):
-        """点击模板位置"""
+        """点击模板位置
+
+        支持两种场景：
+        1. 页面通过模板匹配识别 - 直接点击匹配到的模板位置
+        2. 页面通过文字匹配识别 - 查找 action_template 指定的模板并点击
+        """
         box = match_info.get("box")
+        template_name = match_info.get("template")
+
+        # 如果没有模板 box（页面通过文字匹配），则查找 action_template
+        if not template_name:
+            page_info = match_info.get("page_info", {})
+            template_name = page_info.get("action_template")
+            if template_name:
+                box = self.recognizer.find_template(screenshot, template_name)
+
         if box:
-            print(f"  -> 点击模板: {match_info.get('template', 'unknown')}")
+            print(f"  -> 点击模板: {template_name or 'unknown'}")
             self.adb.tap_center(box)
+        else:
+            print(f"  -> 未找到模板: {template_name}")
 
     def wait(self, screenshot, match_info: Dict):
         """等待（对战中）"""
