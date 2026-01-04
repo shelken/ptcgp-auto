@@ -10,6 +10,9 @@ BATTLE_LEVELS = ["精英", "高級", "中級", "初級"]
 # 格式如: "毽子花牌組（高級擴充包ex）"
 DECK_KEYWORD = "牌組"
 
+# 系列列表（按此顺序遍历）
+SERIES = ["A", "B"]
+
 # 界面识别配置
 # 每个界面定义：
 #   - identifiers: 识别该界面的文字列表（任意一个匹配即可）
@@ -139,8 +142,10 @@ PAGES = {
 # 辅助文本模式（供 actions 模块查询）
 TEXT_PATTERNS = {
     "auto": ["自動"],
-    "series_a": ["A系列"],
-    "series_b": ["B系列"],
+    "series": {
+        "A": ["A系列"],
+        "B": ["B系列"],
+    },
     "skip_titles": ["選擇擴充組", "系列"],
     "no_battles": ["沒有可挑戰的對戰"],
 }

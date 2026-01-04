@@ -11,6 +11,9 @@ BATTLE_LEVELS = ["Expert", "Advanced", "Intermediate", "Beginner"]
 # Format: "Carnivine Deck (Triumphant Light)"
 DECK_KEYWORD = "Deck"
 
+# Series list (traverse in this order)
+SERIES = ["A", "B"]
+
 # Page detection configuration
 # Each page definition:
 #   - identifiers: Text list to identify the page (any match is sufficient)
@@ -119,8 +122,10 @@ PAGES = {
 # Helper text patterns (for actions module queries)
 TEXT_PATTERNS = {
     "auto": ["Auto", "AUTO"],
-    "series_a": ["A Series", "Series A"],
-    "series_b": ["B Series", "Series B"],
+    "series": {
+        "A": ["A Series", "Series A"],
+        "B": ["B Series", "Series B"],
+    },
     "skip_titles": ["Select Expansion", "Series"],
     "no_battles": ["no battles available", "There are no battles"],
 }
