@@ -114,12 +114,22 @@ def main():
         default=None,
         help='界面语言 (默认: zh_Hant)'
     )
+    parser.add_argument(
+        '--no-auto-battle-in-battle',
+        action='store_true',
+        help='禁用对战中自动开启自动对战（允许人工接管）'
+    )
     args = parser.parse_args()
 
     # 加载语言配置
     if args.language:
         config.load_language(args.language)
         print(f"语言设置: {args.language}")
+
+    # 设置自动对战开关
+    if args.no_auto_battle_in_battle:
+        config.AUTO_ENABLE_AUTO_BATTLE = False
+        print("对战中自动开启自动对战: 禁用")
 
     # 解析地址
     host = None
