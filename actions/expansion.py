@@ -91,7 +91,7 @@ class ExpansionActions:
         while True:
             if scroll_count > 0:
                 print(f"  -> 第{scroll_count}次滑动查找卡包")
-                self.adb.swipe_up(distance=400)
+                self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(1.2)
                 screenshot = self.adb.screenshot()
                 if screenshot:

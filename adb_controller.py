@@ -34,11 +34,45 @@ class AdbController:
             # 获取指定地址的设备
             self.device = adb.device(serial=addr)
             print(f"已连接设备: {self.device.serial}")
+
+            # 自动获取屏幕分辨率
+            self._update_screen_size()
+
             return True
 
         except Exception as e:
             print(f"ADB 连接失败: {e}")
             return False
+
+    def _update_screen_size(self):
+        """获取并更新屏幕分辨率到 config"""
+        if not self.device:
+            return
+
+        try:
+            # 执行 wm size 获取屏幕尺寸
+            output = self.device.shell("wm size")
+            # 输出格式: "Physical size: 1080x1920" 或 "Override size: ..."
+            # 优先使用 Override size（如果有的话）
+            lines = output.strip().split('\n')
+            size_str = None
+            for line in lines:
+                if 'Override size:' in line:
+                    size_str = line.split(':')[1].strip()
+                    break
+            if not size_str:
+                for line in lines:
+                    if 'Physical size:' in line:
+                        size_str = line.split(':')[1].strip()
+                        break
+
+            if size_str:
+                width, height = map(int, size_str.split('x'))
+                config.SCREEN_WIDTH = width
+                config.SCREEN_HEIGHT = height
+                print(f"屏幕分辨率: {width}x{height}")
+        except Exception as e:
+            print(f"获取屏幕分辨率失败，使用默认值: {e}")
 
     def disconnect(self):
         """断开 ADB 连接"""
@@ -118,25 +152,27 @@ class AdbController:
         except Exception as e:
             print(f"滑动失败: {e}")
 
-    def swipe_up(self, distance: int = 500, duration: int = 500):
+    def swipe_up(self, ratio: float = 0.26, duration: int = 500):
         """向上滑动（用于查看更多内容）
 
         Args:
-            distance: 滑动距离
+            ratio: 滑动距离占屏幕高度的比例（默认 0.26 约等于 1920 下的 500px）
             duration: 滑动持续时间（毫秒），越大越慢
         """
+        distance = int(config.SCREEN_HEIGHT * ratio)
         center_x = config.SCREEN_WIDTH // 2
         start_y = config.SCREEN_HEIGHT // 2 + distance // 2
         end_y = config.SCREEN_HEIGHT // 2 - distance // 2
         self.swipe(center_x, start_y, center_x, end_y, duration)
 
-    def swipe_down(self, distance: int = 500, duration: int = 500):
+    def swipe_down(self, ratio: float = 0.26, duration: int = 500):
         """向下滑动
 
         Args:
-            distance: 滑动距离
+            ratio: 滑动距离占屏幕高度的比例（默认 0.26 约等于 1920 下的 500px）
             duration: 滑动持续时间（毫秒），越大越慢
         """
+        distance = int(config.SCREEN_HEIGHT * ratio)
         center_x = config.SCREEN_WIDTH // 2
         start_y = config.SCREEN_HEIGHT // 2 - distance // 2
         end_y = config.SCREEN_HEIGHT // 2 + distance // 2
