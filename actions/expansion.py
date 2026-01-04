@@ -172,10 +172,11 @@ class ExpansionActions:
                         print(f"  [DEBUG] 跳过: 左侧进度为空 (right={right['progress_key']})")
                     continue
 
-                # 生成组合 ID: 左分母_右分母
+                # 生成组合 ID: 系列_左分母_右分母 (如 a_20_81)
+                series_prefix = current_series.lower()
                 left_total = str(left['total'])
                 right_total = str(right['total'])
-                pack_id = f"{left_total}_{right_total}"
+                pack_id = f"{series_prefix}_{left_total}_{right_total}"
 
                 if config.DEBUG:
                     left_str = f"{left['current_val']}/{left['total']}"
