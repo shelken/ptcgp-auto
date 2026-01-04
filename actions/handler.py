@@ -99,6 +99,9 @@ class ActionHandler:
     def action_start_battle(self, screenshot, match_info: Dict):
         self._battle.start_battle(screenshot, match_info, self.needs_state_init)
 
+    def action_wait_battle(self, screenshot, match_info: Dict):
+        self._battle.wait_battle(screenshot, match_info)
+
     # ==================== 等级选择动作（委托） ====================
 
     def action_select_level(self, screenshot, match_info: Dict):

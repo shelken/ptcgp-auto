@@ -16,7 +16,7 @@ import config
 # 预定义颜色范围 (HSV)
 # OpenCV 中 H: 0-179, S: 0-255, V: 0-255
 COLORS = {
-    "green": {"lower": (35, 80, 80), "upper": (85, 255, 255)},
+    "green": {"lower": (35, 80, 80), "upper": (100, 255, 255)},  # 扩展到青绿色
     "gray": {"lower": (0, 0, 60), "upper": (180, 30, 200)},
     "red": {"lower": (0, 80, 80), "upper": (10, 255, 255)},  # 红色有两段
     "red2": {"lower": (160, 80, 80), "upper": (179, 255, 255)},
@@ -34,12 +34,12 @@ COLOR_STATES = {
         },
         "color_region": {
             "position": "left",       # left / right / above / below
-            "offset": 0.01,           # 相对于屏幕宽度/高度的比例
-            "width": 0.04,            # 区域宽度（屏幕宽度比例）
-            "height": 0.025,          # 区域高度（屏幕高度比例）
+            "offset": 0.01,          # 相对于屏幕宽度/高度的比例
+            "width": 0.05,            # 区域宽度（屏幕宽度比例）
+            "height": 0.03,           # 区域高度（屏幕高度比例）
         },
         "color": "green",             # COLORS 中的预定义颜色名
-        "threshold": 0.1,             # 颜色占比阈值
+        "threshold": 0.04,            # 颜色占比阈值（4.6% > 4%）
     },
 }
 
