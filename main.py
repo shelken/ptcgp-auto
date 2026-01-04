@@ -84,6 +84,8 @@ class PTCGPAuto:
 
                 # 执行对应动作
                 action = page_info.get("action", "unknown")
+                # 把 page_info 传给动作，让动作能访问配置（如 action_template）
+                match_info["page_info"] = page_info
                 self.action_handler.execute(action, screenshot, match_info)
 
                 # 等待页面切换

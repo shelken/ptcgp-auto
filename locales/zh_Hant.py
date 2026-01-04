@@ -113,6 +113,27 @@ PAGES = {
         "priority": 60,
         "exclude_identifiers": ["與他人對戰"],
     },
+    # TODO for ENG 游戏主页
+    "game_home_main": {
+        "identifiers": ["商店/兌換處", "得卡挑戰"],
+        "match_all": True,
+        "action": "click_template",
+        "action_template": "icon_battle",
+        "priority": 60,
+    },
+    # TODO for ENG 开启页面
+    "game_open_page": {
+        "identifiers": ["點擊畫面開始遊戲"],
+        "action": "click_identifier",
+        "priority": 60,
+    },
+    # TODO for ENG 各种原因跳到主页了
+    "_main_page": {
+        "identifiers": ["Pokémon Trading Card", "搜索游戏和应用"],
+        "match_all": True,
+        "action": "click_identifier",
+        "priority": 100,
+    },
 }
 
 # 多语言文本映射（用于识别界面元素）
