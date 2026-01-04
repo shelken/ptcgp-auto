@@ -41,20 +41,18 @@ _locale = None
 BATTLE_LEVELS = None
 PAGES = None
 TEXT_PATTERNS = None
-TEXT_VARIANTS = None
 DECK_KEYWORD = None
 
 
 def load_language(lang: str = None):
     """加载语言配置"""
-    global LANGUAGE, _locale, BATTLE_LEVELS, PAGES, TEXT_PATTERNS, TEXT_VARIANTS, DECK_KEYWORD
+    global LANGUAGE, _locale, BATTLE_LEVELS, PAGES, TEXT_PATTERNS, DECK_KEYWORD
     if lang:
         LANGUAGE = lang
     _locale = import_module(f"locales.{LANGUAGE}")
     BATTLE_LEVELS = _locale.BATTLE_LEVELS
     PAGES = _locale.PAGES
     TEXT_PATTERNS = _locale.TEXT_PATTERNS
-    TEXT_VARIANTS = _locale.TEXT_VARIANTS
     DECK_KEYWORD = _locale.DECK_KEYWORD
 
 
