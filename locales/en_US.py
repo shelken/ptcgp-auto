@@ -116,6 +116,15 @@ PAGES = {
     },
 }
 
+# Helper text patterns (for actions module queries)
+TEXT_PATTERNS = {
+    "auto": ["Auto", "AUTO"],
+    "series_a": ["A Series", "Series A"],
+    "series_b": ["B Series", "Series B"],
+    "skip_titles": ["Select Expansion", "Series"],
+    "no_battles": ["no battles available", "There are no battles"],
+}
+
 # Multi-language text mapping (for recognizing UI elements)
 TEXT_VARIANTS = {
     "continue": [
