@@ -43,7 +43,7 @@ def print_menu():
     print("2. 截图并保存")
     print("3. 截图 + OCR 识别（显示所有文字）")
     print("4. 测试查找特定文字")
-    print("5. 测试多语言变体查找")
+    print("5. 测试文本模式查找")
     print("6. 测试点击屏幕中央")
     print("7. 测试滑动")
     print("8. 裁剪模板图片（手动输入坐标）")
@@ -147,24 +147,24 @@ def find_text(adb, recognizer):
         print(f"✗ 未找到文字: \"{text}\"")
 
 
-def find_text_variants(adb, recognizer):
-    """查找多语言变体"""
-    print("\n可用的变体键:")
-    for key in config.TEXT_VARIANTS:
-        variants = config.TEXT_VARIANTS[key]
-        print(f"  {key}: {variants[:3]}...")
+def find_text_patterns(adb, recognizer):
+    """查找文本模式"""
+    print("\n可用的模式键:")
+    for key in config.TEXT_PATTERNS:
+        patterns = config.TEXT_PATTERNS[key]
+        print(f"  {key}: {patterns}")
 
-    key = input("\n请输入变体键 (如 continue, battle): ").strip()
+    key = input("\n请输入模式键 (如 auto, series_a): ").strip()
     if not key:
         print("未输入")
         return
 
-    if key not in config.TEXT_VARIANTS:
-        print(f"✗ 未知的变体键: {key}")
+    if key not in config.TEXT_PATTERNS:
+        print(f"✗ 未知的模式键: {key}")
         return
 
-    print(f"\n>>> 查找变体: {key}...")
-    print(f"    候选: {config.TEXT_VARIANTS[key]}")
+    print(f"\n>>> 查找模式: {key}...")
+    print(f"    候选: {config.TEXT_PATTERNS[key]}")
 
     img = adb.screenshot()
     if not img:
@@ -175,7 +175,7 @@ def find_text_variants(adb, recognizer):
     if box:
         print(f"✓ 找到! 位置: ({box[0]}, {box[1]}) - ({box[2]}, {box[3]})")
     else:
-        print(f"✗ 未找到任何 {key} 变体")
+        print(f"✗ 未找到任何 {key} 模式")
 
 
 def test_tap(adb):
@@ -263,8 +263,8 @@ def show_config():
     print(f"等级列表: {config.BATTLE_LEVELS}")
     print(f"数据目录: {get_debug_dir()}")
     print("-" * 40)
-    print("多语言变体:")
-    for key, values in config.TEXT_VARIANTS.items():
+    print("文本模式:")
+    for key, values in config.TEXT_PATTERNS.items():
         print(f"  {key}: {values}")
 
 
@@ -506,7 +506,7 @@ def main():
             if not recognizer:
                 recognizer = get_recognizer()
             if adb:
-                find_text_variants(adb, recognizer)
+                find_text_patterns(adb, recognizer)
 
         elif choice == "6":
             if not adb:
