@@ -40,24 +40,34 @@ PAGES = {
         "identifiers": ["前往任務"],
         "action": "click_cancel",
         "priority": 2,
+        "exact_match": True,
     },
     # 对战结果页面 - 需要点击继续
     "battle_result_continue": {
         "identifiers": ["點擊來繼續", "點擊以繼續"],
         "action": "click_identifier",
         "priority": 10,
+        "exact_match": True,
     },
     # 继续按钮
     "continue_button": {
         "identifiers": ["繼續"],
         "action": "click_identifier",
         "priority": 11,
+        "exact_match": True,
+    },
+    "continue_battle": {
+        "identifiers": ["是", "要繼續上次中斷的對戰嗎？"],
+        "action": "click_identifier",
+        "priority": 11,
+        "match_all": True,
     },
     # 对战记录页面
     "battle_record": {
         "identifiers": ["對戰紀錄"],
         "action": "click_continue",
         "priority": 15,
+        "exact_match": True,
     },
     # 经验值结算页面
     "exp_result": {
@@ -81,6 +91,7 @@ PAGES = {
         "identifiers": ["對戰！"],
         "action": "start_battle",
         "priority": 30,
+        "exact_match": True,
     },
     # 扩充组选择页面（选择哪个卡包）
     "expansion_select": {
@@ -132,7 +143,7 @@ PAGES = {
     },
     # TODO for ENG 各种原因跳到主页了
     "_main_page": {
-        "identifiers": ["Pokémon Trading Card", "搜索游戏和应用"],
+        "identifiers": ["Pokémon Trad", "搜索游戏和应用"],
         "match_all": True,
         "action": "click_identifier",
         "priority": 100,
