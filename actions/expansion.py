@@ -37,59 +37,60 @@ class ExpansionActions:
             self._close_expansion_select(screenshot, ocr_results)
             return
 
+        # 找出尚未尝试的系列
+        untried_series = [s for s in config.SERIES if s not in tried_expansion_series]
+
         # 根据 tried_expansion_series 判断状态
         if not tried_expansion_series:
             current_series = "init"
-        elif "A" in tried_expansion_series and "B" not in tried_expansion_series:
-            current_series = "B"
-        elif "A" in tried_expansion_series and "B" in tried_expansion_series:
+        elif not untried_series:
+            # 所有系列都已检查
             print("  -> 所有系列都已检查，关闭扩充组选择")
             set_tried_expansion_series(set())
             set_all_packs_checked(True)
             self._close_expansion_select(screenshot, ocr_results)
             return
         else:
-            current_series = "A"
+            # 继续处理第一个未尝试的系列
+            current_series = untried_series[0]
 
         last_progress_keys = set()
         scroll_count = 0
-        has_series_button = {"A": None, "B": None}
+        has_series_button = {s: None for s in config.SERIES}
 
         # 获取 patterns（只获取一次，避免循环内重复获取）
-        series_a_patterns = config.TEXT_PATTERNS.get("series_a", [])
-        series_b_patterns = config.TEXT_PATTERNS.get("series_b", [])
+        series_patterns = config.TEXT_PATTERNS.get("series", {})
         skip_titles = config.TEXT_PATTERNS.get("skip_titles", [])
 
         # 先扫描一遍找到系列按钮
         for item in ocr_results:
             text = item['text'].strip()
-            for pattern in series_a_patterns:
-                if pattern in text:
-                    has_series_button["A"] = item['box']
-                    break
-            for pattern in series_b_patterns:
-                if pattern in text:
-                    has_series_button["B"] = item['box']
-                    break
+            for series_name, patterns in series_patterns.items():
+                for pattern in patterns:
+                    if pattern in text:
+                        has_series_button[series_name] = item['box']
+                        break
 
-        # 如果是 init 状态，先点击 A 按钮确保在 A 系列
+        # 如果是 init 状态，先点击第一个系列按钮确保在第一个系列
         if current_series == "init":
-            if has_series_button["A"]:
-                print("  -> 点击 A 系列按钮确保在 A 系列")
+            first_series = config.SERIES[0]
+            if has_series_button[first_series]:
+                print(f"  -> 点击 {first_series} 系列按钮确保在 {first_series} 系列")
                 new_series = tried_expansion_series.copy()
-                new_series.add("clicked_A")
+                new_series.add(f"clicked_{first_series}")
                 set_tried_expansion_series(new_series)
-                self.adb.tap_center(has_series_button["A"])
+                self.adb.tap_center(has_series_button[first_series])
                 return
             else:
-                current_series = "A"
+                current_series = first_series
                 new_series = tried_expansion_series.copy()
-                new_series.add("clicked_A")
+                new_series.add(f"clicked_{first_series}")
                 set_tried_expansion_series(new_series)
 
-        # 如果刚点击了 A 按钮，现在开始遍历 A 系列
-        if "clicked_A" in tried_expansion_series and "A" not in tried_expansion_series:
-            current_series = "A"
+        # 如果刚点击了第一个系列按钮，现在开始遍历该系列
+        first_series = config.SERIES[0]
+        if f"clicked_{first_series}" in tried_expansion_series and first_series not in tried_expansion_series:
+            current_series = first_series
 
         while True:
             if scroll_count > 0:
@@ -112,14 +113,11 @@ class ExpansionActions:
                 text = item['text'].strip()
 
                 # 记录系列按钮位置
-                for pattern in series_a_patterns:
-                    if pattern in text:
-                        has_series_button["A"] = item['box']
-                        break
-                for pattern in series_b_patterns:
-                    if pattern in text:
-                        has_series_button["B"] = item['box']
-                        break
+                for series_name, patterns in series_patterns.items():
+                    for pattern in patterns:
+                        if pattern in text:
+                            has_series_button[series_name] = item['box']
+                            break
 
                 # 跳过标题和系列选择
                 skip = False
@@ -219,14 +217,20 @@ class ExpansionActions:
         # 当前系列没有未完成的卡包
         new_series = tried_expansion_series.copy()
         new_series.add(current_series)
-        new_series.discard("clicked_A")
+        # 清除所有 clicked_* 标记
+        new_series = {s for s in new_series if not s.startswith("clicked_")}
         set_tried_expansion_series(new_series)
 
-        # 尝试切换到另一个系列
-        other_series = "B" if current_series == "A" else "A"
-        if other_series not in tried_expansion_series and has_series_button[other_series]:
-            print(f"  -> {current_series} 系列无可用卡包，切换到 {other_series} 系列")
-            self.adb.tap_center(has_series_button[other_series])
+        # 找下一个未尝试的系列
+        next_series = None
+        for s in config.SERIES:
+            if s not in tried_expansion_series and s != current_series and has_series_button[s]:
+                next_series = s
+                break
+
+        if next_series:
+            print(f"  -> {current_series} 系列无可用卡包，切换到 {next_series} 系列")
+            self.adb.tap_center(has_series_button[next_series])
             return
 
         # 所有系列都遍历完了
