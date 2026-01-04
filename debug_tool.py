@@ -444,8 +444,8 @@ def auto_detect_components(adb):
         print(f"  尺寸: {cropped.size[0]} x {cropped.size[1]}")
 
 
-def color_picker(adb):
-    """颜色取样器 - 获取指定位置/区域的 HSV 值"""
+def color_picker(adb, recognizer):
+    """颜色取样器 - 通过 OCR 定位元素并分析周围颜色"""
     import cv2
     import numpy as np
 
@@ -455,34 +455,80 @@ def color_picker(adb):
         print("✗ 截图失败")
         return
 
-    # 保存原图
-    debug_dir = get_debug_dir()
-    screenshot_path = debug_dir / "for_color.png"
-    img.save(screenshot_path)
-    print(f"截图已保存: {screenshot_path}")
+    # OCR 识别所有文字
+    ocr_results = recognizer.ocr_full_screen(img)
+    if not ocr_results:
+        print("✗ 未识别到任何文字")
+        return
 
-    print("\n请打开截图，记下要取样的坐标")
-    print("格式: x,y (单点) 或 x1,y1,x2,y2 (区域)")
+    # 显示所有识别到的文字
+    print(f"\n识别到 {len(ocr_results)} 个文本区域:")
+    print("-" * 50)
+    for i, item in enumerate(ocr_results, 1):
+        text = item['text']
+        box = item['box']
+        print(f"{i:2}. \"{text}\" @ ({box[0]},{box[1]})-({box[2]},{box[3]})")
+    print("-" * 50)
 
-    coords = input("输入坐标: ").strip()
-    if not coords:
-        print("未输入坐标")
+    choice = input("\n选择文字编号作为锚点: ").strip()
+    if not choice:
+        print("未选择")
         return
 
     try:
-        parts = list(map(int, coords.split(",")))
-        if len(parts) == 2:
-            # 单点取样
-            x, y = parts
-            x1, y1, x2, y2 = x - 5, y - 5, x + 5, y + 5
-        elif len(parts) == 4:
-            x1, y1, x2, y2 = parts
-        else:
-            print("坐标格式错误")
+        idx = int(choice) - 1
+        if idx < 0 or idx >= len(ocr_results):
+            print("无效编号")
             return
     except ValueError:
-        print("坐标格式错误")
+        print("请输入数字")
         return
+
+    anchor = ocr_results[idx]
+    anchor_box = anchor['box']
+    print(f"\n锚点: \"{anchor['text']}\" @ ({anchor_box[0]},{anchor_box[1]})-({anchor_box[2]},{anchor_box[3]})")
+
+    # 选择分析方向
+    print("\n分析哪个方向的颜色?")
+    print("1. 左边")
+    print("2. 右边")
+    print("3. 上边")
+    print("4. 下边")
+
+    direction = input("选择方向 (默认1): ").strip() or "1"
+    direction_map = {"1": "left", "2": "right", "3": "above", "4": "below"}
+    position = direction_map.get(direction, "left")
+
+    # 计算分析区域
+    ax1, ay1, ax2, ay2 = anchor_box
+    anchor_cy = (ay1 + ay2) // 2
+    anchor_cx = (ax1 + ax2) // 2
+
+    # 默认区域大小
+    region_w = int(config.SCREEN_WIDTH * 0.05)
+    region_h = int(config.SCREEN_HEIGHT * 0.03)
+    offset = int(config.SCREEN_WIDTH * 0.01)
+
+    if position == "left":
+        x2 = ax1 - offset
+        x1 = x2 - region_w
+        y1 = anchor_cy - region_h // 2
+        y2 = anchor_cy + region_h // 2
+    elif position == "right":
+        x1 = ax2 + offset
+        x2 = x1 + region_w
+        y1 = anchor_cy - region_h // 2
+        y2 = anchor_cy + region_h // 2
+    elif position == "above":
+        y2 = ay1 - offset
+        y1 = y2 - region_h
+        x1 = anchor_cx - region_w // 2
+        x2 = anchor_cx + region_w // 2
+    else:  # below
+        y1 = ay2 + offset
+        y2 = y1 + region_h
+        x1 = anchor_cx - region_w // 2
+        x2 = anchor_cx + region_w // 2
 
     # 转换为 OpenCV 格式
     img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
@@ -509,7 +555,7 @@ def color_picker(adb):
     s_min, s_max = int(np.min(hsv[:, :, 1])), int(np.max(hsv[:, :, 1]))
     v_min, v_max = int(np.min(hsv[:, :, 2])), int(np.max(hsv[:, :, 2]))
 
-    print(f"\n区域 HSV 分析: ({x1},{y1})-({x2},{y2})")
+    print(f"\n分析区域: ({x1},{y1})-({x2},{y2})")
     print("-" * 40)
     print(f"平均值: H={h_mean}, S={s_mean}, V={v_mean}")
     print(f"H 范围: {h_min} - {h_max}")
@@ -544,21 +590,41 @@ def color_picker(adb):
         upper = np.array(color_range["upper"])
         mask = cv2.inRange(hsv, lower, upper)
         ratio = np.count_nonzero(mask) / mask.size
-        if ratio > 0.01:  # 只显示超过 1% 的
+        if ratio > 0.01:
             print(f"  {name}: {ratio:.1%}")
 
-    # 给出建议的 HSV 范围
-    margin = 10
-    print("\n建议的 HSV 范围配置:")
-    print(f"  lower: ({max(0, h_mean - margin)}, {max(0, s_min - 20)}, {max(0, v_min - 20)})")
-    print(f"  upper: ({min(179, h_mean + margin)}, 255, 255)")
+    # 计算并显示配置建议
+    offset_ratio = offset / config.SCREEN_WIDTH
+    width_ratio = region_w / config.SCREEN_WIDTH
+    height_ratio = region_h / config.SCREEN_HEIGHT
+
+    print("\n建议的 COLOR_STATES 配置:")
+    print(f'''
+    "your_state_name": {{
+        "locator": {{
+            "type": "text_pattern",
+            "key": "your_pattern_key",  # 需要在 TEXT_PATTERNS 中定义
+        }},
+        "color_region": {{
+            "position": "{position}",
+            "offset": {offset_ratio:.3f},
+            "width": {width_ratio:.3f},
+            "height": {height_ratio:.3f},
+        }},
+        "color": "{color_name.split('/')[0].lower() if '/' not in color_name else 'gray'}",
+        "threshold": 0.1,
+    }},
+''')
 
     # 保存标注后的图片
+    debug_dir = get_debug_dir()
     annotated = img_cv.copy()
-    cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    cv2.rectangle(annotated, (ax1, ay1), (ax2, ay2), (255, 0, 0), 2)  # 蓝框 = 锚点
+    cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)  # 绿框 = 分析区域
     annotated_path = debug_dir / "color_sample.png"
     cv2.imwrite(str(annotated_path), annotated)
-    print(f"\n✓ 标注图片已保存: {annotated_path}")
+    print(f"✓ 标注图片已保存: {annotated_path}")
+    print("  蓝框 = 锚点文字, 绿框 = 颜色分析区域")
 
 
 def test_color_state(adb, recognizer):
@@ -755,8 +821,10 @@ def main():
         elif choice == "11":
             if not adb:
                 adb = test_adb_connection()
+            if not recognizer:
+                recognizer = get_recognizer()
             if adb:
-                color_picker(adb)
+                color_picker(adb, recognizer)
 
         elif choice == "12":
             if not adb:
