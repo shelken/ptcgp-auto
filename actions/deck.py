@@ -107,7 +107,7 @@ class DeckActions:
         for attempt in range(max_attempts):
             if attempt > 0:
                 print(f"  -> 第{attempt}次滑动查找沙漏")
-                self.adb.swipe_up(distance=400)
+                self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(1.2)
                 screenshot = self.adb.screenshot()
                 if screenshot:

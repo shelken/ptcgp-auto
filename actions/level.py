@@ -17,7 +17,7 @@ class LevelActions:
         self.recognizer = recognizer
         self.state = state
         self._should_switch_to_higher_priority_level = should_switch_checker
-        self._scroll_helper = ScrollHelper(adb, recognizer, max_attempts=10, distance=400)
+        self._scroll_helper = ScrollHelper(adb, recognizer, max_attempts=10, ratio=0.21)
 
     def select_level(self, screenshot, match_info: Dict, needs_state_init: bool, on_init_complete: Callable, reset_pack_state: Callable):
         """选择未完成的等级
@@ -74,7 +74,7 @@ class LevelActions:
         for attempt in range(max_attempts):
             if attempt > 0:
                 print(f"  -> 滑动查找 {level} (第{attempt}次)")
-                self.adb.swipe_up(distance=400)
+                self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(0.8)
                 screenshot = self.adb.screenshot()
                 if screenshot:
@@ -123,7 +123,7 @@ class LevelActions:
 
         for attempt in range(max_attempts):
             if attempt > 0:
-                self.adb.swipe_up(distance=400)
+                self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(0.8)
                 screenshot = self.adb.screenshot()
                 if screenshot:
@@ -156,7 +156,7 @@ class LevelActions:
 
             last_texts = current_texts
 
-        self.adb.swipe_down(distance=800)
+        self.adb.swipe_down(ratio=0.42)  # 约 800/1920
         time.sleep(0.5)
 
         print(f"  [初始化] 同步完成，共 {len(synced_levels)} 个等级")
