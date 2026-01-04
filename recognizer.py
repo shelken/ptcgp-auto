@@ -306,61 +306,61 @@ class Recognizer:
     def find_text_variants(
         self,
         screenshot: Image.Image,
-        variant_key: str,
+        pattern_key: str,
         partial: bool = False  # 默认改为精确匹配
     ) -> Optional[Tuple[int, int, int, int]]:
-        """在截图中查找多语言文本变体
+        """在截图中查找多语言文本模式
 
         Args:
             screenshot: 截图
-            variant_key: config.TEXT_VARIANTS 中的键名
+            pattern_key: config.TEXT_PATTERNS 中的键名
             partial: 是否部分匹配（默认精确匹配）
 
         Returns:
             找到的区域，未找到返回 None
         """
-        if variant_key not in config.TEXT_VARIANTS:
-            print(f"警告: 未知的文本变体键: {variant_key}")
+        if pattern_key not in config.TEXT_PATTERNS:
+            print(f"警告: 未知的文本模式键: {pattern_key}")
             return None
 
-        variants = config.TEXT_VARIANTS[variant_key]
+        patterns = config.TEXT_PATTERNS[pattern_key]
         ocr_results = self.ocr_full_screen(screenshot)
 
         # 先尝试精确匹配
         for item in ocr_results:
             text = item['text'].strip()
-            for variant in variants:
-                if variant.lower().strip() == text.lower():
+            for pattern in patterns:
+                if pattern.lower().strip() == text.lower():
                     if config.DEBUG:
-                        print(f"找到文字变体(精确) '{variant}' = '{text}'")
+                        print(f"找到文字模式(精确) '{pattern}' = '{text}'")
                     return item['box']
 
         # 如果允许部分匹配且精确匹配失败，再尝试部分匹配
         if partial:
             for item in ocr_results:
                 text = item['text'].strip()
-                for variant in variants:
-                    if variant.lower().strip() in text.lower():
+                for pattern in patterns:
+                    if pattern.lower().strip() in text.lower():
                         if config.DEBUG:
-                            print(f"找到文字变体(部分) '{variant}' 在 '{text}'")
+                            print(f"找到文字模式(部分) '{pattern}' 在 '{text}'")
                         return item['box']
 
         if config.DEBUG:
-            print(f"未找到任何 '{variant_key}' 变体")
+            print(f"未找到任何 '{pattern_key}' 模式")
         return None
 
     def wait_for_text_variants(
         self,
         adb_controller,
-        variant_key: str,
+        pattern_key: str,
         timeout: int = None,
         check_interval: int = None
     ) -> bool:
-        """等待多语言文本变体出现
+        """等待多语言文本模式出现
 
         Args:
             adb_controller: ADB 控制器实例
-            variant_key: config.TEXT_VARIANTS 中的键名
+            pattern_key: config.TEXT_PATTERNS 中的键名
             timeout: 超时时间（秒）
             check_interval: 检查间隔（秒）
 
@@ -376,13 +376,13 @@ class Recognizer:
 
         while time.time() - start_time < timeout:
             screenshot = adb_controller.screenshot()
-            if screenshot and self.find_text_variants(screenshot, variant_key):
+            if screenshot and self.find_text_variants(screenshot, pattern_key):
                 return True
 
             time.sleep(check_interval)
 
         if config.DEBUG:
-            print(f"等待 '{variant_key}' 变体超时")
+            print(f"等待 '{pattern_key}' 模式超时")
         return False
 
     def check_complete_status(self, screenshot: Image.Image) -> Dict[str, bool]:
