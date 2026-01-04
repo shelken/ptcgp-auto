@@ -148,4 +148,8 @@ TEXT_PATTERNS = {
     },
     "skip_titles": ["選擇擴充組", "系列"],
     "no_battles": ["沒有可挑戰的對戰"],
+    "cancel": ["取消"],
+    "expansion_button": ["擴充組"],
+    "ranked_battle": ["分級對戰"],
+    "solo_battle": ["單人對戰"],
 }
