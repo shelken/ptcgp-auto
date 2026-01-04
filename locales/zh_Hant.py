@@ -73,7 +73,7 @@ PAGES = {
             "你是後攻",
             "對戰對手",
         ],
-        "action": "wait",
+        "action": "wait_battle",
         "priority": 20,
     },
     # 牌组详情页面 - 有对战按钮
