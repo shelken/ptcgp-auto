@@ -43,13 +43,13 @@ class BattleActions:
         # 检查自动模式状态
         auto_box = None
         has_off = False
-        auto_variants = config.TEXT_VARIANTS.get("auto", [])
+        auto_patterns = config.TEXT_PATTERNS.get("auto", [])
 
         for item in ocr_results:
             text = item['text'].strip()
             text_upper = text.upper()
-            for variant in auto_variants:
-                if variant in text or variant.upper() in text_upper:
+            for pattern in auto_patterns:
+                if pattern in text or pattern.upper() in text_upper:
                     auto_box = item['box']
                     break
             if 'OFF' in text_upper:
