@@ -136,6 +136,15 @@ PAGES = {
     },
 }
 
+# 辅助文本模式（供 actions 模块查询）
+TEXT_PATTERNS = {
+    "auto": ["自動"],
+    "series_a": ["A系列"],
+    "series_b": ["B系列"],
+    "skip_titles": ["選擇擴充組", "系列"],
+    "no_battles": ["沒有可挑戰的對戰"],
+}
+
 # 多语言文本映射（用于识别界面元素）
 TEXT_VARIANTS = {
     "continue": [
