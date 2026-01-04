@@ -8,3 +8,4 @@ debug_output/
 *.egg-info/
 dist/
 build/
+.worktrees/
