@@ -6,33 +6,33 @@ from typing import List, Dict, Optional, Tuple
 import config
 
 
-def find_text_by_variants(ocr_results: List[Dict], variant_key: str) -> Optional[Dict]:
-    """根据 TEXT_VARIANTS 配置查找文本
+def find_text_by_variants(ocr_results: List[Dict], pattern_key: str) -> Optional[Dict]:
+    """根据 TEXT_PATTERNS 配置查找文本
 
     Args:
         ocr_results: OCR 结果列表
-        variant_key: TEXT_VARIANTS 中的 key
+        pattern_key: TEXT_PATTERNS 中的 key
 
     Returns:
         找到的 OCR item，包含 text 和 box
     """
-    variants = config.TEXT_VARIANTS.get(variant_key, [])
+    patterns = config.TEXT_PATTERNS.get(pattern_key, [])
     for item in ocr_results:
         text = item['text'].strip()
-        for variant in variants:
-            if variant in text:
+        for pattern in patterns:
+            if pattern in text:
                 return item
     return None
 
 
-def find_all_by_variants(ocr_results: List[Dict], variant_key: str) -> List[Dict]:
-    """根据 TEXT_VARIANTS 配置查找所有匹配的文本"""
-    variants = config.TEXT_VARIANTS.get(variant_key, [])
+def find_all_by_variants(ocr_results: List[Dict], pattern_key: str) -> List[Dict]:
+    """根据 TEXT_PATTERNS 配置查找所有匹配的文本"""
+    patterns = config.TEXT_PATTERNS.get(pattern_key, [])
     results = []
     for item in ocr_results:
         text = item['text'].strip()
-        for variant in variants:
-            if variant in text:
+        for pattern in patterns:
+            if pattern in text:
                 results.append(item)
                 break
     return results
