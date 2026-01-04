@@ -33,6 +33,9 @@ TEMPLATE_THRESHOLD = 0.8
 DEBUG = True  # 开启后会保存截图和识别结果
 DEBUG_DIR = "debug_output"
 
+# 自动开启自动对战（对战中检测到未开启时自动点击开启）
+AUTO_ENABLE_AUTO_BATTLE = True
+
 # 弹窗按钮文字（用于滚动循环中检测遮挡弹窗）
 POPUP_BUTTONS = ["OK", "确认", "確認", "取消"]
 

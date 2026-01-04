@@ -71,17 +71,18 @@ class BattleActions:
 
     def wait_battle(self, screenshot, match_info: Dict):
         """对战中等待 - 检测并开启自动对战"""
-        # 检测自动对战是否开启
-        auto_enabled = self.recognizer.check_state(screenshot, "auto_battle")
+        # 根据配置决定是否检测自动对战
+        if config.AUTO_ENABLE_AUTO_BATTLE:
+            auto_enabled = self.recognizer.check_state(screenshot, "auto_battle")
 
-        if auto_enabled is False:
-            # 自动对战未开启，点击开启
-            print("  -> 开启自动对战")
-            auto_box = self.recognizer.find_text_variants(screenshot, "auto")
-            if auto_box:
-                self.adb.tap_center(auto_box)
-                time.sleep(0.5)
-                return  # 开启后立即返回，下次循环继续检测
+            if auto_enabled is False:
+                # 自动对战未开启，点击开启
+                print("  -> 开启自动对战")
+                auto_box = self.recognizer.find_text_variants(screenshot, "auto")
+                if auto_box:
+                    self.adb.tap_center(auto_box)
+                    time.sleep(0.5)
+                    return  # 开启后立即返回，下次循环继续检测
 
         print("  -> 对战中，等待...")
         time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
