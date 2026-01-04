@@ -128,4 +128,8 @@ TEXT_PATTERNS = {
     },
     "skip_titles": ["Select Expansion", "Series"],
     "no_battles": ["no battles available", "There are no battles"],
+    "cancel": ["Cancel"],
+    "expansion_button": ["Expansion"],
+    "ranked_battle": ["Ranked"],
+    "solo_battle": ["Solo"],
 }
