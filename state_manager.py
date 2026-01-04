@@ -50,7 +50,8 @@ class StateManager:
         """检测是否需要迁移
         - 旧格式1: 使用单一数字作为卡包 key
         - 旧格式2: 使用 {"name": ..., "done": bool} 作为值
-        - 新格式: 使用 "数字_数字" 作为 key，bool 作为值
+        - 旧格式3: 使用 "数字_数字" 作为 key（无系列前缀）
+        - 新格式: 使用 "系列_左分母_右分母" 作为 key（如 "a_20_81"），bool 作为值
         """
         levels = state.get("levels", {})
         for level_data in levels.values():
@@ -61,6 +62,9 @@ class StateManager:
                     return True
                 # 如果 value 是 dict（旧格式2），需要迁移
                 if isinstance(value, dict):
+                    return True
+                # 如果 key 不以 a_ 或 b_ 开头（旧格式3），需要迁移
+                if not (key.startswith("a_") or key.startswith("b_")):
                     return True
         return False
 
@@ -127,19 +131,19 @@ class StateManager:
         self.save()
 
     # ===== 卡包状态 =====
-    # packs 结构: {"左分母_右分母": bool, ...}
-    # 使用左右分母组合作为 key（如 "20_81"），因为不同卡包可能有相同的单一分母
-    # 左分母 = 总牌组数，右分母 = 总卡数
+    # packs 结构: {"系列_左分母_右分母": bool, ...}
+    # 使用系列前缀+左右分母组合作为 key（如 "a_20_81"），因为不同系列可能有相同的分母组合
+    # 系列 = a/b，左分母 = 总牌组数，右分母 = 总卡数
 
     def is_pack_complete(self, level: str, pack_id: str) -> bool:
-        """检查指定等级的卡包是否完成（使用左右分母组合作为标识，如 '20_81'）"""
+        """检查指定等级的卡包是否完成（使用系列_左分母_右分母作为标识，如 'a_20_81'）"""
         if level in self.state["levels"]:
             packs = self.state["levels"][level].get("packs", {})
             return packs.get(pack_id, False)
         return False
 
     def set_pack_complete(self, level: str, pack_id: str, complete: bool = True):
-        """标记卡包完成状态（使用左右分母组合作为标识，如 '20_81'）"""
+        """标记卡包完成状态（使用系列_左分母_右分母作为标识，如 'a_20_81'）"""
         if level not in self.state["levels"]:
             self.state["levels"][level] = {"complete": False, "packs": {}}
         self.state["levels"][level]["packs"][pack_id] = complete
@@ -148,7 +152,7 @@ class StateManager:
         self.save()
 
     def get_incomplete_packs(self, level: str) -> list:
-        """获取指定等级未完成的卡包 ID 列表（左右分母组合）"""
+        """获取指定等级未完成的卡包 ID 列表（系列_左分母_右分母）"""
         if level in self.state["levels"]:
             packs = self.state["levels"][level].get("packs", {})
             return [pack_id for pack_id, done in packs.items() if not done]
