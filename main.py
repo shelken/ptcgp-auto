@@ -42,6 +42,9 @@ class PTCGPAuto:
             print("无法连接到模拟器，请检查 ADB 配置")
             return False
 
+        # 连接后重新加载模板（根据实际分辨率缩放）
+        self.recognizer.reload_templates()
+
         print("\n开始自动化流程...")
         print("提示: 脚本会自动识别当前界面并执行相应操作")
 

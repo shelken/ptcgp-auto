@@ -21,6 +21,9 @@ WAIT_BATTLE_TIMEOUT = 600  # 对局超时时间（10分钟）
 SCREEN_WIDTH = 1080
 SCREEN_HEIGHT = 1920
 
+# 模板基准分辨率（模板图片是在此分辨率下截取的）
+TEMPLATE_BASE_WIDTH = 1080
+
 # OCR 配置 (Apple Vision Framework)
 # Vision Framework 原生支持 Apple Silicon 硬件加速，无需额外配置
 OCR_RECOGNITION_LEVEL = "accurate"  # "accurate" 或 "fast"
