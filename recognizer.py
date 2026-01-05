@@ -144,19 +144,34 @@ class Recognizer:
     def __init__(self, templates_dir: str = "templates"):
         self.templates_dir = Path(templates_dir)
         self.templates: Dict[str, np.ndarray] = {}
-        self._load_templates()
+        # 初始化时不加载模板，等待分辨率确定后调用 reload_templates()
         print("使用 Apple Vision Framework 进行 OCR（原生 Apple Silicon 加速）")
 
+    def reload_templates(self):
+        """重新加载模板（根据当前分辨率缩放）"""
+        self.templates.clear()
+        self._load_templates()
+
     def _load_templates(self):
-        """加载所有模板图片"""
+        """加载所有模板图片，并根据当前分辨率缩放"""
         if not self.templates_dir.exists():
             print(f"警告: 模板目录不存在: {self.templates_dir}")
             return
+
+        # 计算缩放比例（当前分辨率 / 模板基准分辨率）
+        scale = config.SCREEN_WIDTH / config.TEMPLATE_BASE_WIDTH
+        if abs(scale - 1.0) > 0.01:
+            print(f"模板缩放比例: {scale:.2f} ({config.SCREEN_WIDTH}/{config.TEMPLATE_BASE_WIDTH})")
 
         for file in self.templates_dir.glob("*.png"):
             name = file.stem
             img = cv2.imread(str(file))
             if img is not None:
+                # 如果分辨率不同，缩放模板
+                if abs(scale - 1.0) > 0.01:
+                    new_w = int(img.shape[1] * scale)
+                    new_h = int(img.shape[0] * scale)
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 self.templates[name] = img
                 print(f"已加载模板: {name}")
 
@@ -180,6 +195,10 @@ class Recognizer:
         Returns:
             匹配到的区域 (x1, y1, x2, y2)，未找到返回 None
         """
+        # 延迟加载：首次使用时加载模板
+        if not self.templates:
+            self._load_templates()
+
         if template_name not in self.templates:
             if config.DEBUG:
                 print(f"警告: 模板不存在: {template_name}")
@@ -217,6 +236,10 @@ class Recognizer:
         Returns:
             所有匹配区域的列表
         """
+        # 延迟加载：首次使用时加载模板
+        if not self.templates:
+            self._load_templates()
+
         if template_name not in self.templates:
             print(f"警告: 模板不存在: {template_name}")
             return []

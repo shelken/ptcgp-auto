@@ -137,6 +137,7 @@ ptcgp-auto/
 - 目前仅支持 macOS（依赖 Apple Vision Framework），后续计划支持其他平台
 - 游戏语言需与 `config.py` 中的 `LANGUAGE` 配置一致
 - 启动脚本前，请确保游戏已进入对战菜单页面
+- **截取模板图片时，模拟器分辨率必须为 1080p**（脚本会根据实际分辨率自动缩放模板）
 
 ## License
 

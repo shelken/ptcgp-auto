@@ -137,6 +137,7 @@ ptcgp-auto/
 - Currently macOS only (depends on Apple Vision Framework), other platforms planned
 - Game language must match `LANGUAGE` setting in `config.py`
 - Make sure the game is on the battle menu before starting the script
+- **Template images must be captured at 1080p resolution** (the script auto-scales templates based on actual resolution)
 
 ## License
 
