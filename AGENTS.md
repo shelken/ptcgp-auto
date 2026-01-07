@@ -120,6 +120,54 @@ rm /tmp/ptcgp_auto_5555/state.json
 - 更新 README 时需同步更新 `README_EN.md`
 - 新功能开发使用 git worktree 创建独立分支，完成后提交 PR 合并
 
+## 清理 BlueStacks VM 中的 PTCGP 用户数据
+
+当需要制作干净的 VM 模板（保留游戏资源但清除用户登录数据）时，使用以下步骤：
+
+### 前置条件
+
+1. 已安装 Lima：`brew install lima`
+2. 已创建 Lima Ubuntu VM（配置文件：`lima-ubuntu.yaml`）
+3. 目标 BlueStacks VM 已关闭
+
+### 启动 Lima VM
+
+```bash
+# 首次创建
+limactl create --name=ubuntu-qcow2 lima-ubuntu.yaml
+limactl start ubuntu-qcow2
+
+# 后续使用
+limactl start ubuntu-qcow2
+```
+
+### 清理 PTCGP 用户数据
+
+```bash
+# 替换 Tiramisu64_XX 为目标 VM 名称（如 Tiramisu64_10）
+limactl shell ubuntu-qcow2 -- bash -c "sudo guestfish -a /bluestacks/Tiramisu64_XX/data.qcow2 run : mount /dev/sda1 / : rm-rf /data/jp.pokemon.pokemontcgp/shared_prefs : rm-rf /data/jp.pokemon.pokemontcgp/databases : rm-rf /data/jp.pokemon.pokemontcgp/files : rm-rf /data/jp.pokemon.pokemontcgp/no_backup : rm-rf /data/jp.pokemon.pokemontcgp/cache : rm-rf /data/jp.pokemon.pokemontcgp/code_cache : rm-rf /data/jp.pokemon.pokemontcgp/app_databases : rm-rf /data/jp.pokemon.pokemontcgp/app_webview : rm-rf /data/jp.pokemon.pokemontcgp/app_textures"
+```
+
+### 验证清理结果
+
+```bash
+limactl shell ubuntu-qcow2 -- bash -c "sudo guestfish --ro -a /bluestacks/Tiramisu64_XX/data.qcow2 run : mount /dev/sda1 / : ll /data/jp.pokemon.pokemontcgp/"
+# 应该只显示空目录（仅 . 和 ..）
+```
+
+### VM 名称对照
+
+查看 BlueStacks 配置获取 VM 名称：
+```bash
+grep 'display_name' "/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf"
+```
+
+### 停止 Lima VM
+
+```bash
+limactl stop ubuntu-qcow2
+```
+
 ## 参考文档
 
 - `docs/design.md`: 详细设计文档（游戏界面结构、状态机流程、界面优先级表）
