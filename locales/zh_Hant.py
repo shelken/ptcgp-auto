@@ -120,6 +120,28 @@ PAGES = {
         "action": "click_solo_battle",
         "priority": 55,
     },
+    # 对战菜单（锁定状态）- 新手账号单人对战被锁，需要完成教程
+    "battle_menu_locked": {
+        "identifiers": ["與他人對戰"],
+        "templates": ["icon_lock"],
+        "match_all": True,
+        "action": "handle_tutorial_unlock",
+        "priority": 54,
+    },
+    # 玩法列表页面 - 新手教程列表
+    "tutorial_list": {
+        "identifiers": ["玩法"],
+        "templates": ["wanfa_shalou"],
+        "action": "handle_tutorial_list",
+        "priority": 40,
+        "exclude_identifiers": ["與他人對戰"],
+    },
+    # 教学界面（后续完善）
+    # "tutorial_teaching": {
+    #     "templates": ["hand_pointer"],
+    #     "action": "handle_tutorial_step",
+    #     "priority": 35,
+    # },
     # 单人对战主页（显示各种任务）
     "solo_battle_main": {
         "identifiers": ["單人對戰"],
