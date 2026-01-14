@@ -12,6 +12,7 @@ from .deck import DeckActions
 from .expansion import ExpansionActions
 from .home import HomeActions
 from .level import LevelActions
+from .tutorial import TutorialActions
 
 
 class ActionHandler:
@@ -51,6 +52,7 @@ class ActionHandler:
             self._should_switch_to_higher_priority_level
         )
         self._home = HomeActions(adb)
+        self._tutorial = TutorialActions(adb, recognizer)
 
     def execute(self, action: str, screenshot, match_info: Dict):
         """执行动作"""
@@ -153,3 +155,14 @@ class ActionHandler:
 
     def action_click_solo_battle(self, screenshot, match_info: Dict):
         self._home.click_solo_battle(screenshot, match_info)
+
+    # ==================== 教程动作（委托） ====================
+
+    def action_handle_tutorial_unlock(self, screenshot, match_info: Dict):
+        self._tutorial.handle_tutorial_unlock(screenshot, match_info)
+
+    def action_handle_tutorial_list(self, screenshot, match_info: Dict):
+        self._tutorial.handle_tutorial_list(screenshot, match_info)
+
+    def action_handle_tutorial_step(self, screenshot, match_info: Dict):
+        self._tutorial.handle_tutorial_step(screenshot, match_info)

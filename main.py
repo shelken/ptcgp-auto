@@ -31,8 +31,12 @@ class PTCGPAuto:
         self.action_handler = ActionHandler(self.adb, self.recognizer, self.state)
         self.running = True
 
-    def start(self):
-        """启动自动化"""
+    def start(self, tutorial_mode=False):
+        """启动自动化
+
+        Args:
+            tutorial_mode: 是否直接进入教程解锁模式
+        """
         print("=" * 50)
         print("PTCGP 单人对战自动化脚本")
         print("=" * 50)
@@ -46,12 +50,19 @@ class PTCGPAuto:
         self.recognizer.reload_templates()
 
         print("\n开始自动化流程...")
-        print("提示: 脚本会自动识别当前界面并执行相应操作")
-
-        # 显示当前进度
-        self.state.print_status()
 
         try:
+            if tutorial_mode:
+                # 先进入教程模式
+                print("提示: 教程解锁模式")
+                from actions.tutorial import TutorialRunner
+                runner = TutorialRunner(self.adb, self.recognizer)
+                runner.run()
+                print("教程完成，进入正常对战流程...")
+
+            # 正常主循环
+            print("提示: 脚本会自动识别当前界面并执行相应操作")
+            self.state.print_status()
             self.main_loop()
         except KeyboardInterrupt:
             print("\n用户中断，退出...")
@@ -122,6 +133,11 @@ def main():
         action='store_true',
         help='禁用对战中自动开启自动对战（允许人工接管）'
     )
+    parser.add_argument(
+        '-t', '--tutorial',
+        action='store_true',
+        help='直接进入教程解锁模式（跳过主循环）'
+    )
     args = parser.parse_args()
 
     # 加载语言配置
@@ -147,7 +163,7 @@ def main():
             port = int(args.address)
 
     auto = PTCGPAuto(host, port)
-    auto.start()
+    auto.start(tutorial_mode=args.tutorial)
 
 
 if __name__ == "__main__":
