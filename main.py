@@ -2,6 +2,8 @@
 PTCGP 单人对战自动化脚本 - 主入口
 """
 
+import sys
+import subprocess
 import time
 
 import config
@@ -13,6 +15,7 @@ from page_detector import PageDetector
 from actions import ActionHandler
 from notifier import notify_unrecognized
 from settings import load_settings, apply_settings_to_config, print_active_settings
+from device_discovery import discover_devices
 
 
 class PTCGPAuto:
@@ -194,23 +197,93 @@ class PTCGPAuto:
                 time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
 
 
-def main():
-    """主入口"""
-    # 加载配置（CLI > 环境变量 > .env > 默认值）
-    settings = load_settings()
+def run_all_devices(settings: dict):
+    """多设备模式：发现设备 → 启动子进程"""
+    devices = discover_devices()
 
-    # 应用配置到 config 模块
+    if not devices:
+        print("未发现运行中的 BlueStacks 设备")
+        return
+
+    # 处理排除端口
+    exclude_str = settings.get("exclude", "")
+    if exclude_str:
+        exclude_ports = set(p.strip() for p in exclude_str.split(",") if p.strip())
+        devices = [d for d in devices if d.split(":")[1] not in exclude_ports]
+        if exclude_ports:
+            print(f"排除端口: {', '.join(sorted(exclude_ports))}")
+
+    if not devices:
+        print("排除后无可用设备")
+        return
+
+    print(f"发现 {len(devices)} 个设备:")
+    for addr in devices:
+        print(f"  - {addr}")
+    print()
+
+    # 构建基础参数（排除 --all 和 -a）
+    base_args = build_base_args(settings)
+
+    # 启动子进程
+    processes = []
+    for addr in devices:
+        cmd = [sys.executable, __file__, "-a", addr] + base_args
+        p = subprocess.Popen(cmd)
+        processes.append((addr, p))
+        print(f"[{addr.split(':')[1]}] 已启动")
+
+    # 等待所有子进程
+    try:
+        for addr, p in processes:
+            p.wait()
+    except KeyboardInterrupt:
+        print("\n正在终止所有子进程...")
+        for addr, p in processes:
+            p.terminate()
+        for addr, p in processes:
+            p.wait()
+
+
+def build_base_args(settings: dict) -> list:
+    """从 settings 构建子进程参数（排除 all 和 address）"""
+    args = []
+    if settings.get("language"):
+        args.extend(["-l", settings["language"]])
+    if settings.get("tutorial"):
+        args.append("-t")
+    if settings.get("debug"):
+        args.append("--debug")
+    if settings.get("no_auto_battle"):
+        args.append("--no-auto-battle")
+    if settings.get("notify_key"):
+        args.extend(["--notify-key", settings["notify_key"]])
+    if settings.get("no_notify_sound"):
+        args.append("--no-notify-sound")
+    return args
+
+
+def run_single_device(settings: dict):
+    """单设备模式：原有逻辑"""
     apply_settings_to_config(settings)
-
-    # 打印非默认配置
     print_active_settings(settings)
 
-    # 解析地址
     host = config.ADB_HOST
     port = config.ADB_PORT
 
     auto = PTCGPAuto(host, port)
     auto.start(tutorial_mode=settings.get("tutorial", False))
+
+
+def main():
+    """主入口"""
+    # 加载配置（CLI > 环境变量 > .env > 默认值）
+    settings = load_settings()
+
+    if settings.get("all"):
+        run_all_devices(settings)
+    else:
+        run_single_device(settings)
 
 
 if __name__ == "__main__":
