@@ -65,6 +65,14 @@ class TutorialRunner:
         if "商店/兌換處" in all_text or "得卡挑戰" in all_text:
             return "exited", ocr_results
 
+        # 1.5 优先检测弹窗（OK 按钮、关闭按钮等）
+        # 这类弹窗需要立即处理，不能被误判为 need_scroll
+        if any(item["text"] == "OK" for item in ocr_results):
+            return "in_tutorial", ocr_results
+        close_box = self.recognizer.find_template(screenshot, "btn_close")
+        if close_box:
+            return "in_tutorial", ocr_results
+
         # 2. 检测是否在玩法列表
         shalou_boxes = self.recognizer.find_all_templates(screenshot, "wanfa_shalou")
         has_wanfa_title = "玩法" in all_text
