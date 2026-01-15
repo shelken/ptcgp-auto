@@ -56,85 +56,92 @@ def perform_ocr(image: Image.Image) -> List[Dict]:
     import Vision
     import Quartz
     from Foundation import NSData
+    import objc
 
-    # 将 PIL Image 转换为 CGImage
-    # 先转为 PNG bytes
+    # 获取图像尺寸（在 autorelease_pool 外获取，避免 image 对象问题）
+    width = image.width
+    height = image.height
+
+    # 将 PIL Image 转换为 PNG bytes（在 pool 外完成）
     import io
     buffer = io.BytesIO()
     image.save(buffer, format='PNG')
     png_data = buffer.getvalue()
+    buffer.close()
 
-    # 创建 NSData 和 CGImage
-    ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
-    image_source = Quartz.CGImageSourceCreateWithData(ns_data, None)
-    cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
-
-    if cg_image is None:
-        print("无法创建 CGImage")
-        return []
-
-    # 获取图像尺寸
-    width = image.width
-    height = image.height
-
-    # 创建 OCR 请求
-    request = Vision.VNRecognizeTextRequest.alloc().init()
-
-    # 设置识别级别
-    if config.OCR_RECOGNITION_LEVEL == "fast":
-        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
-    else:
-        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-
-    # 设置识别语言
-    request.setRecognitionLanguages_(config.OCR_LANGUAGES)
-
-    # 自动检测语言
-    request.setAutomaticallyDetectsLanguage_(True)
-
-    # 创建请求处理器
-    handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-        cg_image, None
-    )
-
-    # 执行请求
-    success = handler.performRequests_error_([request], None)
-
-    if not success:
-        print("OCR 请求执行失败")
-        return []
-
-    # 解析结果
     results = []
-    observations = request.results()
 
-    if observations:
-        for observation in observations:
-            # 获取最佳候选文本
-            top_candidate = observation.topCandidates_(1)
-            if top_candidate and len(top_candidate) > 0:
-                text = top_candidate[0].string()
-                confidence = top_candidate[0].confidence()
+    # 使用 autorelease_pool 确保 Objective-C 对象被正确释放
+    # 这是修复内存泄漏的关键
+    with objc.autorelease_pool():
+        # 创建 NSData 和 CGImage
+        ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
+        image_source = Quartz.CGImageSourceCreateWithData(ns_data, None)
+        cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
 
-                # 获取边界框（Vision 使用归一化坐标，原点在左下角）
-                bounding_box = observation.boundingBox()
-                x = bounding_box.origin.x
-                y = bounding_box.origin.y
-                w = bounding_box.size.width
-                h = bounding_box.size.height
+        if cg_image is None:
+            print("无法创建 CGImage")
+            return []
 
-                # 转换为像素坐标（原点在左上角）
-                x1 = int(x * width)
-                y1 = int((1 - y - h) * height)  # 翻转 Y 轴
-                x2 = int((x + w) * width)
-                y2 = int((1 - y) * height)
+        # 创建 OCR 请求
+        request = Vision.VNRecognizeTextRequest.alloc().init()
 
-                results.append({
-                    'text': text,
-                    'box': (x1, y1, x2, y2),
-                    'confidence': confidence
-                })
+        # 设置识别级别
+        if config.OCR_RECOGNITION_LEVEL == "fast":
+            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
+        else:
+            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
 
+        # 设置识别语言
+        request.setRecognitionLanguages_(config.OCR_LANGUAGES)
+
+        # 自动检测语言
+        request.setAutomaticallyDetectsLanguage_(True)
+
+        # 创建请求处理器
+        handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
+            cg_image, None
+        )
+
+        # 执行请求
+        success = handler.performRequests_error_([request], None)
+
+        if not success:
+            print("OCR 请求执行失败")
+            return []
+
+        # 解析结果（在 pool 内提取为 Python 原生类型）
+        observations = request.results()
+
+        if observations:
+            for observation in observations:
+                # 获取最佳候选文本
+                top_candidate = observation.topCandidates_(1)
+                if top_candidate and len(top_candidate) > 0:
+                    # 转换为 Python 字符串，避免持有 ObjC 对象引用
+                    text = str(top_candidate[0].string())
+                    confidence = float(top_candidate[0].confidence())
+
+                    # 获取边界框（Vision 使用归一化坐标，原点在左下角）
+                    bounding_box = observation.boundingBox()
+                    x = bounding_box.origin.x
+                    y = bounding_box.origin.y
+                    w = bounding_box.size.width
+                    h = bounding_box.size.height
+
+                    # 转换为像素坐标（原点在左上角）
+                    x1 = int(x * width)
+                    y1 = int((1 - y - h) * height)  # 翻转 Y 轴
+                    x2 = int((x + w) * width)
+                    y2 = int((1 - y) * height)
+
+                    results.append({
+                        'text': text,
+                        'box': (x1, y1, x2, y2),
+                        'confidence': confidence
+                    })
+
+    # autorelease_pool 退出时，所有 ObjC 对象会被释放
     return results
 
 
