@@ -76,6 +76,7 @@ class StateManager:
             "last_updated": datetime.now().isoformat(),
             "current_level": None,  # 当前正在处理的等级
             "current_series": config.SERIES[0] if config.SERIES else "A",  # 当前系列
+            "user": None,  # 用户信息：{username, friend_id, fetched_at}
             "levels": {}
         }
 
@@ -183,6 +184,27 @@ class StateManager:
         except ValueError:
             pass
         return None  # 没有更多系列
+
+    # ===== 用户信息 =====
+
+    def has_user_info(self) -> bool:
+        """检查是否已有用户信息"""
+        user = self.state.get("user")
+        return user is not None and user.get("friend_id") is not None
+
+    def get_user_info(self) -> Optional[Dict]:
+        """获取用户信息"""
+        return self.state.get("user")
+
+    def set_user_info(self, username: str, friend_id: str):
+        """设置用户信息"""
+        self.state["user"] = {
+            "username": username,
+            "friend_id": friend_id,
+            "fetched_at": datetime.now().isoformat()
+        }
+        print(f"[状态] 已保存用户信息: {username} ({friend_id})")
+        self.save()
 
     # ===== 工具方法 =====
 

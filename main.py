@@ -32,6 +32,62 @@ class PTCGPAuto:
         self.running = True
         self.unrecognized_notified = False  # Notification state flag
 
+    def fetch_user_info(self):
+        """获取用户信息子流程 - 独立于主循环"""
+        print("正在获取用户信息...")
+
+        while not self.state.has_user_info():
+            screenshot = self.adb.screenshot()
+            if not screenshot:
+                time.sleep(1)
+                continue
+
+            page_name, page_info, match_info = self.page_detector.detect(screenshot)
+
+            if not page_name:
+                time.sleep(1)
+                continue
+
+            print(f"  [{page_name}]")
+
+            # 已到达目标页面，执行提取
+            if page_name == "user_info_popup":
+                match_info["page_info"] = page_info
+                self.action_handler.execute("extract_user_info", screenshot, match_info)
+                break
+
+            # 导航到目标的步骤
+            if page_name == "friends_list":
+                match_info["page_info"] = page_info
+                self.action_handler.execute("click_add_friends", screenshot, match_info)
+            elif page_name == "community_page":
+                match_info["page_info"] = page_info
+                self.action_handler.execute("click_friends_tab", screenshot, match_info)
+            elif page_name == "game_home_main":
+                # 点击社群图标
+                box = self.recognizer.find_template(screenshot, "icon_community", threshold=0.7)
+                if box:
+                    print("  -> 点击社群图标")
+                    self.adb.tap_center(box)
+            elif page_name in ("_main_page", "game_open_page"):
+                # 模拟器主页或游戏开启页面，执行默认动作进入游戏
+                match_info["page_info"] = page_info
+                self.action_handler.execute("click_identifier", screenshot, match_info)
+            else:
+                # 其他页面，尝试查找社群图标
+                box = self.recognizer.find_template(screenshot, "icon_community", threshold=0.7)
+                if box:
+                    print("  -> 点击社群图标")
+                    self.adb.tap_center(box)
+                else:
+                    # 找不到社群图标，按返回键
+                    print("  -> 返回上一页")
+                    self.adb.back()
+
+            time.sleep(config.WAIT_PAGE_TRANSITION)
+
+        print("用户信息获取完成")
+
     def start(self, tutorial_mode=False):
         """启动自动化
 
@@ -49,6 +105,15 @@ class PTCGPAuto:
 
         # 连接后重新加载模板（根据实际分辨率缩放）
         self.recognizer.reload_templates()
+
+        # 获取用户信息（如果没有）
+        if not self.state.has_user_info():
+            self.fetch_user_info()
+
+        # 显示用户信息
+        if self.state.has_user_info():
+            user = self.state.get_user_info()
+            print(f"用户: {user['username']} ({user['friend_id']})")
 
         print("\n开始自动化流程...")
 
@@ -108,13 +173,21 @@ class PTCGPAuto:
                 time.sleep(config.WAIT_PAGE_TRANSITION)
             else:
                 no_action_count += 1
-                if no_action_count >= 5:
+                if no_action_count >= config.UNRECOGNIZED_THRESHOLD:
                     print("连续多次无法识别界面，可能需要手动干预")
                     # Send notification only once per unrecognized state
                     if not self.unrecognized_notified and config.NOTIFICATION_ENABLED:
+                        # 获取用户名
+                        username = None
+                        if self.state.has_user_info():
+                            user = self.state.get_user_info()
+                            username = user.get("username")
+
                         notify_unrecognized(
                             config.NOTIFICATION_WEBHOOK_KEY,
-                            config.NOTIFICATION_SOUND
+                            config.NOTIFICATION_SOUND,
+                            port=self.port,
+                            username=username
                         )
                         self.unrecognized_notified = True
                     no_action_count = 0
