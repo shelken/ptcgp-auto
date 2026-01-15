@@ -4,6 +4,9 @@ import time
 from typing import Dict, Callable
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from .utils import go_back, find_auto_mode_button, find_text_by_variants
 
 
@@ -34,23 +37,23 @@ class BattleActions:
             # 尝试点击关闭按钮
             close_box = self.recognizer.find_template(screenshot, "btn_close")
             if close_box:
-                print("  -> 检测到弹窗遮挡，点击关闭")
+                logger.info("  -> 检测到弹窗遮挡，点击关闭")
                 self.adb.tap_center(close_box)
                 return False
             # 没有关闭按钮，点击屏幕中央关闭弹窗
-            print("  -> 检测到弹窗遮挡，点击屏幕继续")
+            logger.info("  -> 检测到弹窗遮挡，点击屏幕继续")
             self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
             return False
 
         # 如果需要初始化状态且当前等级未设置，返回上级页面
         if needs_state_init and not self.state.get_current_level():
-            print("  -> 需要初始化状态，返回上级页面")
+            logger.info("  -> 需要初始化状态，返回上级页面")
             go_back(self.adb, self.recognizer, screenshot)
             return True
 
         # 检查是否应该切换到更高优先级的等级
         if self._should_switch_to_higher_priority_level():
-            print("  -> 返回上级页面以选择更高优先级等级")
+            logger.info("  -> 返回上级页面以选择更高优先级等级")
             go_back(self.adb, self.recognizer, screenshot)
             return True
 
@@ -60,14 +63,14 @@ class BattleActions:
             auto_item, has_off = result
             # 如果自动模式是 OFF，先点击开启
             if has_off:
-                print("  -> 开启自动模式")
+                logger.info("  -> 开启自动模式")
                 self.adb.tap_center(auto_item['box'])
                 time.sleep(0.5)
 
         # 点击对战按钮
         battle_box = match_info.get("box")
         if battle_box:
-            print("  -> 点击对战")
+            logger.info("  -> 点击对战")
             self.adb.tap_center(battle_box)
 
         return False
@@ -80,12 +83,12 @@ class BattleActions:
 
             if auto_enabled is False:
                 # 自动对战未开启，点击开启
-                print("  -> 开启自动对战")
+                logger.info("  -> 开启自动对战")
                 auto_box = self.recognizer.find_text_variants(screenshot, "auto")
                 if auto_box:
                     self.adb.tap_center(auto_box)
                     time.sleep(0.5)
                     return  # 开启后立即返回，下次循环继续检测
 
-        print("  -> 对战中，等待...")
+        logger.info("  -> 对战中，等待...")
         time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)

@@ -5,6 +5,9 @@ import time
 from typing import Dict, List, Optional, Callable
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from .utils import go_back, find_text_by_variants, close_popup, detect_and_close_popup
 
 
@@ -34,14 +37,14 @@ class DeckActions:
 
         # 如果所有卡包都已检查完毕，返回上级页面
         if all_packs_checked:
-            print("  -> 所有卡包都已检查，返回上级页面")
+            logger.info("  -> 所有卡包都已检查，返回上级页面")
             set_all_packs_checked(False)
             go_back(self.adb, self.recognizer, screenshot)
             return
 
         # 如果需要初始化状态且当前等级未设置，返回上级页面
         if needs_state_init and not current_level:
-            print("  -> 需要初始化状态，返回上级页面")
+            logger.info("  -> 需要初始化状态，返回上级页面")
             go_back(self.adb, self.recognizer, screenshot)
             return
 
@@ -49,20 +52,20 @@ class DeckActions:
         detected_level = self._detect_level_from_ocr(ocr_results)
         if detected_level:
             if current_level and detected_level != current_level:
-                print(f"  [等级] 检测到等级不一致: state={current_level}, 实际={detected_level}")
-                print(f"  -> 更新 current_level 为 {detected_level}")
+                logger.info(f"  [等级] 检测到等级不一致: state={current_level}, 实际={detected_level}")
+                logger.info(f"  -> 更新 current_level 为 {detected_level}")
             current_level = detected_level
             self.state.set_current_level(current_level)
 
         # 如果 current_level 仍未设置，返回上级重新选择
         if not current_level:
-            print("  -> 无法识别当前等级，返回上级重新选择")
+            logger.info("  -> 无法识别当前等级，返回上级重新选择")
             go_back(self.adb, self.recognizer, screenshot)
             return
 
         # 检查是否应该切换到更高优先级的等级
         if self._should_switch_to_higher_priority_level():
-            print("  -> 返回上级页面以选择更高优先级等级")
+            logger.info("  -> 返回上级页面以选择更高优先级等级")
             go_back(self.adb, self.recognizer, screenshot)
             return
 
@@ -72,7 +75,7 @@ class DeckActions:
             text = item['text'].strip().lower()
             for pattern in no_battles_patterns:
                 if pattern.lower() in text:
-                    print("  -> 当前难度没有可用对战，标记卡包完成并返回")
+                    logger.info("  -> 当前难度没有可用对战，标记卡包完成并返回")
                     if current_level and current_pack_id:
                         self.state.set_pack_complete(current_level, current_pack_id, True)
                     # 点击扩充组查看更多卡包
@@ -87,12 +90,12 @@ class DeckActions:
         pack_name = self._extract_pack_name(ocr_results)
         if pack_name:
             set_current_pack_name(pack_name)
-            print(f"  [卡包] {pack_name}")
+            logger.info(f"  [卡包] {pack_name}")
 
         # 检查当前卡包是否已标记为完成
         if current_level and current_pack_id:
             if self.state.is_pack_complete(current_level, current_pack_id):
-                print(f"  -> {current_pack_name or current_pack_id} 在 {current_level} 已完成，进入扩充组选择其他卡包")
+                logger.info(f"  -> {current_pack_name or current_pack_id} 在 {current_level} 已完成，进入扩充组选择其他卡包")
                 expansion_item = find_text_by_variants(ocr_results, "expansion_button")
                 if expansion_item:
                     self.adb.tap_center(expansion_item['box'])
@@ -106,7 +109,7 @@ class DeckActions:
 
         for attempt in range(max_attempts):
             if attempt > 0:
-                print(f"  -> 第{attempt}次滑动查找沙漏")
+                logger.info(f"  -> 第{attempt}次滑动查找沙漏")
                 self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(1.2)
                 screenshot = self.adb.screenshot()
@@ -120,7 +123,7 @@ class DeckActions:
             # 查找沙漏图标
             shalou_box = self.recognizer.find_template(screenshot, "shalou", threshold=0.6)
             if shalou_box:
-                print("  -> 找到沙漏，点击未完成牌组")
+                logger.info("  -> 找到沙漏，点击未完成牌组")
                 self.adb.tap_center(shalou_box)
                 return
 
@@ -129,7 +132,7 @@ class DeckActions:
 
             # 检测是否到底
             if attempt > 0 and current_texts == last_texts:
-                print("  -> 已滑动到底部，未找到沙漏")
+                logger.info("  -> 已滑动到底部，未找到沙漏")
                 break
 
             last_texts = current_texts
@@ -141,12 +144,12 @@ class DeckActions:
         # 点击扩充组查看更多卡包
         expansion_item = find_text_by_variants(ocr_results, "expansion_button")
         if expansion_item:
-            print("  -> 点击擴充組查看更多卡包")
+            logger.info("  -> 点击擴充組查看更多卡包")
             self.adb.tap_center(expansion_item['box'])
             return
 
         # 都没找到，返回
-        print("  -> 当前等级已完成，返回")
+        logger.info("  -> 当前等级已完成，返回")
         go_back(self.adb, self.recognizer, screenshot)
 
     def _detect_level_from_ocr(self, ocr_results: List[Dict]) -> Optional[str]:

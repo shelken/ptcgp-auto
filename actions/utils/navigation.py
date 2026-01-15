@@ -3,6 +3,9 @@
 from typing import List, Dict
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def go_back(adb, recognizer, screenshot):
@@ -49,7 +52,7 @@ def detect_and_close_popup(adb, ocr_results: List[Dict]) -> bool:
     for item in ocr_results:
         text = item['text'].strip()
         if text in config.POPUP_BUTTONS:
-            print(f"  -> 检测到弹窗按钮 '{text}'，点击关闭")
+            logger.info(f"  -> 检测到弹窗按钮 '{text}'，点击关闭")
             adb.tap_center(item['box'])
             return True
     return False

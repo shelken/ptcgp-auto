@@ -5,7 +5,10 @@
 from typing import Optional, Dict, Tuple, List
 
 import config
+from logger import get_logger
 from recognizer import Recognizer
+
+logger = get_logger(__name__)
 
 
 class PageDetector:
@@ -64,21 +67,18 @@ class PageDetector:
                     match_info["template_match"] = template_match
 
                 match_info["ocr_results"] = ocr_results
-                if config.DEBUG:
-                    print(f"[匹配] {page_name} <- \"{match_info['identifier']}\" in \"{match_info.get('matched_text', '')}\"")
+                logger.debug(f"[匹配] {page_name} <- \"{match_info['identifier']}\" in \"{match_info.get('matched_text', '')}\"")
                 return page_name, page_info, match_info
 
             # 检查纯模板匹配（没有 identifiers 的情况）
             if not identifiers:
                 match_info = self._check_templates(screenshot, templates, ocr_results)
                 if match_info:
-                    if config.DEBUG:
-                        print(f"[匹配] {page_name} <- 模板 {match_info['template']}")
+                    logger.debug(f"[匹配] {page_name} <- 模板 {match_info['template']}")
                     return page_name, page_info, match_info
 
         # 没有匹配到任何界面
-        if config.DEBUG:
-            print(f"[未匹配] 无法识别当前界面")
+        logger.debug("[未匹配] 无法识别当前界面")
 
         return None, None, None
 

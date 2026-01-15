@@ -4,6 +4,9 @@ import time
 from typing import Dict
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from .utils import find_text_by_variants, find_auto_mode_button
 
 
@@ -18,12 +21,12 @@ class BaseActions:
         """点击识别到的文字位置"""
         box = match_info.get("box")
         if box:
-            print(f"  -> 点击: {match_info.get('identifier', 'unknown')}")
+            logger.info(f"  -> 点击: {match_info.get('identifier', 'unknown')}")
             self.adb.tap_center(box)
 
     def click_continue(self, screenshot, match_info: Dict):
         """点击屏幕中央继续"""
-        print("  -> 点击屏幕继续")
+        logger.info("  -> 点击屏幕继续")
         self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
 
     def click_cancel(self, screenshot, match_info: Dict):
@@ -31,11 +34,11 @@ class BaseActions:
         ocr_results = match_info.get("ocr_results", [])
         cancel_item = find_text_by_variants(ocr_results, "cancel")
         if cancel_item:
-            print("  -> 点击取消")
+            logger.info("  -> 点击取消")
             self.adb.tap_center(cancel_item['box'])
             return
         # 如果没找到取消，尝试点击屏幕继续
-        print("  -> 未找到取消按钮，点击屏幕继续")
+        logger.info("  -> 未找到取消按钮，点击屏幕继续")
         self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
 
     def click_template(self, screenshot, match_info: Dict):
@@ -56,14 +59,14 @@ class BaseActions:
                 box = self.recognizer.find_template(screenshot, template_name)
 
         if box:
-            print(f"  -> 点击模板: {template_name or 'unknown'}")
+            logger.info(f"  -> 点击模板: {template_name or 'unknown'}")
             self.adb.tap_center(box)
         else:
-            print(f"  -> 未找到模板: {template_name}")
+            logger.error(f"  -> 未找到模板: {template_name}")
 
     def wait(self, screenshot, match_info: Dict):
         """等待（对战中）"""
-        print("  -> 对战中，等待...")
+        logger.info("  -> 对战中，等待...")
         time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
 
     def click_auto_mode(self, screenshot, match_info: Dict):
@@ -72,9 +75,9 @@ class BaseActions:
         result = find_auto_mode_button(ocr_results)
         if result:
             auto_item, _ = result
-            print(f"  -> 点击自动模式: {auto_item['text']}")
+            logger.info(f"  -> 点击自动模式: {auto_item['text']}")
             self.adb.tap_center(auto_item['box'])
             return
         # 没找到自动按钮，点击屏幕继续
-        print("  -> 未找到自动按钮，点击屏幕继续")
+        logger.info("  -> 未找到自动按钮，点击屏幕继续")
         self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)

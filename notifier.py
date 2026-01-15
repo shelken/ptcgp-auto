@@ -4,6 +4,9 @@ Supports WeCom (WeChat Work) webhook and macOS sound alerts
 """
 
 import subprocess
+from logger import get_logger
+
+logger = get_logger(__name__)
 from urllib import request
 import json
 
@@ -37,13 +40,13 @@ def send_wecom_notification(key: str, message: str) -> bool:
         with request.urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode("utf-8"))
             if result.get("errcode") == 0:
-                print(f"[Notify] WeCom notification sent")
+                logger.info("[Notify] WeCom notification sent")
                 return True
             else:
-                print(f"[Notify] WeCom error: {result.get('errmsg', 'Unknown error')}")
+                logger.error(f"[Notify] WeCom error: {result.get('errmsg', 'Unknown error')}")
                 return False
     except Exception as e:
-        print(f"[Notify] Failed to send WeCom notification: {e}")
+        logger.error(f"[Notify] Failed to send WeCom notification: {e}")
         return False
 
 
@@ -61,7 +64,7 @@ def play_sound() -> bool:
             check=True,
             capture_output=True
         )
-        print("[Notify] Sound alert played")
+        logger.info("[Notify] Sound alert played")
         return True
     except subprocess.CalledProcessError:
         # Fallback: use osascript to trigger system beep
@@ -71,13 +74,13 @@ def play_sound() -> bool:
                 check=True,
                 capture_output=True
             )
-            print("[Notify] Sound alert played (beep)")
+            logger.info("[Notify] Sound alert played (beep)")
             return True
         except Exception as e:
-            print(f"[Notify] Failed to play sound: {e}")
+            logger.error(f"[Notify] Failed to play sound: {e}")
             return False
     except FileNotFoundError:
-        print("[Notify] Sound playback not available (not macOS)")
+        logger.error("[Notify] Sound playback not available (not macOS)")
         return False
 
 

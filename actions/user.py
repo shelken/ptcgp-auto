@@ -3,7 +3,10 @@
 import re
 from typing import Dict, Optional, Tuple
 
+from logger import get_logger
 from .utils import find_text_by_variants
+
+logger = get_logger(__name__)
 
 
 class UserActions:
@@ -30,10 +33,10 @@ class UserActions:
         if username and friend_id:
             self.state.set_user_info(username, friend_id)
             # 返回上一页
-            print("  -> 用户信息已保存，返回")
+            logger.info("  -> 用户信息已保存，返回")
             self.adb.back()
         else:
-            print(f"  -> 提取失败: username={username}, friend_id={friend_id}")
+            logger.error(f"  -> 提取失败: username={username}, friend_id={friend_id}")
             self.adb.back()
 
     def click_add_friends(self, screenshot, match_info: Dict):
@@ -44,7 +47,7 @@ class UserActions:
                 screenshot, "btn_close", threshold=0.7
             )
             if close_box:
-                print("  -> 点击关闭按钮")
+                logger.info("  -> 点击关闭按钮")
                 self.adb.tap_center(close_box)
             return
 
@@ -53,16 +56,16 @@ class UserActions:
             screenshot, "icon_add_friends", threshold=0.7
         )
         if add_friends_box:
-            print("  -> 点击添加朋友图标")
+            logger.info("  -> 点击添加朋友图标")
             self.adb.tap_center(add_friends_box)
         else:
-            print("  -> 未找到添加朋友图标")
+            logger.error("  -> 未找到添加朋友图标")
 
     def click_friends_tab(self, screenshot, match_info: Dict):
         """在社群页面点击朋友标签"""
         # 如果已有用户信息，点击对战图标回到主流程
         if self.state.has_user_info():
-            print("  -> 已有用户信息，点击对战图标")
+            logger.info("  -> 已有用户信息，点击对战图标")
             self._click_battle_icon(screenshot)
             return
 
@@ -73,11 +76,11 @@ class UserActions:
             text = item['text'].strip()
             # 精确匹配"朋友"，排除"朋友ID"、"朋友數"等
             if text == "朋友" or text == "好友":
-                print(f"  -> 点击: {text}")
+                logger.info(f"  -> 点击: {text}")
                 self.adb.tap_center(item['box'])
                 return
 
-        print("  -> 未找到朋友标签，点击对战图标")
+        logger.info("  -> 未找到朋友标签，点击对战图标")
         self._click_battle_icon(screenshot)
 
     def _click_battle_icon(self, screenshot):
@@ -88,7 +91,7 @@ class UserActions:
         if battle_box:
             self.adb.tap_center(battle_box)
         else:
-            print("  -> 未找到对战图标")
+            logger.error("  -> 未找到对战图标")
 
     def _parse_user_info(self, ocr_results) -> Tuple[Optional[str], Optional[str]]:
         """解析 OCR 结果提取用户名和朋友ID"""
@@ -152,6 +155,6 @@ class UserActions:
                 username = candidates[0][1]
 
         if username and friend_id:
-            print(f"  -> 提取成功: {username} / {friend_id}")
+            logger.info(f"  -> 提取成功: {username} / {friend_id}")
 
         return username, friend_id

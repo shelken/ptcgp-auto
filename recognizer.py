@@ -11,6 +11,9 @@ import numpy as np
 from PIL import Image
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # 预定义颜色范围 (HSV)
@@ -80,7 +83,7 @@ def perform_ocr(image: Image.Image) -> List[Dict]:
         cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
 
         if cg_image is None:
-            print("无法创建 CGImage")
+            logger.error("无法创建 CGImage")
             return []
 
         # 创建 OCR 请求
@@ -107,7 +110,7 @@ def perform_ocr(image: Image.Image) -> List[Dict]:
         success = handler.performRequests_error_([request], None)
 
         if not success:
-            print("OCR 请求执行失败")
+            logger.error("OCR 请求执行失败")
             return []
 
         # 解析结果（在 pool 内提取为 Python 原生类型）
@@ -152,7 +155,7 @@ class Recognizer:
         self.templates_dir = Path(templates_dir)
         self.templates: Dict[str, np.ndarray] = {}
         # 初始化时不加载模板，等待分辨率确定后调用 reload_templates()
-        print("使用 Apple Vision Framework 进行 OCR（原生 Apple Silicon 加速）")
+        logger.info("使用 Apple Vision Framework 进行 OCR（原生 Apple Silicon 加速）")
 
     def reload_templates(self):
         """重新加载模板（根据当前分辨率缩放）"""
@@ -162,13 +165,13 @@ class Recognizer:
     def _load_templates(self):
         """加载所有模板图片，并根据当前分辨率缩放"""
         if not self.templates_dir.exists():
-            print(f"警告: 模板目录不存在: {self.templates_dir}")
+            logger.warning(f"模板目录不存在: {self.templates_dir}")
             return
 
         # 计算缩放比例（当前分辨率 / 模板基准分辨率）
         scale = config.SCREEN_WIDTH / config.TEMPLATE_BASE_WIDTH
         if abs(scale - 1.0) > 0.01:
-            print(f"模板缩放比例: {scale:.2f} ({config.SCREEN_WIDTH}/{config.TEMPLATE_BASE_WIDTH})")
+            logger.info(f"模板缩放比例: {scale:.2f} ({config.SCREEN_WIDTH}/{config.TEMPLATE_BASE_WIDTH})")
 
         for file in self.templates_dir.glob("*.png"):
             name = file.stem
@@ -180,7 +183,7 @@ class Recognizer:
                     new_h = int(img.shape[0] * scale)
                     img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 self.templates[name] = img
-                print(f"已加载模板: {name}")
+                logger.info(f"已加载模板: {name}")
 
     def pil_to_cv2(self, pil_image: Image.Image) -> np.ndarray:
         """PIL Image 转 OpenCV 格式"""
@@ -207,8 +210,7 @@ class Recognizer:
             self._load_templates()
 
         if template_name not in self.templates:
-            if config.DEBUG:
-                print(f"警告: 模板不存在: {template_name}")
+            logger.debug(f"模板不存在: {template_name}")
             return None
 
         threshold = threshold or config.TEMPLATE_THRESHOLD
@@ -223,13 +225,11 @@ class Recognizer:
             x1, y1 = max_loc
             x2, y2 = x1 + w, y1 + h
 
-            if config.DEBUG:
-                print(f"[模板] 找到 {template_name}: ({x1},{y1})-({x2},{y2}) 置信度={max_val:.2f}")
+            logger.debug(f"[模板] 找到 {template_name}: ({x1},{y1})-({x2},{y2}) 置信度={max_val:.2f}")
 
             return (x1, y1, x2, y2)
 
-        if config.DEBUG:
-            print(f"[模板] 未找到 {template_name}, 最高置信度={max_val:.2f} (阈值={threshold})")
+        logger.debug(f"[模板] 未找到 {template_name}, 最高置信度={max_val:.2f} (阈值={threshold})")
         return None
 
     def find_all_templates(
@@ -248,7 +248,7 @@ class Recognizer:
             self._load_templates()
 
         if template_name not in self.templates:
-            print(f"警告: 模板不存在: {template_name}")
+            logger.warning(f"模板不存在: {template_name}")
             return []
 
         threshold = threshold or config.TEMPLATE_THRESHOLD
@@ -269,8 +269,7 @@ class Recognizer:
         # 使用 NMS 去除重叠的检测
         boxes = self._non_max_suppression(boxes)
 
-        if config.DEBUG:
-            print(f"找到 {len(boxes)} 个 {template_name}")
+        logger.debug(f"找到 {len(boxes)} 个 {template_name}")
 
         return boxes
 
@@ -323,9 +322,8 @@ class Recognizer:
         """
         results = perform_ocr(screenshot)
 
-        if config.DEBUG:
-            texts = [f'"{item["text"]}"@({item["box"][0]},{item["box"][1]})' for item in results]
-            print(f"OCR({len(results)}): {', '.join(texts)}")
+        ocr_str = ", ".join([f'"{item["text"]}"@({item["box"][0]},{item["box"][1]})' for item in results])
+        logger.debug(f"OCR({len(results)}): {ocr_str}")
 
         return results
 
@@ -351,17 +349,14 @@ class Recognizer:
             text = item['text']
             if partial:
                 if target_text.lower() in text.lower():
-                    if config.DEBUG:
-                        print(f"找到文字 '{target_text}' 在 '{text}'")
+                    logger.debug(f"找到文字 '{target_text}' 在 '{text}'")
                     return item['box']
             else:
                 if target_text.lower() == text.lower():
-                    if config.DEBUG:
-                        print(f"找到文字 '{target_text}'")
+                    logger.debug(f"找到文字 '{target_text}'")
                     return item['box']
 
-        if config.DEBUG:
-            print(f"未找到文字: {target_text}")
+        logger.debug(f"未找到文字: {target_text}")
         return None
 
     def find_text_variants(
@@ -381,7 +376,7 @@ class Recognizer:
             找到的区域，未找到返回 None
         """
         if pattern_key not in config.TEXT_PATTERNS:
-            print(f"警告: 未知的文本模式键: {pattern_key}")
+            logger.warning(f"未知的文本模式键: {pattern_key}")
             return None
 
         patterns = config.TEXT_PATTERNS[pattern_key]
@@ -392,8 +387,7 @@ class Recognizer:
             text = item['text'].strip()
             for pattern in patterns:
                 if pattern.lower().strip() == text.lower():
-                    if config.DEBUG:
-                        print(f"找到文字模式(精确) '{pattern}' = '{text}'")
+                    logger.debug(f"找到文字模式(精确) '{pattern}' = '{text}'")
                     return item['box']
 
         # 如果允许部分匹配且精确匹配失败，再尝试部分匹配
@@ -402,12 +396,10 @@ class Recognizer:
                 text = item['text'].strip()
                 for pattern in patterns:
                     if pattern.lower().strip() in text.lower():
-                        if config.DEBUG:
-                            print(f"找到文字模式(部分) '{pattern}' 在 '{text}'")
+                        logger.debug(f"找到文字模式(部分) '{pattern}' 在 '{text}'")
                         return item['box']
 
-        if config.DEBUG:
-            print(f"未找到任何 '{pattern_key}' 模式")
+        logger.debug(f"未找到任何 '{pattern_key}' 模式")
         return None
 
     def wait_for_text_variants(
@@ -442,8 +434,7 @@ class Recognizer:
 
             time.sleep(check_interval)
 
-        if config.DEBUG:
-            print(f"等待 '{pattern_key}' 模式超时")
+        logger.debug(f"等待 '{pattern_key}' 模式超时")
         return False
 
     def check_complete_status(self, screenshot: Image.Image) -> Dict[str, bool]:
@@ -508,7 +499,7 @@ class Recognizer:
 
             time.sleep(check_interval)
 
-        print(f"等待 '{target_text}' 超时")
+        logger.info(f"等待 '{target_text}' 超时")
         return False
 
     def check_color_ratio(
@@ -540,8 +531,7 @@ class Recognizer:
         x2, y2 = min(w, x2), min(h, y2)
 
         if x2 <= x1 or y2 <= y1:
-            if config.DEBUG:
-                print(f"[颜色] 无效区域: ({x1},{y1})-({x2},{y2})")
+            logger.debug(f"[颜色] 无效区域: ({x1},{y1})-({x2},{y2})")
             return False
 
         roi = img[y1:y2, x1:x2]
@@ -549,8 +539,7 @@ class Recognizer:
         mask = cv2.inRange(hsv, np.array(hsv_lower), np.array(hsv_upper))
         ratio = np.count_nonzero(mask) / mask.size
 
-        if config.DEBUG:
-            print(f"[颜色] 区域({x1},{y1})-({x2},{y2}) 占比={ratio:.2%} 阈值={threshold:.2%}")
+        logger.debug(f"[颜色] 区域({x1},{y1})-({x2},{y2}) 占比={ratio:.2%} 阈值={threshold:.2%}")
 
         return ratio >= threshold
 
@@ -666,7 +655,7 @@ class Recognizer:
             状态值 (True/False)，无法检测返回 None
         """
         if state_name not in COLOR_STATES:
-            print(f"警告: 未知的状态配置: {state_name}")
+            logger.warning(f"未知的状态配置: {state_name}")
             return None
 
         state_config = COLOR_STATES[state_name]
@@ -679,12 +668,11 @@ class Recognizer:
         elif locator["type"] == "template":
             anchor_box = self.find_template(screenshot, locator["key"])
         else:
-            print(f"警告: 未知的定位类型: {locator['type']}")
+            logger.warning(f"未知的定位类型: {locator['type']}")
             return None
 
         if anchor_box is None:
-            if config.DEBUG:
-                print(f"[状态] 无法定位 {state_name} 的锚点")
+            logger.debug(f"[状态] 无法定位 {state_name} 的锚点")
             return None
 
         # 2. 计算颜色检测区域
@@ -695,7 +683,7 @@ class Recognizer:
         # 3. 获取颜色配置
         color_name = state_config["color"]
         if color_name not in COLORS:
-            print(f"警告: 未知的颜色: {color_name}")
+            logger.warning(f"未知的颜色: {color_name}")
             return None
 
         color_config = COLORS[color_name]
@@ -709,8 +697,7 @@ class Recognizer:
             state_config["threshold"]
         )
 
-        if config.DEBUG:
-            print(f"[状态] {state_name} = {result}")
+        logger.debug(f"[状态] {state_name} = {result}")
 
         return result
 
