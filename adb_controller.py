@@ -131,6 +131,73 @@ class AdbController:
         y = (box[1] + box[3]) // 2
         self.tap(x, y)
 
+    def long_press(self, x: int, y: int, duration: int = 1000):
+        """长按屏幕指定位置
+
+        Args:
+            x, y: 坐标
+            duration: 按住时间（毫秒），默认 1000ms
+        """
+        if not self.device:
+            print("错误: 设备未连接")
+            return
+
+        try:
+            # 长按通过 swipe 实现，起点终点相同
+            self.device.swipe(x, y, x, y, duration / 1000)
+            if config.DEBUG:
+                print(f"长按: ({x}, {y}) 持续 {duration}ms")
+            time.sleep(config.WAIT_AFTER_CLICK)
+
+        except Exception as e:
+            print(f"长按失败: {e}")
+
+    def long_press_center(self, box: Tuple[int, int, int, int], duration: int = 1000):
+        """长按矩形区域的中心点
+
+        Args:
+            box: (x1, y1, x2, y2) 矩形区域
+            duration: 按住时间（毫秒）
+        """
+        x = (box[0] + box[2]) // 2
+        y = (box[1] + box[3]) // 2
+        self.long_press(x, y, duration)
+
+    def drag(self, x1: int, y1: int, x2: int, y2: int, duration: int = 500):
+        """长按并拖动（从起点拖到终点）
+
+        Args:
+            x1, y1: 起始坐标
+            x2, y2: 结束坐标
+            duration: 拖动持续时间（毫秒），默认 500ms
+        """
+        if not self.device:
+            print("错误: 设备未连接")
+            return
+
+        try:
+            self.device.swipe(x1, y1, x2, y2, duration / 1000)
+            if config.DEBUG:
+                print(f"拖动: ({x1}, {y1}) -> ({x2}, {y2}) 持续 {duration}ms")
+            time.sleep(config.WAIT_AFTER_CLICK)
+
+        except Exception as e:
+            print(f"拖动失败: {e}")
+
+    def drag_centers(self, box1: Tuple[int, int, int, int], box2: Tuple[int, int, int, int], duration: int = 500):
+        """从一个矩形中心拖动到另一个矩形中心
+
+        Args:
+            box1: 起始矩形区域
+            box2: 结束矩形区域
+            duration: 拖动持续时间（毫秒）
+        """
+        x1 = (box1[0] + box1[2]) // 2
+        y1 = (box1[1] + box1[3]) // 2
+        x2 = (box2[0] + box2[2]) // 2
+        y2 = (box2[1] + box2[3]) // 2
+        self.drag(x1, y1, x2, y2, duration)
+
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: int = 300):
         """滑动屏幕
 
