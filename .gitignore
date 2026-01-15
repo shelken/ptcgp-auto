@@ -9,3 +9,4 @@ debug_output/
 dist/
 build/
 .worktrees/
+.env
