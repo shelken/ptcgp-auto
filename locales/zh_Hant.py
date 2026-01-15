@@ -138,6 +138,12 @@ PAGES = {
         "priority": 46,
         "exclude_identifiers": ["與他人對戰", "擴充組", "分級對戰"],
     },
+    # 教程完成提示页面 - 点击任意位置继续
+    "tutorial_complete_hint": {
+        "identifiers": ["若想知道更詳細的規則"],
+        "action": "click_continue",
+        "priority": 35,
+    },
     # 教学界面（后续完善）
     # "tutorial_teaching": {
     #     "templates": ["hand_pointer"],
