@@ -2,9 +2,7 @@
 PTCGP 单人对战自动化脚本 - 主入口
 """
 
-import argparse
 import time
-import sys
 
 import config
 from utils import get_data_dir
@@ -13,6 +11,8 @@ from recognizer import get_recognizer
 from state_manager import get_state_manager
 from page_detector import PageDetector
 from actions import ActionHandler
+from notifier import notify_unrecognized
+from settings import load_settings, apply_settings_to_config, print_active_settings
 
 
 class PTCGPAuto:
@@ -21,7 +21,7 @@ class PTCGPAuto:
     def __init__(self, host: str = None, port: int = None):
         self.host = host or config.ADB_HOST
         self.port = port or config.ADB_PORT
-        self.adb = AdbController(host, port)
+        self.adb = AdbController(self.host, self.port)
         self.recognizer = get_recognizer()
         # 使用统一的数据目录
         data_dir = get_data_dir(self.port)
@@ -30,6 +30,7 @@ class PTCGPAuto:
         self.page_detector = PageDetector(self.recognizer)
         self.action_handler = ActionHandler(self.adb, self.recognizer, self.state)
         self.running = True
+        self.unrecognized_notified = False  # Notification state flag
 
     def start(self, tutorial_mode=False):
         """启动自动化
@@ -94,6 +95,7 @@ class PTCGPAuto:
 
             if page_name:
                 no_action_count = 0
+                self.unrecognized_notified = False  # Reset notification state
                 print(f"\n[界面] {page_name}")
 
                 # 执行对应动作
@@ -108,62 +110,34 @@ class PTCGPAuto:
                 no_action_count += 1
                 if no_action_count >= 5:
                     print("连续多次无法识别界面，可能需要手动干预")
+                    # Send notification only once per unrecognized state
+                    if not self.unrecognized_notified and config.NOTIFICATION_ENABLED:
+                        notify_unrecognized(
+                            config.NOTIFICATION_WEBHOOK_KEY,
+                            config.NOTIFICATION_SOUND
+                        )
+                        self.unrecognized_notified = True
                     no_action_count = 0
                 time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
 
 
 def main():
     """主入口"""
-    parser = argparse.ArgumentParser(description='PTCGP 单人对战自动化脚本')
-    parser.add_argument(
-        '-a', '--address',
-        type=str,
-        default=None,
-        help='ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)'
-    )
-    parser.add_argument(
-        '-l', '--language',
-        type=str,
-        choices=['zh_Hant', 'en_US'],
-        default=None,
-        help='界面语言 (默认: zh_Hant)'
-    )
-    parser.add_argument(
-        '--no-auto-battle-in-battle',
-        action='store_true',
-        help='禁用对战中自动开启自动对战（允许人工接管）'
-    )
-    parser.add_argument(
-        '-t', '--tutorial',
-        action='store_true',
-        help='直接进入教程解锁模式（跳过主循环）'
-    )
-    args = parser.parse_args()
+    # 加载配置（CLI > 环境变量 > .env > 默认值）
+    settings = load_settings()
 
-    # 加载语言配置
-    if args.language:
-        config.load_language(args.language)
-        print(f"语言设置: {args.language}")
+    # 应用配置到 config 模块
+    apply_settings_to_config(settings)
 
-    # 设置自动对战开关
-    if args.no_auto_battle_in_battle:
-        config.AUTO_ENABLE_AUTO_BATTLE = False
-        print("对战中自动开启自动对战: 禁用")
+    # 打印非默认配置
+    print_active_settings(settings)
 
     # 解析地址
-    host = None
-    port = None
-    if args.address:
-        if ':' in args.address:
-            parts = args.address.split(':')
-            host = parts[0]
-            port = int(parts[1])
-        else:
-            # 只有端口号
-            port = int(args.address)
+    host = config.ADB_HOST
+    port = config.ADB_PORT
 
     auto = PTCGPAuto(host, port)
-    auto.start(tutorial_mode=args.tutorial)
+    auto.start(tutorial_mode=settings.get("tutorial", False))
 
 
 if __name__ == "__main__":
