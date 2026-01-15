@@ -9,8 +9,36 @@ from .utils import find_text_by_variants
 class HomeActions:
     """主页相关动作处理"""
 
-    def __init__(self, adb):
+    def __init__(self, adb, recognizer=None, state=None):
         self.adb = adb
+        self.recognizer = recognizer
+        self.state = state
+
+    def handle_game_home(self, screenshot, match_info: Dict):
+        """处理游戏主页 - 检查用户信息后决定下一步"""
+        # 如果没有用户信息，先去获取
+        if self.state and not self.state.has_user_info():
+            # 点击社群图标
+            if self.recognizer:
+                community_box = self.recognizer.find_template(
+                    screenshot, "icon_community", threshold=0.7
+                )
+                if community_box:
+                    print("  -> 需要获取用户信息，点击社群图标")
+                    self.adb.tap_center(community_box)
+                    return
+
+        # 已有用户信息，点击对战图标
+        if self.recognizer:
+            battle_box = self.recognizer.find_template(
+                screenshot, "icon_battle", threshold=0.7
+            )
+            if battle_box:
+                print("  -> 点击对战图标")
+                self.adb.tap_center(battle_box)
+                return
+
+        print("  -> 未找到目标图标")
 
     def find_incomplete(self, screenshot, match_info: Dict):
         """在单人对战主页寻找未完成任务"""

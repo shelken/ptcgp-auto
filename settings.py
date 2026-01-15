@@ -86,12 +86,13 @@ def create_parser() -> argparse.ArgumentParser:
 
 def load_settings() -> dict:
     """
-    Load settings with priority: CLI > env vars > .env > defaults
+    Load settings with priority: CLI > env vars > .env > config.py
 
     Flow:
     1. Load .env into os.environ (won't override existing env vars)
     2. Parse CLI args
-    3. For each config: CLI value > env value > default
+    3. For each config: only include explicitly set values (CLI or env)
+    4. Unset values = keep config.py defaults
     """
     load_dotenv()
     parser = create_parser()
@@ -106,19 +107,25 @@ def load_settings() -> dict:
         if cli_value is not None and (typ != bool or cli_value):
             settings[cli_name] = cli_value
         else:
-            # From env vars (including .env loaded) or default
-            settings[cli_name] = get_env_value(env_name, typ, default)
+            # 只在环境变量存在时才设置，不使用默认值
+            env_value = os.environ.get(env_name)
+            if env_value is not None:
+                if typ == bool:
+                    settings[cli_name] = env_value.lower() in ("true", "1", "yes")
+                else:
+                    settings[cli_name] = typ(env_value)
+            # 不设置 = 保持 config.py 的值
 
     return settings
 
 
 def apply_settings_to_config(settings: dict) -> None:
-    """Apply loaded settings to config module."""
+    """Apply loaded settings to config module - only override explicitly set values."""
     import config
 
-    # Parse address
-    address = settings.get("address")
-    if address:
+    # Address - 只有显式设置时才覆盖
+    if "address" in settings:
+        address = settings["address"]
         if ":" in address:
             host, port = address.rsplit(":", 1)
             config.ADB_HOST = host
@@ -126,25 +133,24 @@ def apply_settings_to_config(settings: dict) -> None:
         else:
             config.ADB_PORT = int(address)
 
-    # Language
-    language = settings.get("language")
-    if language:
-        config.load_language(language)
+    # Language - 只有显式设置时才覆盖
+    if "language" in settings:
+        config.load_language(settings["language"])
 
-    # Debug
-    config.DEBUG = settings.get("debug", False)
+    # Debug - 只有显式设置时才覆盖
+    if "debug" in settings:
+        config.DEBUG = settings["debug"]
 
-    # Auto battle
-    if settings.get("no_auto_battle"):
+    # Auto battle - 只有显式设置时才覆盖
+    if "no_auto_battle" in settings and settings["no_auto_battle"]:
         config.AUTO_ENABLE_AUTO_BATTLE = False
 
-    # Notification
-    notify_key = settings.get("notify_key", "")
-    if notify_key:
+    # Notification - 只有显式设置时才覆盖
+    if "notify_key" in settings and settings["notify_key"]:
         config.NOTIFICATION_ENABLED = True
-        config.NOTIFICATION_WEBHOOK_KEY = notify_key
+        config.NOTIFICATION_WEBHOOK_KEY = settings["notify_key"]
 
-    if settings.get("no_notify_sound"):
+    if "no_notify_sound" in settings and settings["no_notify_sound"]:
         config.NOTIFICATION_SOUND = False
 
 

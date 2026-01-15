@@ -78,15 +78,10 @@ python debug_tool.py -a 5556
 
 ## Configuration
 
-Edit `config.py`:
-
-```python
-# Language setting (options: "zh_Hant", "en_US")
-LANGUAGE = "zh_Hant"
-
-# Battle check interval (seconds)
-WAIT_BATTLE_CHECK_INTERVAL = 10
-```
+Edit `config.py` to view and modify all settings, including:
+- `LANGUAGE` - Language setting (options: "zh_Hant", "en_US")
+- `WAIT_BATTLE_CHECK_INTERVAL` - Battle check interval
+- `DEBUG` - Debug mode
 
 ## Multi-Device
 

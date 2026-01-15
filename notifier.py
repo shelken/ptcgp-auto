@@ -81,15 +81,46 @@ def play_sound() -> bool:
         return False
 
 
-def notify_unrecognized(key: str, sound: bool = True) -> None:
+def notify_unrecognized(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
     """
     Send notification for unrecognized screen state
 
     Args:
         key: WeCom webhook key
         sound: Whether to play sound alert
+        port: ADB port number
+        username: Username for identification
     """
-    message = "[PTCGP Auto] Screen unrecognized for multiple attempts. Manual intervention may be required."
+    # 构建设备标识
+    device_info = f"端口: {port}" if port else ""
+    if username:
+        device_info += f" | 用户: {username}" if device_info else f"用户: {username}"
+
+    message = f"[PTCGP Auto] {device_info}\n界面无法识别，可能需要手动干预。"
+
+    if key:
+        send_wecom_notification(key, message)
+
+    if sound:
+        play_sound()
+
+
+def notify_completed(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
+    """
+    Send notification when all tasks are completed
+
+    Args:
+        key: WeCom webhook key
+        sound: Whether to play sound alert
+        port: ADB port number
+        username: Username for identification
+    """
+    # 构建设备标识
+    device_info = f"端口: {port}" if port else ""
+    if username:
+        device_info += f" | 用户: {username}" if device_info else f"用户: {username}"
+
+    message = f"[PTCGP Auto] {device_info}\n🎉 所有分级对战任务已完成！"
 
     if key:
         send_wecom_notification(key, message)

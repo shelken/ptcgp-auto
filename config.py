@@ -19,7 +19,7 @@ ADB_HOST = "127.0.0.1"
 ADB_PORT = 5555
 
 # 调试模式
-DEBUG = False
+DEBUG = True
 
 # 通知配置
 NOTIFICATION_ENABLED = False
@@ -35,9 +35,12 @@ AUTO_ENABLE_AUTO_BATTLE = True
 
 # 等待时间配置（秒）
 WAIT_AFTER_CLICK = 0.5  # 点击后等待
-WAIT_PAGE_TRANSITION = 1.5  # 页面切换等待
-WAIT_BATTLE_CHECK_INTERVAL = 5  # 对局中检测间隔
+WAIT_PAGE_TRANSITION = 1  # 页面切换等待
+WAIT_BATTLE_CHECK_INTERVAL = 2  # 对局中检测间隔
 WAIT_BATTLE_TIMEOUT = 600  # 对局超时时间（10分钟）
+
+# 无法识别界面的阈值（连续多少次触发通知）
+UNRECOGNIZED_THRESHOLD = 10
 
 # 屏幕分辨率（BlueStacks 默认）
 SCREEN_WIDTH = 1080
