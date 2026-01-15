@@ -8,13 +8,17 @@ import argparse
 from pathlib import Path
 from typing import Any, List, Tuple, Optional
 
+from logger import get_logger
+
+logger = get_logger(__name__)
+
 
 # Config definition: (cli_name, env_name, type, default, help, short_flag, choices)
 CONFIG_DEFS: List[Tuple[str, str, type, Any, str, Optional[str], Optional[list]]] = [
     ("address", "ADDRESS", str, None, "ADB 连接地址 (host:port 或 port)", "-a", None),
     ("language", "LANGUAGE", str, "zh_Hant", "界面语言", "-l", ["zh_Hant", "en_US"]),
     ("tutorial", "TUTORIAL", bool, False, "教程模式", "-t", None),
-    ("debug", "DEBUG", bool, False, "调试模式", None, None),
+    ("log_level", "LOG_LEVEL", str, "INFO", "日志级别", "--log-level", ["DEBUG", "INFO", "WARNING", "ERROR"]),
     ("no_auto_battle", "NO_AUTO_BATTLE", bool, False, "禁用自动对战", None, None),
     ("notify_key", "NOTIFY_KEY", str, "", "企业微信 webhook key", None, None),
     ("no_notify_sound", "NO_NOTIFY_SOUND", bool, False, "禁用通知声音", None, None),
@@ -65,8 +69,9 @@ def create_parser() -> argparse.ArgumentParser:
 
 示例:
   python main.py -a 5556                    # 指定端口
+  python main.py --log-level DEBUG          # 启用调试日志
   python main.py --notify-key YOUR_KEY      # 启用通知
-  DEBUG=true python main.py                 # 环境变量启用调试
+  LOG_LEVEL=DEBUG python main.py            # 环境变量设置日志级别
         """,
     )
 
@@ -139,9 +144,10 @@ def apply_settings_to_config(settings: dict) -> None:
     if "language" in settings:
         config.load_language(settings["language"])
 
-    # Debug - 只有显式设置时才覆盖
-    if "debug" in settings:
-        config.DEBUG = settings["debug"]
+    # Log level - 只有显式设置时才覆盖
+    if "log_level" in settings:
+        config.LOG_LEVEL = settings["log_level"]
+        config.update_debug_flag()
 
     # Auto battle - 只有显式设置时才覆盖
     if "no_auto_battle" in settings and settings["no_auto_battle"]:
@@ -163,11 +169,11 @@ def print_active_settings(settings: dict) -> None:
         value = settings.get(cli_name)
         if value != default and value:
             if not printed:
-                print("配置:")
+                logger.info("配置:")
                 printed = True
             # Mask sensitive values
             if cli_name == "notify_key" and value:
                 display = f"{value[:8]}..." if len(value) > 8 else value
             else:
                 display = value
-            print(f"  {cli_name}: {display}")
+            logger.info(f"  {cli_name}: {display}")

@@ -16,6 +16,9 @@ from actions import ActionHandler
 from notifier import notify_unrecognized
 from settings import load_settings, apply_settings_to_config, print_active_settings
 from device_discovery import discover_devices
+from logger import setup_logging, set_username, get_logger
+
+logger = get_logger(__name__)
 
 
 class PTCGPAuto:
@@ -37,7 +40,7 @@ class PTCGPAuto:
 
     def fetch_user_info(self):
         """获取用户信息子流程 - 独立于主循环"""
-        print("正在获取用户信息...")
+        logger.info("正在获取用户信息...")
 
         while not self.state.has_user_info():
             screenshot = self.adb.screenshot()
@@ -51,7 +54,7 @@ class PTCGPAuto:
                 time.sleep(1)
                 continue
 
-            print(f"  [{page_name}]")
+            logger.debug(f"  [{page_name}]")
 
             # 已到达目标页面，执行提取
             if page_name == "user_info_popup":
@@ -70,7 +73,7 @@ class PTCGPAuto:
                 # 点击社群图标
                 box = self.recognizer.find_template(screenshot, "icon_community", threshold=0.7)
                 if box:
-                    print("  -> 点击社群图标")
+                    logger.debug("  -> 点击社群图标")
                     self.adb.tap_center(box)
             elif page_name in ("_main_page", "game_open_page"):
                 # 模拟器主页或游戏开启页面，执行默认动作进入游戏
@@ -80,16 +83,16 @@ class PTCGPAuto:
                 # 其他页面，尝试查找社群图标
                 box = self.recognizer.find_template(screenshot, "icon_community", threshold=0.7)
                 if box:
-                    print("  -> 点击社群图标")
+                    logger.debug("  -> 点击社群图标")
                     self.adb.tap_center(box)
                 else:
                     # 找不到社群图标，按返回键
-                    print("  -> 返回上一页")
+                    logger.debug("  -> 返回上一页")
                     self.adb.back()
 
             time.sleep(config.WAIT_PAGE_TRANSITION)
 
-        print("用户信息获取完成")
+        logger.info("用户信息获取完成")
 
     def start(self, tutorial_mode=False):
         """启动自动化
@@ -97,13 +100,13 @@ class PTCGPAuto:
         Args:
             tutorial_mode: 是否直接进入教程解锁模式
         """
-        print("=" * 50)
-        print("PTCGP 单人对战自动化脚本")
-        print("=" * 50)
+        logger.info("=" * 50)
+        logger.info("PTCGP 单人对战自动化脚本")
+        logger.info("=" * 50)
 
         # 连接 ADB
         if not self.adb.connect():
-            print("无法连接到模拟器，请检查 ADB 配置")
+            logger.error("无法连接到模拟器，请检查 ADB 配置")
             return False
 
         # 连接后重新加载模板（根据实际分辨率缩放）
@@ -113,30 +116,31 @@ class PTCGPAuto:
         if not self.state.has_user_info():
             self.fetch_user_info()
 
-        # 显示用户信息
+        # 显示用户信息并设置日志上下文
         if self.state.has_user_info():
             user = self.state.get_user_info()
-            print(f"用户: {user['username']} ({user['friend_id']})")
+            set_username(user['username'])
+            logger.info(f"用户: {user['username']} ({user['friend_id']})")
 
-        print("\n开始自动化流程...")
+        logger.info("开始自动化流程...")
 
         try:
             if tutorial_mode:
                 # 先进入教程模式
-                print("提示: 教程解锁模式")
+                logger.info("提示: 教程解锁模式")
                 from actions.tutorial import TutorialRunner
                 runner = TutorialRunner(self.adb, self.recognizer)
                 runner.run()
-                print("教程完成，进入正常对战流程...")
+                logger.info("教程完成，进入正常对战流程...")
 
             # 正常主循环
-            print("提示: 脚本会自动识别当前界面并执行相应操作")
+            logger.info("提示: 脚本会自动识别当前界面并执行相应操作")
             self.state.print_status()
             self.main_loop()
         except KeyboardInterrupt:
-            print("\n用户中断，退出...")
+            logger.info("用户中断，退出...")
         except Exception as e:
-            print(f"\n发生错误: {e}")
+            logger.error(f"发生错误: {e}")
             if config.DEBUG:
                 import traceback
                 traceback.print_exc()
@@ -154,7 +158,7 @@ class PTCGPAuto:
             # 截图
             screenshot = self.adb.screenshot()
             if not screenshot:
-                print("截图失败，等待重试...")
+                logger.warning("截图失败，等待重试...")
                 time.sleep(1)
                 continue
 
@@ -164,7 +168,7 @@ class PTCGPAuto:
             if page_name:
                 no_action_count = 0
                 self.unrecognized_notified = False  # Reset notification state
-                print(f"\n[界面] {page_name}")
+                logger.info(f"[界面] {page_name}")
 
                 # 执行对应动作
                 action = page_info.get("action", "unknown")
@@ -177,7 +181,7 @@ class PTCGPAuto:
             else:
                 no_action_count += 1
                 if no_action_count >= config.UNRECOGNIZED_THRESHOLD:
-                    print("连续多次无法识别界面，可能需要手动干预")
+                    logger.warning("连续多次无法识别界面，可能需要手动干预")
                     # Send notification only once per unrecognized state
                     if not self.unrecognized_notified and config.NOTIFICATION_ENABLED:
                         # 获取用户名
@@ -202,7 +206,7 @@ def run_all_devices(settings: dict):
     devices = discover_devices()
 
     if not devices:
-        print("未发现运行中的 BlueStacks 设备")
+        logger.warning("未发现运行中的 BlueStacks 设备")
         return
 
     # 处理排除端口
@@ -211,16 +215,15 @@ def run_all_devices(settings: dict):
         exclude_ports = set(p.strip() for p in exclude_str.split(",") if p.strip())
         devices = [d for d in devices if d.split(":")[1] not in exclude_ports]
         if exclude_ports:
-            print(f"排除端口: {', '.join(sorted(exclude_ports))}")
+            logger.info(f"排除端口: {', '.join(sorted(exclude_ports))}")
 
     if not devices:
-        print("排除后无可用设备")
+        logger.warning("排除后无可用设备")
         return
 
-    print(f"发现 {len(devices)} 个设备:")
+    logger.info(f"发现 {len(devices)} 个设备:")
     for addr in devices:
-        print(f"  - {addr}")
-    print()
+        logger.info(f"  - {addr}")
 
     # 构建基础参数（排除 --all 和 -a）
     base_args = build_base_args(settings)
@@ -231,14 +234,14 @@ def run_all_devices(settings: dict):
         cmd = [sys.executable, __file__, "-a", addr] + base_args
         p = subprocess.Popen(cmd)
         processes.append((addr, p))
-        print(f"[{addr.split(':')[1]}] 已启动")
+        logger.info(f"[{addr.split(':')[1]}] 已启动")
 
     # 等待所有子进程
     try:
         for addr, p in processes:
             p.wait()
     except KeyboardInterrupt:
-        print("\n正在终止所有子进程...")
+        logger.info("正在终止所有子进程...")
         for addr, p in processes:
             p.terminate()
         for addr, p in processes:
@@ -252,8 +255,8 @@ def build_base_args(settings: dict) -> list:
         args.extend(["-l", settings["language"]])
     if settings.get("tutorial"):
         args.append("-t")
-    if settings.get("debug"):
-        args.append("--debug")
+    if settings.get("log_level"):
+        args.extend(["--log-level", settings["log_level"]])
     if settings.get("no_auto_battle"):
         args.append("--no-auto-battle")
     if settings.get("notify_key"):
@@ -266,6 +269,11 @@ def build_base_args(settings: dict) -> list:
 def run_single_device(settings: dict):
     """单设备模式：原有逻辑"""
     apply_settings_to_config(settings)
+
+    # 初始化日志系统
+    log_level = settings.get("log_level", "INFO")
+    setup_logging(port=config.ADB_PORT, level=log_level)
+
     print_active_settings(settings)
 
     host = config.ADB_HOST

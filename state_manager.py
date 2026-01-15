@@ -8,6 +8,9 @@ from typing import Dict, Optional
 from datetime import datetime
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class StateManager:
@@ -27,21 +30,21 @@ class StateManager:
                     # 检查语言是否一致，不一致则重置
                     saved_lang = state.get("language")
                     if saved_lang and saved_lang != config.LANGUAGE:
-                        print(f"语言已变更: {saved_lang} -> {config.LANGUAGE}")
-                        print("重置状态文件...")
+                        logger.info(f"语言已变更: {saved_lang} -> {config.LANGUAGE}")
+                        logger.info("重置状态文件...")
                         self.state_file.unlink()
                         return self._create_default_state()
 
                     # 检查是否需要迁移（旧格式）
                     if self._needs_migration(state):
-                        print("检测到旧版本状态格式，重置状态文件...")
+                        logger.info("检测到旧版本状态格式，重置状态文件...")
                         self.state_file.unlink()
                         return self._create_default_state()
 
-                    print(f"已加载状态: {self.state_file}")
+                    logger.info(f"已加载状态: {self.state_file}")
                     return state
             except Exception as e:
-                print(f"加载状态失败: {e}")
+                logger.error(f"加载状态失败: {e}")
 
         # 初始化默认状态
         return self._create_default_state()
@@ -95,16 +98,15 @@ class StateManager:
         try:
             with open(self.state_file, 'w', encoding='utf-8') as f:
                 json.dump(self.state, f, ensure_ascii=False, indent=2)
-            if config.DEBUG:
-                print(f"状态已保存: {self.state_file}")
+            logger.debug(f"状态已保存: {self.state_file}")
         except Exception as e:
-            print(f"保存状态失败: {e}")
+            logger.error(f"保存状态失败: {e}")
 
     def reset(self):
         """重置状态"""
         self.state = self._create_default_state()
         self.save()
-        print("状态已重置")
+        logger.info("状态已重置")
 
     # ===== 等级状态 =====
 
@@ -120,7 +122,7 @@ class StateManager:
             self.state["levels"][level] = {"complete": False, "packs": {}}
         self.state["levels"][level]["complete"] = complete
         if complete:
-            print(f"[状态] 等级 {level} 已标记为完成")
+            logger.info(f"[状态] 等级 {level} 已标记为完成")
         self.save()
 
     def get_current_level(self) -> Optional[str]:
@@ -150,7 +152,7 @@ class StateManager:
             self.state["levels"][level] = {"complete": False, "packs": {}}
         self.state["levels"][level]["packs"][pack_id] = complete
         if complete:
-            print(f"[状态] {level} - {pack_id} 已标记为完成")
+            logger.info(f"[状态] {level} - {pack_id} 已标记为完成")
         self.save()
 
     def get_incomplete_packs(self, level: str) -> list:
@@ -203,7 +205,7 @@ class StateManager:
             "friend_id": friend_id,
             "fetched_at": datetime.now().isoformat()
         }
-        print(f"[状态] 已保存用户信息: {username} ({friend_id})")
+        logger.info(f"[状态] 已保存用户信息: {username} ({friend_id})")
         self.save()
 
     # ===== 工具方法 =====
@@ -221,9 +223,9 @@ class StateManager:
 
     def print_status(self):
         """打印当前状态摘要"""
-        print("\n" + "=" * 40)
-        print("当前进度:")
-        print("=" * 40)
+        logger.info("\n" + "=" * 40)
+        logger.info("当前进度:")
+        logger.info("=" * 40)
         for level in config.BATTLE_LEVELS:
             level_state = self.state["levels"].get(level, {})
             complete = "✓ Complete" if level_state.get("complete") else "进行中"
@@ -231,8 +233,8 @@ class StateManager:
             # 兼容新旧格式：新格式直接是 bool，旧格式是 dict
             done_count = sum(1 for v in packs.values() if (v is True) or (isinstance(v, dict) and v.get("done")))
             total_count = len(packs)
-            print(f"  {level}: {complete} ({done_count}/{total_count} 卡包)")
-        print("=" * 40 + "\n")
+            logger.info(f"  {level}: {complete} ({done_count}/{total_count} 卡包)")
+        logger.info("=" * 40 + "\n")
 
 
 # 全局实例（按文件名缓存）

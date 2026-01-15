@@ -3,6 +3,9 @@
 from typing import Dict
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from adb_controller import AdbController
 from recognizer import Recognizer
 from state_manager import StateManager
@@ -75,7 +78,7 @@ class ActionHandler:
         if action not in self._SKIP_HAND_CHECK_ACTIONS:
             hand_box = self.recognizer.find_template(screenshot, "hand_up_left", threshold=0.7)
             if hand_box:
-                print("  -> 检测到手指引导，点击")
+                logger.info("  -> 检测到手指引导，点击")
                 self.adb.tap_center(hand_box)
                 return
 
@@ -83,7 +86,7 @@ class ActionHandler:
         if handler:
             handler(screenshot, match_info)
         else:
-            print(f"  -> 未知动作: {action}")
+            logger.error(f"  -> 未知动作: {action}")
 
     # ==================== 基础动作（委托） ====================
 
@@ -116,7 +119,7 @@ class ActionHandler:
         for level in config.BATTLE_LEVELS:
             if not self.state.is_level_complete(level):
                 if level != current_level:
-                    print(f"  [优先级检查] 当前 {current_level}，但 {level} 未完成且优先级更高")
+                    logger.info(f"  [优先级检查] 当前 {current_level}，但 {level} 未完成且优先级更高")
                     return True
                 else:
                     return False
