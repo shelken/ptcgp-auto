@@ -5,6 +5,9 @@ import time
 from typing import Dict, List, Set, Optional, Callable
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from .utils import close_popup, detect_and_close_popup
 
 
@@ -32,7 +35,7 @@ class ExpansionActions:
 
         # 检查是否应该切换到更高优先级的等级
         if self._should_switch_to_higher_priority_level():
-            print("  -> 返回上级页面以选择更高优先级等级")
+            logger.info("  -> 返回上级页面以选择更高优先级等级")
             set_tried_expansion_series(set())
             self._close_expansion_select(screenshot, ocr_results)
             return
@@ -45,7 +48,7 @@ class ExpansionActions:
             current_series = "init"
         elif not untried_series:
             # 所有系列都已检查
-            print("  -> 所有系列都已检查，关闭扩充组选择")
+            logger.info("  -> 所有系列都已检查，关闭扩充组选择")
             set_tried_expansion_series(set())
             set_all_packs_checked(True)
             self._close_expansion_select(screenshot, ocr_results)
@@ -75,7 +78,7 @@ class ExpansionActions:
         if current_series == "init":
             first_series = config.SERIES[0]
             if has_series_button[first_series]:
-                print(f"  -> 点击 {first_series} 系列按钮确保在 {first_series} 系列")
+                logger.info(f"  -> 点击 {first_series} 系列按钮确保在 {first_series} 系列")
                 new_series = tried_expansion_series.copy()
                 new_series.add(f"clicked_{first_series}")
                 set_tried_expansion_series(new_series)
@@ -94,7 +97,7 @@ class ExpansionActions:
 
         while True:
             if scroll_count > 0:
-                print(f"  -> 第{scroll_count}次滑动查找卡包")
+                logger.info(f"  -> 第{scroll_count}次滑动查找卡包")
                 self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(1.2)
                 screenshot = self.adb.screenshot()
@@ -155,7 +158,7 @@ class ExpansionActions:
             # 找到未完成的卡包
             incomplete_items = []
             if config.DEBUG:
-                print(f"  [DEBUG] row_data 共 {len(row_data)} 行")
+                logger.debug(f"  [DEBUG] row_data 共 {len(row_data)} 行")
 
             for row in row_data:
                 right = row['right']  # 卡片收集进度
@@ -166,7 +169,7 @@ class ExpansionActions:
                 # 如果左侧为空或者是 CLEAR，跳过该卡包（已完成所有牌组）
                 if not left:
                     if config.DEBUG:
-                        print(f"  [DEBUG] 跳过: 左侧进度为空 (right={right['progress_key']})")
+                        logger.debug(f"  [DEBUG] 跳过: 左侧进度为空 (right={right['progress_key']})")
                     continue
 
                 # 生成组合 ID: 系列_左分母_右分母 (如 a_20_81)
@@ -177,11 +180,11 @@ class ExpansionActions:
 
                 if config.DEBUG:
                     left_str = f"{left['current_val']}/{left['total']}"
-                    print(f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}, pack_id={pack_id}")
+                    logger.debug(f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}, pack_id={pack_id}")
 
                 if current_level and self.state.is_pack_complete(current_level, pack_id):
                     if config.DEBUG:
-                        print(f"  [DEBUG]   -> 已标记为完成，跳过")
+                        logger.debug(f"  [DEBUG]   -> 已标记为完成，跳过")
                     continue
 
                 # 使用左侧进度判断是否未完成
@@ -194,12 +197,12 @@ class ExpansionActions:
                         'progress_key': f"{left['progress_key']} | {right['progress_key']}"
                     })
                     if config.DEBUG:
-                        print(f"  [DEBUG]   -> 未完成，加入候选")
+                        logger.debug(f"  [DEBUG]   -> 未完成，加入候选")
 
             if incomplete_items:
                 incomplete_items.sort(key=lambda x: x['remaining'], reverse=True)
                 item = incomplete_items[0]
-                print(f"  -> 选择未完成卡包: {item['progress_key']} (pack_id={item['pack_id']}, 剩余 {item['remaining']})")
+                logger.info(f"  -> 选择未完成卡包: {item['progress_key']} (pack_id={item['pack_id']}, 剩余 {item['remaining']})")
                 set_current_pack_id(item['pack_id'])
                 set_tried_expansion_series(set())
                 set_all_packs_checked(False)
@@ -208,7 +211,7 @@ class ExpansionActions:
 
             # 检测是否到底
             if scroll_count > 0 and current_progress_keys == last_progress_keys:
-                print(f"  -> 已滑动到底部（第{scroll_count}次滑动后无新内容）")
+                logger.info(f"  -> 已滑动到底部（第{scroll_count}次滑动后无新内容）")
                 break
 
             last_progress_keys = current_progress_keys
@@ -229,14 +232,14 @@ class ExpansionActions:
                 break
 
         if next_series:
-            print(f"  -> {current_series} 系列无可用卡包，切换到 {next_series} 系列")
+            logger.info(f"  -> {current_series} 系列无可用卡包，切换到 {next_series} 系列")
             self.adb.tap_center(has_series_button[next_series])
             return
 
         # 所有系列都遍历完了
         set_tried_expansion_series(set())
         set_all_packs_checked(True)
-        print("  -> 所有系列都已检查，关闭扩充组选择")
+        logger.info("  -> 所有系列都已检查，关闭扩充组选择")
         self._close_expansion_select(screenshot, ocr_results)
 
     def _group_progress_by_row(self, progress_items: List[Dict]) -> List[Dict]:

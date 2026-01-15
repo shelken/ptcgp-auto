@@ -4,6 +4,9 @@ import time
 from typing import Dict
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from adb_controller import AdbController
 from recognizer import Recognizer
 
@@ -22,7 +25,7 @@ class TutorialRunner:
 
     def run(self):
         """运行教程解锁流程，直到完成或退出"""
-        print("  [教程] 进入教程解锁流程")
+        logger.info("  [教程] 进入教程解锁流程")
 
         while True:
             time.sleep(1)
@@ -31,7 +34,7 @@ class TutorialRunner:
                 continue
 
             state, ocr_results = self._detect_state(screenshot)
-            print(f"  [教程] 状态: {state}")
+            logger.info(f"  [教程] 状态: {state}")
 
             if state == "tutorial_list":
                 self._on_tutorial_list(screenshot)
@@ -42,11 +45,11 @@ class TutorialRunner:
             elif state == "need_scroll_up":
                 self.adb.swipe_down()
             elif state == "complete":
-                print("  [教程] 00-06 全部完成")
+                logger.info("  [教程] 00-06 全部完成")
                 self.adb.back()
                 break
             elif state == "exited":
-                print("  [教程] 已退出教程流程")
+                logger.info("  [教程] 已退出教程流程")
                 break
 
     def _detect_state(self, screenshot):
@@ -119,7 +122,7 @@ class TutorialRunner:
         if shalou_boxes:
             shalou_boxes.sort(key=lambda box: box[1])
             top_shalou = shalou_boxes[0]
-            print(f"  [教程] 发现 {len(shalou_boxes)} 个未完成，点击最上面的")
+            logger.info(f"  [教程] 发现 {len(shalou_boxes)} 个未完成，点击最上面的")
             self.adb.tap_center(top_shalou)
 
     def _on_in_tutorial(self, screenshot, ocr_results):
@@ -129,14 +132,14 @@ class TutorialRunner:
         # 0. 检测 OK 弹窗（教程完成奖励等）
         for item in ocr_results:
             if item["text"] == "OK":
-                print("  [教程] 检测到 OK 弹窗，点击")
+                logger.info("  [教程] 检测到 OK 弹窗，点击")
                 self.adb.tap_center(item["box"])
                 return
 
         # 0.1 检测关闭按钮
         close_box = self.recognizer.find_template(screenshot, "btn_close")
         if close_box:
-            print("  [教程] 检测到关闭按钮，点击")
+            logger.info("  [教程] 检测到关闭按钮，点击")
             self.adb.tap_center(close_box)
             return
 
@@ -147,7 +150,7 @@ class TutorialRunner:
             if hand_down_box:
                 hand_center_x = (hand_down_box[0] + hand_down_box[2]) // 2
                 card_y = int(config.SCREEN_HEIGHT * 0.92)
-                print(f"  [教程] 检测到長按+hand_down，在 ({hand_center_x},{card_y}) 长按")
+                logger.info(f"  [教程] 检测到長按+hand_down，在 ({hand_center_x},{card_y}) 长按")
                 self.adb.long_press(hand_center_x, card_y, duration=1500)
                 return
 
@@ -168,19 +171,19 @@ class TutorialRunner:
                     if hand_box:
                         hand_center_y = (hand_box[1] + hand_box[3]) // 2
                         target_y = (long_press_y + hand_center_y) // 2
-                        print(f"  [教程] 检测到長按+{template}，在 ({long_press_x},{target_y}) 长按")
+                        logger.info(f"  [教程] 检测到長按+{template}，在 ({long_press_x},{target_y}) 长按")
                         self.adb.long_press(long_press_x, target_y, duration=1500)
                         return
 
                 # 没找到手指，在長按文字位置长按
-                print("  [教程] 检测到長按文字，执行长按")
+                logger.info("  [教程] 检测到長按文字，执行长按")
                 self.adb.long_press_center(long_press_item["box"], duration=1500)
                 return
 
         # 1. 检测 blue_circle 模板 -> 优先点击
         blue_circle_box = self.recognizer.find_template(screenshot, "blue_circle")
         if blue_circle_box:
-            print("  [教程] 检测到蓝色圆圈，点击")
+            logger.info("  [教程] 检测到蓝色圆圈，点击")
             self.adb.tap_center(blue_circle_box)
             return
 
@@ -190,7 +193,7 @@ class TutorialRunner:
             # 判断是点击技能、拖动能量还是拖动进化
             # 如果有 "撤退" 文字，说明在卡片详情页，需要点击技能
             if "撤退" in all_text:
-                print("  [教程] 检测到左侧手指+撤退，点击技能")
+                logger.info("  [教程] 检测到左侧手指+撤退，点击技能")
                 self.adb.tap_center(hand_left_box)
             else:
                 # 高频检测手指位置
@@ -199,7 +202,7 @@ class TutorialRunner:
 
                 # 如果有 "請選擇" 提示，优先点击
                 if "請選擇" in all_text:
-                    print("  [教程] 检测到選擇提示，点击")
+                    logger.info("  [教程] 检测到選擇提示，点击")
                     self.adb.tap_center(hand_left_box)
                     return
 
@@ -210,7 +213,7 @@ class TutorialRunner:
                     start_y = int(config.SCREEN_HEIGHT * 0.92)
                     end_x = config.SCREEN_WIDTH // 2
                     end_y = int(config.SCREEN_HEIGHT * 0.55)
-                    print(f"  [教程] 检测到放置提示，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})")
+                    logger.info(f"  [教程] 检测到放置提示，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})")
                     self.adb.drag(start_x, start_y, end_x, end_y, duration=500)
                     return
 
@@ -234,18 +237,18 @@ class TutorialRunner:
                     # 多次在右下角：拖动能量
                     start_x = int(config.SCREEN_WIDTH * 0.9)
                     start_y = int(config.SCREEN_HEIGHT * 0.92)
-                    print(f"  [教程] 检测到右下角手指，拖动能量 ({start_x},{start_y}) -> ({end_x},{end_y})")
+                    logger.info(f"  [教程] 检测到右下角手指，拖动能量 ({start_x},{start_y}) -> ({end_x},{end_y})")
                     self.adb.drag(start_x, start_y, end_x, end_y, duration=500)
                 elif bottom_count >= 3:
                     # 多次在底部：拖动卡牌
                     hand_center_x = (hand_left_box[0] + hand_left_box[2]) // 2
                     start_x = hand_center_x
                     start_y = int(config.SCREEN_HEIGHT * 0.92)
-                    print(f"  [教程] 检测到底部手指，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})")
+                    logger.info(f"  [教程] 检测到底部手指，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})")
                     self.adb.drag(start_x, start_y, end_x, end_y, duration=500)
                 else:
                     # 默认：点击
-                    print("  [教程] 检测到手指，点击")
+                    logger.info("  [教程] 检测到手指，点击")
                     self.adb.tap_center(hand_left_box)
             return
 
@@ -259,18 +262,18 @@ class TutorialRunner:
             for item in ocr_results:
                 box_center_x = (item["box"][0] + item["box"][2]) // 2
                 if box_center_x > screen_center_x and any(btn in item["text"] for btn in right_buttons):
-                    print(f"  [教程] 检测到右侧手指，点击 {item['text']}")
+                    logger.info(f"  [教程] 检测到右侧手指，点击 {item['text']}")
                     self.adb.tap_center(item["box"])
                     return
             # 没找到文字，点击手指位置
-            print("  [教程] 检测到右侧手指，点击手指位置")
+            logger.info("  [教程] 检测到右侧手指，点击手指位置")
             self.adb.tap_center(hand_right_box)
             return
 
         # 3. 检测 hand_up 模板 -> 点击手指位置
         hand_box = self.recognizer.find_template(screenshot, "hand_up")
         if hand_box:
-            print("  [教程] 检测到手指引导，点击")
+            logger.info("  [教程] 检测到手指引导，点击")
             self.adb.tap_center(hand_box)
             return
 
@@ -294,7 +297,7 @@ class TutorialActions:
         for item in ocr_results:
             if "玩法" in item["text"]:
                 self.adb.tap_center(item["box"])
-                print("  -> 点击玩法按钮")
+                logger.info("  -> 点击玩法按钮")
                 time.sleep(config.WAIT_PAGE_TRANSITION)
 
                 # 运行教程子流程
@@ -302,7 +305,7 @@ class TutorialActions:
                 runner.run()
                 return
 
-        print("  -> 未找到玩法按钮")
+        logger.error("  -> 未找到玩法按钮")
 
     def handle_tutorial_list(self, screenshot, match_info: Dict):
         """玩法列表页面 -> 直接进入教程子流程"""

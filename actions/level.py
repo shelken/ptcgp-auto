@@ -6,6 +6,9 @@ import time
 from typing import Dict, List, Callable
 
 import config
+from logger import get_logger
+
+logger = get_logger(__name__)
 from .utils import ScrollHelper, go_back
 
 
@@ -41,7 +44,7 @@ class LevelActions:
 
         # 检查是否应该切换到更高优先级的等级
         if self._should_switch_to_higher_priority_level():
-            print("  -> 返回上级页面以选择更高优先级等级")
+            logger.info("  -> 返回上级页面以选择更高优先级等级")
             self.state.set_current_level(None)
             go_back(self.adb, self.recognizer, screenshot)
             return
@@ -56,10 +59,10 @@ class LevelActions:
                 return
 
         # 所有等级都已完成
-        print("  -> 所有等级都已完成！")
-        print("=" * 50)
-        print("恭喜！所有分级对战任务已完成！")
-        print("=" * 50)
+        logger.info("  -> 所有等级都已完成！")
+        logger.info("=" * 50)
+        logger.info("恭喜！所有分级对战任务已完成！")
+        logger.info("=" * 50)
 
         # 发送完成通知
         if config.NOTIFICATION_ENABLED:
@@ -88,7 +91,7 @@ class LevelActions:
 
         for attempt in range(max_attempts):
             if attempt > 0:
-                print(f"  -> 滑动查找 {level} (第{attempt}次)")
+                logger.info(f"  -> 滑动查找 {level} (第{attempt}次)")
                 self.adb.swipe_up(ratio=0.21)  # 约 400/1920
                 time.sleep(0.8)
                 screenshot = self.adb.screenshot()
@@ -115,13 +118,13 @@ class LevelActions:
                                 return False
 
                             if re.search(r'\d+\s*/\s*\d+', other_text):
-                                print(f"  -> 选择等级: {level} ({other_text})")
+                                logger.info(f"  -> 选择等级: {level} ({other_text})")
                                 self.state.set_current_level(level)
                                 self.adb.tap_center(item['box'])
                                 return True
 
             if attempt > 0 and current_texts == last_texts:
-                print(f"  -> 已滑动到底部，未找到 {level}")
+                logger.info(f"  -> 已滑动到底部，未找到 {level}")
                 break
 
             last_texts = current_texts
@@ -130,7 +133,7 @@ class LevelActions:
 
     def _sync_level_complete_status(self, ocr_results: List[Dict], screenshot):
         """同步所有等级的完成状态"""
-        print("  [初始化] 正在同步等级完成状态...")
+        logger.info("  [初始化] 正在同步等级完成状态...")
 
         synced_levels = set()
         max_attempts = 10
@@ -160,13 +163,13 @@ class LevelActions:
                                     break
                         if is_complete:
                             self.state.set_level_complete(level, True)
-                            print(f"  [初始化] {level} = COMPLETE")
+                            logger.info(f"  [初始化] {level} = COMPLETE")
                         else:
-                            print(f"  [初始化] {level} = 进行中")
+                            logger.info(f"  [初始化] {level} = 进行中")
                         synced_levels.add(level)
 
             if attempt > 0 and current_texts == last_texts:
-                print("  [初始化] 已滑动到底部")
+                logger.info("  [初始化] 已滑动到底部")
                 break
 
             last_texts = current_texts
@@ -174,4 +177,4 @@ class LevelActions:
         self.adb.swipe_down(ratio=0.42)  # 约 800/1920
         time.sleep(0.5)
 
-        print(f"  [初始化] 同步完成，共 {len(synced_levels)} 个等级")
+        logger.info(f"  [初始化] 同步完成，共 {len(synced_levels)} 个等级")

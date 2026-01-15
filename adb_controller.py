@@ -12,6 +12,9 @@ from PIL import Image
 
 import config
 from utils import get_data_dir
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class AdbController:
@@ -29,11 +32,11 @@ class AdbController:
         try:
             addr = f"{self.host}:{self.port}"
             output = adb.connect(addr)
-            print(f"ADB 连接: {output}")
+            logger.info(f"ADB 连接: {output}")
 
             # 获取指定地址的设备
             self.device = adb.device(serial=addr)
-            print(f"已连接设备: {self.device.serial}")
+            logger.info(f"已连接设备: {self.device.serial}")
 
             # 自动获取屏幕分辨率
             self._update_screen_size()
@@ -41,7 +44,7 @@ class AdbController:
             return True
 
         except Exception as e:
-            print(f"ADB 连接失败: {e}")
+            logger.error(f"ADB 连接失败: {e}")
             return False
 
     def _update_screen_size(self):
@@ -70,23 +73,23 @@ class AdbController:
                 width, height = map(int, size_str.split('x'))
                 config.SCREEN_WIDTH = width
                 config.SCREEN_HEIGHT = height
-                print(f"屏幕分辨率: {width}x{height}")
+                logger.info(f"屏幕分辨率: {width}x{height}")
         except Exception as e:
-            print(f"获取屏幕分辨率失败，使用默认值: {e}")
+            logger.warning(f"获取屏幕分辨率失败，使用默认值: {e}")
 
     def disconnect(self):
         """断开 ADB 连接"""
         if self.device:
             try:
                 adb.disconnect(f"{self.host}:{self.port}")
-                print("ADB 已断开")
+                logger.info("ADB 已断开")
             except Exception as e:
-                print(f"断开失败: {e}")
+                logger.error(f"断开失败: {e}")
 
     def screenshot(self) -> Optional[Image.Image]:
         """截取屏幕截图"""
         if not self.device:
-            print("错误: 设备未连接")
+            logger.error("设备未连接")
             return None
 
         try:
@@ -103,23 +106,22 @@ class AdbController:
                 return Image.open(io.BytesIO(bytes(result)))
 
         except Exception as e:
-            print(f"截图失败: {e}")
+            logger.error(f"截图失败: {e}")
             return None
 
     def tap(self, x: int, y: int):
         """点击屏幕指定位置"""
         if not self.device:
-            print("错误: 设备未连接")
+            logger.error("设备未连接")
             return
 
         try:
             self.device.click(x, y)
-            if config.DEBUG:
-                print(f"点击: ({x}, {y})")
+            logger.debug(f"点击: ({x}, {y})")
             time.sleep(config.WAIT_AFTER_CLICK)
 
         except Exception as e:
-            print(f"点击失败: {e}")
+            logger.error(f"点击失败: {e}")
 
     def tap_center(self, box: Tuple[int, int, int, int]):
         """点击矩形区域的中心点
@@ -139,18 +141,17 @@ class AdbController:
             duration: 按住时间（毫秒），默认 1000ms
         """
         if not self.device:
-            print("错误: 设备未连接")
+            logger.error("设备未连接")
             return
 
         try:
             # 长按通过 swipe 实现，起点终点相同
             self.device.swipe(x, y, x, y, duration / 1000)
-            if config.DEBUG:
-                print(f"长按: ({x}, {y}) 持续 {duration}ms")
+            logger.debug(f"长按: ({x}, {y}) 持续 {duration}ms")
             time.sleep(config.WAIT_AFTER_CLICK)
 
         except Exception as e:
-            print(f"长按失败: {e}")
+            logger.error(f"长按失败: {e}")
 
     def long_press_center(self, box: Tuple[int, int, int, int], duration: int = 1000):
         """长按矩形区域的中心点
@@ -172,17 +173,16 @@ class AdbController:
             duration: 拖动持续时间（毫秒），默认 500ms
         """
         if not self.device:
-            print("错误: 设备未连接")
+            logger.error("设备未连接")
             return
 
         try:
             self.device.swipe(x1, y1, x2, y2, duration / 1000)
-            if config.DEBUG:
-                print(f"拖动: ({x1}, {y1}) -> ({x2}, {y2}) 持续 {duration}ms")
+            logger.debug(f"拖动: ({x1}, {y1}) -> ({x2}, {y2}) 持续 {duration}ms")
             time.sleep(config.WAIT_AFTER_CLICK)
 
         except Exception as e:
-            print(f"拖动失败: {e}")
+            logger.error(f"拖动失败: {e}")
 
     def drag_centers(self, box1: Tuple[int, int, int, int], box2: Tuple[int, int, int, int], duration: int = 500):
         """从一个矩形中心拖动到另一个矩形中心
@@ -207,17 +207,16 @@ class AdbController:
             duration: 滑动持续时间（毫秒）
         """
         if not self.device:
-            print("错误: 设备未连接")
+            logger.error("设备未连接")
             return
 
         try:
             self.device.swipe(x1, y1, x2, y2, duration / 1000)
-            if config.DEBUG:
-                print(f"滑动: ({x1}, {y1}) -> ({x2}, {y2})")
+            logger.debug(f"滑动: ({x1}, {y1}) -> ({x2}, {y2})")
             time.sleep(config.WAIT_AFTER_CLICK)
 
         except Exception as e:
-            print(f"滑动失败: {e}")
+            logger.error(f"滑动失败: {e}")
 
     def swipe_up(self, ratio: float = 0.26, duration: int = 500):
         """向上滑动（用于查看更多内容）
@@ -248,17 +247,16 @@ class AdbController:
     def back(self):
         """按返回键"""
         if not self.device:
-            print("错误: 设备未连接")
+            logger.error("设备未连接")
             return
 
         try:
             self.device.keyevent(4)  # KEYCODE_BACK
-            if config.DEBUG:
-                print("按下返回键")
+            logger.debug("按下返回键")
             time.sleep(config.WAIT_AFTER_CLICK)
 
         except Exception as e:
-            print(f"返回键失败: {e}")
+            logger.error(f"返回键失败: {e}")
 
     def save_screenshot(self, filename: str) -> Optional[str]:
         """保存截图到文件（用于调试）"""
@@ -266,7 +264,7 @@ class AdbController:
         if image:
             filepath = self.data_dir / filename
             image.save(filepath)
-            print(f"截图已保存: {filepath}")
+            logger.debug(f"截图已保存: {filepath}")
             return str(filepath)
         return None
 

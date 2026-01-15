@@ -18,8 +18,18 @@ LANGUAGE = "zh_Hant"
 ADB_HOST = "127.0.0.1"
 ADB_PORT = 5555
 
-# 调试模式
-DEBUG = True
+# 日志级别 (DEBUG, INFO, WARNING, ERROR)
+LOG_LEVEL = "INFO"
+
+# 向后兼容：DEBUG 变量（当 LOG_LEVEL 为 DEBUG 时为 True）
+# 注意：修改 LOG_LEVEL 后需要调用 update_debug_flag()
+DEBUG = False
+
+
+def update_debug_flag():
+    """根据 LOG_LEVEL 更新 DEBUG 标志"""
+    global DEBUG
+    DEBUG = LOG_LEVEL == "DEBUG"
 
 # 通知配置
 NOTIFICATION_ENABLED = False

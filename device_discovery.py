@@ -3,6 +3,10 @@ import subprocess
 import re
 from typing import List
 
+from logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def discover_devices() -> List[str]:
     """发现所有运行中的 BlueStacks 设备，返回 ADB 地址列表
@@ -40,10 +44,13 @@ def discover_devices() -> List[str]:
 
 if __name__ == "__main__":
     # 测试设备发现
+    from logger import setup_logging
+    setup_logging(level="INFO")
+
     devices = discover_devices()
     if devices:
-        print(f"发现 {len(devices)} 个设备:")
+        logger.info(f"发现 {len(devices)} 个设备:")
         for addr in devices:
-            print(f"  - {addr}")
+            logger.info(f"  - {addr}")
     else:
-        print("未发现运行中的 BlueStacks 设备")
+        logger.warning("未发现运行中的 BlueStacks 设备")
