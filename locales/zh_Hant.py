@@ -21,7 +21,27 @@ SERIES = ["A", "B"]
 #   - exact_match: 是否精确匹配（默认 False，使用包含匹配）
 
 PAGES = {
-    # 弹窗 - 最高优先级（精确匹配，避免误匹配 POKéMON）
+    # ==================== 用户信息获取流程 ====================
+    # 用户信息弹窗 - 提取用户名和朋友ID
+    "user_info_popup": {
+        "identifiers": ["您的玩家資訊"],
+        "action": "extract_user_info",
+        "priority": 5,
+    },
+    # 朋友列表页面 - 点击添加朋友图标
+    "friends_list": {
+        "identifiers": ["朋友數"],
+        "action": "click_add_friends",
+        "priority": 58,
+    },
+    # 社群页面 - 点击朋友标签
+    "community_page": {
+        "identifiers": ["社群"],
+        "action": "click_friends_tab",
+        "priority": 59,
+        "exclude_identifiers": ["朋友數"],
+    },
+    # ==================== 弹窗处理 ====================
     "popup_ok": {
         "identifiers": ["OK"],
         "action": "click_identifier",
@@ -160,8 +180,7 @@ PAGES = {
     "game_home_main": {
         "identifiers": ["商店/兌換處", "得卡挑戰"],
         "match_all": True,
-        "action": "click_template",
-        "action_template": "icon_battle",
+        "action": "handle_game_home",  # 改用新动作，检查用户信息
         "priority": 60,
     },
     # TODO for ENG 开启页面

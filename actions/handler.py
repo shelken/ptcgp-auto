@@ -13,6 +13,7 @@ from .expansion import ExpansionActions
 from .home import HomeActions
 from .level import LevelActions
 from .tutorial import TutorialActions
+from .user import UserActions
 
 
 class ActionHandler:
@@ -51,8 +52,9 @@ class ActionHandler:
             adb, recognizer, state,
             self._should_switch_to_higher_priority_level
         )
-        self._home = HomeActions(adb)
+        self._home = HomeActions(adb, recognizer, state)
         self._tutorial = TutorialActions(adb, recognizer)
+        self._user = UserActions(adb, recognizer, state)
 
     # 需要跳过手指检测的动作（这些动作自己处理或不需要）
     _SKIP_HAND_CHECK_ACTIONS = {
@@ -180,6 +182,9 @@ class ActionHandler:
     def action_click_solo_battle(self, screenshot, match_info: Dict):
         self._home.click_solo_battle(screenshot, match_info)
 
+    def action_handle_game_home(self, screenshot, match_info: Dict):
+        self._home.handle_game_home(screenshot, match_info)
+
     # ==================== 教程动作（委托） ====================
 
     def action_handle_tutorial_unlock(self, screenshot, match_info: Dict):
@@ -190,3 +195,14 @@ class ActionHandler:
 
     def action_handle_tutorial_step(self, screenshot, match_info: Dict):
         self._tutorial.handle_tutorial_step(screenshot, match_info)
+
+    # ==================== 用户信息动作（委托） ====================
+
+    def action_extract_user_info(self, screenshot, match_info: Dict):
+        self._user.extract_user_info(screenshot, match_info)
+
+    def action_click_add_friends(self, screenshot, match_info: Dict):
+        self._user.click_add_friends(screenshot, match_info)
+
+    def action_click_friends_tab(self, screenshot, match_info: Dict):
+        self._user.click_friends_tab(screenshot, match_info)

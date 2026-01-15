@@ -78,15 +78,10 @@ python debug_tool.py -a 5556
 
 ## 配置
 
-编辑 `config.py`：
-
-```python
-# 语言配置（可选: "zh_Hant", "en_US"）
-LANGUAGE = "zh_Hant"
-
-# 对战中检测间隔（秒）
-WAIT_BATTLE_CHECK_INTERVAL = 10
-```
+编辑 `config.py` 查看和修改所有配置项，包括：
+- `LANGUAGE` - 语言配置（可选: "zh_Hant", "en_US"）
+- `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔
+- `DEBUG` - 调试模式
 
 ## 多设备
 

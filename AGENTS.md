@@ -4,6 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # PTCGP Auto - AI 助手指引
 
+## 最高原则
+
+- 使用中文描述所有 文档/注释/日志输出 方便开发人员理解
+- 解决问题时，执行命令前，思考当前的命令是否需要声明式配置以保证后续不再犯错，而不是直接执行
+- 必要时直接通过 `python debug_tool.py -a 127.0.0.1:[PORT] --template [template_name]` 查看当前页面的ocr内容和是否出现相应模板文件
+
+## 知识获取与整理原则
+
+- 使用中文书写所有文档
+- 优先使用`fetcher-mcp`获取网页内容
+- 调研资料时，不定时（分阶段）将获取的知识按照`[两位数字]-[主题].md`格式放入docs/refs文件夹中，方便后续重新阅读.
+- 每次进行资料搜集时先列出目录已经获取的知识
+- 知识不要详尽，应当大部分用一句话来总结结论，然后用具体来源的URL链接指向，尽量简洁凝练总结所有知识点，除非很重要必须详细说明。
+- 知识获取来源必须用链接直接写出，方便用户和agents直接跳转获取，链接应该是具体的，而不是笼统的域名或者路径。
+
 ## 项目概述
 
 这是一个用于 PTCGP（Pokemon TCG Pocket）单人对战的 Python 自动化脚本，运行在 Mac 上的 BlueStacks Air 模拟器。使用 ADB 进行设备控制，Apple Vision Framework OCR + OpenCV 模板匹配进行界面识别。
@@ -96,7 +111,7 @@ rm /tmp/ptcgp_auto_5555/state.json
 
 关键配置项（config.py）：
 - `BATTLE_LEVELS` - 等级遍历顺序（默认精英→初级）
-- `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔（默认10秒）
+- `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔
 - `PAGES` - 界面识别规则（优先级、标识符、动作）
 
 ## 调试技巧

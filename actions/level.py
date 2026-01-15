@@ -60,6 +60,21 @@ class LevelActions:
         print("=" * 50)
         print("恭喜！所有分级对战任务已完成！")
         print("=" * 50)
+
+        # 发送完成通知
+        if config.NOTIFICATION_ENABLED:
+            from notifier import notify_completed
+            username = None
+            if self.state.has_user_info():
+                user = self.state.get_user_info()
+                username = user.get("username")
+            notify_completed(
+                config.NOTIFICATION_WEBHOOK_KEY,
+                config.NOTIFICATION_SOUND,
+                port=config.ADB_PORT,
+                username=username
+            )
+
         sys.exit(0)
 
     def _find_and_click_level(self, level: str, ocr_results: List[Dict], screenshot) -> bool:
