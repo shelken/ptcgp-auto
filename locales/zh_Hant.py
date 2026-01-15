@@ -100,9 +100,10 @@ PAGES = {
         "priority": 42,
     },
     # 牌组列表页面 - 在某个卡包内，有擴充組按钮可以进入扩充组
+    # 注意：不要求 shalou 模板，因为沙漏只在有未完成牌组时出现
+    # 沙漏检测在 handle_deck_list 动作内部进行
     "deck_list": {
         "identifiers": ["擴充組"],
-        "templates": ["shalou"],
         "action": "handle_deck_list",
         "priority": 45,
         "exclude_identifiers": ["選擇擴充組"],
@@ -129,12 +130,13 @@ PAGES = {
         "priority": 54,
     },
     # 玩法列表页面 - 新手教程列表
+    # 注意：优先级低于 deck_list(45)，避免底部导航"玩法"误匹配
     "tutorial_list": {
         "identifiers": ["玩法"],
         "templates": ["wanfa_shalou"],
         "action": "handle_tutorial_list",
-        "priority": 40,
-        "exclude_identifiers": ["與他人對戰"],
+        "priority": 46,
+        "exclude_identifiers": ["與他人對戰", "擴充組", "分級對戰"],
     },
     # 教学界面（后续完善）
     # "tutorial_teaching": {
