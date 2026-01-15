@@ -3,3 +3,4 @@ opencv-python>=4.8.0
 pyobjc-framework-Vision>=10.0  # Apple Vision Framework for OCR
 Pillow>=10.0.0
 numpy>=1.24.0
+loguru>=0.7.0  # 结构化日志
