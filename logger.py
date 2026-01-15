@@ -1,18 +1,28 @@
-"""统一日志模块 - 支持动态上下文（端口、用户名）"""
+"""统一日志模块 - 使用 Loguru"""
+import sys
 import logging
-import threading
+from loguru import logger
 
-# 线程局部存储，保存当前上下文
-_context = threading.local()
+# 移除默认 handler，避免重复输出
+logger.remove()
+
+# 上下文存储
+_port = "----"
+_username = ""
+_initialized = False
 
 
-class ContextFormatter(logging.Formatter):
-    """自定义格式化器，注入端口和用户名上下文"""
-
-    def format(self, record):
-        record.port = getattr(_context, 'port', '----')
-        record.username = getattr(_context, 'username', '')
-        return super().format(record)
+def _format(record):
+    """自定义格式"""
+    port = record["extra"].get("port", _port)
+    username = record["extra"].get("username", _username)
+    user_part = f"{username} " if username else ""
+    return (
+        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<level>{level: <5}</level> | "
+        f"[{port}] {user_part}| "
+        "<level>{message}</level>\n"
+    )
 
 
 def setup_logging(port: int = None, level: str = "INFO"):
@@ -22,34 +32,38 @@ def setup_logging(port: int = None, level: str = "INFO"):
         port: ADB 端口号，用于日志上下文
         level: 日志级别 (DEBUG, INFO, WARNING, ERROR)
     """
-    log_level = getattr(logging, level.upper(), logging.INFO)
-
-    # 格式：时间 | 等级 | [端口] 用户名 | 消息
-    fmt = "%(asctime)s | %(levelname)-5s | [%(port)s] %(username)s| %(message)s"
-    datefmt = "%H:%M:%S"
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(ContextFormatter(fmt, datefmt))
-
-    root = logging.getLogger()
-    root.handlers.clear()
-    root.addHandler(handler)
-    root.setLevel(log_level)
+    global _port, _initialized
 
     if port:
-        set_port(port)
+        _port = str(port)
+
+    # 避免重复添加 handler
+    if not _initialized:
+        logger.add(
+            sys.stderr,
+            format=_format,
+            level=level.upper(),
+            colorize=True,
+        )
+        _initialized = True
+
+    # 禁用第三方库的调试日志
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
 
 
 def set_port(port: int):
     """设置当前上下文的端口号"""
-    _context.port = str(port)
+    global _port
+    _port = str(port)
 
 
 def set_username(username: str):
     """设置当前上下文的用户名"""
-    _context.username = f"{username} " if username else ""
+    global _username
+    _username = username
 
 
-def get_logger(name: str = None) -> logging.Logger:
-    """获取 logger 实例"""
-    return logging.getLogger(name)
+def get_logger(name: str = None):
+    """兼容旧 API，返回 loguru logger"""
+    return logger
