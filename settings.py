@@ -18,6 +18,8 @@ CONFIG_DEFS: List[Tuple[str, str, type, Any, str, Optional[str], Optional[list]]
     ("no_auto_battle", "NO_AUTO_BATTLE", bool, False, "禁用自动对战", None, None),
     ("notify_key", "NOTIFY_KEY", str, "", "企业微信 webhook key", None, None),
     ("no_notify_sound", "NO_NOTIFY_SOUND", bool, False, "禁用通知声音", None, None),
+    ("all", "ALL_DEVICES", bool, False, "自动发现并控制所有运行中的设备", "--all", None),
+    ("exclude", "EXCLUDE_PORTS", str, "", "排除的端口列表（逗号分隔，如 5555,5715）", "--exclude", None),
 ]
 
 
