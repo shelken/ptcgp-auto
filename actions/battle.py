@@ -4,7 +4,7 @@ import time
 from typing import Dict, Callable
 
 import config
-from .utils import go_back
+from .utils import go_back, find_auto_mode_button, find_text_by_variants
 
 
 class BattleActions:
@@ -28,6 +28,20 @@ class BattleActions:
         """
         ocr_results = match_info.get("ocr_results", [])
 
+        # 检查是否有"首次過關報酬"，没有说明被弹窗遮挡
+        reward_item = find_text_by_variants(ocr_results, "first_clear_reward")
+        if not reward_item:
+            # 尝试点击关闭按钮
+            close_box = self.recognizer.find_template(screenshot, "btn_close")
+            if close_box:
+                print("  -> 检测到弹窗遮挡，点击关闭")
+                self.adb.tap_center(close_box)
+                return False
+            # 没有关闭按钮，点击屏幕中央关闭弹窗
+            print("  -> 检测到弹窗遮挡，点击屏幕继续")
+            self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+            return False
+
         # 如果需要初始化状态且当前等级未设置，返回上级页面
         if needs_state_init and not self.state.get_current_level():
             print("  -> 需要初始化状态，返回上级页面")
@@ -41,25 +55,14 @@ class BattleActions:
             return True
 
         # 检查自动模式状态
-        auto_box = None
-        has_off = False
-        auto_patterns = config.TEXT_PATTERNS.get("auto", [])
-
-        for item in ocr_results:
-            text = item['text'].strip()
-            text_upper = text.upper()
-            for pattern in auto_patterns:
-                if pattern in text or pattern.upper() in text_upper:
-                    auto_box = item['box']
-                    break
-            if 'OFF' in text_upper:
-                has_off = True
-
-        # 如果自动模式是 OFF，先点击开启
-        if auto_box and has_off:
-            print("  -> 开启自动模式")
-            self.adb.tap_center(auto_box)
-            time.sleep(0.5)
+        result = find_auto_mode_button(ocr_results)
+        if result:
+            auto_item, has_off = result
+            # 如果自动模式是 OFF，先点击开启
+            if has_off:
+                print("  -> 开启自动模式")
+                self.adb.tap_center(auto_item['box'])
+                time.sleep(0.5)
 
         # 点击对战按钮
         battle_box = match_info.get("box")

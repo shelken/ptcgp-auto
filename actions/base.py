@@ -4,7 +4,7 @@ import time
 from typing import Dict
 
 import config
-from .utils import find_text_by_variants
+from .utils import find_text_by_variants, find_auto_mode_button
 
 
 class BaseActions:
@@ -65,3 +65,16 @@ class BaseActions:
         """等待（对战中）"""
         print("  -> 对战中，等待...")
         time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
+
+    def click_auto_mode(self, screenshot, match_info: Dict):
+        """点击自动模式按钮"""
+        ocr_results = match_info.get("ocr_results", [])
+        result = find_auto_mode_button(ocr_results)
+        if result:
+            auto_item, _ = result
+            print(f"  -> 点击自动模式: {auto_item['text']}")
+            self.adb.tap_center(auto_item['box'])
+            return
+        # 没找到自动按钮，点击屏幕继续
+        print("  -> 未找到自动按钮，点击屏幕继续")
+        self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
