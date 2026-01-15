@@ -115,3 +115,32 @@ def group_by_row(ocr_results: List[Dict], tolerance: int = 100) -> List[List[Dic
         rows.append(current_row)
 
     return rows
+
+
+def find_auto_mode_button(ocr_results: List[Dict]) -> Optional[Tuple[Dict, bool]]:
+    """查找自动模式按钮及其状态
+
+    Args:
+        ocr_results: OCR 结果列表
+
+    Returns:
+        (auto_item, is_off) 元组，auto_item 是自动按钮的 OCR item，is_off 表示是否为关闭状态
+        如果未找到返回 None
+    """
+    auto_patterns = config.TEXT_PATTERNS.get("auto", [])
+    auto_item = None
+    has_off = False
+
+    for item in ocr_results:
+        text = item['text'].strip()
+        text_upper = text.upper()
+        for pattern in auto_patterns:
+            if pattern in text or pattern.upper() in text_upper:
+                auto_item = item
+                break
+        if 'OFF' in text_upper:
+            has_off = True
+
+    if auto_item:
+        return (auto_item, has_off)
+    return None

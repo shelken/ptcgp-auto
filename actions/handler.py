@@ -54,8 +54,29 @@ class ActionHandler:
         self._home = HomeActions(adb)
         self._tutorial = TutorialActions(adb, recognizer)
 
+    # 需要跳过手指检测的动作（这些动作自己处理或不需要）
+    _SKIP_HAND_CHECK_ACTIONS = {
+        "click_identifier",
+        "click_continue",
+        "click_cancel",
+        "click_template",
+        "wait",
+        "wait_battle",
+        "handle_tutorial_unlock",
+        "handle_tutorial_list",
+        "handle_tutorial_step",
+    }
+
     def execute(self, action: str, screenshot, match_info: Dict):
         """执行动作"""
+        # 统一检测手指引导模板（新手教程），优先处理
+        if action not in self._SKIP_HAND_CHECK_ACTIONS:
+            hand_box = self.recognizer.find_template(screenshot, "hand_up_left", threshold=0.7)
+            if hand_box:
+                print("  -> 检测到手指引导，点击")
+                self.adb.tap_center(hand_box)
+                return
+
         handler = getattr(self, f"action_{action}", None)
         if handler:
             handler(screenshot, match_info)
@@ -72,6 +93,9 @@ class ActionHandler:
 
     def action_click_cancel(self, screenshot, match_info: Dict):
         self._base.click_cancel(screenshot, match_info)
+
+    def action_click_auto_mode(self, screenshot, match_info: Dict):
+        self._base.click_auto_mode(screenshot, match_info)
 
     def action_click_template(self, screenshot, match_info: Dict):
         self._base.click_template(screenshot, match_info)

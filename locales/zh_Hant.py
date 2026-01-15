@@ -86,12 +86,11 @@ PAGES = {
         "action": "wait_battle",
         "priority": 20,
     },
-    # 牌组详情页面 - 有对战按钮
+    # 牌组详情页面 - 有对战按钮（可能被教程弹窗遮挡）
     "deck_detail": {
-        "identifiers": ["對戰！"],
+        "identifiers": ["對戰！", "首次過關報酬"],
         "action": "start_battle",
         "priority": 30,
-        "exact_match": True,
     },
     # 扩充组选择页面（选择哪个卡包）
     "expansion_select": {
@@ -193,4 +192,5 @@ TEXT_PATTERNS = {
     "expansion_button": ["擴充組"],
     "ranked_battle": ["分級對戰"],
     "solo_battle": ["單人對戰"],
+    "first_clear_reward": ["首次過關報酬"],
 }
