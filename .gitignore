@@ -11,4 +11,4 @@ build/
 .worktrees/
 .env
 .claude/settings.local.json
-.out/
+_out
