@@ -194,7 +194,14 @@ PAGES = {
         "identifiers": ["Pokémon Trad", "搜索游戏和应用"],
         "match_all": True,
         "action": "click_identifier",
+        "exclude_identifiers": ["关闭应用"],
         "priority": 100,
+    },
+    "_close_app_popup": {
+        "identifiers": ["关闭应用", "应用信息"],
+        "match_all": True,
+        "action": "click_identifier",
+        "priority": 99,
     },
 }
 
