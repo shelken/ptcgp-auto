@@ -199,7 +199,7 @@ PACK_TEMPLATE_SCALES = {
 4. [x] 创建卡包常量模块 (`constants/packs.py`)
 5. [x] 创建卡包数据文件 (`data/packs.json`)
 6. [x] 创建数据更新脚本 (`scripts/fetch_packs.py`)
-7. [ ] 使用 `--crop-pack` 截取卡包封面模板
+7. [x] 使用 `--crop-pack` 截取卡包封面模板（20个子包已完成）
 8. [ ] 分析系列选择页面和卡包选择页面
 9. [ ] 补充 `daily.py` 页面定义
 
