@@ -47,7 +47,7 @@ AUTO_ENABLE_AUTO_BATTLE = True
 # 等待时间配置（秒）
 WAIT_AFTER_CLICK = 0.5  # 点击后等待
 WAIT_PAGE_TRANSITION = 1  # 页面切换等待
-WAIT_BATTLE_CHECK_INTERVAL = 2  # 对局中检测间隔
+WAIT_BATTLE_CHECK_INTERVAL = 5  # 对局中检测间隔
 WAIT_BATTLE_TIMEOUT = 600  # 对局超时时间（10分钟）
 
 # 无法识别界面的阈值（连续多少次触发通知）
@@ -85,6 +85,7 @@ beginner_decks = 35  # 首次获得沙漏 2
 # 初始大概 12 级，打完40级 28x12=336
 # 任天堂账号赠送 36
 # 初始 800 个
+# 兑换处 10x6+10=70
 # 也就是剩 400 个是需要额外寻找方式获取的
 
 # ============================================================

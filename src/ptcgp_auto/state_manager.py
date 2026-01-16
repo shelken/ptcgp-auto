@@ -19,6 +19,11 @@ class StateManager:
     def __init__(self, state_file: str = "state.json"):
         self.state_file = Path(state_file)
         self.state: Dict = self._load_state()
+        # 恢复状态后同步等级到日志上下文
+        current_level = self.state.get("current_level")
+        if current_level:
+            from ptcgp_auto.logger import set_level
+            set_level(current_level)
 
     def _load_state(self) -> Dict:
         """加载状态文件"""
@@ -163,6 +168,9 @@ class StateManager:
     def set_current_level(self, level: str):
         """设置当前正在处理的等级"""
         self.state["current_level"] = level
+        # 同步更新日志上下文中的等级
+        from ptcgp_auto.logger import set_level
+        set_level(level)
         self.save()
 
     # ===== 卡包状态 =====
