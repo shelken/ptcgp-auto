@@ -4,6 +4,7 @@
 使用 OpenCV cv2.selectROI() 显示截图，让用户用鼠标框选区域，保存为模板。
 """
 
+import json
 import cv2
 import numpy as np
 from PIL import Image
@@ -12,6 +13,35 @@ from typing import Optional, Tuple
 
 # 模板保存目录
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "templates"
+
+# ROI 缓存文件
+ROI_CACHE_FILE = Path("/tmp/ptcgp_crop_roi_cache.json")
+
+
+def _load_cached_roi() -> Optional[Tuple[int, int, int, int]]:
+    """加载缓存的 ROI"""
+    if not ROI_CACHE_FILE.exists():
+        return None
+    try:
+        with open(ROI_CACHE_FILE, "r") as f:
+            data = json.load(f)
+            return tuple(data["roi"])
+    except Exception:
+        return None
+
+
+def _save_cached_roi(roi: Tuple[int, int, int, int]):
+    """保存 ROI 到缓存"""
+    try:
+        with open(ROI_CACHE_FILE, "w") as f:
+            json.dump({"roi": list(roi)}, f)
+    except Exception:
+        pass
+
+
+def get_cached_roi() -> Optional[Tuple[int, int, int, int]]:
+    """获取缓存的 ROI（供外部使用）"""
+    return _load_cached_roi()
 
 
 def select_region(
@@ -65,6 +95,10 @@ def select_region(
     h = int(h / scale)
 
     print(f"选中区域: ({x}, {y}) - ({x+w}, {y+h})  尺寸: {w}x{h}")
+
+    # 保存到缓存
+    _save_cached_roi((x, y, w, h))
+
     return (x, y, w, h)
 
 
