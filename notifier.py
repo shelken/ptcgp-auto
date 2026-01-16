@@ -156,6 +156,28 @@ def notify_completed(key: str, sound: bool = True, port: int = None, username: s
         play_sound()
 
 
+def notify_recovered(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
+    """发送识别恢复通知
+
+    Args:
+        key: WeCom webhook key
+        sound: 是否播放提示音
+        port: ADB 端口
+        username: 用户名
+    """
+    device_info = f"端口: {port}" if port else ""
+    if username:
+        device_info += f" | 用户: {username}" if device_info else f"用户: {username}"
+
+    message = f"[PTCGP Auto] {device_info}\n✅ 界面识别已恢复正常"
+
+    if key:
+        send_wecom_notification(key, message)
+
+    if sound:
+        play_sound()
+
+
 def notify_battle_started(key: str, level: str, sound: bool = True, port: int = None, username: str = None) -> None:
     """发送对战开始通知
 
