@@ -24,6 +24,15 @@ Automation script for Pokemon TCG Pocket solo battles, supporting any Android de
 - Automated solo battles (ranked battles)
 - Auto-traverse levels and card packs by priority
 - Multi-device support
+- **Daily Pack Mode** (in development) - Auto-rotate accounts for free packs
+
+## Run Modes
+
+| Mode | Command | Description |
+|------|---------|-------------|
+| Battle Mode | `python main.py` | Default mode, automated solo battles |
+| Tutorial Mode | `python main.py -t` | Unlock solo battle tutorial flow |
+| Daily Pack | `python main.py --daily` | Rotate accounts for free packs (requires root) |
 
 ## Tech Stack
 
@@ -120,12 +129,26 @@ ptcgp-auto/
 │       │       ├── ocr_helpers.py  # OCR utilities
 │       │       └── navigation.py   # Navigation utilities
 │       ├── adb_controller.py   # ADB controller
-│       ├── config.py           # Configuration
+│       ├── config.py           # Configuration (with mode loading)
+│       ├── daily/              # Daily pack module
+│       │   ├── __init__.py
+│       │   ├── runner.py       # Daily mode runner
+│       │   └── pack_opener.py  # Pack opening logic
+│       ├── db/                 # Database module
+│       │   ├── __init__.py
+│       │   └── account_db.py   # Account database
 │       ├── debug_tools/        # Debug tool modules
 │       ├── device_discovery.py # Device discovery
 │       ├── locales/            # Multi-language configs
-│       │   ├── zh_Hant.py      # Traditional Chinese
-│       │   └── en_US.py        # English
+│       │   ├── zh_Hant.py          # Traditional Chinese main config
+│       │   ├── zh_Hant_pages/      # Traditional Chinese page configs
+│       │   │   ├── __init__.py     # Exports all page groups
+│       │   │   ├── common.py       # Common pages
+│       │   │   ├── user_info.py    # User info pages
+│       │   │   ├── battle.py       # Battle mode pages
+│       │   │   ├── tutorial.py     # Tutorial mode pages
+│       │   │   └── daily.py        # Daily pack mode pages
+│       │   └── en_US.py            # English config
 │       ├── logger.py           # Logging
 │       ├── notifier.py         # Notifications
 │       ├── page_detector.py    # Page detector
@@ -133,7 +156,10 @@ ptcgp-auto/
 │       ├── recognizer_parts/   # Recognizer components
 │       ├── settings.py         # Runtime settings
 │       ├── state_manager.py    # State management
-│       └── utils.py            # Utilities
+│       ├── utils.py            # Utilities
+│       └── xml/                # XML account management module
+│           ├── __init__.py
+│           └── account_xml.py  # XML file operations
 ├── templates/              # Template images
 └── docs/                   # Documentation
 ```
