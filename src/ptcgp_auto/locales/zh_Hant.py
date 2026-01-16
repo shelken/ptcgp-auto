@@ -30,16 +30,18 @@ PAGES = {
     },
     # 朋友列表页面 - 点击添加朋友图标
     "friends_list": {
-        "identifiers": ["朋友數"],
+        "identifiers": ["申請中", "朋友"],
+        "match_all": True,  # 同时匹配避免误识别
         "action": "click_add_friends",
         "priority": 58,
     },
     # 社群页面 - 点击朋友标签
     "community_page": {
-        "identifiers": ["社群"],
+        "identifiers": ["他人的收藏", "朋友"],
+        "match_all": True,  # 需要同时匹配，避免误识别
         "action": "click_friends_tab",
         "priority": 59,
-        "exclude_identifiers": ["朋友數"],
+        "exclude_identifiers": ["申請中"],  # 排除朋友列表页面
     },
     # ==================== 弹窗处理 ====================
     "popup_ok": {
@@ -177,6 +179,13 @@ PAGES = {
         "priority": 60,
         "exclude_identifiers": ["與他人對戰"],
     },
+    # 开包页面 - 点击返回
+    "game_show_pack": {
+        "identifiers": ["提供比例", "其他擴充包"],
+        "match_all": True,
+        "action": "go_back",
+        "priority": 60,
+    },
     # TODO for ENG 游戏主页
     "game_home_main": {
         "identifiers": ["商店/兌換處", "得卡挑戰"],
@@ -184,6 +193,7 @@ PAGES = {
         "action": "handle_game_home",  # 改用新动作，检查用户信息
         "priority": 60,
     },
+
     # TODO for ENG 开启页面
     "game_open_page": {
         "identifiers": ["點擊畫面開始遊戲"],
