@@ -180,6 +180,7 @@ class PTCGPAuto:
                 time.sleep(config.WAIT_PAGE_TRANSITION)
             else:
                 no_action_count += 1
+                logger.debug(f"无法识别次数 {no_action_count} 次")
                 if no_action_count >= config.UNRECOGNIZED_THRESHOLD:
                     logger.warning("连续多次无法识别界面，可能需要手动干预")
                     # Send notification only once per unrecognized state
