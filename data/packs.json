@@ -1,0 +1,54 @@
+{
+  "A1": {
+    "name": "Genetic Apex",
+    "boosters": ["Pikachu", "Charizard", "Mewtwo"]
+  },
+  "A1a": {
+    "name": "Mythical Island",
+    "boosters": []
+  },
+  "A2": {
+    "name": "Space-Time Smackdown",
+    "boosters": ["Dialga", "Palkia"]
+  },
+  "A2a": {
+    "name": "Triumphant Light",
+    "boosters": []
+  },
+  "A2b": {
+    "name": "Shining Revelry",
+    "boosters": []
+  },
+  "A3": {
+    "name": "Celestial Guardians",
+    "boosters": ["Solgaleo", "Lunala"]
+  },
+  "A3a": {
+    "name": "Extradimensional Crisis",
+    "boosters": []
+  },
+  "A3b": {
+    "name": "Eevee Grove",
+    "boosters": []
+  },
+  "A4": {
+    "name": "Wisdom of Sea and Sky",
+    "boosters": ["Ho-oh", "Lugia"]
+  },
+  "A4a": {
+    "name": "Secluded Springs",
+    "boosters": []
+  },
+  "A4b": {
+    "name": "Deluxe Pack ex",
+    "boosters": []
+  },
+  "B1": {
+    "name": "Mega Rising",
+    "boosters": ["Mega Blaziken ex", "Mega Gyarados ex", "Mega Altaria ex"]
+  },
+  "B1a": {
+    "name": "Crimson Blaze",
+    "boosters": []
+  }
+}
