@@ -5,13 +5,61 @@
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
 
 from .region_selector import select_region, get_cached_roi
 from .terminal_preview import preview_image_inline, get_terminal_support
 
 
-def _calculate_scale(adb_controller, pack_code, booster_choices, get_template_path, templates_dir):
+def _build_all_boosters(templates_dir: Path) -> List[Tuple[str, str, str, bool]]:
+    """
+    构建所有子包的扁平列表
+
+    Returns:
+        [(pack_code, booster_name, display, exists), ...]
+        排序规则：有模板的在前（按系列排序），无模板的在后（按系列排序）
+    """
+    from ..constants.packs import PACKS, get_template_path
+
+    all_boosters = []
+
+    for pack_code, info in PACKS.items():
+        boosters = info.get("boosters", [])
+        if not boosters:
+            # 无子包时，使用扩充包名称
+            name = info["name"].replace(" ", "_")
+            display = f"{pack_code} - {info['name']}"
+            template_path = templates_dir / get_template_path(pack_code, name)
+            exists = template_path.exists()
+            all_boosters.append((pack_code, name, display, exists))
+        else:
+            for booster in boosters:
+                name = booster.replace(" ", "_")
+                display = f"{pack_code} - {booster}"
+                template_path = templates_dir / get_template_path(pack_code, name)
+                exists = template_path.exists()
+                all_boosters.append((pack_code, name, display, exists))
+
+    # 排序：有模板的在前，无模板的在后；同组内按系列代码排序
+    def sort_key(item):
+        pack_code, name, display, exists = item
+        # 解析系列代码用于排序 (如 A1, A1a, B1, B1a)
+        # 字母部分 + 数字部分 + 后缀
+        import re
+        match = re.match(r'([A-Z])(\d+)([a-z]?)', pack_code)
+        if match:
+            letter, num, suffix = match.groups()
+            sort_tuple = (letter, int(num), suffix)
+        else:
+            sort_tuple = (pack_code, 0, '')
+        # exists=True 排在前面 (0), exists=False 排在后面 (1)
+        return (0 if exists else 1, sort_tuple, name)
+
+    all_boosters.sort(key=sort_key)
+    return all_boosters
+
+
+def _calculate_scale_from_list(adb_controller, all_boosters, templates_dir):
     """
     自动计算缩放比例：通过框选屏幕上的目标与已有模板对比
 
@@ -19,25 +67,25 @@ def _calculate_scale(adb_controller, pack_code, booster_choices, get_template_pa
         计算出的缩放比例，失败返回 None
     """
     from PIL import Image
+    from ..constants.packs import get_template_path
 
     # 找到第一个存在的模板
     template_path = None
-    template_name = None
-    for name, display in booster_choices:
-        path = templates_dir / get_template_path(pack_code, name)
-        if path.exists():
-            template_path = path
-            template_name = display
+    template_display = None
+    for pack_code, name, display, exists in all_boosters:
+        if exists:
+            template_path = templates_dir / get_template_path(pack_code, name)
+            template_display = display
             break
 
     if not template_path:
-        print("错误: 当前扩充包没有已存在的模板，请先截取至少一个模板")
+        print("错误: 没有已存在的模板，请先截取至少一个模板")
         return None
 
     # 获取模板尺寸
     template_img = Image.open(template_path)
     template_w, template_h = template_img.width, template_img.height
-    print(f"\n参考模板: {template_name}")
+    print(f"\n参考模板: {template_display}")
     print(f"模板尺寸: {template_w}x{template_h}")
 
     # 截图
@@ -73,19 +121,18 @@ def _calculate_scale(adb_controller, pack_code, booster_choices, get_template_pa
     return scale
 
 
-def _run_detect_mode(adb_controller, pack_code, booster_choices, get_template_path, templates_dir, scale: float = None):
+def _run_detect_mode(adb_controller, selected_items, templates_dir, scale: float = None):
     """
-    检测模式：截图后批量匹配所有子包
+    检测模式：截图后匹配选中的子包
 
     Args:
         adb_controller: ADB 控制器
-        pack_code: 扩充包代码
-        booster_choices: 子包选择列表
-        get_template_path: 获取模板路径的函数
+        selected_items: 选中的子包列表 [(pack_code, name, display, exists), ...]
         templates_dir: 模板目录
         scale: 缩放比例（None 表示使用原始尺寸）
     """
     from ..recognizer import Recognizer
+    from ..constants.packs import get_template_path
     from .. import config
 
     # 截图
@@ -100,17 +147,17 @@ def _run_detect_mode(adb_controller, pack_code, booster_choices, get_template_pa
     recognizer.reload_templates()
     threshold = config.TEMPLATE_THRESHOLD
 
-    # 批量匹配所有子包
+    # 批量匹配选中的子包
     scale_info = f" @{scale:.2f}x" if scale else ""
-    print(f"\n=== 检测全部子包 ({pack_code}){scale_info} ===")
+    print(f"\n=== 检测选中的 {len(selected_items)} 个子包{scale_info} ===")
     print()
 
-    for i, (name, display) in enumerate(booster_choices, 1):
+    for i, (pack_code, name, display, exists) in enumerate(selected_items, 1):
         template_rel_path = get_template_path(pack_code, name)
         template_path = templates_dir / template_rel_path
 
         if not template_path.exists():
-            print(f"  {i}. [✗] {display:<20} 模板不存在")
+            print(f"  {i}. [✗] {display:<25} 模板不存在")
             continue
 
         # 根据是否指定缩放比例选择匹配方法
@@ -127,11 +174,11 @@ def _run_detect_mode(adb_controller, pack_code, booster_choices, get_template_pa
             if match_result:
                 x1, y1, x2, y2 = match_result
                 cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                print(f"  {i}. [✓] {display:<20} 置信度: {confidence:.3f}  位置: ({cx}, {cy})")
+                print(f"  {i}. [✓] {display:<25} 置信度: {confidence:.3f}  位置: ({cx}, {cy})")
             else:
-                print(f"  {i}. [?] {display:<20} 置信度: {confidence:.3f}  匹配异常")
+                print(f"  {i}. [?] {display:<25} 置信度: {confidence:.3f}  匹配异常")
         else:
-            print(f"  {i}. [✗] {display:<20} 置信度: {confidence:.3f}  未匹配")
+            print(f"  {i}. [✗] {display:<25} 置信度: {confidence:.3f}  未匹配")
 
     print()
     input("按回车返回...")
@@ -139,118 +186,115 @@ def _run_detect_mode(adb_controller, pack_code, booster_choices, get_template_pa
 
 def run_crop_pack(adb_controller, templates_dir: Path):
     """
-    运行卡包模板截取工具（循环模式）
+    运行卡包模板截取工具（扁平模式）
 
     Args:
         adb_controller: ADB 控制器实例
         templates_dir: 模板保存根目录
     """
-    from ..constants.packs import (
-        get_pack_choices,
-        get_booster_choices,
-        get_template_path,
-    )
+    from ..constants.packs import get_template_path
     from .. import config
 
     recognizer = None  # 延迟加载
     current_scale = None  # 当前缩放比例（None 表示原始尺寸）
 
-    pack_choices = get_pack_choices()
-
     while True:
-        # 1. 选择扩充包
-        print("\n=== 选择扩充包 ===")
-        for i, (code, display) in enumerate(pack_choices, 1):
-            print(f"  {i}. {display}")
+        # 构建并刷新列表（每次循环重新检查模板存在状态）
+        all_boosters = _build_all_boosters(templates_dir)
+
+        scale_display = f"{current_scale:.2f}" if current_scale else "原始"
+        print(f"\n=== 卡包模板截取 [缩放: {scale_display}] ===")
+
+        # 显示列表
+        for i, (pack_code, name, display, exists) in enumerate(all_boosters, 1):
+            marker = "✓" if exists else "✗"
+            print(f"  {i:2}. [{marker}] {display}")
+
+        print()
+        print("  d. 检测模式（选择后检测匹配）")
+        print(f"  s. 设置缩放比例 [当前: {scale_display}]")
         print("  0. 退出")
         print()
 
         try:
-            pack_input = input("请输入扩充包编号: ").strip()
-            if pack_input == "0" or pack_input.lower() == "q":
+            user_input = input("请输入编号: ").strip()
+
+            if user_input == "0" or user_input.lower() == "q":
                 print("退出")
                 return
-            pack_idx = int(pack_input) - 1
-            if pack_idx < 0 or pack_idx >= len(pack_choices):
-                print("无效的编号")
+
+            # 检测模式 - 进入子菜单选择要检测的项
+            if user_input.lower() == "d":
+                print("\n请输入要检测的编号 (可用逗号分隔，如 1,2,3，留空检测全部有模板的):")
+                detect_input = input("检测编号: ").strip()
+
+                if not detect_input:
+                    # 检测所有有模板的项
+                    items_to_detect = [b for b in all_boosters if b[3]]
+                else:
+                    # 解析输入的编号
+                    items_to_detect = []
+                    for part in detect_input.split(","):
+                        part = part.strip()
+                        if part:
+                            try:
+                                idx = int(part)
+                                if 1 <= idx <= len(all_boosters):
+                                    items_to_detect.append(all_boosters[idx - 1])
+                            except ValueError:
+                                pass
+
+                if not items_to_detect:
+                    print("没有可检测的项")
+                    continue
+
+                _run_detect_mode(adb_controller, items_to_detect, templates_dir, current_scale)
                 continue
-        except ValueError:
-            print("请输入数字")
-            continue
 
-        pack_code = pack_choices[pack_idx][0]
-
-        # 子包选择循环
-        while True:
-            booster_choices = get_booster_choices(pack_code)
-            scale_display = f"{current_scale:.2f}" if current_scale else "原始"
-            print(f"\n=== 选择子包 ({pack_code}) ===")
-            for i, (name, display) in enumerate(booster_choices, 1):
-                # 检查模板文件是否存在
-                template_rel_path = get_template_path(pack_code, name)
-                template_path = templates_dir / template_rel_path
-                exists = "✓" if template_path.exists() else "✗"
-                print(f"  {i}. [{exists}] {display}")
-            print("  d. 检测全部（截图匹配）")
-            print(f"  s. 设置缩放比例 [当前: {scale_display}]")
-            print("  0. 返回上一级")
-            print()
-
-            try:
-                booster_input = input("请输入子包编号: ").strip()
-                if booster_input == "0" or booster_input.lower() == "b":
-                    break  # 返回扩充包选择
-
-                # 检测模式
-                if booster_input.lower() == "d":
-                    _run_detect_mode(
-                        adb_controller, pack_code, booster_choices,
-                        get_template_path, templates_dir, current_scale
+            # 设置缩放比例
+            if user_input.lower() == "s":
+                print("\n=== 设置缩放比例 ===")
+                print("预设值:")
+                for key, value in config.PACK_TEMPLATE_SCALES.items():
+                    print(f"  {key}: {value}")
+                print()
+                print("输入 c 自动计算（框选屏幕上的目标）")
+                scale_input = input("输入缩放比例 (0.01-2.0, c=计算, 留空恢复原始): ").strip()
+                if not scale_input:
+                    current_scale = None
+                    print("已恢复原始尺寸")
+                elif scale_input.lower() == "c":
+                    # 自动计算缩放比例
+                    calculated_scale = _calculate_scale_from_list(
+                        adb_controller, all_boosters, templates_dir
                     )
-                    continue
+                    if calculated_scale:
+                        current_scale = calculated_scale
+                        print(f"缩放比例已设置为 {current_scale:.3f}")
+                else:
+                    try:
+                        new_scale = float(scale_input)
+                        if 0.01 <= new_scale <= 2.0:
+                            current_scale = new_scale
+                            print(f"缩放比例已设置为 {current_scale:.2f}")
+                        else:
+                            print("缩放比例需在 0.01-2.0 范围内")
+                    except ValueError:
+                        print("请输入有效数字")
+                continue
 
-                # 设置缩放比例
-                if booster_input.lower() == "s":
-                    print("\n=== 设置缩放比例 ===")
-                    print("预设值:")
-                    for key, value in config.PACK_TEMPLATE_SCALES.items():
-                        print(f"  {key}: {value}")
-                    print()
-                    print("输入 c 自动计算（框选屏幕上的目标）")
-                    scale_input = input("输入缩放比例 (0.01-2.0, c=计算, 留空恢复原始): ").strip()
-                    if not scale_input:
-                        current_scale = None
-                        print("已恢复原始尺寸")
-                    elif scale_input.lower() == "c":
-                        # 自动计算缩放比例
-                        calculated_scale = _calculate_scale(
-                            adb_controller, pack_code, booster_choices,
-                            get_template_path, templates_dir
-                        )
-                        if calculated_scale:
-                            current_scale = calculated_scale
-                            print(f"缩放比例已设置为 {current_scale:.3f}")
-                    else:
-                        try:
-                            new_scale = float(scale_input)
-                            if 0.01 <= new_scale <= 2.0:
-                                current_scale = new_scale
-                                print(f"缩放比例已设置为 {current_scale:.2f}")
-                            else:
-                                print("缩放比例需在 0.01-2.0 范围内")
-                        except ValueError:
-                            print("请输入有效数字")
-                    continue
-
-                booster_idx = int(booster_input) - 1
-                if booster_idx < 0 or booster_idx >= len(booster_choices):
-                    print("无效的编号")
+            # 解析输入的编号
+            try:
+                idx = int(user_input)
+                if idx < 1 or idx > len(all_boosters):
+                    print(f"无效的编号: {idx}")
                     continue
             except ValueError:
-                print("请输入数字")
+                print(f"无效的输入: {user_input}")
                 continue
 
-            booster_name = booster_choices[booster_idx][0]
+            # 进入截取模式
+            pack_code, booster_name, display, exists = all_boosters[idx - 1]
 
             # 截图
             screenshot = adb_controller.screenshot()
@@ -299,7 +343,6 @@ def run_crop_pack(adb_controller, templates_dir: Path):
             print("\n=== 验证模板匹配 ===")
             if recognizer is None:
                 from ..recognizer import Recognizer
-                from .. import config
                 recognizer = Recognizer()
 
             # 重新加载模板（包含刚保存的）
@@ -322,4 +365,6 @@ def run_crop_pack(adb_controller, templates_dir: Path):
                 elif confidence < threshold - 0.1:
                     print("   提示: 可能需要调整截取区域大小")
 
-            # 继续留在子包选择
+        except ValueError:
+            print("请输入有效的数字")
+            continue
