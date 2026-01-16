@@ -13,7 +13,7 @@ from recognizer import get_recognizer
 from state_manager import get_state_manager
 from page_detector import PageDetector
 from actions import ActionHandler
-from notifier import notify_unrecognized
+from notifier import notify_unrecognized, notify_recovered
 from settings import load_settings, apply_settings_to_config, print_active_settings
 from device_discovery import discover_devices
 from logger import setup_logging, set_username, get_logger, allocate_colors
@@ -167,7 +167,18 @@ class PTCGPAuto:
 
             if page_name:
                 no_action_count = 0
-                self.unrecognized_notified = False  # Reset notification state
+                # 如果之前发送过无法识别通知，现在恢复了，发送恢复通知
+                if self.unrecognized_notified and config.NOTIFICATION_ENABLED:
+                    username = None
+                    if self.state.has_user_info():
+                        username = self.state.get_user_info().get("username")
+                    notify_recovered(
+                        config.NOTIFICATION_WEBHOOK_KEY,
+                        config.NOTIFICATION_SOUND,
+                        port=self.port,
+                        username=username
+                    )
+                self.unrecognized_notified = False
                 logger.info(f"[界面] {page_name}")
 
                 # 执行对应动作
