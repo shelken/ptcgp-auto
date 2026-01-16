@@ -150,12 +150,13 @@ PAGES = {
     },
     # 玩法列表页面 - 新手教程列表
     # 注意：优先级低于 deck_list(45)，避免底部导航"玩法"误匹配
+    # 排除条件包含牌组详情页面特有的文字，防止 wanfa_shalou 模板误匹配
     "tutorial_list": {
         "identifiers": ["玩法"],
         "templates": ["wanfa_shalou"],
         "action": "handle_tutorial_list",
         "priority": 46,
-        "exclude_identifiers": ["與他人對戰", "擴充組", "分級對戰"],
+        "exclude_identifiers": ["與他人對戰", "擴充組", "分級對戰", "對戰規則", "對戰課題"],
     },
     # 教程完成提示页面 - 点击任意位置继续
     "tutorial_complete_hint": {
