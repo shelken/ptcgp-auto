@@ -324,12 +324,60 @@ def run_single_device(settings: dict):
     auto.start(tutorial_mode=settings.get("tutorial", False))
 
 
+def run_daily_mode_wrapper(settings: dict):
+    """每日开包模式"""
+    from ptcgp_auto.daily import run_daily_mode
+    from ptcgp_auto.device_discovery import discover_devices
+
+    # 初始化日志
+    log_level = settings.get("log_level", "INFO")
+    setup_logging(port=0, level=log_level)
+
+    logger.info("=" * 50)
+    logger.info("PTCGP 每日开包模式")
+    logger.info("=" * 50)
+
+    # 发现设备
+    devices = discover_devices()
+
+    if not devices:
+        logger.error("未发现运行中的 BlueStacks 设备")
+        return
+
+    # 处理排除端口
+    exclude_str = settings.get("exclude", "")
+    if exclude_str:
+        exclude_ports = set(p.strip() for p in exclude_str.split(",") if p.strip())
+        devices = [d for d in devices if d.split(":")[1] not in exclude_ports]
+        if exclude_ports:
+            logger.info(f"排除端口: {', '.join(sorted(exclude_ports))}")
+
+    if not devices:
+        logger.error("排除后无可用设备")
+        return
+
+    logger.info(f"发现 {len(devices)} 个设备:")
+    for addr in devices:
+        logger.info(f"  - {addr}")
+
+    # 运行每日开包模式
+    run_daily_mode(
+        device_addresses=devices,
+        db_path=settings.get("db_path") or None,
+        xml_dir=settings.get("xml_dir") or None,
+        daemon=True,
+    )
+
+
 def main():
     """主入口"""
     # 加载配置（CLI > 环境变量 > .env > 默认值）
     settings = load_settings()
 
-    if settings.get("all"):
+    # 每日开包模式
+    if settings.get("daily"):
+        run_daily_mode_wrapper(settings)
+    elif settings.get("all"):
         run_all_devices(settings)
     else:
         run_single_device(settings)

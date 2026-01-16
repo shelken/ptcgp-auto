@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 解决问题时，执行命令前，思考当前的命令是否需要声明式配置以保证后续不再犯错，而不是直接执行
 - 必要时直接通过 `python debug_tool.py -a 127.0.0.1:[PORT] --template [template_name]` 查看当前页面的ocr内容和是否出现相应模板文件
 - add代码时，必须检查与本次有关的文件，不允许`add -A`
+- 在coding阶段，一定要懂得模块化设计，高内聚低耦合原则，单代码文件最多不要超过500行
 
 ## 知识获取与整理原则
 
@@ -26,26 +27,93 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 核心文件
 
+源代码位于 `src/ptcgp_auto/` 目录下：
+
 - `main.py` - 入口文件，支持命令行参数指定 ADB 地址
-- `adb_controller.py` - ADB 封装（截图、点击、滑动）
-- `recognizer.py` - Apple Vision OCR + OpenCV 模板匹配
-- `page_detector.py` - 页面检测器，识别当前游戏界面
-- `actions/` - 动作处理器模块（模块化架构）
-  - `handler.py` - ActionHandler 门面类
-  - `base.py` - 基础动作（点击、等待等）
-  - `battle.py` - 对战相关动作
-  - `level.py` - 等级选择动作
-  - `deck.py` - 牌组列表动作
-  - `expansion.py` - 扩充组选择动作
-  - `home.py` - 主页动作
-  - `utils/` - 工具模块（滚动、OCR辅助、导航）
-- `state_manager.py` - 状态管理器，保存和加载自动化进度
-- `config.py` - 配置常量和界面识别规则
-- `utils.py` - 工具函数
-- `debug_tool.py` - 交互式调试工具
+- `src/ptcgp_auto/`
+  - `adb_controller.py` - ADB 封装（截图、点击、滑动）
+  - `recognizer.py` - Apple Vision OCR + OpenCV 模板匹配
+  - `page_detector.py` - 页面检测器，识别当前游戏界面
+  - `state_manager.py` - 状态管理器，保存和加载自动化进度
+  - `config.py` - 配置常量和界面识别规则
+  - `settings.py` - 运行时配置加载
+  - `device_discovery.py` - 设备发现
+  - `logger.py` - 日志系统
+  - `notifier.py` - 通知系统
+  - `utils.py` - 工具函数
+  - `actions/` - 动作处理器模块（模块化架构）
+    - `handler.py` - ActionHandler 门面类
+    - `base.py` - 基础动作（点击、等待等）
+    - `battle.py` - 对战相关动作
+    - `level.py` - 等级选择动作
+    - `deck.py` - 牌组列表动作
+    - `expansion.py` - 扩充组选择动作
+    - `home.py` - 主页动作
+    - `user.py` - 用户信息动作
+    - `tutorial.py` - 教程动作
+    - `utils/` - 工具模块（滚动、OCR辅助、导航）
+  - `recognizer_parts/` - 识别器拆分模块
+    - `ocr.py` - OCR 相关
+    - `template_matcher.py` - 模板匹配
+    - `text.py` - 文本处理
+    - `color.py` - 颜色处理
+  - `locales/` - 多语言配置
+    - `zh_Hant.py` - 繁体中文
+    - `en_US.py` - 英文
+  - `debug_tools/` - 调试工具实现
+- `debug_tool.py` - 调试工具入口
 - `templates/` - 按钮模板图片
 
 ## 架构
+
+```
+ptcgp-auto/
+├── main.py                     # 主程序入口
+├── debug_tool.py               # 调试工具入口
+├── src/
+│   └── ptcgp_auto/
+│       ├── __init__.py
+│       ├── adb_controller.py   # ADB 控制
+│       ├── config.py           # 配置
+│       ├── device_discovery.py # 设备发现
+│       ├── logger.py           # 日志
+│       ├── notifier.py         # 通知
+│       ├── page_detector.py    # 页面检测器
+│       ├── recognizer.py       # OCR + 模板匹配
+│       ├── settings.py         # 运行时配置
+│       ├── state_manager.py    # 状态管理
+│       ├── utils.py            # 工具函数
+│       ├── actions/            # 动作处理器模块
+│       │   ├── __init__.py         # 导出 ActionHandler
+│       │   ├── handler.py          # 门面类
+│       │   ├── base.py             # 基础动作
+│       │   ├── battle.py           # 对战动作
+│       │   ├── level.py            # 等级选择
+│       │   ├── deck.py             # 牌组列表
+│       │   ├── expansion.py        # 扩充组选择
+│       │   ├── home.py             # 主页动作
+│       │   ├── user.py             # 用户信息
+│       │   ├── tutorial.py         # 教程
+│       │   └── utils/              # 工具模块
+│       │       ├── scroll.py           # 滚动辅助
+│       │       ├── ocr_helpers.py      # OCR 工具
+│       │       └── navigation.py       # 导航工具
+│       ├── recognizer_parts/   # 识别器拆分模块
+│       │   ├── ocr.py
+│       │   ├── template_matcher.py
+│       │   ├── text.py
+│       │   └── color.py
+│       ├── locales/            # 多语言配置
+│       │   ├── zh_Hant.py
+│       │   └── en_US.py
+│       └── debug_tools/        # 调试工具实现
+├── templates/                  # 模板图片
+└── docs/                       # 文档
+    ├── design.md
+    └── refs/                   # 参考资料
+```
+
+运行时架构：
 
 ```
 main.py (入口 + 主循环)
@@ -65,6 +133,7 @@ PTCGPAuto
     │       ├── DeckActions - 牌组列表
     │       ├── ExpansionActions - 扩充组选择
     │       ├── HomeActions - 主页动作
+    │       ├── UserActions - 用户信息
     │       └── utils/ - 工具（滚动、OCR、导航）
     └── StateManager (state_manager.py)
             保存/加载等级和卡包完成状态
