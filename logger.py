@@ -15,7 +15,6 @@ AVAILABLE_COLORS = [
 
 # 端口 -> 颜色映射
 _port_colors: dict[str, str] = {}
-_used_colors: list[str] = []
 
 # 上下文存储
 _port = "----"
@@ -24,25 +23,40 @@ _username = ""
 _initialized = False
 
 
-def _get_port_color(port: str) -> str:
-    """为端口分配颜色（随机不重复）"""
-    global _used_colors
+def allocate_colors(ports: list[str]) -> dict[str, str]:
+    """为多个端口分配不重复的颜色（父进程调用）
 
-    if port in _port_colors:
-        return _port_colors[port]
+    Args:
+        ports: 端口号列表
 
-    # 如果颜色用完了，重置可用池
-    available = [c for c in AVAILABLE_COLORS if c not in _used_colors]
-    if not available:
-        _used_colors.clear()
-        available = AVAILABLE_COLORS.copy()
+    Returns:
+        端口 -> 颜色的映射
+    """
+    result = {}
+    for i, port in enumerate(ports):
+        if i < len(AVAILABLE_COLORS):
+            color = AVAILABLE_COLORS[i]
+        else:
+            # 颜色用完后，生成随机 RGB 颜色（避开太暗的颜色）
+            r = random.randint(100, 255)
+            g = random.randint(100, 255)
+            b = random.randint(100, 255)
+            color = f"#{r:02x}{g:02x}{b:02x}"
+        result[port] = color
+    return result
 
-    # 随机选择一个颜色
-    color = random.choice(available)
-    _used_colors.append(color)
-    _port_colors[port] = color
 
-    return color
+def _is_rgb_color(color: str) -> bool:
+    """判断是否是 #RRGGBB 格式的颜色"""
+    return color.startswith("#") and len(color) == 7
+
+
+def _format_color_tag(color: str, text: str) -> str:
+    """生成带颜色的标签，支持预定义颜色和 RGB 格式"""
+    if _is_rgb_color(color):
+        return f"<fg {color}>{text}</fg {color}>"
+    else:
+        return f"<{color}>{text}</{color}>"
 
 
 def _format(record):
@@ -51,8 +65,8 @@ def _format(record):
     username = record["extra"].get("username", _username)
     color = record["extra"].get("port_color", _port_color)
 
-    port_part = f"<{color}>[{port}]</{color}>"
-    user_part = f"<{color}>{username}</{color}> " if username else ""
+    port_part = _format_color_tag(color, f"[{port}]")
+    user_part = _format_color_tag(color, username) + " " if username else ""
 
     return (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
@@ -62,18 +76,21 @@ def _format(record):
     )
 
 
-def setup_logging(port: int = None, level: str = "INFO"):
+def setup_logging(port: int = None, level: str = "INFO", color: str = None):
     """初始化日志系统
 
     Args:
         port: ADB 端口号，用于日志上下文
         level: 日志级别 (DEBUG, INFO, WARNING, ERROR)
+        color: 端口颜色（由父进程分配，支持预定义颜色或 #RRGGBB 格式）
     """
     global _port, _port_color, _initialized
 
     if port:
         _port = str(port)
-        _port_color = _get_port_color(_port)
+        # 优先使用传入的颜色，否则使用默认白色
+        _port_color = color if color else "white"
+        _port_colors[_port] = _port_color
 
     # 避免重复添加 handler
     if not _initialized:
@@ -90,11 +107,17 @@ def setup_logging(port: int = None, level: str = "INFO"):
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
 
 
-def set_port(port: int):
-    """设置当前上下文的端口号"""
+def set_port(port: int, color: str = None):
+    """设置当前上下文的端口号
+
+    Args:
+        port: 端口号
+        color: 端口颜色（可选）
+    """
     global _port, _port_color
     _port = str(port)
-    _port_color = _get_port_color(_port)
+    _port_color = color if color else "white"
+    _port_colors[_port] = _port_color
 
 
 def set_username(username: str):

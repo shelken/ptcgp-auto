@@ -16,7 +16,7 @@ from actions import ActionHandler
 from notifier import notify_unrecognized
 from settings import load_settings, apply_settings_to_config, print_active_settings
 from device_discovery import discover_devices
-from logger import setup_logging, set_username, get_logger
+from logger import setup_logging, set_username, get_logger, allocate_colors
 
 logger = get_logger(__name__)
 
@@ -225,16 +225,21 @@ def run_all_devices(settings: dict):
     for addr in devices:
         logger.info(f"  - {addr}")
 
-    # 构建基础参数（排除 --all 和 -a）
-    base_args = build_base_args(settings)
+    # 为所有端口分配颜色（父进程统一分配，避免子进程冲突）
+    ports = [addr.split(":")[1] for addr in devices]
+    port_colors = allocate_colors(ports)
 
     # 启动子进程
     processes = []
     for addr in devices:
+        port = addr.split(":")[1]
+        color = port_colors[port]
+        # 构建参数（每个设备的颜色不同）
+        base_args = build_base_args(settings, color=color)
         cmd = [sys.executable, __file__, "-a", addr] + base_args
         p = subprocess.Popen(cmd)
         processes.append((addr, p))
-        logger.info(f"[{addr.split(':')[1]}] 已启动")
+        logger.info(f"[{port}] 已启动 (颜色: {color})")
 
     # 等待所有子进程
     try:
@@ -248,8 +253,13 @@ def run_all_devices(settings: dict):
             p.wait()
 
 
-def build_base_args(settings: dict) -> list:
-    """从 settings 构建子进程参数（排除 all 和 address）"""
+def build_base_args(settings: dict, color: str = None) -> list:
+    """从 settings 构建子进程参数（排除 all 和 address）
+
+    Args:
+        settings: 配置字典
+        color: 分配给此设备的日志颜色
+    """
     args = []
     if settings.get("language"):
         args.extend(["-l", settings["language"]])
@@ -257,6 +267,8 @@ def build_base_args(settings: dict) -> list:
         args.append("-t")
     if settings.get("log_level"):
         args.extend(["--log-level", settings["log_level"]])
+    if color:
+        args.extend(["--log-color", color])
     if settings.get("no_auto_battle"):
         args.append("--no-auto-battle")
     if settings.get("notify_key"):
@@ -272,7 +284,8 @@ def run_single_device(settings: dict):
 
     # 初始化日志系统
     log_level = settings.get("log_level", "INFO")
-    setup_logging(port=config.ADB_PORT, level=log_level)
+    log_color = settings.get("log_color")  # 由父进程分配的颜色
+    setup_logging(port=config.ADB_PORT, level=log_level, color=log_color)
 
     print_active_settings(settings)
 
