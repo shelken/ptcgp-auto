@@ -1,54 +1,87 @@
 {
   "A1": {
     "name": "Genetic Apex",
-    "boosters": ["Pikachu", "Charizard", "Mewtwo"]
+    "boosters": [
+      "Charizard",
+      "Mewtwo",
+      "Pikachu"
+    ]
   },
   "A1a": {
     "name": "Mythical Island",
-    "boosters": []
+    "boosters": [
+      "Mew"
+    ]
   },
   "A2": {
     "name": "Space-Time Smackdown",
-    "boosters": ["Dialga", "Palkia"]
+    "boosters": [
+      "Dialga",
+      "Palkia"
+    ]
   },
   "A2a": {
     "name": "Triumphant Light",
-    "boosters": []
+    "boosters": [
+      "Arceus"
+    ]
   },
   "A2b": {
     "name": "Shining Revelry",
-    "boosters": []
+    "boosters": [
+      "Shining"
+    ]
   },
   "A3": {
     "name": "Celestial Guardians",
-    "boosters": ["Solgaleo", "Lunala"]
+    "boosters": [
+      "Lunala",
+      "Solgaleo"
+    ]
   },
   "A3a": {
     "name": "Extradimensional Crisis",
-    "boosters": []
+    "boosters": [
+      "Extradimensional"
+    ]
   },
   "A3b": {
     "name": "Eevee Grove",
-    "boosters": []
+    "boosters": [
+      "Eevee"
+    ]
   },
   "A4": {
     "name": "Wisdom of Sea and Sky",
-    "boosters": ["Ho-oh", "Lugia"]
+    "boosters": [
+      "Ho-Oh",
+      "Lugia"
+    ]
   },
   "A4a": {
     "name": "Secluded Springs",
-    "boosters": []
+    "boosters": [
+      "Secluded"
+    ]
   },
   "A4b": {
-    "name": "Deluxe Pack ex",
-    "boosters": []
+    "name": "Deluxe Pack: ex",
+    "boosters": [
+      "Deluxe"
+    ]
   },
   "B1": {
     "name": "Mega Rising",
-    "boosters": ["Mega Blaziken ex", "Mega Gyarados ex", "Mega Altaria ex"]
+    "boosters": [
+      "Mega Altaria",
+      "Mega Blaziken",
+      "Mega Gyarados"
+    ]
   },
   "B1a": {
     "name": "Crimson Blaze",
-    "boosters": []
+    "boosters": [
+      "Crimson Blaze"
+    ]
   }
 }
