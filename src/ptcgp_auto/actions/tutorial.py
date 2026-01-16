@@ -3,12 +3,12 @@
 import time
 from typing import Dict
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
-from adb_controller import AdbController
-from recognizer import Recognizer
+from ptcgp_auto.adb_controller import AdbController
+from ptcgp_auto.recognizer import Recognizer
 
 
 class TutorialRunner:
@@ -150,7 +150,9 @@ class TutorialRunner:
             if hand_down_box:
                 hand_center_x = (hand_down_box[0] + hand_down_box[2]) // 2
                 card_y = int(config.SCREEN_HEIGHT * 0.92)
-                logger.info(f"  [教程] 检测到長按+hand_down，在 ({hand_center_x},{card_y}) 长按")
+                logger.info(
+                    f"  [教程] 检测到長按+hand_down，在 ({hand_center_x},{card_y}) 长按"
+                )
                 self.adb.long_press(hand_center_x, card_y, duration=1500)
                 return
 
@@ -162,8 +164,12 @@ class TutorialRunner:
                     break
 
             if long_press_item:
-                long_press_x = (long_press_item["box"][0] + long_press_item["box"][2]) // 2
-                long_press_y = (long_press_item["box"][1] + long_press_item["box"][3]) // 2
+                long_press_x = (
+                    long_press_item["box"][0] + long_press_item["box"][2]
+                ) // 2
+                long_press_y = (
+                    long_press_item["box"][1] + long_press_item["box"][3]
+                ) // 2
 
                 # 其他手指模板：取長按x + (長按y和手指y的中心)
                 for template in ["hand_up_left", "hand_up", "hand_up_right"]:
@@ -171,7 +177,9 @@ class TutorialRunner:
                     if hand_box:
                         hand_center_y = (hand_box[1] + hand_box[3]) // 2
                         target_y = (long_press_y + hand_center_y) // 2
-                        logger.info(f"  [教程] 检测到長按+{template}，在 ({long_press_x},{target_y}) 长按")
+                        logger.info(
+                            f"  [教程] 检测到長按+{template}，在 ({long_press_x},{target_y}) 长按"
+                        )
                         self.adb.long_press(long_press_x, target_y, duration=1500)
                         return
 
@@ -188,7 +196,9 @@ class TutorialRunner:
             return
 
         # 2. 检测 hand_up_left 模板
-        hand_left_box = self.recognizer.find_template(screenshot, "hand_up_left", threshold=0.7)
+        hand_left_box = self.recognizer.find_template(
+            screenshot, "hand_up_left", threshold=0.7
+        )
         if hand_left_box:
             # 判断是点击技能、拖动能量还是拖动进化
             # 如果有 "撤退" 文字，说明在卡片详情页，需要点击技能
@@ -213,7 +223,9 @@ class TutorialRunner:
                     start_y = int(config.SCREEN_HEIGHT * 0.92)
                     end_x = config.SCREEN_WIDTH // 2
                     end_y = int(config.SCREEN_HEIGHT * 0.55)
-                    logger.info(f"  [教程] 检测到放置提示，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})")
+                    logger.info(
+                        f"  [教程] 检测到放置提示，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})"
+                    )
                     self.adb.drag(start_x, start_y, end_x, end_y, duration=500)
                     return
 
@@ -223,11 +235,16 @@ class TutorialRunner:
                 for _ in range(5):
                     check_screenshot = self.adb.screenshot()
                     if check_screenshot:
-                        hand = self.recognizer.find_template(check_screenshot, "hand_up_left", threshold=0.7)
+                        hand = self.recognizer.find_template(
+                            check_screenshot, "hand_up_left", threshold=0.7
+                        )
                         if hand:
                             hx = (hand[0] + hand[2]) // 2
                             hy = (hand[1] + hand[3]) // 2
-                            if hx > config.SCREEN_WIDTH * 0.7 and hy > config.SCREEN_HEIGHT * 0.7:
+                            if (
+                                hx > config.SCREEN_WIDTH * 0.7
+                                and hy > config.SCREEN_HEIGHT * 0.7
+                            ):
                                 right_bottom_count += 1
                             elif hy > config.SCREEN_HEIGHT * 0.8:
                                 bottom_count += 1
@@ -237,14 +254,18 @@ class TutorialRunner:
                     # 多次在右下角：拖动能量
                     start_x = int(config.SCREEN_WIDTH * 0.9)
                     start_y = int(config.SCREEN_HEIGHT * 0.92)
-                    logger.info(f"  [教程] 检测到右下角手指，拖动能量 ({start_x},{start_y}) -> ({end_x},{end_y})")
+                    logger.info(
+                        f"  [教程] 检测到右下角手指，拖动能量 ({start_x},{start_y}) -> ({end_x},{end_y})"
+                    )
                     self.adb.drag(start_x, start_y, end_x, end_y, duration=500)
                 elif bottom_count >= 3:
                     # 多次在底部：拖动卡牌
                     hand_center_x = (hand_left_box[0] + hand_left_box[2]) // 2
                     start_x = hand_center_x
                     start_y = int(config.SCREEN_HEIGHT * 0.92)
-                    logger.info(f"  [教程] 检测到底部手指，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})")
+                    logger.info(
+                        f"  [教程] 检测到底部手指，拖动卡牌 ({start_x},{start_y}) -> ({end_x},{end_y})"
+                    )
                     self.adb.drag(start_x, start_y, end_x, end_y, duration=500)
                 else:
                     # 默认：点击
@@ -261,7 +282,9 @@ class TutorialRunner:
             screen_center_x = config.SCREEN_WIDTH // 2
             for item in ocr_results:
                 box_center_x = (item["box"][0] + item["box"][2]) // 2
-                if box_center_x > screen_center_x and any(btn in item["text"] for btn in right_buttons):
+                if box_center_x > screen_center_x and any(
+                    btn in item["text"] for btn in right_buttons
+                ):
                     logger.info(f"  [教程] 检测到右侧手指，点击 {item['text']}")
                     self.adb.tap_center(item["box"])
                     return

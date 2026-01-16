@@ -4,9 +4,9 @@
 
 from typing import Optional, Dict, Tuple, List
 
-import config
-from logger import get_logger
-from recognizer import Recognizer
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
+from ptcgp_auto.recognizer import Recognizer
 
 logger = get_logger(__name__)
 
@@ -17,7 +17,9 @@ class PageDetector:
     def __init__(self, recognizer: Recognizer):
         self.recognizer = recognizer
 
-    def detect(self, screenshot) -> Tuple[Optional[str], Optional[Dict], Optional[Dict]]:
+    def detect(
+        self, screenshot
+    ) -> Tuple[Optional[str], Optional[Dict], Optional[Dict]]:
         """检测当前界面
 
         Args:
@@ -28,12 +30,11 @@ class PageDetector:
         """
         # 获取 OCR 结果
         ocr_results = self.recognizer.ocr_full_screen(screenshot)
-        ocr_texts = [item['text'].strip().lower() for item in ocr_results]
+        ocr_texts = [item["text"].strip().lower() for item in ocr_results]
 
         # 按优先级排序页面
         sorted_pages = sorted(
-            config.PAGES.items(),
-            key=lambda x: x[1].get("priority", 999)
+            config.PAGES.items(), key=lambda x: x[1].get("priority", 999)
         )
 
         for page_name, page_info in sorted_pages:
@@ -60,14 +61,18 @@ class PageDetector:
             if match_info:
                 # 如果有模板要求，也必须匹配模板
                 if templates:
-                    template_match = self._check_templates(screenshot, templates, ocr_results)
+                    template_match = self._check_templates(
+                        screenshot, templates, ocr_results
+                    )
                     if not template_match:
                         continue  # 模板不匹配，跳过这个页面
                     # 合并模板匹配信息
                     match_info["template_match"] = template_match
 
                 match_info["ocr_results"] = ocr_results
-                logger.debug(f"[匹配] {page_name} <- \"{match_info['identifier']}\" in \"{match_info.get('matched_text', '')}\"")
+                logger.debug(
+                    f'[匹配] {page_name} <- "{match_info["identifier"]}" in "{match_info.get("matched_text", "")}"'
+                )
                 return page_name, page_info, match_info
 
             # 检查纯模板匹配（没有 identifiers 的情况）
@@ -87,7 +92,7 @@ class PageDetector:
         identifiers: List[str],
         ocr_results: List[Dict],
         exact_match: bool,
-        match_all: bool = False
+        match_all: bool = False,
     ) -> Optional[Dict]:
         """检查文字标识符匹配
 
@@ -116,35 +121,31 @@ class PageDetector:
             return None
 
     def _find_identifier(
-        self,
-        identifier: str,
-        ocr_results: List[Dict],
-        exact_match: bool
+        self, identifier: str, ocr_results: List[Dict], exact_match: bool
     ) -> Optional[Dict]:
         """查找单个标识符"""
         for ocr_item in ocr_results:
-            ocr_text = ocr_item['text'].strip()
+            ocr_text = ocr_item["text"].strip()
 
             if exact_match:
                 matched = identifier.lower() == ocr_text.lower()
             else:
-                matched = (identifier.lower() == ocr_text.lower() or
-                           identifier.lower() in ocr_text.lower())
+                matched = (
+                    identifier.lower() == ocr_text.lower()
+                    or identifier.lower() in ocr_text.lower()
+                )
 
             if matched:
                 return {
                     "type": "text",
                     "identifier": identifier,
                     "matched_text": ocr_text,
-                    "box": ocr_item['box'],
+                    "box": ocr_item["box"],
                 }
         return None
 
     def _check_templates(
-        self,
-        screenshot,
-        templates: List[str],
-        ocr_results: List[Dict]
+        self, screenshot, templates: List[str], ocr_results: List[Dict]
     ) -> Optional[Dict]:
         """检查模板匹配"""
         for template_name in templates:

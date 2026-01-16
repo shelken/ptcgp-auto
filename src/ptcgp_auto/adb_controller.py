@@ -10,9 +10,9 @@ from typing import Optional, Tuple
 from adbutils import adb, AdbDevice
 from PIL import Image
 
-import config
-from utils import get_data_dir
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.utils import get_data_dir
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -57,20 +57,20 @@ class AdbController:
             output = self.device.shell("wm size")
             # 输出格式: "Physical size: 1080x1920" 或 "Override size: ..."
             # 优先使用 Override size（如果有的话）
-            lines = output.strip().split('\n')
+            lines = output.strip().split("\n")
             size_str = None
             for line in lines:
-                if 'Override size:' in line:
-                    size_str = line.split(':')[1].strip()
+                if "Override size:" in line:
+                    size_str = line.split(":")[1].strip()
                     break
             if not size_str:
                 for line in lines:
-                    if 'Physical size:' in line:
-                        size_str = line.split(':')[1].strip()
+                    if "Physical size:" in line:
+                        size_str = line.split(":")[1].strip()
                         break
 
             if size_str:
-                width, height = map(int, size_str.split('x'))
+                width, height = map(int, size_str.split("x"))
                 config.SCREEN_WIDTH = width
                 config.SCREEN_HEIGHT = height
                 logger.info(f"屏幕分辨率: {width}x{height}")
@@ -184,7 +184,12 @@ class AdbController:
         except Exception as e:
             logger.error(f"拖动失败: {e}")
 
-    def drag_centers(self, box1: Tuple[int, int, int, int], box2: Tuple[int, int, int, int], duration: int = 500):
+    def drag_centers(
+        self,
+        box1: Tuple[int, int, int, int],
+        box2: Tuple[int, int, int, int],
+        duration: int = 500,
+    ):
         """从一个矩形中心拖动到另一个矩形中心
 
         Args:

@@ -3,8 +3,8 @@
 import time
 from typing import Dict
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 from .utils import find_text_by_variants, find_auto_mode_button
@@ -35,7 +35,7 @@ class BaseActions:
         cancel_item = find_text_by_variants(ocr_results, "cancel")
         if cancel_item:
             logger.info("  -> 点击取消")
-            self.adb.tap_center(cancel_item['box'])
+            self.adb.tap_center(cancel_item["box"])
             return
         # 如果没找到取消，尝试点击屏幕继续
         logger.info("  -> 未找到取消按钮，点击屏幕继续")
@@ -76,7 +76,7 @@ class BaseActions:
         if result:
             auto_item, _ = result
             logger.info(f"  -> 点击自动模式: {auto_item['text']}")
-            self.adb.tap_center(auto_item['box'])
+            self.adb.tap_center(auto_item["box"])
             return
         # 没找到自动按钮，点击屏幕继续
         logger.info("  -> 未找到自动按钮，点击屏幕继续")

@@ -5,8 +5,8 @@ import sys
 import time
 from typing import Dict, List, Callable
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 from .utils import ScrollHelper, go_back
@@ -15,14 +15,23 @@ from .utils import ScrollHelper, go_back
 class LevelActions:
     """等级选择相关动作处理"""
 
-    def __init__(self, adb, recognizer, state, should_switch_checker: Callable[[], bool]):
+    def __init__(
+        self, adb, recognizer, state, should_switch_checker: Callable[[], bool]
+    ):
         self.adb = adb
         self.recognizer = recognizer
         self.state = state
         self._should_switch_to_higher_priority_level = should_switch_checker
         self._scroll_helper = ScrollHelper(adb, recognizer, max_attempts=10, ratio=0.21)
 
-    def select_level(self, screenshot, match_info: Dict, needs_state_init: bool, on_init_complete: Callable, reset_pack_state: Callable):
+    def select_level(
+        self,
+        screenshot,
+        match_info: Dict,
+        needs_state_init: bool,
+        on_init_complete: Callable,
+        reset_pack_state: Callable,
+    ):
         """选择未完成的等级
 
         Args:
@@ -66,7 +75,8 @@ class LevelActions:
 
         # 发送完成通知
         if config.NOTIFICATION_ENABLED:
-            from notifier import notify_completed
+            from ptcgp_auto.notifier import notify_completed
+
             username = None
             if self.state.has_user_info():
                 user = self.state.get_user_info()
@@ -75,12 +85,14 @@ class LevelActions:
                 config.NOTIFICATION_WEBHOOK_KEY,
                 config.NOTIFICATION_SOUND,
                 port=config.ADB_PORT,
-                username=username
+                username=username,
             )
 
         sys.exit(0)
 
-    def _find_and_click_level(self, level: str, ocr_results: List[Dict], screenshot) -> bool:
+    def _find_and_click_level(
+        self, level: str, ocr_results: List[Dict], screenshot
+    ) -> bool:
         """查找并点击指定等级
 
         Returns:
@@ -100,27 +112,27 @@ class LevelActions:
                 else:
                     continue
 
-            current_texts = set(item['text'].strip() for item in ocr_results)
+            current_texts = set(item["text"].strip() for item in ocr_results)
 
             # 在当前 OCR 结果中查找该等级
             for item in ocr_results:
-                text = item['text'].strip()
+                text = item["text"].strip()
                 if level in text:
-                    level_y = (item['box'][1] + item['box'][3]) // 2
+                    level_y = (item["box"][1] + item["box"][3]) // 2
 
                     for other_item in ocr_results:
-                        other_y = (other_item['box'][1] + other_item['box'][3]) // 2
+                        other_y = (other_item["box"][1] + other_item["box"][3]) // 2
                         if abs(other_y - level_y) < 150:
-                            other_text = other_item['text'].strip()
+                            other_text = other_item["text"].strip()
 
-                            if 'COMPLETE' in other_text.upper():
+                            if "COMPLETE" in other_text.upper():
                                 self.state.set_level_complete(level, True, notify=True)
                                 return False
 
-                            if re.search(r'\d+\s*/\s*\d+', other_text):
+                            if re.search(r"\d+\s*/\s*\d+", other_text):
                                 logger.info(f"  -> 选择等级: {level} ({other_text})")
                                 self.state.set_current_level(level)
-                                self.adb.tap_center(item['box'])
+                                self.adb.tap_center(item["box"])
                                 return True
 
             if attempt > 0 and current_texts == last_texts:
@@ -147,18 +159,18 @@ class LevelActions:
                 if screenshot:
                     ocr_results = self.recognizer.ocr_full_screen(screenshot)
 
-            current_texts = set(item['text'].strip() for item in ocr_results)
+            current_texts = set(item["text"].strip() for item in ocr_results)
 
             for item in ocr_results:
-                text = item['text'].strip()
+                text = item["text"].strip()
                 for level in config.BATTLE_LEVELS:
                     if level in text and level not in synced_levels:
-                        level_y = (item['box'][1] + item['box'][3]) // 2
+                        level_y = (item["box"][1] + item["box"][3]) // 2
                         is_complete = False
                         for other in ocr_results:
-                            other_y = (other['box'][1] + other['box'][3]) // 2
+                            other_y = (other["box"][1] + other["box"][3]) // 2
                             if abs(other_y - level_y) < 150:
-                                if 'COMPLETE' in other['text'].upper():
+                                if "COMPLETE" in other["text"].upper():
                                     is_complete = True
                                     break
                         if is_complete:

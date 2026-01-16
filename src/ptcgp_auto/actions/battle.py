@@ -3,8 +3,8 @@
 import time
 from typing import Dict, Callable
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 from .utils import go_back, find_auto_mode_button, find_text_by_variants
@@ -13,7 +13,9 @@ from .utils import go_back, find_auto_mode_button, find_text_by_variants
 class BattleActions:
     """对战相关动作处理"""
 
-    def __init__(self, adb, recognizer, state, should_switch_checker: Callable[[], bool]):
+    def __init__(
+        self, adb, recognizer, state, should_switch_checker: Callable[[], bool]
+    ):
         """
         Args:
             should_switch_checker: 检查是否应该切换等级的回调函数
@@ -65,7 +67,7 @@ class BattleActions:
             # 如果自动模式是 OFF，先点击开启
             if has_off:
                 logger.info("  -> 开启自动模式")
-                self.adb.tap_center(auto_item['box'])
+                self.adb.tap_center(auto_item["box"])
                 time.sleep(0.5)
 
         # 点击对战按钮
@@ -74,7 +76,8 @@ class BattleActions:
             # 首次进入对战时发送通知
             if not self.battle_started_notified:
                 if config.NOTIFICATION_ENABLED:
-                    from notifier import notify_battle_started
+                    from ptcgp_auto.notifier import notify_battle_started
+
                     level = self.state.get_current_level() or "未知"
                     username = None
                     if self.state.has_user_info():
@@ -84,7 +87,7 @@ class BattleActions:
                         level,
                         config.NOTIFICATION_SOUND,
                         port=config.ADB_PORT,
-                        username=username
+                        username=username,
                     )
                 self.battle_started_notified = True
 

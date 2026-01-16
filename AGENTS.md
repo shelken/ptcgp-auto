@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 使用中文描述所有 文档/注释/日志输出 方便开发人员理解
 - 解决问题时，执行命令前，思考当前的命令是否需要声明式配置以保证后续不再犯错，而不是直接执行
 - 必要时直接通过 `python debug_tool.py -a 127.0.0.1:[PORT] --template [template_name]` 查看当前页面的ocr内容和是否出现相应模板文件
+- add代码时，必须检查与本次有关的文件，不允许`add -A`
 
 ## 知识获取与整理原则
 

@@ -4,7 +4,7 @@ Supports WeCom (WeChat Work) webhook and macOS sound alerts
 """
 
 import subprocess
-from logger import get_logger
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 from urllib import request
@@ -23,19 +23,12 @@ def send_wecom_notification(key: str, message: str) -> bool:
         True if successful, False otherwise
     """
     url = f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
-    payload = {
-        "msgtype": "text",
-        "text": {
-            "content": message
-        }
-    }
+    payload = {"msgtype": "text", "text": {"content": message}}
 
     try:
         data = json.dumps(payload).encode("utf-8")
         req = request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"}
+            url, data=data, headers={"Content-Type": "application/json"}
         )
         with request.urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode("utf-8"))
@@ -43,7 +36,9 @@ def send_wecom_notification(key: str, message: str) -> bool:
                 logger.info("[Notify] WeCom notification sent")
                 return True
             else:
-                logger.error(f"[Notify] WeCom error: {result.get('errmsg', 'Unknown error')}")
+                logger.error(
+                    f"[Notify] WeCom error: {result.get('errmsg', 'Unknown error')}"
+                )
                 return False
     except Exception as e:
         logger.error(f"[Notify] Failed to send WeCom notification: {e}")
@@ -62,7 +57,7 @@ def play_sound() -> bool:
         subprocess.run(
             ["afplay", "/System/Library/Sounds/Glass.aiff"],
             check=True,
-            capture_output=True
+            capture_output=True,
         )
         logger.info("[Notify] Sound alert played")
         return True
@@ -70,9 +65,7 @@ def play_sound() -> bool:
         # Fallback: use osascript to trigger system beep
         try:
             subprocess.run(
-                ["osascript", "-e", "beep 2"],
-                check=True,
-                capture_output=True
+                ["osascript", "-e", "beep 2"], check=True, capture_output=True
             )
             logger.info("[Notify] Sound alert played (beep)")
             return True
@@ -84,7 +77,9 @@ def play_sound() -> bool:
         return False
 
 
-def notify_unrecognized(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
+def notify_unrecognized(
+    key: str, sound: bool = True, port: int = None, username: str = None
+) -> None:
     """
     Send notification for unrecognized screen state
 
@@ -108,7 +103,9 @@ def notify_unrecognized(key: str, sound: bool = True, port: int = None, username
         play_sound()
 
 
-def notify_level_complete(key: str, level: str, sound: bool = True, port: int = None, username: str = None) -> None:
+def notify_level_complete(
+    key: str, level: str, sound: bool = True, port: int = None, username: str = None
+) -> None:
     """
     发送等级完成通知
 
@@ -132,7 +129,9 @@ def notify_level_complete(key: str, level: str, sound: bool = True, port: int = 
         play_sound()
 
 
-def notify_completed(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
+def notify_completed(
+    key: str, sound: bool = True, port: int = None, username: str = None
+) -> None:
     """
     Send notification when all tasks are completed
 
@@ -156,7 +155,9 @@ def notify_completed(key: str, sound: bool = True, port: int = None, username: s
         play_sound()
 
 
-def notify_recovered(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
+def notify_recovered(
+    key: str, sound: bool = True, port: int = None, username: str = None
+) -> None:
     """发送识别恢复通知
 
     Args:
@@ -178,7 +179,9 @@ def notify_recovered(key: str, sound: bool = True, port: int = None, username: s
         play_sound()
 
 
-def notify_battle_started(key: str, level: str, sound: bool = True, port: int = None, username: str = None) -> None:
+def notify_battle_started(
+    key: str, level: str, sound: bool = True, port: int = None, username: str = None
+) -> None:
     """发送对战开始通知
 
     Args:
