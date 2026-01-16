@@ -114,7 +114,7 @@ class LevelActions:
                             other_text = other_item['text'].strip()
 
                             if 'COMPLETE' in other_text.upper():
-                                self.state.set_level_complete(level, True)
+                                self.state.set_level_complete(level, True, notify=True)
                                 return False
 
                             if re.search(r'\d+\s*/\s*\d+', other_text):

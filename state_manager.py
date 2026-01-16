@@ -116,13 +116,40 @@ class StateManager:
             return self.state["levels"][level].get("complete", False)
         return False
 
-    def set_level_complete(self, level: str, complete: bool = True):
-        """标记等级完成状态"""
+    def set_level_complete(self, level: str, complete: bool = True, notify: bool = False):
+        """标记等级完成状态
+
+        Args:
+            level: 等级名称
+            complete: 是否完成
+            notify: 是否发送通知（仅在实际完成对战时传 True，状态同步时不传）
+        """
         if level not in self.state["levels"]:
             self.state["levels"][level] = {"complete": False, "packs": {}}
+
+        # 检查是否是新完成的等级（之前未完成，现在完成）
+        was_complete = self.state["levels"][level].get("complete", False)
         self.state["levels"][level]["complete"] = complete
+
         if complete:
             logger.info(f"[状态] 等级 {level} 已标记为完成")
+
+            # 仅在实际完成时发送通知（非状态同步）
+            if notify and not was_complete:
+                import config
+                if config.NOTIFICATION_ENABLED:
+                    from notifier import notify_level_complete
+                    username = None
+                    if self.has_user_info():
+                        user = self.get_user_info()
+                        username = user.get("username")
+                    notify_level_complete(
+                        config.NOTIFICATION_WEBHOOK_KEY,
+                        level,
+                        config.NOTIFICATION_SOUND,
+                        port=config.ADB_PORT,
+                        username=username
+                    )
         self.save()
 
     def get_current_level(self) -> Optional[str]:
