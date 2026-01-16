@@ -101,6 +101,11 @@ class ActionHandler:
     def action_wait(self, screenshot, match_info: Dict):
         self._base.wait(screenshot, match_info)
 
+    def action_go_back(self, screenshot, match_info: Dict):
+        """返回上一页"""
+        from .utils import go_back
+        go_back(self.adb, self.recognizer, screenshot)
+
     # ==================== 辅助方法 ====================
 
     def _should_switch_to_higher_priority_level(self) -> bool:
