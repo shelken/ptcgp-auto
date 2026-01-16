@@ -258,6 +258,18 @@ class AdbController:
         except Exception as e:
             logger.error(f"返回键失败: {e}")
 
+    def force_stop_app(self, package_name: str):
+        """强制停止应用"""
+        if not self.device:
+            logger.error("设备未连接")
+            return
+
+        try:
+            self.device.shell(f"am force-stop {package_name}")
+            logger.info(f"已强制停止应用: {package_name}")
+        except Exception as e:
+            logger.error(f"停止应用失败: {e}")
+
     def save_screenshot(self, filename: str) -> Optional[str]:
         """保存截图到文件（用于调试）"""
         image = self.screenshot()

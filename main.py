@@ -198,6 +198,8 @@ class PTCGPAuto:
                             username=username
                         )
                         self.unrecognized_notified = True
+                    # 强制停止应用
+                    self.adb.force_stop_app(config.PTCGP_PACKAGE_NAME)
                     no_action_count = 0
                 time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
 
