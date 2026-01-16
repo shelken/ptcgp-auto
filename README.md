@@ -24,6 +24,15 @@ Pokemon TCG Pocket 单人对战自动化脚本，支持任何可通过 ADB 连�
 - 自动单人对战（分级对战）
 - 按优先级自动遍历等级和卡包
 - 支持多设备同时控制
+- **每日开包模式**（开发中）- 自动轮换账号开免费包
+
+## 运行模式
+
+| 模式 | 命令 | 说明 |
+|------|------|------|
+| 对战模式 | `python main.py` | 默认模式，自动单人对战 |
+| 教程模式 | `python main.py -t` | 解锁单人对战的教程流程 |
+| 每日开包 | `python main.py --daily` | 轮换账号开免费包（需 root） |
 
 ## 技术栈
 
@@ -120,12 +129,26 @@ ptcgp-auto/
 │       │       ├── ocr_helpers.py  # OCR 工具
 │       │       └── navigation.py   # 导航工具
 │       ├── adb_controller.py   # ADB 控制
-│       ├── config.py           # 配置
+│       ├── config.py           # 配置（含模式加载）
+│       ├── daily/              # 每日开包模块
+│       │   ├── __init__.py
+│       │   ├── runner.py       # 每日模式运行器
+│       │   └── pack_opener.py  # 开包逻辑
+│       ├── db/                 # 数据库模块
+│       │   ├── __init__.py
+│       │   └── account_db.py   # 账号数据库
 │       ├── debug_tools/        # 调试工具实现
 │       ├── device_discovery.py # 设备发现
 │       ├── locales/            # 多语言配置
-│       │   ├── zh_Hant.py      # 繁体中文
-│       │   └── en_US.py        # 英文
+│       │   ├── zh_Hant.py          # 繁体中文主配置
+│       │   ├── zh_Hant_pages/      # 繁体中文页面配置
+│       │   │   ├── __init__.py     # 导出所有页面组
+│       │   │   ├── common.py       # 通用页面
+│       │   │   ├── user_info.py    # 用户信息页面
+│       │   │   ├── battle.py       # 对战模式页面
+│       │   │   ├── tutorial.py     # 教程模式页面
+│       │   │   └── daily.py        # 开包模式页面
+│       │   └── en_US.py            # 英文配置
 │       ├── logger.py           # 日志
 │       ├── notifier.py         # 通知
 │       ├── page_detector.py    # 页面检测器
@@ -133,7 +156,10 @@ ptcgp-auto/
 │       ├── recognizer_parts/   # 识别器拆分模块
 │       ├── settings.py         # 运行时配置
 │       ├── state_manager.py    # 状态管理
-│       └── utils.py            # 工具函数
+│       ├── utils.py            # 工具函数
+│       └── xml/                # XML 账号管理模块
+│           ├── __init__.py
+│           └── account_xml.py  # XML 文件操作
 ├── templates/              # 模板图片
 └── docs/                   # 文档
 ```

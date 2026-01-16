@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 必要时直接通过 `python debug_tool.py -a 127.0.0.1:[PORT] --template [template_name]` 查看当前页面的ocr内容和是否出现相应模板文件
 - add代码时，必须检查与本次有关的文件，不允许`add -A`
 - 在coding阶段，一定要懂得模块化设计，高内聚低耦合原则，单代码文件最多不要超过500行
+- **当代码结构变更时，对应更新 README 和 CLAUDE.md（本文件）**
 
 ## 知识获取与整理原则
 
@@ -58,8 +59,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - `text.py` - 文本处理
     - `color.py` - 颜色处理
   - `locales/` - 多语言配置
-    - `zh_Hant.py` - 繁体中文
+    - `zh_Hant.py` - 繁体中文主配置
+    - `zh_Hant_pages/` - 繁体中文页面配置（按模式分离）
+      - `common.py` - 通用页面
+      - `user_info.py` - 用户信息页面
+      - `battle.py` - 对战模式页面
+      - `tutorial.py` - 教程模式页面
+      - `daily.py` - 开包模式页面
     - `en_US.py` - 英文
+  - `db/` - 数据库模块（每日开包功能）
+    - `connection.py` - SQLite 连接管理
+    - `models.py` - 数据模型
+    - `repository.py` - 数据访问层
+  - `xml/` - XML 账号操作（每日开包功能）
+    - `extractor.py` - 账号提取
+    - `injector.py` - 账号注入
+  - `daily/` - 每日开包模块
+    - `runner.py` - 多设备并行运行器
+    - `account_manager.py` - 账号管理
+    - `pack_opener.py` - 开包执行器
+    - `root_checker.py` - Root 检测
   - `debug_tools/` - 调试工具实现
 - `debug_tool.py` - 调试工具入口
 - `templates/` - 按钮模板图片
@@ -74,7 +93,7 @@ ptcgp-auto/
 │   └── ptcgp_auto/
 │       ├── __init__.py
 │       ├── adb_controller.py   # ADB 控制
-│       ├── config.py           # 配置
+│       ├── config.py           # 配置 + 模式加载
 │       ├── device_discovery.py # 设备发现
 │       ├── logger.py           # 日志
 │       ├── notifier.py         # 通知
@@ -84,7 +103,7 @@ ptcgp-auto/
 │       ├── state_manager.py    # 状态管理
 │       ├── utils.py            # 工具函数
 │       ├── actions/            # 动作处理器模块
-│       │   ├── __init__.py         # 导出 ActionHandler
+│       │   ├── __init__.py
 │       │   ├── handler.py          # 门面类
 │       │   ├── base.py             # 基础动作
 │       │   ├── battle.py           # 对战动作
@@ -95,21 +114,23 @@ ptcgp-auto/
 │       │   ├── user.py             # 用户信息
 │       │   ├── tutorial.py         # 教程
 │       │   └── utils/              # 工具模块
-│       │       ├── scroll.py           # 滚动辅助
-│       │       ├── ocr_helpers.py      # OCR 工具
-│       │       └── navigation.py       # 导航工具
 │       ├── recognizer_parts/   # 识别器拆分模块
-│       │   ├── ocr.py
-│       │   ├── template_matcher.py
-│       │   ├── text.py
-│       │   └── color.py
 │       ├── locales/            # 多语言配置
-│       │   ├── zh_Hant.py
+│       │   ├── zh_Hant.py          # 繁体中文主配置
+│       │   ├── zh_Hant_pages/      # 页面配置（按模式分离）
+│       │   │   ├── common.py       # 通用页面
+│       │   │   ├── battle.py       # 对战模式
+│       │   │   ├── tutorial.py     # 教程模式
+│       │   │   └── daily.py        # 开包模式
 │       │   └── en_US.py
+│       ├── db/                 # 数据库模块
+│       ├── xml/                # XML 账号操作
+│       ├── daily/              # 每日开包模块
 │       └── debug_tools/        # 调试工具实现
 ├── templates/                  # 模板图片
 └── docs/                       # 文档
-    ├── design.md
+    ├── 01-daily-pack-feature.md
+    ├── 02-pack-opener-logic.md
     └── refs/                   # 参考资料
 ```
 
@@ -182,7 +203,24 @@ rm /tmp/ptcgp_auto_5555/state.json
 关键配置项（config.py）：
 - `BATTLE_LEVELS` - 等级遍历顺序（默认精英→初级）
 - `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔
-- `PAGES` - 界面识别规则（优先级、标识符、动作）
+- `PAGES` - 界面识别规则（由 `load_mode()` 动态加载）
+- `CURRENT_MODE` - 当前运行模式（battle/tutorial/daily）
+
+### 模式系统
+
+支持三种运行模式，每种模式加载不同的页面配置：
+
+| 模式 | 入口参数 | 页面数 | 说明 |
+|------|----------|--------|------|
+| `battle` | 默认 | 26 | 自动对战（含教程检测） |
+| `tutorial` | `-t` | 8 | 教程解锁模式 |
+| `daily` | `--daily` | 10+ | 每日开包模式 |
+
+切换模式：
+```python
+from ptcgp_auto import config
+config.load_mode("daily")  # 加载每日开包模式的页面
+```
 
 ## 调试技巧
 
@@ -193,7 +231,11 @@ rm /tmp/ptcgp_auto_5555/state.json
 
 ## 扩展新页面
 
-1. 在 `config.py` 的 `PAGES` 中添加识别规则（identifiers/templates、action、priority）
+1. 根据页面所属模式，在 `locales/zh_Hant_pages/` 对应文件中添加页面定义
+   - `common.py` - 所有模式共享的页面
+   - `battle.py` - 对战模式专用
+   - `tutorial.py` - 教程模式专用
+   - `daily.py` - 开包模式专用
 2. 在 `actions/` 对应模块中实现动作方法，并在 `actions/handler.py` 中添加委托方法
 
 ## 注意事项
