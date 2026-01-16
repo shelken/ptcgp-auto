@@ -57,6 +57,33 @@ CONFIG_DEFS: List[Tuple[str, str, type, Any, str, Optional[str], Optional[list]]
         "--exclude",
         None,
     ),
+    (
+        "daily",
+        "DAILY_MODE",
+        bool,
+        False,
+        "每日开包模式：自动轮换所有账号开免费包",
+        "--daily",
+        None,
+    ),
+    (
+        "db_path",
+        "DB_PATH",
+        str,
+        "",
+        "SQLite 数据库文件路径（默认: ~/.ptcgp_auto/accounts.db）",
+        "--db-path",
+        None,
+    ),
+    (
+        "xml_dir",
+        "XML_DIR",
+        str,
+        "",
+        "账号 XML 文件存储目录（默认: ~/.ptcgp_auto/accounts/）",
+        "--xml-dir",
+        None,
+    ),
 ]
 
 
