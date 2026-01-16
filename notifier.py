@@ -108,6 +108,30 @@ def notify_unrecognized(key: str, sound: bool = True, port: int = None, username
         play_sound()
 
 
+def notify_level_complete(key: str, level: str, sound: bool = True, port: int = None, username: str = None) -> None:
+    """
+    发送等级完成通知
+
+    Args:
+        key: WeCom webhook key
+        level: 完成的等级名称
+        sound: 是否播放提示音
+        port: ADB 端口
+        username: 用户名
+    """
+    device_info = f"端口: {port}" if port else ""
+    if username:
+        device_info += f" | 用户: {username}" if device_info else f"用户: {username}"
+
+    message = f"[PTCGP Auto] {device_info}\n✅ 等级 {level} 已完成！"
+
+    if key:
+        send_wecom_notification(key, message)
+
+    if sound:
+        play_sound()
+
+
 def notify_completed(key: str, sound: bool = True, port: int = None, username: str = None) -> None:
     """
     Send notification when all tasks are completed
