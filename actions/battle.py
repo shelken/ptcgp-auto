@@ -22,6 +22,7 @@ class BattleActions:
         self.recognizer = recognizer
         self.state = state
         self._should_switch_to_higher_priority_level = should_switch_checker
+        self.battle_started_notified = False
 
     def start_battle(self, screenshot, match_info: Dict, needs_state_init: bool):
         """开始对战 - 先开启自动，再点击对战按钮
@@ -70,6 +71,23 @@ class BattleActions:
         # 点击对战按钮
         battle_box = match_info.get("box")
         if battle_box:
+            # 首次进入对战时发送通知
+            if not self.battle_started_notified:
+                if config.NOTIFICATION_ENABLED:
+                    from notifier import notify_battle_started
+                    level = self.state.get_current_level() or "未知"
+                    username = None
+                    if self.state.has_user_info():
+                        username = self.state.get_user_info().get("username")
+                    notify_battle_started(
+                        config.NOTIFICATION_WEBHOOK_KEY,
+                        level,
+                        config.NOTIFICATION_SOUND,
+                        port=config.ADB_PORT,
+                        username=username
+                    )
+                self.battle_started_notified = True
+
             logger.info("  -> 点击对战")
             self.adb.tap_center(battle_box)
 

@@ -154,3 +154,26 @@ def notify_completed(key: str, sound: bool = True, port: int = None, username: s
 
     if sound:
         play_sound()
+
+
+def notify_battle_started(key: str, level: str, sound: bool = True, port: int = None, username: str = None) -> None:
+    """发送对战开始通知
+
+    Args:
+        key: WeCom webhook key
+        level: 当前等级
+        sound: 是否播放提示音
+        port: ADB 端口
+        username: 用户名
+    """
+    device_info = f"端口: {port}" if port else ""
+    if username:
+        device_info += f" | 用户: {username}" if device_info else f"用户: {username}"
+
+    message = f"[PTCGP Auto] {device_info}\n🎮 开始刷包 - 当前等级: {level}"
+
+    if key:
+        send_wecom_notification(key, message)
+
+    if sound:
+        play_sound()
