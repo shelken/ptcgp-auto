@@ -18,6 +18,14 @@ def auto_detect_components(adb):
         print("✗ 截图失败")
         return
 
+    # 分辨率检查：所有素材必须在 1080p 下截图
+    width, height = img.size
+    if not ((width == 1080 and height == 1920) or (width == 1920 and height == 1080)):
+        print(f"✗ 分辨率不符合要求: {width}x{height}")
+        print("  所有素材必须在 1080p (1080x1920 或 1920x1080) 下截图")
+        print("  请调整模拟器分辨率后重试")
+        return
+
     debug_dir = context.get_debug_dir()
 
     img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
