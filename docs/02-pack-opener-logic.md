@@ -141,13 +141,24 @@ python debug_tool.py -a 5705 --crop-pack
 - **ROI 缓存**：记住上次选区，快速复用相同区域截取多个模板
 - **模板存在状态**：子包列表显示 `[✓]`/`[✗]` 标记模板文件是否存在
 - **批量检测模式**：输入 `d` 一次截图批量匹配所有子包，显示置信度和匹配结果
+- **多尺度匹配**：输入 `s` 设置缩放比例，支持自动计算（输入 `c`）
 - **终端图片预览**：支持 Kitty 终端直接预览截取的模板（使用 `kitten icat`）
 - **即时验证**：保存后立即重新加载模板并验证匹配
+
+**卡包模板缩放比例配置** (`config.py`):
+```python
+PACK_TEMPLATE_SCALES = {
+    "pack_list": 0.22,      # 扩充包列表页（很小）
+    "pack_select": 0.81,    # 子包选择页（中等）
+    "pack_detail": 1.0,     # 单包详情页（最大）
+}
+```
 
 实现文件：
 - `src/ptcgp_auto/debug_tools/region_selector.py` - 区域选择和 ROI 缓存
 - `src/ptcgp_auto/debug_tools/crop_pack.py` - 卡包模板截取主逻辑
 - `src/ptcgp_auto/debug_tools/terminal_preview.py` - Kitty 终端图片预览
+- `src/ptcgp_auto/recognizer_parts/template_matcher.py` - 多尺度模板匹配
 
 ### 3.5 免费包机制
 
