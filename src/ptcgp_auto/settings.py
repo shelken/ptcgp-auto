@@ -65,7 +65,7 @@ def load_dotenv() -> None:
     Load .env file into os.environ.
     Uses setdefault so existing env vars are NOT overridden.
     """
-    env_path = Path(__file__).parent / ".env"
+    env_path = Path.cwd() / ".env"
     if not env_path.exists():
         return
 

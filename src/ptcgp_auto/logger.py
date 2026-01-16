@@ -20,6 +20,7 @@ _port_colors: dict[str, str] = {}
 _port = "----"
 _port_color = "white"
 _username = ""
+_level = ""
 _initialized = False
 
 
@@ -63,15 +64,17 @@ def _format(record):
     """自定义格式"""
     port = record["extra"].get("port", _port)
     username = record["extra"].get("username", _username)
+    level = record["extra"].get("level", _level)
     color = record["extra"].get("port_color", _port_color)
 
     port_part = _format_color_tag(color, f"[{port}]")
     user_part = _format_color_tag(color, username) + " " if username else ""
+    level_part = _format_color_tag(color, f"[{level}]") + " " if level else ""
 
     return (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <5}</level> | "
-        f"{port_part} {user_part}| "
+        f"{port_part} {user_part}{level_part}| "
         "<level>{message}</level>\n"
     )
 
@@ -124,6 +127,12 @@ def set_username(username: str):
     """设置当前上下文的用户名"""
     global _username
     _username = username
+
+
+def set_level(level: str):
+    """设置当前上下文的等级"""
+    global _level
+    _level = level if level else ""
 
 
 def get_logger(name: str = None):
