@@ -5,18 +5,26 @@ PTCGP 单人对战自动化脚本 - 主入口
 import sys
 import subprocess
 import time
+from pathlib import Path
 
-import config
-from utils import get_data_dir
-from adb_controller import AdbController
-from recognizer import get_recognizer
-from state_manager import get_state_manager
-from page_detector import PageDetector
-from actions import ActionHandler
-from notifier import notify_unrecognized, notify_recovered
-from settings import load_settings, apply_settings_to_config, print_active_settings
-from device_discovery import discover_devices
-from logger import setup_logging, set_username, get_logger, allocate_colors
+ROOT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT_DIR / "src"))
+
+from ptcgp_auto import config
+from ptcgp_auto.utils import get_data_dir
+from ptcgp_auto.adb_controller import AdbController
+from ptcgp_auto.recognizer import get_recognizer
+from ptcgp_auto.state_manager import get_state_manager
+from ptcgp_auto.page_detector import PageDetector
+from ptcgp_auto.actions import ActionHandler
+from ptcgp_auto.notifier import notify_unrecognized, notify_recovered
+from ptcgp_auto.settings import (
+    load_settings,
+    apply_settings_to_config,
+    print_active_settings,
+)
+from ptcgp_auto.device_discovery import discover_devices
+from ptcgp_auto.logger import setup_logging, set_username, get_logger, allocate_colors
 
 logger = get_logger(__name__)
 
@@ -71,7 +79,9 @@ class PTCGPAuto:
                 self.action_handler.execute("click_friends_tab", screenshot, match_info)
             elif page_name == "game_home_main":
                 # 点击社群图标
-                box = self.recognizer.find_template(screenshot, "icon_community", threshold=0.7)
+                box = self.recognizer.find_template(
+                    screenshot, "icon_community", threshold=0.7
+                )
                 if box:
                     logger.debug("  -> 点击社群图标")
                     self.adb.tap_center(box)
@@ -81,7 +91,9 @@ class PTCGPAuto:
                 self.action_handler.execute("click_identifier", screenshot, match_info)
             else:
                 # 其他页面，尝试查找社群图标
-                box = self.recognizer.find_template(screenshot, "icon_community", threshold=0.7)
+                box = self.recognizer.find_template(
+                    screenshot, "icon_community", threshold=0.7
+                )
                 if box:
                     logger.debug("  -> 点击社群图标")
                     self.adb.tap_center(box)
@@ -119,7 +131,7 @@ class PTCGPAuto:
         # 显示用户信息并设置日志上下文
         if self.state.has_user_info():
             user = self.state.get_user_info()
-            set_username(user['username'])
+            set_username(user["username"])
             logger.info(f"用户: {user['username']} ({user['friend_id']})")
 
         logger.info("开始自动化流程...")
@@ -128,7 +140,8 @@ class PTCGPAuto:
             if tutorial_mode:
                 # 先进入教程模式
                 logger.info("提示: 教程解锁模式")
-                from actions.tutorial import TutorialRunner
+                from ptcgp_auto.actions.tutorial import TutorialRunner
+
                 runner = TutorialRunner(self.adb, self.recognizer)
                 runner.run()
                 logger.info("教程完成，进入正常对战流程...")
@@ -143,6 +156,7 @@ class PTCGPAuto:
             logger.error(f"发生错误: {e}")
             if config.DEBUG:
                 import traceback
+
                 traceback.print_exc()
         finally:
             self.state.save()
@@ -176,7 +190,7 @@ class PTCGPAuto:
                         config.NOTIFICATION_WEBHOOK_KEY,
                         config.NOTIFICATION_SOUND,
                         port=self.port,
-                        username=username
+                        username=username,
                     )
                 self.unrecognized_notified = False
                 logger.info(f"[界面] {page_name}")
@@ -206,7 +220,7 @@ class PTCGPAuto:
                             config.NOTIFICATION_WEBHOOK_KEY,
                             config.NOTIFICATION_SOUND,
                             port=self.port,
-                            username=username
+                            username=username,
                         )
                         self.unrecognized_notified = True
                     # 强制停止应用

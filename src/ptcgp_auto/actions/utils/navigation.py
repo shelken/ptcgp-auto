@@ -2,8 +2,8 @@
 
 from typing import List, Dict
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -28,9 +28,9 @@ def close_popup(adb, recognizer, screenshot, ocr_results: List[Dict]):
     """
     # 尝试 OCR 查找 X 按钮
     for item in ocr_results:
-        text = item['text'].strip()
-        if text in ['×', 'X', 'x', '✕']:
-            adb.tap_center(item['box'])
+        text = item["text"].strip()
+        if text in ["×", "X", "x", "✕"]:
+            adb.tap_center(item["box"])
             return
 
     # 尝试模板匹配
@@ -50,9 +50,9 @@ def detect_and_close_popup(adb, ocr_results: List[Dict]) -> bool:
     与 close_popup 不同，close_popup 用于关闭 X 按钮类型的弹窗。
     """
     for item in ocr_results:
-        text = item['text'].strip()
+        text = item["text"].strip()
         if text in config.POPUP_BUTTONS:
             logger.info(f"  -> 检测到弹窗按钮 '{text}'，点击关闭")
-            adb.tap_center(item['box'])
+            adb.tap_center(item["box"])
             return True
     return False

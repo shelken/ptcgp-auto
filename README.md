@@ -101,30 +101,41 @@ rm /tmp/ptcgp_auto_5555/state.json
 
 ```
 ptcgp-auto/
-├── main.py             # 主程序入口
-├── actions/            # 动作处理器模块
-│   ├── __init__.py     # 导出 ActionHandler
-│   ├── handler.py      # 门面类
-│   ├── base.py         # 基础动作
-│   ├── battle.py       # 对战动作
-│   ├── level.py        # 等级选择
-│   ├── deck.py         # 牌组列表
-│   ├── expansion.py    # 扩充组选择
-│   ├── home.py         # 主页动作
-│   └── utils/          # 工具模块
-│       ├── scroll.py       # 滚动辅助
-│       ├── ocr_helpers.py  # OCR 工具
-│       └── navigation.py   # 导航工具
-├── page_detector.py    # 页面检测器
-├── state_manager.py    # 状态管理
-├── adb_controller.py   # ADB 控制
-├── recognizer.py       # OCR + 模板匹配
-├── config.py           # 配置
-├── locales/            # 多语言配置
-│   ├── zh_Hant.py      # 繁体中文
-│   └── en_US.py        # 英文
-├── debug_tool.py       # 调试工具
-└── templates/          # 模板图片
+├── main.py                 # 主程序入口
+├── debug_tool.py           # 调试工具入口
+├── src/
+│   └── ptcgp_auto/
+│       ├── __init__.py
+│       ├── actions/        # 动作处理器模块
+│       │   ├── __init__.py     # 导出 ActionHandler
+│       │   ├── handler.py      # 门面类
+│       │   ├── base.py         # 基础动作
+│       │   ├── battle.py       # 对战动作
+│       │   ├── level.py        # 等级选择
+│       │   ├── deck.py         # 牌组列表
+│       │   ├── expansion.py    # 扩充组选择
+│       │   ├── home.py         # 主页动作
+│       │   └── utils/          # 工具模块
+│       │       ├── scroll.py       # 滚动辅助
+│       │       ├── ocr_helpers.py  # OCR 工具
+│       │       └── navigation.py   # 导航工具
+│       ├── adb_controller.py   # ADB 控制
+│       ├── config.py           # 配置
+│       ├── debug_tools/        # 调试工具实现
+│       ├── device_discovery.py # 设备发现
+│       ├── locales/            # 多语言配置
+│       │   ├── zh_Hant.py      # 繁体中文
+│       │   └── en_US.py        # 英文
+│       ├── logger.py           # 日志
+│       ├── notifier.py         # 通知
+│       ├── page_detector.py    # 页面检测器
+│       ├── recognizer.py       # OCR + 模板匹配
+│       ├── recognizer_parts/   # 识别器拆分模块
+│       ├── settings.py         # 运行时配置
+│       ├── state_manager.py    # 状态管理
+│       └── utils.py            # 工具函数
+├── templates/              # 模板图片
+└── docs/                   # 文档
 ```
 
 ## 注意事项

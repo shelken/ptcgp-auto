@@ -3,7 +3,7 @@
 import re
 from typing import List, Dict, Optional, Tuple
 
-import config
+from ptcgp_auto import config
 
 
 def find_text_by_variants(ocr_results: List[Dict], pattern_key: str) -> Optional[Dict]:
@@ -18,7 +18,7 @@ def find_text_by_variants(ocr_results: List[Dict], pattern_key: str) -> Optional
     """
     patterns = config.TEXT_PATTERNS.get(pattern_key, [])
     for item in ocr_results:
-        text = item['text'].strip()
+        text = item["text"].strip()
         for pattern in patterns:
             if pattern in text:
                 return item
@@ -30,7 +30,7 @@ def find_all_by_variants(ocr_results: List[Dict], pattern_key: str) -> List[Dict
     patterns = config.TEXT_PATTERNS.get(pattern_key, [])
     results = []
     for item in ocr_results:
-        text = item['text'].strip()
+        text = item["text"].strip()
         for pattern in patterns:
             if pattern in text:
                 results.append(item)
@@ -47,16 +47,14 @@ def extract_progress(text: str) -> Optional[Tuple[int, int]]:
     Returns:
         (current, total) 元组，或 None
     """
-    match = re.search(r'(\d+)\s*/\s*(\d+)', text)
+    match = re.search(r"(\d+)\s*/\s*(\d+)", text)
     if match:
         return int(match.group(1)), int(match.group(2))
     return None
 
 
 def find_items_on_same_row(
-    ocr_results: List[Dict],
-    reference_y: int,
-    tolerance: int = 150
+    ocr_results: List[Dict], reference_y: int, tolerance: int = 150
 ) -> List[Dict]:
     """查找与参考 Y 坐标在同一行的所有项目
 
@@ -70,7 +68,7 @@ def find_items_on_same_row(
     """
     results = []
     for item in ocr_results:
-        item_y = (item['box'][1] + item['box'][3]) // 2
+        item_y = (item["box"][1] + item["box"][3]) // 2
         if abs(item_y - reference_y) < tolerance:
             results.append(item)
     return results
@@ -90,14 +88,14 @@ def group_by_row(ocr_results: List[Dict], tolerance: int = 100) -> List[List[Dic
         return []
 
     # 按 Y 坐标排序
-    items = sorted(ocr_results, key=lambda x: (x['box'][1] + x['box'][3]) // 2)
+    items = sorted(ocr_results, key=lambda x: (x["box"][1] + x["box"][3]) // 2)
 
     rows = []
     current_row = []
     row_start_y = None
 
     for item in items:
-        item_y = (item['box'][1] + item['box'][3]) // 2
+        item_y = (item["box"][1] + item["box"][3]) // 2
         if row_start_y is None or abs(item_y - row_start_y) < tolerance:
             current_row.append(item)
             if row_start_y is None:
@@ -105,13 +103,13 @@ def group_by_row(ocr_results: List[Dict], tolerance: int = 100) -> List[List[Dic
         else:
             if current_row:
                 # 按 X 坐标排序
-                current_row.sort(key=lambda x: (x['box'][0] + x['box'][2]) // 2)
+                current_row.sort(key=lambda x: (x["box"][0] + x["box"][2]) // 2)
                 rows.append(current_row)
             current_row = [item]
             row_start_y = item_y
 
     if current_row:
-        current_row.sort(key=lambda x: (x['box'][0] + x['box'][2]) // 2)
+        current_row.sort(key=lambda x: (x["box"][0] + x["box"][2]) // 2)
         rows.append(current_row)
 
     return rows
@@ -132,13 +130,13 @@ def find_auto_mode_button(ocr_results: List[Dict]) -> Optional[Tuple[Dict, bool]
     has_off = False
 
     for item in ocr_results:
-        text = item['text'].strip()
+        text = item["text"].strip()
         text_upper = text.upper()
         for pattern in auto_patterns:
             if pattern in text or pattern.upper() in text_upper:
                 auto_item = item
                 break
-        if 'OFF' in text_upper:
+        if "OFF" in text_upper:
             has_off = True
 
     if auto_item:

@@ -3,7 +3,7 @@
 import re
 from typing import Dict, Optional, Tuple
 
-from logger import get_logger
+from ptcgp_auto.logger import get_logger
 from .utils import find_text_by_variants
 
 logger = get_logger(__name__)
@@ -73,11 +73,11 @@ class UserActions:
 
         # 查找并点击"朋友"标签
         for item in ocr_results:
-            text = item['text'].strip()
+            text = item["text"].strip()
             # 精确匹配"朋友"，排除"朋友ID"、"朋友數"等
             if text == "朋友" or text == "好友":
                 logger.info(f"  -> 点击: {text}")
-                self.adb.tap_center(item['box'])
+                self.adb.tap_center(item["box"])
                 return
 
         logger.info("  -> 未找到朋友标签，点击对战图标")
@@ -99,11 +99,11 @@ class UserActions:
         friend_id = None
 
         # 朋友 ID 格式：XXXX-XXXX-XXXX-XXXX（4组4位数字）
-        friend_id_pattern = re.compile(r'\d{4}-\d{4}-\d{4}-\d{4}')
+        friend_id_pattern = re.compile(r"\d{4}-\d{4}-\d{4}-\d{4}")
 
         # 提取朋友 ID
         for item in ocr_results:
-            text = item['text'].strip()
+            text = item["text"].strip()
             match = friend_id_pattern.search(text)
             if match:
                 friend_id = match.group()
@@ -114,8 +114,8 @@ class UserActions:
         title_y = None
 
         for item in ocr_results:
-            text = item['text'].strip()
-            y = item['box'][1]  # top y
+            text = item["text"].strip()
+            y = item["box"][1]  # top y
 
             if "朋友ID" in text or "朋友 ID" in text or "Friend ID" in text:
                 friend_id_label_y = y
@@ -126,14 +126,22 @@ class UserActions:
         if title_y is not None:
             candidates = []
             for item in ocr_results:
-                text = item['text'].strip()
-                y = item['box'][1]
+                text = item["text"].strip()
+                y = item["box"][1]
 
                 # 排除已知标签和 ID
                 skip_patterns = [
-                    "玩家資訊", "玩家资讯", "Player Info",
-                    "朋友ID", "朋友 ID", "Friend ID",
-                    "您的", "Your", "搜尋", "輸入", "僅限"
+                    "玩家資訊",
+                    "玩家资讯",
+                    "Player Info",
+                    "朋友ID",
+                    "朋友 ID",
+                    "Friend ID",
+                    "您的",
+                    "Your",
+                    "搜尋",
+                    "輸入",
+                    "僅限",
                 ]
                 if any(skip in text for skip in skip_patterns):
                     continue

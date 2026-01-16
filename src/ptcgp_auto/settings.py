@@ -8,7 +8,7 @@ import argparse
 from pathlib import Path
 from typing import Any, List, Tuple, Optional
 
-from logger import get_logger
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -18,13 +18,45 @@ CONFIG_DEFS: List[Tuple[str, str, type, Any, str, Optional[str], Optional[list]]
     ("address", "ADDRESS", str, None, "ADB 连接地址 (host:port 或 port)", "-a", None),
     ("language", "LANGUAGE", str, "zh_Hant", "界面语言", "-l", ["zh_Hant", "en_US"]),
     ("tutorial", "TUTORIAL", bool, False, "教程模式", "-t", None),
-    ("log_level", "LOG_LEVEL", str, "INFO", "日志级别", "--log-level", ["DEBUG", "INFO", "WARNING", "ERROR"]),
-    ("log_color", "LOG_COLOR", str, None, "日志端口颜色（由父进程分配）", "--log-color", None),
+    (
+        "log_level",
+        "LOG_LEVEL",
+        str,
+        "INFO",
+        "日志级别",
+        "--log-level",
+        ["DEBUG", "INFO", "WARNING", "ERROR"],
+    ),
+    (
+        "log_color",
+        "LOG_COLOR",
+        str,
+        None,
+        "日志端口颜色（由父进程分配）",
+        "--log-color",
+        None,
+    ),
     ("no_auto_battle", "NO_AUTO_BATTLE", bool, False, "禁用自动对战", None, None),
     ("notify_key", "NOTIFY_KEY", str, "", "企业微信 webhook key", None, None),
     ("no_notify_sound", "NO_NOTIFY_SOUND", bool, False, "禁用通知声音", None, None),
-    ("all", "ALL_DEVICES", bool, False, "自动发现并控制所有运行中的设备", "--all", None),
-    ("exclude", "EXCLUDE_PORTS", str, "", "排除的端口列表（逗号分隔，如 5555,5715）", "--exclude", None),
+    (
+        "all",
+        "ALL_DEVICES",
+        bool,
+        False,
+        "自动发现并控制所有运行中的设备",
+        "--all",
+        None,
+    ),
+    (
+        "exclude",
+        "EXCLUDE_PORTS",
+        str,
+        "",
+        "排除的端口列表（逗号分隔，如 5555,5715）",
+        "--exclude",
+        None,
+    ),
 ]
 
 
@@ -129,7 +161,7 @@ def load_settings() -> dict:
 
 def apply_settings_to_config(settings: dict) -> None:
     """Apply loaded settings to config module - only override explicitly set values."""
-    import config
+    from ptcgp_auto import config
 
     # Address - 只有显式设置时才覆盖
     if "address" in settings:

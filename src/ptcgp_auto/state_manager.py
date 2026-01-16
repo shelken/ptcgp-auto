@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -24,7 +24,7 @@ class StateManager:
         """加载状态文件"""
         if self.state_file.exists():
             try:
-                with open(self.state_file, 'r', encoding='utf-8') as f:
+                with open(self.state_file, "r", encoding="utf-8") as f:
                     state = json.load(f)
 
                     # 检查语言是否一致，不一致则重置
@@ -80,14 +80,14 @@ class StateManager:
             "current_level": None,  # 当前正在处理的等级
             "current_series": config.SERIES[0] if config.SERIES else "A",  # 当前系列
             "user": None,  # 用户信息：{username, friend_id, fetched_at}
-            "levels": {}
+            "levels": {},
         }
 
         # 为每个等级创建状态
         for level in config.BATTLE_LEVELS:
             state["levels"][level] = {
                 "complete": False,  # 是否显示 Complete
-                "packs": {}  # 卡包完成状态
+                "packs": {},  # 卡包完成状态
             }
 
         return state
@@ -96,7 +96,7 @@ class StateManager:
         """保存状态到文件"""
         self.state["last_updated"] = datetime.now().isoformat()
         try:
-            with open(self.state_file, 'w', encoding='utf-8') as f:
+            with open(self.state_file, "w", encoding="utf-8") as f:
                 json.dump(self.state, f, ensure_ascii=False, indent=2)
             logger.debug(f"状态已保存: {self.state_file}")
         except Exception as e:
@@ -116,7 +116,9 @@ class StateManager:
             return self.state["levels"][level].get("complete", False)
         return False
 
-    def set_level_complete(self, level: str, complete: bool = True, notify: bool = False):
+    def set_level_complete(
+        self, level: str, complete: bool = True, notify: bool = False
+    ):
         """标记等级完成状态
 
         Args:
@@ -136,9 +138,11 @@ class StateManager:
 
             # 仅在实际完成时发送通知（非状态同步）
             if notify and not was_complete:
-                import config
+                from ptcgp_auto import config
+
                 if config.NOTIFICATION_ENABLED:
-                    from notifier import notify_level_complete
+                    from ptcgp_auto.notifier import notify_level_complete
+
                     username = None
                     if self.has_user_info():
                         user = self.get_user_info()
@@ -148,7 +152,7 @@ class StateManager:
                         level,
                         config.NOTIFICATION_SOUND,
                         port=config.ADB_PORT,
-                        username=username
+                        username=username,
                     )
         self.save()
 
@@ -230,7 +234,7 @@ class StateManager:
         self.state["user"] = {
             "username": username,
             "friend_id": friend_id,
-            "fetched_at": datetime.now().isoformat()
+            "fetched_at": datetime.now().isoformat(),
         }
         logger.info(f"[状态] 已保存用户信息: {username} ({friend_id})")
         self.save()
@@ -258,7 +262,11 @@ class StateManager:
             complete = "✓ Complete" if level_state.get("complete") else "进行中"
             packs = level_state.get("packs", {})
             # 兼容新旧格式：新格式直接是 bool，旧格式是 dict
-            done_count = sum(1 for v in packs.values() if (v is True) or (isinstance(v, dict) and v.get("done")))
+            done_count = sum(
+                1
+                for v in packs.values()
+                if (v is True) or (isinstance(v, dict) and v.get("done"))
+            )
             total_count = len(packs)
             logger.info(f"  {level}: {complete} ({done_count}/{total_count} 卡包)")
         logger.info("=" * 40 + "\n")
