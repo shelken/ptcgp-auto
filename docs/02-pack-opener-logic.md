@@ -90,11 +90,13 @@ print(len(config.PAGES))    # 26
 
 ```
 data/packs.json              # 卡包数据（可通过脚本更新）
-scripts/fetch_packs.py       # 从 game8.co 抓取卡包数据
+scripts/fetch_packs.py       # 从 pokemon-tcg-pocket-database 抓取
 src/ptcgp_auto/constants/    # 常量模块
 ├── __init__.py
 └── packs.py                 # 加载 JSON 并提供接口
 ```
+
+**数据来源：** [flibustier/pokemon-tcg-pocket-database](https://github.com/flibustier/pokemon-tcg-pocket-database)
 
 **卡包代码格式：**
 
@@ -135,7 +137,17 @@ python debug_tool.py -a 5705 --crop-pack
 # 操作：选择扩充包 → 选择子包 → 截图框选 → 自动保存到正确路径
 ```
 
-实现文件：`src/ptcgp_auto/debug_tools/region_selector.py`
+功能特性：
+- **ROI 缓存**：记住上次选区，快速复用相同区域截取多个模板
+- **模板存在状态**：子包列表显示 `[✓]`/`[✗]` 标记模板文件是否存在
+- **批量检测模式**：输入 `d` 一次截图批量匹配所有子包，显示置信度和匹配结果
+- **终端图片预览**：支持 Kitty 终端直接预览截取的模板（使用 `kitten icat`）
+- **即时验证**：保存后立即重新加载模板并验证匹配
+
+实现文件：
+- `src/ptcgp_auto/debug_tools/region_selector.py` - 区域选择和 ROI 缓存
+- `src/ptcgp_auto/debug_tools/crop_pack.py` - 卡包模板截取主逻辑
+- `src/ptcgp_auto/debug_tools/terminal_preview.py` - Kitty 终端图片预览
 
 ### 3.5 免费包机制
 

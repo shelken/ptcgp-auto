@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-从 game8.co 抓取 Pokemon TCG Pocket 卡包数据
+从 pokemon-tcg-pocket-database 抓取卡包数据
+
+数据来源: https://github.com/flibustier/pokemon-tcg-pocket-database
 
 用法:
     python scripts/fetch_packs.py
@@ -9,70 +11,61 @@
 """
 
 import json
-import re
 import sys
 from pathlib import Path
 
-# 添加项目路径
-ROOT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT_DIR / "src"))
-
 try:
     import requests
-    from bs4 import BeautifulSoup
 except ImportError:
-    print("需要安装依赖: pip install requests beautifulsoup4")
+    print("需要安装依赖: pip install requests")
     sys.exit(1)
 
 
-GAME8_URL = "https://game8.co/games/Pokemon-TCG-Pocket/archives/477754"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+SOURCE_URL = "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist/sets.json"
 OUTPUT_FILE = ROOT_DIR / "data" / "packs.json"
 
 
 def fetch_packs() -> dict:
     """
-    从 game8 抓取卡包数据
+    从 GitHub 获取卡包数据并转换格式
 
     Returns:
         {
-            "A1": {"name": "Genetic Apex", "boosters": ["Pikachu", "Charizard", "Mewtwo"]},
+            "A1": {"name": "Genetic Apex", "boosters": ["Charizard", "Mewtwo", "Pikachu"]},
             ...
         }
     """
-    print(f"正在从 {GAME8_URL} 获取数据...")
+    print(f"正在从 {SOURCE_URL} 获取数据...")
 
-    response = requests.get(GAME8_URL, timeout=30)
+    response = requests.get(SOURCE_URL, timeout=30)
     response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    source_data = response.json()
 
     packs = {}
 
-    # 查找卡包列表
-    # game8 的结构可能变化，这里尝试解析
-    for row in soup.select("table tr"):
-        cells = row.select("td")
-        if len(cells) < 2:
-            continue
+    # 遍历所有系列 (A, B, ...)
+    for series_key, series_sets in source_data.items():
+        for set_info in series_sets:
+            code = set_info.get("code", "")
 
-        # 尝试提取卡包信息
-        first_cell = cells[0]
-        link = first_cell.select_one("a")
-        if not link:
-            continue
+            # 跳过 PROMO 系列
+            if code.startswith("PROMO"):
+                continue
 
-        pack_name = link.get_text(strip=True)
+            # 获取英文名称
+            name_dict = set_info.get("name", {})
+            name = name_dict.get("en", "") if isinstance(name_dict, dict) else str(name_dict)
 
-        # 尝试从第二列获取代码
-        code_cell = cells[1] if len(cells) > 1 else None
-        code = code_cell.get_text(strip=True) if code_cell else None
+            # 获取子包列表
+            boosters = set_info.get("packs", [])
 
-        # 解析代码 (如 A1, B1a)
-        if code and re.match(r"^[AB]\d+[a-z]?$", code):
-            packs[code] = {
-                "name": pack_name,
-                "boosters": [],  # 需要进一步抓取子页面获取
-            }
+            if code and name:
+                packs[code] = {
+                    "name": name,
+                    "boosters": boosters,
+                }
 
     return packs
 
@@ -81,8 +74,11 @@ def save_packs(packs: dict):
     """保存卡包数据到 JSON 文件"""
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
+    # 按代码排序
+    sorted_packs = dict(sorted(packs.items()))
+
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(packs, f, indent=2, ensure_ascii=False)
+        json.dump(sorted_packs, f, indent=2, ensure_ascii=False)
 
     print(f"已保存到 {OUTPUT_FILE}")
     print(f"共 {len(packs)} 个扩充包")
@@ -93,12 +89,16 @@ def main():
         packs = fetch_packs()
         if packs:
             save_packs(packs)
+            # 显示摘要
+            print("\n=== 卡包列表 ===")
+            for code, info in sorted(packs.items()):
+                boosters = ", ".join(info["boosters"]) if info["boosters"] else "-"
+                print(f"  {code}: {info['name']} [{boosters}]")
         else:
-            print("未获取到任何卡包数据，可能网页结构已变化")
-            print("请手动更新 data/packs.json")
+            print("未获取到任何卡包数据")
+            sys.exit(1)
     except Exception as e:
         print(f"抓取失败: {e}")
-        print("请手动更新 data/packs.json")
         sys.exit(1)
 
 

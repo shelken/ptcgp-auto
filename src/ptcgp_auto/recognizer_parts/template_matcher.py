@@ -15,6 +15,13 @@ from ptcgp_auto.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _normalize_template_name(name: str) -> str:
+    """规范化模板名称：移除 .png 后缀"""
+    if name.endswith(".png"):
+        return name[:-4]
+    return name
+
+
 class TemplateMatcherMixin:
     """模板匹配能力"""
 
@@ -39,8 +46,10 @@ class TemplateMatcherMixin:
                 f"({config.SCREEN_WIDTH}/{config.TEMPLATE_BASE_WIDTH})"
             )
 
-        for file in self.templates_dir.glob("*.png"):
-            name = file.stem
+        for file in self.templates_dir.glob("**/*.png"):
+            # 使用相对路径作为模板名（支持子目录）
+            rel_path = file.relative_to(self.templates_dir)
+            name = str(rel_path.with_suffix(""))  # 移除 .png 后缀
             img = cv2.imread(str(file))
             if img is not None:
                 if abs(scale - 1.0) > 0.01:
@@ -63,6 +72,9 @@ class TemplateMatcherMixin:
         """在截图中查找模板"""
         if not self.templates:
             self._load_templates()
+
+        # 规范化模板名称
+        template_name = _normalize_template_name(template_name)
 
         if template_name not in self.templates:
             logger.debug(f"模板不存在: {template_name}")
@@ -93,6 +105,29 @@ class TemplateMatcherMixin:
         )
         return None
 
+    def get_template_confidence(
+        self,
+        screenshot: Image.Image,
+        template_name: str,
+    ) -> float:
+        """获取模板匹配的最高置信度（不考虑阈值）"""
+        if not self.templates:
+            self._load_templates()
+
+        # 规范化模板名称
+        template_name = _normalize_template_name(template_name)
+
+        if template_name not in self.templates:
+            return 0.0
+
+        template = self.templates[template_name]
+        screen = self.pil_to_cv2(screenshot)
+
+        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, _ = cv2.minMaxLoc(result)
+
+        return max_val
+
     def find_all_templates(
         self,
         screenshot: Image.Image,
@@ -102,6 +137,9 @@ class TemplateMatcherMixin:
         """在截图中查找所有匹配的模板"""
         if not self.templates:
             self._load_templates()
+
+        # 规范化模板名称
+        template_name = _normalize_template_name(template_name)
 
         if template_name not in self.templates:
             logger.warning(f"模板不存在: {template_name}")
