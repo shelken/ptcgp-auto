@@ -89,7 +89,7 @@ beginner_decks = 35  # 首次获得沙漏 2
 # 也就是剩 400 个是需要额外寻找方式获取的
 
 # ============================================================
-# 动态加载语言配置
+# 动态加载语言和模式配置
 # ============================================================
 
 _locale = None
@@ -98,20 +98,66 @@ PAGES = None
 TEXT_PATTERNS = None
 DECK_KEYWORD = None
 SERIES = None
+CURRENT_MODE = "battle"  # 当前模式：battle, tutorial, daily
 
 
 def load_language(lang: str = None):
-    """加载语言配置"""
-    global LANGUAGE, _locale, BATTLE_LEVELS, PAGES, TEXT_PATTERNS, DECK_KEYWORD, SERIES
+    """加载语言配置（不包括 PAGES，PAGES 由 load_mode 加载）"""
+    global LANGUAGE, _locale, BATTLE_LEVELS, TEXT_PATTERNS, DECK_KEYWORD, SERIES
     if lang:
         LANGUAGE = lang
     _locale = import_module(f"ptcgp_auto.locales.{LANGUAGE}")
     BATTLE_LEVELS = _locale.BATTLE_LEVELS
-    PAGES = _locale.PAGES
     TEXT_PATTERNS = _locale.TEXT_PATTERNS
     DECK_KEYWORD = _locale.DECK_KEYWORD
     SERIES = _locale.SERIES
 
 
-# 默认加载
+def load_mode(mode: str = None):
+    """
+    加载指定模式的 PAGES 配置
+
+    Args:
+        mode: 模式名称，可选 "battle", "tutorial", "daily"
+              默认为 "battle"
+
+    模式会合并多个页面组：
+    - battle: common + user_info + battle + tutorial
+    - tutorial: common + tutorial
+    - daily: common + user_info + daily
+    """
+    global PAGES, CURRENT_MODE
+
+    if mode:
+        CURRENT_MODE = mode
+
+    if _locale is None:
+        raise RuntimeError("请先调用 load_language() 加载语言配置")
+
+    # 获取模式定义
+    modes_config = getattr(_locale, "MODES", None)
+    if modes_config is None:
+        # 向后兼容：如果没有 MODES 配置，尝试直接使用旧的 PAGES
+        old_pages = getattr(_locale, "PAGES", None)
+        if old_pages:
+            PAGES = old_pages
+            return
+        raise RuntimeError(f"语言配置 {LANGUAGE} 中没有 MODES 定义")
+
+    page_groups = modes_config.get(CURRENT_MODE, modes_config.get("battle", []))
+
+    # 合并页面组
+    PAGES = {}
+    pages_module = getattr(_locale, "pages", None)
+    if pages_module is None:
+        raise RuntimeError(f"语言配置 {LANGUAGE} 中没有 pages 模块")
+
+    for group in page_groups:
+        group_name = f"PAGES_{group.upper()}"
+        group_pages = getattr(pages_module, group_name, {})
+        PAGES.update(group_pages)
+
+
+# 默认加载语言和对战模式
 load_language()
+load_mode("battle")

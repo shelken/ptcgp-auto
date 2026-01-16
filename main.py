@@ -310,6 +310,12 @@ def run_single_device(settings: dict):
     """单设备模式：原有逻辑"""
     apply_settings_to_config(settings)
 
+    # 根据模式加载对应的 PAGES 配置
+    if settings.get("tutorial"):
+        config.load_mode("tutorial")
+    else:
+        config.load_mode("battle")
+
     # 初始化日志系统
     log_level = settings.get("log_level", "INFO")
     log_color = settings.get("log_color")  # 由父进程分配的颜色
@@ -328,6 +334,9 @@ def run_daily_mode_wrapper(settings: dict):
     """每日开包模式"""
     from ptcgp_auto.daily import run_daily_mode
     from ptcgp_auto.device_discovery import discover_devices
+
+    # 加载每日开包模式的 PAGES 配置
+    config.load_mode("daily")
 
     # 初始化日志
     log_level = settings.get("log_level", "INFO")
