@@ -19,6 +19,7 @@ CONFIG_DEFS: List[Tuple[str, str, type, Any, str, Optional[str], Optional[list]]
     ("language", "LANGUAGE", str, "zh_Hant", "界面语言", "-l", ["zh_Hant", "en_US"]),
     ("tutorial", "TUTORIAL", bool, False, "教程模式", "-t", None),
     ("log_level", "LOG_LEVEL", str, "INFO", "日志级别", "--log-level", ["DEBUG", "INFO", "WARNING", "ERROR"]),
+    ("log_color", "LOG_COLOR", str, None, "日志端口颜色（由父进程分配）", "--log-color", None),
     ("no_auto_battle", "NO_AUTO_BATTLE", bool, False, "禁用自动对战", None, None),
     ("notify_key", "NOTIFY_KEY", str, "", "企业微信 webhook key", None, None),
     ("no_notify_sound", "NO_NOTIFY_SOUND", bool, False, "禁用通知声音", None, None),
