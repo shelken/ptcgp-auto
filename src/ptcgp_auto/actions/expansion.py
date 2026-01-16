@@ -4,8 +4,8 @@ import re
 import time
 from typing import Dict, List, Set, Optional, Callable
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 from .utils import close_popup, detect_and_close_popup
@@ -14,7 +14,9 @@ from .utils import close_popup, detect_and_close_popup
 class ExpansionActions:
     """扩充组选择相关动作处理"""
 
-    def __init__(self, adb, recognizer, state, should_switch_checker: Callable[[], bool]):
+    def __init__(
+        self, adb, recognizer, state, should_switch_checker: Callable[[], bool]
+    ):
         self.adb = adb
         self.recognizer = recognizer
         self.state = state
@@ -27,7 +29,7 @@ class ExpansionActions:
         tried_expansion_series: Set[str],
         set_tried_expansion_series: Callable[[Set[str]], None],
         set_all_packs_checked: Callable[[bool], None],
-        set_current_pack_id: Callable[[str], None]
+        set_current_pack_id: Callable[[str], None],
     ):
         """处理扩充组选择页面 - 选择未完成的卡包"""
         ocr_results = match_info.get("ocr_results", [])
@@ -67,18 +69,20 @@ class ExpansionActions:
 
         # 先扫描一遍找到系列按钮
         for item in ocr_results:
-            text = item['text'].strip()
+            text = item["text"].strip()
             for series_name, patterns in series_patterns.items():
                 for pattern in patterns:
                     if pattern in text:
-                        has_series_button[series_name] = item['box']
+                        has_series_button[series_name] = item["box"]
                         break
 
         # 如果是 init 状态，先点击第一个系列按钮确保在第一个系列
         if current_series == "init":
             first_series = config.SERIES[0]
             if has_series_button[first_series]:
-                logger.info(f"  -> 点击 {first_series} 系列按钮确保在 {first_series} 系列")
+                logger.info(
+                    f"  -> 点击 {first_series} 系列按钮确保在 {first_series} 系列"
+                )
                 new_series = tried_expansion_series.copy()
                 new_series.add(f"clicked_{first_series}")
                 set_tried_expansion_series(new_series)
@@ -92,7 +96,10 @@ class ExpansionActions:
 
         # 如果刚点击了第一个系列按钮，现在开始遍历该系列
         first_series = config.SERIES[0]
-        if f"clicked_{first_series}" in tried_expansion_series and first_series not in tried_expansion_series:
+        if (
+            f"clicked_{first_series}" in tried_expansion_series
+            and first_series not in tried_expansion_series
+        ):
             current_series = first_series
 
         while True:
@@ -113,13 +120,13 @@ class ExpansionActions:
             progress_items = []
 
             for item in ocr_results:
-                text = item['text'].strip()
+                text = item["text"].strip()
 
                 # 记录系列按钮位置
                 for series_name, patterns in series_patterns.items():
                     for pattern in patterns:
                         if pattern in text:
-                            has_series_button[series_name] = item['box']
+                            has_series_button[series_name] = item["box"]
                             break
 
                 # 跳过标题和系列选择
@@ -132,25 +139,30 @@ class ExpansionActions:
                     continue
 
                 # 检查是否是 CLEAR!
-                if 'CLEAR' in text.upper():
+                if "CLEAR" in text.upper():
                     continue
 
                 # 检查是否是进度数字
-                progress_match = re.search(r'(\d+)\s*/\s*(\d+)', text)
+                progress_match = re.search(r"(\d+)\s*/\s*(\d+)", text)
                 if progress_match:
                     current_val = int(progress_match.group(1))
                     total = int(progress_match.group(2))
                     progress_key = f"{current_val}/{total}"
-                    item_x = (item['box'][0] + item['box'][2]) // 2
-                    item_y = (item['box'][1] + item['box'][3]) // 2
+                    item_x = (item["box"][0] + item["box"][2]) // 2
+                    item_y = (item["box"][1] + item["box"][3]) // 2
 
                     current_progress_keys.add(progress_key)
-                    progress_items.append({
-                        'text': text, 'box': item['box'],
-                        'x': item_x, 'y': item_y,
-                        'current_val': current_val, 'total': total,
-                        'progress_key': progress_key
-                    })
+                    progress_items.append(
+                        {
+                            "text": text,
+                            "box": item["box"],
+                            "x": item_x,
+                            "y": item_y,
+                            "current_val": current_val,
+                            "total": total,
+                            "progress_key": progress_key,
+                        }
+                    )
 
             # 按 Y 坐标分组
             row_data = self._group_progress_by_row(progress_items)
@@ -161,52 +173,62 @@ class ExpansionActions:
                 logger.debug(f"  [DEBUG] row_data 共 {len(row_data)} 行")
 
             for row in row_data:
-                right = row['right']  # 卡片收集进度
-                left = row['left']    # 牌组完成进度
+                right = row["right"]  # 卡片收集进度
+                left = row["left"]  # 牌组完成进度
                 if not right:
                     continue
 
                 # 如果左侧为空或者是 CLEAR，跳过该卡包（已完成所有牌组）
                 if not left:
                     if config.DEBUG:
-                        logger.debug(f"  [DEBUG] 跳过: 左侧进度为空 (right={right['progress_key']})")
+                        logger.debug(
+                            f"  [DEBUG] 跳过: 左侧进度为空 (right={right['progress_key']})"
+                        )
                     continue
 
                 # 生成组合 ID: 系列_左分母_右分母 (如 a_20_81)
                 series_prefix = current_series.lower()
-                left_total = str(left['total'])
-                right_total = str(right['total'])
+                left_total = str(left["total"])
+                right_total = str(right["total"])
                 pack_id = f"{series_prefix}_{left_total}_{right_total}"
 
                 if config.DEBUG:
                     left_str = f"{left['current_val']}/{left['total']}"
-                    logger.debug(f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}, pack_id={pack_id}")
+                    logger.debug(
+                        f"  [DEBUG] 检查卡包: left={left_str}, right={right['current_val']}/{right['total']}, pack_id={pack_id}"
+                    )
 
-                if current_level and self.state.is_pack_complete(current_level, pack_id):
+                if current_level and self.state.is_pack_complete(
+                    current_level, pack_id
+                ):
                     if config.DEBUG:
                         logger.debug(f"  [DEBUG]   -> 已标记为完成，跳过")
                     continue
 
                 # 使用左侧进度判断是否未完成
-                if left['current_val'] < left['total']:
-                    incomplete_items.append({
-                        'text': f"{left['progress_key']} | {right['progress_key']}",
-                        'box': left['box'],
-                        'remaining': left['total'] - left['current_val'],
-                        'pack_id': pack_id,
-                        'progress_key': f"{left['progress_key']} | {right['progress_key']}"
-                    })
+                if left["current_val"] < left["total"]:
+                    incomplete_items.append(
+                        {
+                            "text": f"{left['progress_key']} | {right['progress_key']}",
+                            "box": left["box"],
+                            "remaining": left["total"] - left["current_val"],
+                            "pack_id": pack_id,
+                            "progress_key": f"{left['progress_key']} | {right['progress_key']}",
+                        }
+                    )
                     if config.DEBUG:
                         logger.debug(f"  [DEBUG]   -> 未完成，加入候选")
 
             if incomplete_items:
-                incomplete_items.sort(key=lambda x: x['remaining'], reverse=True)
+                incomplete_items.sort(key=lambda x: x["remaining"], reverse=True)
                 item = incomplete_items[0]
-                logger.info(f"  -> 选择未完成卡包: {item['progress_key']} (pack_id={item['pack_id']}, 剩余 {item['remaining']})")
-                set_current_pack_id(item['pack_id'])
+                logger.info(
+                    f"  -> 选择未完成卡包: {item['progress_key']} (pack_id={item['pack_id']}, 剩余 {item['remaining']})"
+                )
+                set_current_pack_id(item["pack_id"])
                 set_tried_expansion_series(set())
                 set_all_packs_checked(False)
-                self.adb.tap_center(item['box'])
+                self.adb.tap_center(item["box"])
                 return
 
             # 检测是否到底
@@ -227,12 +249,18 @@ class ExpansionActions:
         # 找下一个未尝试的系列
         next_series = None
         for s in config.SERIES:
-            if s not in tried_expansion_series and s != current_series and has_series_button[s]:
+            if (
+                s not in tried_expansion_series
+                and s != current_series
+                and has_series_button[s]
+            ):
                 next_series = s
                 break
 
         if next_series:
-            logger.info(f"  -> {current_series} 系列无可用卡包，切换到 {next_series} 系列")
+            logger.info(
+                f"  -> {current_series} 系列无可用卡包，切换到 {next_series} 系列"
+            )
             self.adb.tap_center(has_series_button[next_series])
             return
 
@@ -247,30 +275,30 @@ class ExpansionActions:
         if not progress_items:
             return []
 
-        progress_items.sort(key=lambda x: x['y'])
+        progress_items.sort(key=lambda x: x["y"])
         row_data = []
         row_items = []
         row_start_y = None
 
         for item in progress_items:
-            if row_start_y is None or abs(item['y'] - row_start_y) < 100:
+            if row_start_y is None or abs(item["y"] - row_start_y) < 100:
                 row_items.append(item)
                 if row_start_y is None:
-                    row_start_y = item['y']
+                    row_start_y = item["y"]
             else:
                 if len(row_items) >= 2:
-                    row_items.sort(key=lambda x: x['x'])
-                    row_data.append({'left': row_items[0], 'right': row_items[-1]})
+                    row_items.sort(key=lambda x: x["x"])
+                    row_data.append({"left": row_items[0], "right": row_items[-1]})
                 elif len(row_items) == 1:
-                    row_data.append({'left': None, 'right': row_items[0]})
+                    row_data.append({"left": None, "right": row_items[0]})
                 row_items = [item]
-                row_start_y = item['y']
+                row_start_y = item["y"]
 
         if len(row_items) >= 2:
-            row_items.sort(key=lambda x: x['x'])
-            row_data.append({'left': row_items[0], 'right': row_items[-1]})
+            row_items.sort(key=lambda x: x["x"])
+            row_data.append({"left": row_items[0], "right": row_items[-1]})
         elif len(row_items) == 1:
-            row_data.append({'left': None, 'right': row_items[0]})
+            row_data.append({"left": None, "right": row_items[0]})
 
         return row_data
 

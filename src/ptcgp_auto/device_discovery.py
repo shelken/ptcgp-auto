@@ -1,9 +1,10 @@
 """BlueStacks Air 设备发现 - 通过进程端口"""
+
 import subprocess
 import re
 from typing import List
 
-from logger import get_logger
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -15,10 +16,9 @@ def discover_devices() -> List[str]:
     """
     # 获取 BlueStacks 进程 PID
     ps_result = subprocess.run(
-        ["pgrep", "-f", "BlueStacks.*--instance"],
-        capture_output=True, text=True
+        ["pgrep", "-f", "BlueStacks.*--instance"], capture_output=True, text=True
     )
-    pids = ps_result.stdout.strip().split('\n')
+    pids = ps_result.stdout.strip().split("\n")
     pids = [p for p in pids if p]
 
     if not pids:
@@ -28,23 +28,23 @@ def discover_devices() -> List[str]:
     devices = []
     for pid in pids:
         lsof_result = subprocess.run(
-            ["lsof", "-a", "-p", pid, "-i", "-P", "-n"],
-            capture_output=True, text=True
+            ["lsof", "-a", "-p", pid, "-i", "-P", "-n"], capture_output=True, text=True
         )
         for line in lsof_result.stdout.splitlines():
             # 匹配 LISTEN 行: TCP *:5705 (LISTEN)
             if "LISTEN" in line:
-                match = re.search(r'\*:(\d+)', line)
+                match = re.search(r"\*:(\d+)", line)
                 if match:
                     port = match.group(1)
                     devices.append(f"127.0.0.1:{port}")
 
-    return sorted(devices, key=lambda x: int(x.split(':')[1]))
+    return sorted(devices, key=lambda x: int(x.split(":")[1]))
 
 
 if __name__ == "__main__":
     # 测试设备发现
-    from logger import setup_logging
+    from ptcgp_auto.logger import setup_logging
+
     setup_logging(level="INFO")
 
     devices = discover_devices()

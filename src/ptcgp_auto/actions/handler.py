@@ -2,13 +2,13 @@
 
 from typing import Dict
 
-import config
-from logger import get_logger
+from ptcgp_auto import config
+from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
-from adb_controller import AdbController
-from recognizer import Recognizer
-from state_manager import StateManager
+from ptcgp_auto.adb_controller import AdbController
+from ptcgp_auto.recognizer import Recognizer
+from ptcgp_auto.state_manager import StateManager
 from .base import BaseActions
 from .battle import BattleActions
 from .deck import DeckActions
@@ -22,38 +22,29 @@ from .user import UserActions
 class ActionHandler:
     """动作处理器门面类，委托给各子模块"""
 
-    def __init__(
-        self,
-        adb: AdbController,
-        recognizer: Recognizer,
-        state: StateManager
-    ):
+    def __init__(self, adb: AdbController, recognizer: Recognizer, state: StateManager):
         self.adb = adb
         self.recognizer = recognizer
         self.state = state
         # 状态变量
-        self.current_pack_name = None      # 当前卡包名称（用于显示）
-        self.current_pack_id = None        # 当前卡包 ID（左分母_右分母）
+        self.current_pack_name = None  # 当前卡包名称（用于显示）
+        self.current_pack_id = None  # 当前卡包 ID（左分母_右分母）
         self.tried_expansion_series = set()
         self.all_packs_checked = False
         self.needs_state_init = state.needs_initialization()
         # 子模块
         self._base = BaseActions(adb, recognizer)
         self._battle = BattleActions(
-            adb, recognizer, state,
-            self._should_switch_to_higher_priority_level
+            adb, recognizer, state, self._should_switch_to_higher_priority_level
         )
         self._level = LevelActions(
-            adb, recognizer, state,
-            self._should_switch_to_higher_priority_level
+            adb, recognizer, state, self._should_switch_to_higher_priority_level
         )
         self._deck = DeckActions(
-            adb, recognizer, state,
-            self._should_switch_to_higher_priority_level
+            adb, recognizer, state, self._should_switch_to_higher_priority_level
         )
         self._expansion = ExpansionActions(
-            adb, recognizer, state,
-            self._should_switch_to_higher_priority_level
+            adb, recognizer, state, self._should_switch_to_higher_priority_level
         )
         self._home = HomeActions(adb, recognizer, state)
         self._tutorial = TutorialActions(adb, recognizer)
@@ -76,7 +67,9 @@ class ActionHandler:
         """执行动作"""
         # 统一检测手指引导模板（新手教程），优先处理
         if action not in self._SKIP_HAND_CHECK_ACTIONS:
-            hand_box = self.recognizer.find_template(screenshot, "hand_up_left", threshold=0.7)
+            hand_box = self.recognizer.find_template(
+                screenshot, "hand_up_left", threshold=0.7
+            )
             if hand_box:
                 logger.info("  -> 检测到手指引导，点击")
                 self.adb.tap_center(hand_box)
@@ -119,7 +112,9 @@ class ActionHandler:
         for level in config.BATTLE_LEVELS:
             if not self.state.is_level_complete(level):
                 if level != current_level:
-                    logger.info(f"  [优先级检查] 当前 {current_level}，但 {level} 未完成且优先级更高")
+                    logger.info(
+                        f"  [优先级检查] 当前 {current_level}，但 {level} 未完成且优先级更高"
+                    )
                     return True
                 else:
                     return False
@@ -138,26 +133,37 @@ class ActionHandler:
     def action_select_level(self, screenshot, match_info: Dict):
         def on_init_complete():
             self.needs_state_init = False
+
         def reset_pack_state():
             self.all_packs_checked = False
             self.tried_expansion_series.clear()
-        self._level.select_level(screenshot, match_info, self.needs_state_init, on_init_complete, reset_pack_state)
+
+        self._level.select_level(
+            screenshot,
+            match_info,
+            self.needs_state_init,
+            on_init_complete,
+            reset_pack_state,
+        )
 
     # ==================== 牌组列表动作（委托） ====================
 
     def action_handle_deck_list(self, screenshot, match_info: Dict):
         def set_all_packs_checked(val: bool):
             self.all_packs_checked = val
+
         def set_current_pack_name(name: str):
             self.current_pack_name = name
+
         self._deck.handle_deck_list(
-            screenshot, match_info,
+            screenshot,
+            match_info,
             self.needs_state_init,
             self.all_packs_checked,
             self.current_pack_id,
             self.current_pack_name,
             set_all_packs_checked,
-            set_current_pack_name
+            set_current_pack_name,
         )
 
     # ==================== 扩充组选择动作（委托） ====================
@@ -165,16 +171,20 @@ class ActionHandler:
     def action_handle_expansion_select(self, screenshot, match_info: Dict):
         def set_tried_expansion_series(val: set):
             self.tried_expansion_series = val
+
         def set_all_packs_checked(val: bool):
             self.all_packs_checked = val
+
         def set_current_pack_id(val: str):
             self.current_pack_id = val
+
         self._expansion.handle_expansion_select(
-            screenshot, match_info,
+            screenshot,
+            match_info,
             self.tried_expansion_series,
             set_tried_expansion_series,
             set_all_packs_checked,
-            set_current_pack_id
+            set_current_pack_id,
         )
 
     # ==================== 主页动作（委托） ====================

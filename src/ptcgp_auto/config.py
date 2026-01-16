@@ -31,6 +31,7 @@ def update_debug_flag():
     global DEBUG
     DEBUG = LOG_LEVEL == "DEBUG"
 
+
 # 通知配置
 NOTIFICATION_ENABLED = False
 NOTIFICATION_WEBHOOK_KEY = ""
@@ -76,10 +77,10 @@ DEBUG_DIR = "debug_output"
 POPUP_BUTTONS = ["OK", "确认", "確認", "取消"]
 
 # 等级目前总牌组数（截止红莲烈焰）1410
-expert_decks = 91 # 首次获得沙漏 7
-advanced_decks = 95 # 首次获得沙漏 5
-intermediate_decks = 76 # # 首次获得沙漏 3
-beginner_decks = 35 # 首次获得沙漏 2
+expert_decks = 91  # 首次获得沙漏 7
+advanced_decks = 95  # 首次获得沙漏 5
+intermediate_decks = 76  # # 首次获得沙漏 3
+beginner_decks = 35  # 首次获得沙漏 2
 
 # 初始大概 12 级，打完40级 28x12=336
 # 任天堂账号赠送 36
@@ -103,7 +104,7 @@ def load_language(lang: str = None):
     global LANGUAGE, _locale, BATTLE_LEVELS, PAGES, TEXT_PATTERNS, DECK_KEYWORD, SERIES
     if lang:
         LANGUAGE = lang
-    _locale = import_module(f"locales.{LANGUAGE}")
+    _locale = import_module(f"ptcgp_auto.locales.{LANGUAGE}")
     BATTLE_LEVELS = _locale.BATTLE_LEVELS
     PAGES = _locale.PAGES
     TEXT_PATTERNS = _locale.TEXT_PATTERNS

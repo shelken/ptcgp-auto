@@ -101,30 +101,41 @@ rm /tmp/ptcgp_auto_5555/state.json
 
 ```
 ptcgp-auto/
-├── main.py             # Main entry point
-├── actions/            # Action handler module
-│   ├── __init__.py     # Exports ActionHandler
-│   ├── handler.py      # Facade class
-│   ├── base.py         # Base actions
-│   ├── battle.py       # Battle actions
-│   ├── level.py        # Level selection
-│   ├── deck.py         # Deck list
-│   ├── expansion.py    # Expansion selection
-│   ├── home.py         # Home actions
-│   └── utils/          # Utility modules
-│       ├── scroll.py       # Scroll helper
-│       ├── ocr_helpers.py  # OCR utilities
-│       └── navigation.py   # Navigation utilities
-├── page_detector.py    # Page detector
-├── state_manager.py    # State management
-├── adb_controller.py   # ADB controller
-├── recognizer.py       # OCR + template matching
-├── config.py           # Configuration
-├── locales/            # Multi-language configs
-│   ├── zh_Hant.py      # Traditional Chinese
-│   └── en_US.py        # English
-├── debug_tool.py       # Debug tool
-└── templates/          # Template images
+├── main.py                 # Main entry point
+├── debug_tool.py           # Debug tool entry
+├── src/
+│   └── ptcgp_auto/
+│       ├── __init__.py
+│       ├── actions/        # Action handler module
+│       │   ├── __init__.py     # Exports ActionHandler
+│       │   ├── handler.py      # Facade class
+│       │   ├── base.py         # Base actions
+│       │   ├── battle.py       # Battle actions
+│       │   ├── level.py        # Level selection
+│       │   ├── deck.py         # Deck list
+│       │   ├── expansion.py    # Expansion selection
+│       │   ├── home.py         # Home actions
+│       │   └── utils/          # Utility modules
+│       │       ├── scroll.py       # Scroll helper
+│       │       ├── ocr_helpers.py  # OCR utilities
+│       │       └── navigation.py   # Navigation utilities
+│       ├── adb_controller.py   # ADB controller
+│       ├── config.py           # Configuration
+│       ├── debug_tools/        # Debug tool modules
+│       ├── device_discovery.py # Device discovery
+│       ├── locales/            # Multi-language configs
+│       │   ├── zh_Hant.py      # Traditional Chinese
+│       │   └── en_US.py        # English
+│       ├── logger.py           # Logging
+│       ├── notifier.py         # Notifications
+│       ├── page_detector.py    # Page detector
+│       ├── recognizer.py       # OCR + template matching
+│       ├── recognizer_parts/   # Recognizer components
+│       ├── settings.py         # Runtime settings
+│       ├── state_manager.py    # State management
+│       └── utils.py            # Utilities
+├── templates/              # Template images
+└── docs/                   # Documentation
 ```
 
 ## Notes
