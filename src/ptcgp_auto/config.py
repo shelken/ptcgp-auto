@@ -73,9 +73,9 @@ TEMPLATE_THRESHOLD = 0.8
 # 卡包模板在不同页面的缩放比例（相对于原始模板尺寸）
 # 用于 --crop-pack 检测模式和页面匹配
 PACK_TEMPLATE_SCALES = {
-    "pack_list": 0.22,      # 扩充包列表页（很小）
-    "pack_select": 0.81,     # 子包选择页（中等）
-    "pack_detail": 1.0,     # 单包详情页（最大）
+    "pack_list": 0.23,  # 扩充包列表页（很小）
+    "pack_select": 0.81,  # 子包选择页（中等）
+    "pack_detail": 1.0,  # 单包详情页（最大）
 }
 
 # 调试输出目录
