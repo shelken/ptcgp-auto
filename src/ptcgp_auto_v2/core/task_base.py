@@ -27,6 +27,7 @@ class TaskStatus(Enum):
     """任务实例状态"""
 
     PENDING = "pending"  # 待执行
+    BLOCKED = "blocked"  # 被阻塞（等待前置任务完成）
     RUNNING = "running"  # 执行中
     COMPLETED = "completed"  # 已完成
     FAILED = "failed"  # 失败
@@ -106,7 +107,7 @@ class Task(ABC):
     max_iterations: int = 100
 
     # 连续未知页面上限
-    max_unknown_pages: int = 10
+    max_unknown_pages: int = 30
 
     def __init__(self, adb, recognizer, page_detector):
         """
