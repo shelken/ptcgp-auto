@@ -58,13 +58,13 @@ PAGES = {
     # Battle record page
     "battle_record": {
         "identifiers": ["Battle Log"],
-        "action": "click_continue",
+        "action": "tap_screen_center",
         "priority": 15,
     },
     # EXP result page
     "exp_result": {
         "identifiers": ["Player EXP"],
-        "action": "click_continue",
+        "action": "tap_screen_center",
         "priority": 16,
     },
     # Battle in progress - wait

@@ -80,6 +80,9 @@ python main.py
 python main.py -a 5556
 python main.py -a 192.168.1.100:5555
 
+# v2：未指定 -d 时自动发现 BlueStacks 设备
+python main_v2.py --daemon
+
 # 调试工具
 python debug_tool.py
 python debug_tool.py -a 5556
@@ -115,6 +118,7 @@ ptcgp-auto/
 ├── src/
 │   └── ptcgp_auto/
 │       ├── __init__.py
+│       ├── runner.py       # 主流程状态机
 │       ├── actions/        # 动作处理器模块
 │       │   ├── __init__.py     # 导出 ActionHandler
 │       │   ├── handler.py      # 门面类
@@ -156,10 +160,7 @@ ptcgp-auto/
 │       ├── recognizer_parts/   # 识别器拆分模块
 │       ├── settings.py         # 运行时配置
 │       ├── state_manager.py    # 状态管理
-│       ├── utils.py            # 工具函数
-│       └── xml/                # XML 账号管理模块
-│           ├── __init__.py
-│           └── account_xml.py  # XML 文件操作
+│       └── utils.py            # 工具函数
 ├── templates/              # 模板图片
 └── docs/                   # 文档
 ```

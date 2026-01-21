@@ -36,14 +36,14 @@ PAGES_BATTLE = {
     # 对战记录页面
     "battle_record": {
         "identifiers": ["對戰紀錄"],
-        "action": "click_continue",
+        "action": "tap_screen_center",
         "priority": 15,
         "exact_match": True,
     },
     # 经验值结算页面
     "exp_result": {
         "identifiers": ["玩家經驗值"],
-        "action": "click_continue",
+        "action": "tap_screen_center",
         "priority": 16,
     },
     # 对战中 - 等待

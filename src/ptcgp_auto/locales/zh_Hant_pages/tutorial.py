@@ -16,7 +16,7 @@ PAGES_TUTORIAL = {
     # 教程完成提示页面
     "tutorial_complete_hint": {
         "identifiers": ["若想知道更詳細的規則"],
-        "action": "click_continue",
+        "action": "tap_screen_center",
         "priority": 35,
     },
 }
