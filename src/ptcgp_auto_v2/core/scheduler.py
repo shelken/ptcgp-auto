@@ -194,6 +194,60 @@ class Scheduler:
         """
         return self._task_instance_repo.get_next_pending()
 
+    def _check_prerequisites(self, task_instance: "TaskInstance") -> Optional[str]:
+        """
+        检查任务是否有未满足的前置条件
+
+        Args:
+            task_instance: 待执行的任务实例
+
+        Returns:
+            需要执行的前置任务类型，或 None 表示无需前置任务
+        """
+        account = task_instance.account
+
+        # 检查账号信息完整性（friend_id、nickname、level）
+        if not account.friend_id or not account.nickname or not account.level:
+            # 避免对 fetch_account_info 任务本身检查前置条件（防止循环）
+            if task_instance.task_type != "fetch_account_info":
+                return "fetch_account_info"
+
+        return None
+
+    def _insert_prerequisite_task(
+        self, original_task: "TaskInstance", prerequisite_type: str
+    ):
+        """
+        在原任务前插入前置任务
+
+        将原任务状态改回 pending，创建前置任务优先执行。
+
+        Args:
+            original_task: 原任务实例
+            prerequisite_type: 前置任务类型
+        """
+        # 将原任务改回 pending，等待前置任务完成后重新调度
+        original_task.status = TaskStatus.PENDING.value
+        original_task.save()
+
+        # 创建前置任务
+        task_class = TaskRegistry.get(prerequisite_type)
+        prerequisite = self._task_instance_repo.get_or_create(
+            account_id=original_task.account_id,
+            task_type=prerequisite_type,
+            reset_type=task_class.reset_type.value,
+        )
+
+        # 确保前置任务是 pending 状态
+        if prerequisite.status != TaskStatus.PENDING.value:
+            prerequisite.status = TaskStatus.PENDING.value
+            prerequisite.save()
+
+        logger.info(
+            f"插入前置任务: {prerequisite_type} -> {original_task.task_type} "
+            f"(账号: {original_task.account.nickname})"
+        )
+
     def _dispatch_task(self, task_instance: "TaskInstance"):
         """
         分配任务到设备执行
@@ -201,6 +255,13 @@ class Scheduler:
         Args:
             task_instance: 任务实例
         """
+        # 检查是否需要前置任务
+        prerequisite = self._check_prerequisites(task_instance)
+        if prerequisite:
+            # 插入前置任务并优先执行
+            self._insert_prerequisite_task(task_instance, prerequisite)
+            return
+
         # 获取设备（优先获取已登录该账号的设备）
         device = self.device_pool.acquire_for_account(task_instance.account_id)
         if not device:
@@ -357,6 +418,9 @@ class Scheduler:
         """
         运行单个任务（用于调试）
 
+        如果账号信息不完整，会自动先执行前置任务（如 fetch_account_info），
+        然后再执行用户指定的任务。
+
         Args:
             device_address: 设备地址
             account_id: 账号 ID
@@ -377,14 +441,65 @@ class Scheduler:
             reset_type=task_class.reset_type.value,
         )
 
-        # 创建临时设备池
-        temp_pool = DevicePool([device_address])
-        device = temp_pool.acquire()
-        if not device:
-            logger.error("无法获取设备")
-            return False
+        # 检查是否需要前置任务
+        prerequisite_type = self._check_prerequisites(instance)
+        if prerequisite_type:
+            logger.info(
+                f"检测到需要前置任务: {prerequisite_type} -> {task_type} "
+                f"(账号: {instance.account.nickname})"
+            )
+            # 先执行前置任务
+            prereq_class = TaskRegistry.get(prerequisite_type)
+            prereq_instance = self._task_instance_repo.get_or_create(
+                account_id=account_id,
+                task_type=prerequisite_type,
+                reset_type=prereq_class.reset_type.value,
+            )
+            # 确保前置任务是 pending 状态
+            if prereq_instance.status != TaskStatus.PENDING.value:
+                prereq_instance.status = TaskStatus.PENDING.value
+                prereq_instance.save()
 
-        # 执行任务
+            # 创建临时设备池并执行前置任务
+            temp_pool = DevicePool([device_address])
+            device = temp_pool.acquire()
+            if not device:
+                logger.error("无法获取设备")
+                return False
+
+            executor = TaskExecutor(
+                device=device,
+                task_instance=prereq_instance,
+                device_pool=temp_pool,
+                config=self.config.executor_config,
+            )
+            executor.run()
+
+            # 检查前置任务是否成功
+            if prereq_instance.status != TaskStatus.COMPLETED.value:
+                logger.error(f"前置任务失败: {prerequisite_type}")
+                return False
+
+            # 刷新账号信息
+            from ptcgp_auto_v2.db.repositories import AccountRepository
+            updated_account = AccountRepository().get_by_id(account_id)
+            if updated_account:
+                instance.account = updated_account
+
+            # 重新获取设备执行主任务
+            device = temp_pool.acquire()
+            if not device:
+                logger.error("无法获取设备")
+                return False
+        else:
+            # 无前置任务，直接创建设备池
+            temp_pool = DevicePool([device_address])
+            device = temp_pool.acquire()
+            if not device:
+                logger.error("无法获取设备")
+                return False
+
+        # 执行主任务
         executor = TaskExecutor(
             device=device,
             task_instance=instance,
