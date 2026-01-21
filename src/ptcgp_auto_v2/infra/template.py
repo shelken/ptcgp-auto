@@ -108,7 +108,7 @@ class TemplateMatcher:
                     img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
                 self.templates[name] = img
-                logger.debug(f"已加载模板: {name}")
+                # 单个模板加载日志过于冗余，仅在最后显示总数
 
         logger.info(f"共加载 {len(self.templates)} 个模板")
 

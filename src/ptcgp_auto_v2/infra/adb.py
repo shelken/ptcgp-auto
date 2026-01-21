@@ -14,12 +14,9 @@ from typing import Optional, Tuple
 from adbutils import adb, AdbDevice
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from ptcgp_auto_v2.config.settings import get_settings
 
-# 默认配置
-DEFAULT_WAIT_AFTER_CLICK = 0.3
-DEFAULT_SCREEN_WIDTH = 1080
-DEFAULT_SCREEN_HEIGHT = 1920
+logger = logging.getLogger(__name__)
 
 
 class AdbController:
@@ -44,10 +41,20 @@ class AdbController:
             self.host = address
             self.port = 5555
 
+        # 从 settings 获取配置
+        settings = get_settings()
+
         self.device: Optional[AdbDevice] = None
-        self.screen_width = DEFAULT_SCREEN_WIDTH
-        self.screen_height = DEFAULT_SCREEN_HEIGHT
-        self.wait_after_click = DEFAULT_WAIT_AFTER_CLICK
+
+        # 基准分辨率（用于坐标比例计算）
+        self.base_width = settings.base_screen_width
+        self.base_height = settings.base_screen_height
+
+        # 当前分辨率（连接后通过 wm size 更新）
+        self.screen_width = settings.base_screen_width
+        self.screen_height = settings.base_screen_height
+
+        self.wait_after_click = settings.wait_after_click
 
     def connect(self) -> bool:
         """
@@ -109,7 +116,29 @@ class AdbController:
                 logger.info(f"屏幕分辨率: {width}x{height}")
 
         except Exception as e:
-            logger.warning(f"获取屏幕分辨率失败，使用默认值: {e}")
+            logger.warning(f"获取屏幕分辨率失败，使用基准值: {e}")
+
+    @property
+    def scale_x(self) -> float:
+        """X 轴缩放比例（当前分辨率 / 基准分辨率）"""
+        return self.screen_width / self.base_width
+
+    @property
+    def scale_y(self) -> float:
+        """Y 轴缩放比例（当前分辨率 / 基准分辨率）"""
+        return self.screen_height / self.base_height
+
+    def scaled_x(self, x: int) -> int:
+        """根据屏幕宽度缩放 X 坐标（基于基准宽度）"""
+        return int(x * self.scale_x)
+
+    def scaled_y(self, y: int) -> int:
+        """根据屏幕高度缩放 Y 坐标（基于基准高度）"""
+        return int(y * self.scale_y)
+
+    def scaled_point(self, x: int, y: int) -> tuple[int, int]:
+        """缩放坐标点"""
+        return self.scaled_x(x), self.scaled_y(y)
 
     def is_connected(self) -> bool:
         """检查设备是否已连接"""

@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 在coding阶段，一定要懂得模块化设计，高内聚低耦合原则，单代码文件最多不要超过500行
 - **当代码结构变更时，对应更新 README 和 CLAUDE.md（本文件）**
 - 不准硬编码ocr出来的文字内容，要考虑 locales 配置，可以只优先配置zh_hant不处理其他语言，但是不能硬编码
+- 涉及像素的代码，使用基准像素值（基于 1080x1920）+ `adb.scaled_x/scaled_y` 缩放方法，不允许直接写死当前分辨率像素或使用比例常量；基准像素常量应提前到代码开头，并写明注释说明来源
 
 ## 知识获取与整理原则
 

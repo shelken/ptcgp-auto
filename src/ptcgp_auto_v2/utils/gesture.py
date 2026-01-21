@@ -10,6 +10,19 @@ from ptcgp_auto_v2.core.task_base import ActionResult
 
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# 常量定义（基于 1080x1920 基准分辨率的像素值）
+# 使用时通过 adb.scaled_x/scaled_y 缩放到当前分辨率
+# ============================================================
+
+# 开包滑动坐标（从左到右）
+BASE_SWIPE_PACK_START_X = 54   # 1080 * 0.05
+BASE_SWIPE_PACK_END_X = 1026   # 1080 * 0.95
+
+# 卡牌上滑坐标（从下到上）
+BASE_SWIPE_CARD_START_Y = 1152  # 1920 * 0.6
+BASE_SWIPE_CARD_END_Y = 384     # 1920 * 0.2
+
 
 def tap_template(
     adb, page_detector, template_name: str, wait: float = 1.0
@@ -211,12 +224,16 @@ def center_point(adb) -> Tuple[int, int]:
 
 
 def swipe_pack_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-    """获取开包滑动坐标"""
-    w, h = adb.screen_width, adb.screen_height
-    return (w // 20, h // 2), (w * 19 // 20, h // 2)
+    """获取开包滑动坐标（从左到右）"""
+    start_x = adb.scaled_x(BASE_SWIPE_PACK_START_X)
+    end_x = adb.scaled_x(BASE_SWIPE_PACK_END_X)
+    y = adb.screen_height // 2
+    return (start_x, y), (end_x, y)
 
 
 def swipe_card_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
-    """获取卡牌上滑坐标"""
-    w, h = adb.screen_width, adb.screen_height
-    return (w // 2, int(h * 0.6)), (w // 2, int(h * 0.2))
+    """获取卡牌上滑坐标（从下到上）"""
+    x = adb.screen_width // 2
+    start_y = adb.scaled_y(BASE_SWIPE_CARD_START_Y)
+    end_y = adb.scaled_y(BASE_SWIPE_CARD_END_Y)
+    return (x, start_y), (x, end_y)
