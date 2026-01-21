@@ -26,6 +26,7 @@
           packages = with pkgs; [
             python312
             android-tools  # adb
+            sqlit-tui
           ];
 
           shellHook = ''
