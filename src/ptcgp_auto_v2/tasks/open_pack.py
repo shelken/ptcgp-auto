@@ -49,7 +49,6 @@ from ptcgp_auto_v2.utils.gesture import (
     long_press_text,
     tap_home_icon,
     click_close,
-    click_continue,
     center_point,
     swipe_pack_coords,
     swipe_card_coords,
@@ -112,14 +111,6 @@ def _build_pack_pages(text_patterns: dict) -> list[dict]:
         {
             "name": "pack_card_register",
             "identifiers": _get_patterns(text_patterns, "pack_card_register"),
-            "priority": 99,
-        },
-        {
-            "name": "pack_collection_result",
-            "identifiers": _get_patterns(text_patterns, "pack_collection_result"),
-            "exclude_identifiers": _get_patterns(
-                text_patterns, "pack_collection_exclude"
-            ),
             "priority": 99,
         },
         {
@@ -303,10 +294,6 @@ class OpenPackTask(Task):
         if page_name == "pack_opening_result":
             logger.info("  -> 等待开包结果展示")
             return ActionResult.ok(wait=1.5)
-
-        # pack_collection_result：处理图鉴结果，标记开包成功
-        if page_name == "pack_collection_result":
-            return self._handle_collection_result(page_info)
 
         # 其他页面由通用处理器处理
         logger.warning(
@@ -601,8 +588,6 @@ class OpenPackTask(Task):
         open_pack_patterns = TEXT_PATTERNS.get("open_pack", [])
         if tap_text(self.adb, ocr_results, open_pack_patterns):
             logger.info("  -> 点击开封按钮，进入开包流程")
-            # 点击开封即视为开包成功（免费包已消耗），记录数量
-            self._packs_opened_count += 1
             self._phase = OpenPackPhase.OPENING
             return ActionResult.ok(wait=1.0)
 
@@ -648,28 +633,16 @@ class OpenPackTask(Task):
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（pack_card_register 页面）"""
-        logger.info("  -> 向上滑动卡牌")
-        start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, 300)
+        # 进入卡牌登录页面说明开包成功，增加计数
+        self._packs_opened_count += 1
+        logger.info(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
 
-    def _handle_collection_result(self, page_info: dict) -> ActionResult:
-        """
-        处理图鉴结果（pack_collection_result 页面）
-
-        点击继续完成开包流程，然后回到主页继续检测是否还有免费包。
-        """
-        logger.info(
-            f"  -> 点击继续完成开包流程（已开 {self._packs_opened_count} 包），回到主页继续检测"
-        )
-        # 开包流程结束，回到主页继续检测
+        # 开包流程即将结束，准备回到主页继续检测
         self._phase = OpenPackPhase.NAVIGATING_TO_HOME
         self._home_check_count = 0  # 重置主页检查计数
 
-        ocr_results = page_info.get("ocr_results", [])
-        continue_patterns = TEXT_PATTERNS.get("continue", [])
-        return click_continue(
-            self.adb, self.page_detector, ocr_results, continue_patterns
-        )
+        start, end = swipe_card_coords(self.adb)
+        return swipe(self.adb, start, end, 300)
 
     def _load_boosters_list(self, pack_code: str) -> list:
         """从 packs.json 加载子包列表"""

@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 # 配置常量
 PTCGP_PACKAGE_NAME = "jp.pokemon.pokemontcgp"
 DEVICE_XML_PATH = "/data/data/jp.pokemon.pokemontcgp/shared_prefs/deviceAccount:.xml"
-DEVICE_TEMP_PATH = "/sdcard/deviceAccount:.xml"
+# 注意：adb push 无法处理带冒号的文件名，使用不带冒号的临时路径
+DEVICE_TEMP_PATH = "/sdcard/deviceAccount_temp.xml"
 DEVICE_SHARED_PREFS_DIR = "/data/data/jp.pokemon.pokemontcgp/shared_prefs"
 PTCGP_MAIN_ACTIVITY = f"{PTCGP_PACKAGE_NAME}/com.unity3d.player.UnityPlayerActivity"
 

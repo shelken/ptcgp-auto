@@ -89,6 +89,7 @@ class Account:
     - nickname: 用户昵称，方便识别
     - country: 国家/地区代码（从 JWT 解析）
     - xml_content: 账号 XML 文件内容（用于账号切换）
+    - session_token_iat: sessionToken 的 iat 字段（签发时间戳），用于判断 token 是否最新
     """
 
     id: Optional[int] = None
@@ -98,6 +99,7 @@ class Account:
     nickname: Optional[str] = None  # 用户昵称
     country: Optional[str] = None  # 国家/地区
     xml_content: Optional[bytes] = None  # XML 文件内容
+    session_token_iat: Optional[int] = None  # sessionToken 的签发时间戳
     task_plan_id: Optional[int] = None
     task_plan: Optional[TaskPlan] = None  # 关联的任务计划（延迟加载）
     created_at: Optional[datetime] = None
@@ -116,6 +118,7 @@ class Account:
             nickname=row["nickname"],
             country=row["country"],
             xml_content=row["xml_content"],
+            session_token_iat=row["session_token_iat"] if "session_token_iat" in row.keys() else None,
             task_plan_id=row["task_plan_id"],
             created_at=_parse_datetime(row["created_at"]),
             updated_at=_parse_datetime(row["updated_at"]),
@@ -131,6 +134,7 @@ class Account:
             "nickname": self.nickname,
             "country": self.country,
             "xml_content": self.xml_content.hex() if self.xml_content else None,
+            "session_token_iat": self.session_token_iat,
             "task_plan_id": self.task_plan_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
