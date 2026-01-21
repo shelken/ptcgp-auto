@@ -24,10 +24,21 @@ class BaseActions:
             logger.info(f"  -> 点击: {match_info.get('identifier', 'unknown')}")
             self.adb.tap_center(box)
 
-    def click_continue(self, screenshot, match_info: Dict):
-        """点击屏幕中央继续"""
-        logger.info("  -> 点击屏幕继续")
+    def tap_screen_center(self, screenshot, match_info: Dict):
+        """点击屏幕中心"""
+        logger.info("  -> 点击屏幕中心")
         self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+
+    def click_continue_button(self, screenshot, match_info: Dict):
+        """查找并点击继续按钮"""
+        ocr_results = match_info.get("ocr_results", [])
+        item = find_text_by_variants(ocr_results, "continue")
+        if item:
+            logger.info(f"  -> 点击继续按钮: {item['text']}")
+            self.adb.tap_center(item["box"])
+        else:
+            logger.info("  -> 未找到继续按钮，点击屏幕中心")
+            self.adb.tap(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
 
     def click_cancel(self, screenshot, match_info: Dict):
         """点击取消按钮"""

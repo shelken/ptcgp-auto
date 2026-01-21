@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - add代码时，必须检查与本次有关的文件，不允许`add -A`
 - 在coding阶段，一定要懂得模块化设计，高内聚低耦合原则，单代码文件最多不要超过500行
 - **当代码结构变更时，对应更新 README 和 CLAUDE.md（本文件）**
+- 不准硬编码ocr出来的文字内容，要考虑 locales 配置，可以只优先配置zh_hant不处理其他语言，但是不能硬编码
 
 ## 知识获取与整理原则
 
@@ -32,6 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `main.py` - 入口文件，支持命令行参数指定 ADB 地址
 - `src/ptcgp_auto/`
+  - `runner.py` - 主流程状态机
   - `adb_controller.py` - ADB 封装（截图、点击、滑动）
   - `recognizer.py` - Apple Vision OCR + OpenCV 模板匹配
   - `page_detector.py` - 页面检测器，识别当前游戏界面
@@ -40,6 +42,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `settings.py` - 运行时配置加载
   - `device_discovery.py` - 设备发现
   - `logger.py` - 日志系统
+  - `src/ptcgp_auto_v2/utils/device_discovery.py` - v2 自动发现 BlueStacks 设备
+
   - `notifier.py` - 通知系统
   - `utils.py` - 工具函数
   - `actions/` - 动作处理器模块（模块化架构）
@@ -65,81 +69,61 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
       - `user_info.py` - 用户信息页面
       - `battle.py` - 对战模式页面
       - `tutorial.py` - 教程模式页面
-      - `daily.py` - 开包模式页面
     - `en_US.py` - 英文
-  - `db/` - 数据库模块（每日开包功能）
-    - `connection.py` - SQLite 连接管理
-    - `models.py` - 数据模型
-    - `repository.py` - 数据访问层
-  - `xml/` - XML 账号操作（每日开包功能）
-    - `extractor.py` - 账号提取
-    - `injector.py` - 账号注入
-  - `daily/` - 每日开包模块
-    - `runner.py` - 多设备并行运行器
-    - `account_manager.py` - 账号管理
-    - `pack_opener.py` - 开包执行器
-    - `root_checker.py` - Root 检测
   - `debug_tools/` - 调试工具实现
 - `debug_tool.py` - 调试工具入口
 - `templates/` - 按钮模板图片
+- `src/ptcgp_auto_v2/` - v2 版本（每日开包功能）
 
 ## 架构
 
 ```
 ptcgp-auto/
-├── main.py                     # 主程序入口
+├── main.py                     # 主程序入口（v1 自动对战）
+├── main_v2.py                  # v2 入口（每日开包）
+├── config_cli.py               # 开包配置 CLI
 ├── debug_tool.py               # 调试工具入口
 ├── src/
-│   └── ptcgp_auto/
-│       ├── __init__.py
-│       ├── adb_controller.py   # ADB 控制
-│       ├── config.py           # 配置 + 模式加载
-│       ├── device_discovery.py # 设备发现
-│       ├── logger.py           # 日志
-│       ├── notifier.py         # 通知
-│       ├── page_detector.py    # 页面检测器
-│       ├── recognizer.py       # OCR + 模板匹配
-│       ├── settings.py         # 运行时配置
-│       ├── state_manager.py    # 状态管理
-│       ├── utils.py            # 工具函数
-│       ├── actions/            # 动作处理器模块
-│       │   ├── __init__.py
-│       │   ├── handler.py          # 门面类
-│       │   ├── base.py             # 基础动作
-│       │   ├── battle.py           # 对战动作
-│       │   ├── level.py            # 等级选择
-│       │   ├── deck.py             # 牌组列表
-│       │   ├── expansion.py        # 扩充组选择
-│       │   ├── home.py             # 主页动作
-│       │   ├── user.py             # 用户信息
-│       │   ├── tutorial.py         # 教程
-│       │   └── utils/              # 工具模块
-│       ├── recognizer_parts/   # 识别器拆分模块
-│       ├── locales/            # 多语言配置
-│       │   ├── zh_Hant.py          # 繁体中文主配置
-│       │   ├── zh_Hant_pages/      # 页面配置（按模式分离）
-│       │   │   ├── common.py       # 通用页面
-│       │   │   ├── battle.py       # 对战模式
-│       │   │   ├── tutorial.py     # 教程模式
-│       │   │   └── daily.py        # 开包模式
-│       │   └── en_US.py
-│       ├── db/                 # 数据库模块
-│       ├── xml/                # XML 账号操作
-│       ├── daily/              # 每日开包模块
-│       └── debug_tools/        # 调试工具实现
+│   ├── ptcgp_auto/             # v1 自动对战模块
+│   │   ├── __init__.py
+│   │   ├── runner.py           # 主流程状态机
+│   │   ├── adb_controller.py   # ADB 控制
+│   │   ├── config.py           # 配置 + 模式加载
+│   │   ├── device_discovery.py # 设备发现
+│   │   ├── logger.py           # 日志
+│   │   ├── notifier.py         # 通知
+│   │   ├── page_detector.py    # 页面检测器
+│   │   ├── recognizer.py       # OCR + 模板匹配
+│   │   ├── settings.py         # 运行时配置
+│   │   ├── state_manager.py    # 状态管理
+│   │   ├── utils.py            # 工具函数
+│   │   ├── actions/            # 动作处理器模块
+│   │   ├── recognizer_parts/   # 识别器拆分模块
+│   │   ├── locales/            # 多语言配置
+│   │   │   ├── zh_Hant.py          # 繁体中文主配置
+│   │   │   ├── zh_Hant_pages/      # 页面配置（按模式分离）
+│   │   │   │   ├── common.py       # 通用页面
+│   │   │   │   ├── battle.py       # 对战模式
+│   │   │   │   └── tutorial.py     # 教程模式
+│   │   │   └── en_US.py
+│   │   └── debug_tools/        # 调试工具实现
+│   └── ptcgp_auto_v2/          # v2 每日开包模块
+│       ├── core/               # 核心框架（任务基类、调度器）
+│       ├── tasks/              # 任务实现（open_pack.py）
+│       ├── db/                 # 数据库（账号、开包记录）
+│       ├── utils/              # 工具（手势、设备发现）
+│       └── locales/            # 多语言配置
 ├── templates/                  # 模板图片
+├── data/                       # 数据文件（packs.json）
 └── docs/                       # 文档
-    ├── 01-daily-pack-feature.md
-    ├── 02-pack-opener-logic.md
-    └── refs/                   # 参考资料
 ```
 
 运行时架构：
 
 ```
-main.py (入口 + 主循环)
+main.py (入口)
     ↓
-PTCGPAuto
+PTCGPAuto (runner.py)
     ├── AdbController (adb_controller.py)
     │       截图、点击、滑动、返回键
     ├── Recognizer (recognizer.py)
@@ -204,22 +188,23 @@ rm /tmp/ptcgp_auto_5555/state.json
 - `BATTLE_LEVELS` - 等级遍历顺序（默认精英→初级）
 - `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔
 - `PAGES` - 界面识别规则（由 `load_mode()` 动态加载）
-- `CURRENT_MODE` - 当前运行模式（battle/tutorial/daily）
+- `CURRENT_MODE` - 当前运行模式（battle/tutorial）
 
 ### 模式系统
 
-支持三种运行模式，每种模式加载不同的页面配置：
+v1 支持两种运行模式：
 
-| 模式 | 入口参数 | 页面数 | 说明 |
-|------|----------|--------|------|
-| `battle` | 默认 | 26 | 自动对战（含教程检测） |
-| `tutorial` | `-t` | 8 | 教程解锁模式 |
-| `daily` | `--daily` | 10+ | 每日开包模式 |
+| 模式 | 入口参数 | 说明 |
+|------|----------|------|
+| `battle` | 默认 | 自动对战（含教程检测） |
+| `tutorial` | `-t` | 教程解锁模式 |
+
+v2 每日开包模式使用独立入口 `main_v2.py`。
 
 切换模式：
 ```python
 from ptcgp_auto import config
-config.load_mode("daily")  # 加载每日开包模式的页面
+config.load_mode("battle")  # 加载对战模式的页面
 ```
 
 ## 调试技巧
@@ -235,7 +220,6 @@ config.load_mode("daily")  # 加载每日开包模式的页面
    - `common.py` - 所有模式共享的页面
    - `battle.py` - 对战模式专用
    - `tutorial.py` - 教程模式专用
-   - `daily.py` - 开包模式专用
 2. 在 `actions/` 对应模块中实现动作方法，并在 `actions/handler.py` 中添加委托方法
 
 ## 注意事项

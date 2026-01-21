@@ -20,7 +20,6 @@ SERIES = ["A", "B"]
 MODES = {
     "tutorial": ["common", "tutorial"],
     "battle": ["common", "user_info", "battle", "tutorial"],
-    "daily": ["common", "user_info", "daily"],
 }
 
 # 辅助文本模式（供 actions 模块查询）
@@ -30,6 +29,7 @@ TEXT_PATTERNS = {
         "A": ["A系列"],
         "B": ["B系列"],
     },
+    "series_keyword": ["系列"],
     "skip_titles": ["選擇擴充組", "系列"],
     "no_battles": ["沒有可挑戰的對戰"],
     "cancel": ["取消"],
@@ -37,4 +37,10 @@ TEXT_PATTERNS = {
     "ranked_battle": ["分級對戰"],
     "solo_battle": ["單人對戰"],
     "first_clear_reward": ["首次過關報酬"],
+    # 开包相关
+    "open_pack_1": ["開封1包"],
+    "open_pack": ["開封"],
+    "continue": ["繼續"],
+    "close_button": ["×"],
+    "long_press": ["長按", "長按以跳過", "長按開封"],
 }

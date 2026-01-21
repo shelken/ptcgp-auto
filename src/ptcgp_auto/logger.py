@@ -1,4 +1,5 @@
 """统一日志模块 - 使用 Loguru"""
+
 import sys
 import logging
 import random
@@ -9,8 +10,14 @@ logger.remove()
 
 # 可用颜色池（排除已被日志级别占用的颜色）
 AVAILABLE_COLORS = [
-    "cyan", "magenta", "light-blue", "light-magenta",
-    "light-cyan", "light-green", "light-yellow", "light-red",
+    "cyan",
+    "magenta",
+    "light-blue",
+    "light-magenta",
+    "light-cyan",
+    "light-green",
+    "light-yellow",
+    "light-red",
 ]
 
 # 端口 -> 颜色映射

@@ -26,4 +26,23 @@ PAGES_USER_INFO = {
         "priority": 59,
         "exclude_identifiers": ["申請中"],  # 排除朋友列表页面
     },
+    # 游戏主页 - 需要进入社群获取用户信息
+    "game_home_main": {
+        "identifiers": ["商店/兌換處", "得卡挑戰"],
+        "match_all": True,
+        "action": "handle_game_home",
+        "priority": 60,
+    },
+    # 关闭按钮 - 退出弹窗
+    "close_button": {
+        "templates": ["btn_close"],
+        "action": "click_template",
+        "priority": 90,
+    },
+    # 返回按钮 - 回到上一页
+    "back_button": {
+        "templates": ["btn_back"],
+        "action": "click_template",
+        "priority": 91,
+    },
 }

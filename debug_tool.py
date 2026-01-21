@@ -52,6 +52,12 @@ def main():
         action="store_true",
         help="交互模式：专用卡包模板截取，选择扩充包和子包后框选区域",
     )
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=None,
+        help="模板匹配缩放比例（如 0.22, 0.81, 1.0）",
+    )
     args = parser.parse_args()
 
     host = None

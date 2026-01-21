@@ -15,6 +15,7 @@ from .deck import DeckActions
 from .expansion import ExpansionActions
 from .home import HomeActions
 from .level import LevelActions
+from .pack import PackActions
 from .tutorial import TutorialActions
 from .user import UserActions
 
@@ -47,17 +48,20 @@ class ActionHandler:
             adb, recognizer, state, self._should_switch_to_higher_priority_level
         )
         self._home = HomeActions(adb, recognizer, state)
+        self._pack = PackActions(adb, recognizer, state)
         self._tutorial = TutorialActions(adb, recognizer)
         self._user = UserActions(adb, recognizer, state)
 
     # 需要跳过手指检测的动作（这些动作自己处理或不需要）
     _SKIP_HAND_CHECK_ACTIONS = {
         "click_identifier",
-        "click_continue",
+        "tap_screen_center",
+        "click_continue_button",
         "click_cancel",
         "click_template",
         "wait",
         "wait_battle",
+        "long_press_text",
         "handle_tutorial_unlock",
         "handle_tutorial_list",
         "handle_tutorial_step",
@@ -86,8 +90,11 @@ class ActionHandler:
     def action_click_identifier(self, screenshot, match_info: Dict):
         self._base.click_identifier(screenshot, match_info)
 
-    def action_click_continue(self, screenshot, match_info: Dict):
-        self._base.click_continue(screenshot, match_info)
+    def action_tap_screen_center(self, screenshot, match_info: Dict):
+        self._base.tap_screen_center(screenshot, match_info)
+
+    def action_click_continue_button(self, screenshot, match_info: Dict):
+        self._base.click_continue_button(screenshot, match_info)
 
     def action_click_cancel(self, screenshot, match_info: Dict):
         self._base.click_cancel(screenshot, match_info)
@@ -104,6 +111,7 @@ class ActionHandler:
     def action_go_back(self, screenshot, match_info: Dict):
         """返回上一页"""
         from .utils import go_back
+
         go_back(self.adb, self.recognizer, screenshot)
 
     # ==================== 辅助方法 ====================
@@ -202,6 +210,39 @@ class ActionHandler:
 
     def action_handle_game_home(self, screenshot, match_info: Dict):
         self._home.handle_game_home(screenshot, match_info)
+
+    # ==================== 开包动作（委托） ====================
+
+    def set_target_pack(self, pack_code: str, booster_name: str):
+        """设置目标卡包"""
+        self._pack.set_target_pack(pack_code, booster_name)
+
+    def action_click_pack_icon(self, screenshot, match_info: Dict):
+        self._pack.click_pack_icon(screenshot, match_info)
+
+    def action_select_pack_series(self, screenshot, match_info: Dict):
+        self._pack.select_pack_series(screenshot, match_info)
+
+    def action_select_pack(self, screenshot, match_info: Dict):
+        self._pack.select_pack(screenshot, match_info)
+
+    def action_click_open_pack(self, screenshot, match_info: Dict):
+        self._pack.click_open_pack(screenshot, match_info)
+
+    def action_handle_hourglass_popup(self, screenshot, match_info: Dict):
+        self._pack.handle_hourglass_popup(screenshot, match_info)
+
+    def action_swipe_open_pack(self, screenshot, match_info: Dict):
+        self._pack.swipe_open_pack(screenshot, match_info)
+
+    def action_long_press_text(self, screenshot, match_info: Dict):
+        self._pack.long_press_text(screenshot, match_info)
+
+    def action_long_press_center(self, screenshot, match_info: Dict):
+        self._pack.long_press_center(screenshot, match_info)
+
+    def action_swipe_up_card(self, screenshot, match_info: Dict):
+        self._pack.swipe_up_card(screenshot, match_info)
 
     # ==================== 教程动作（委托） ====================
 
