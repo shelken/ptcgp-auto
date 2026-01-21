@@ -182,10 +182,10 @@ class FetchAccountInfoTask(Task):
         if page_name == "home_icon":
             return self._handle_home_icon(page_info)
 
-        # 未知页面，尝试返回
-        self._attempt_count += 1
-        logger.warning(f"未知页面，尝试返回 (尝试 {self._attempt_count}/{self._max_attempts})")
-        return press_back(self.adb)
+        # 未知页面：不主动按返回，让 common_handlers 或 task_base 框架处理
+        # 返回等待结果，让框架继续循环
+        logger.debug(f"[FetchAccountInfo] 未处理页面: {page_name}，等待框架处理")
+        return ActionResult.ok(wait=1.0)
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """处理主页"""
@@ -250,25 +250,31 @@ class FetchAccountInfoTask(Task):
         logger.info("  -> 点击 Home 图标返回主页")
         return tap_home_icon(self.adb, self.page_detector)
 
+    def _box_center(self, box: tuple) -> tuple:
+        """计算边界框中心点"""
+        x1, y1, x2, y2 = box
+        return ((x1 + x2) // 2, (y1 + y2) // 2)
+
     def _find_lv_position(self, ocr_results: list) -> Optional[tuple]:
         """查找 Lv. 文本位置"""
-        for text, pos in ocr_results:
+        for item in ocr_results:
+            text = item["text"]
             if text.startswith("Lv.") or text.startswith("Lv "):
-                return pos
+                return self._box_center(item["box"])
         return None
 
     def _extract_friend_id(self, ocr_results: list) -> Optional[str]:
         """从 OCR 结果提取 friend_id"""
-        for text, pos in ocr_results:
-            match = FRIEND_ID_PATTERN.search(text)
+        for item in ocr_results:
+            match = FRIEND_ID_PATTERN.search(item["text"])
             if match:
                 return match.group()
         return None
 
     def _extract_level(self, ocr_results: list) -> Optional[int]:
         """从 OCR 结果提取等级"""
-        for text, pos in ocr_results:
-            match = LEVEL_PATTERN.search(text)
+        for item in ocr_results:
+            match = LEVEL_PATTERN.search(item["text"])
             if match:
                 try:
                     return int(match.group(1))
@@ -291,9 +297,10 @@ class FetchAccountInfoTask(Task):
         # 找到 Lv. 位置作为参考点
         lv_y = None
 
-        for text, pos in ocr_results:
+        for item in ocr_results:
+            text = item["text"]
             if text.startswith("Lv.") or text.startswith("Lv "):
-                lv_y = pos[1]
+                lv_y = self._box_center(item["box"])[1]
                 break
 
         if lv_y is None:
@@ -306,8 +313,9 @@ class FetchAccountInfoTask(Task):
         exclude_patterns = _get_patterns("profile_exclude")
 
         candidates = []
-        for text, pos in ocr_results:
-            y = pos[1]
+        for item in ocr_results:
+            text = item["text"]
+            y = self._box_center(item["box"])[1]
             # 在 Lv. 下方指定范围内搜索
             # 排除经验值（如 1,610/1,865）和其他固定文本
             if lv_y < y < lv_y + search_range:
