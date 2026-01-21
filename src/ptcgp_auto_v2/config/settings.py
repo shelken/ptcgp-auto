@@ -98,17 +98,14 @@ class Settings:
         return settings
 
     def configure_logging(self):
-        """配置日志系统"""
-        level = getattr(logging, self.log_level.upper(), logging.INFO)
-        logging.basicConfig(
-            level=level,
-            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
+        """配置日志系统（使用 loguru）"""
+        from ptcgp_auto_v2.utils.logger import setup_logging, intercept_standard_logging
 
-        # 降低第三方库的日志级别
-        logging.getLogger("urllib3").setLevel(logging.WARNING)
-        logging.getLogger("PIL").setLevel(logging.WARNING)
+        # 初始化 loguru 日志
+        setup_logging(level=self.log_level)
+
+        # 拦截标准 logging 输出到 loguru
+        intercept_standard_logging()
 
 
 def get_settings() -> Settings:
