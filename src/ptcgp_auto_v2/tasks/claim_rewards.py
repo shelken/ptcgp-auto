@@ -193,7 +193,7 @@ class ClaimRewardsTask(Task):
 
         检测是否有奖励图标：
         1. 有奖励 → 进入任务页面
-        2. 无奖励 → 连续检测 4 次（每次间隔 2 秒），全部无奖励才确认
+        2. 无奖励 → 连续检测 2 次（每次间隔 2 秒），全部无奖励才确认
         """
         self._phase = ClaimRewardsPhase.CHECKING_HOME
 
@@ -203,8 +203,8 @@ class ClaimRewardsTask(Task):
 
         _, template_matcher = self.recognizer
 
-        # 连续检测 4 次，每次间隔 2 秒
-        for i in range(4):
+        # 连续检测 2 次，每次间隔 2 秒
+        for i in range(2):
             # 每次循环重新截图
             screenshot = self.adb.screenshot()
             if not screenshot:
@@ -225,15 +225,15 @@ class ClaimRewardsTask(Task):
                 self.adb.tap_center(reward_icon.box)
                 return ActionResult.ok(wait=3.0)
 
-            logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/4)")
-            if i < 3:
+            logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/2)")
+            if i < 1:
                 time.sleep(2.0)
 
-        # 4 次都无奖励，累计检查次数
+        # 2 次都无奖励，累计检查次数
         self._home_check_count += 1
         logger.info(f"  -> 确认无奖励图标（第 {self._home_check_count} 轮检查）")
 
-        if self._home_check_count >= 3 or self._round_count >= MAX_ROUNDS:
+        if self._home_check_count >= 2 or self._round_count >= MAX_ROUNDS:
             logger.info("  -> 确认无奖励，任务完成")
             self._phase = ClaimRewardsPhase.NO_REWARDS
 

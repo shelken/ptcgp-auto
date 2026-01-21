@@ -41,6 +41,12 @@ COMMON_PAGES = [
         "priority": 50,
     },
     {
+        # 游戏内通用关闭按钮（模板匹配）
+        "name": "btn_close",
+        "templates": ["btn_close"],
+        "priority": 500,
+    },
+    {
         "name": "_close_app_popup",
         "identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
         "match_all": True,

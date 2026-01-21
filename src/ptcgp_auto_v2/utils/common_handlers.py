@@ -8,6 +8,7 @@ from ptcgp_auto_v2.utils.gesture import (
     click_continue,
     tap_center,
     tap_text,
+    tap_template,
     press_back,
 )
 
@@ -63,6 +64,10 @@ def build_common_handlers(
         patterns = text_patterns.get("close_app_popup", [])
         return tap_text(adb, ocr, patterns, wait=1.0) or press_back(adb, wait=1.0)
 
+    def h_btn_close(page_info: dict) -> ActionResult:
+        """点击游戏内通用关闭按钮"""
+        return tap_template(adb, page_detector, "btn_close", wait=1.0) or ActionResult.ok(wait=1.0)
+
     def h_wait(page_info: dict) -> ActionResult:
         #TODO 后续需要让所有陷入停滞的流程发出通知。
         return ActionResult.ok(wait=3)
@@ -73,6 +78,7 @@ def build_common_handlers(
         "continue_button": h_continue,
         "tap_to_continue": h_tap_to_continue,
         "game_open_page": h_game_open,
+        "btn_close": h_btn_close,
         "_main_page": h_main,
         "_close_app_popup": h_close_app,
         "_auth_again": h_wait,

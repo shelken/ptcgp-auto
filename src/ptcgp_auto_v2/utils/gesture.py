@@ -61,12 +61,26 @@ def tap_text(
     ocr_results: list[dict],
     patterns: list[str],
     wait: float = 1.0,
+    exact: bool = False,
 ) -> Optional[ActionResult]:
-    """按文本列表匹配点击"""
+    """按文本列表匹配点击
+
+    Args:
+        adb: ADB 控制器
+        ocr_results: OCR 识别结果
+        patterns: 待匹配的文本列表
+        wait: 点击后等待时间
+        exact: 是否精确匹配（默认 False 为包含匹配）
+    """
     for pattern in patterns:
       for item in ocr_results:
         text = "".join(item["text"].lower().split())
-        if "".join(pattern.lower().split()) in text:
+        pattern_normalized = "".join(pattern.lower().split())
+        if exact:
+            matched = pattern_normalized == text
+        else:
+            matched = pattern_normalized in text
+        if matched:
             adb.tap_center(item["box"])
             logger.debug(f"点击文字: {pattern}")
             return ActionResult.ok(wait=wait)
