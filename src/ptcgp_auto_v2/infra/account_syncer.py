@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 # PTCGP 账号 XML 路径
 DEVICE_XML_PATH = "/data/data/jp.pokemon.pokemontcgp/shared_prefs/deviceAccount:.xml"
-DEVICE_TEMP_PATH = "/sdcard/deviceAccount:.xml"
+# 注意：adb push/pull 无法处理带冒号的文件名，使用不带冒号的临时路径
+DEVICE_TEMP_PATH = "/sdcard/deviceAccount_temp.xml"
 
 
 @dataclass
@@ -32,6 +33,7 @@ class DeviceAccountInfo:
     device_account: str  # 设备账号 ID，唯一标识符
     nintendo_id: Optional[str] = None  # Nintendo 账号 ID（从 JWT 解析）
     country: Optional[str] = None  # 国家/地区
+    session_token_iat: Optional[int] = None  # sessionToken 的 iat（签发时间戳）
     xml_content: bytes = b""  # 原始 XML 内容
 
 
@@ -83,10 +85,26 @@ class AccountSyncer:
         # 用 device_account 作为 game_id 查找
         account = self.account_repo.get_by_game_id(device_account_id)
         if account:
-            # 更新 Nintendo ID（如果有新的）
+            # 更新账号信息
+            updated = False
             if account_info.nintendo_id and account.nintendo_id != account_info.nintendo_id:
                 account.nintendo_id = account_info.nintendo_id
+                updated = True
+            if account_info.country and account.country != account_info.country:
+                account.country = account_info.country
+                updated = True
+
+            # 比较 iat，决定是否更新 xml_content
+            if self._should_update_xml(account, account_info):
+                old_iat = account.session_token_iat
+                account.xml_content = account_info.xml_content
+                account.session_token_iat = account_info.session_token_iat
+                updated = True
+                logger.debug(f"Token 已更新: iat {old_iat} -> {account_info.session_token_iat}")
+
+            if updated:
                 self.account_repo.update(account)
+                logger.debug(f"已更新账号: {account.nickname or account.game_id}")
             logger.info(f"识别到账号: {account.nickname or account.game_id} (ID: {account.id})")
             return account
 
@@ -96,6 +114,7 @@ class AccountSyncer:
             nintendo_id=account_info.nintendo_id,
             country=account_info.country,
             xml_content=account_info.xml_content,
+            session_token_iat=account_info.session_token_iat,
         )
         account = self.account_repo.create(account)
         logger.info(f"创建新账号: {device_account_id} (ID: {account.id})")
@@ -121,7 +140,13 @@ class AccountSyncer:
             account.nintendo_id = account_info.nintendo_id
         if account_info.country:
             account.country = account_info.country
-        account.xml_content = account_info.xml_content
+
+        # 比较 iat，决定是否更新 xml_content
+        if self._should_update_xml(account, account_info):
+            old_iat = account.session_token_iat
+            account.xml_content = account_info.xml_content
+            account.session_token_iat = account_info.session_token_iat
+            logger.debug(f"同步 Token: iat {old_iat} -> {account_info.session_token_iat}")
 
         return self.account_repo.update(account)
 
@@ -183,7 +208,7 @@ class AccountSyncer:
                 logger.warning("XML 中未找到 deviceAccount 字段")
                 return None
 
-            # 解析 Nintendo ID（从 idToken JWT 中提取）
+            # 解析 Nintendo ID 和 country（从 idToken JWT 中提取）
             nintendo_id = None
             country = None
             id_token = self._extract_xml_string(content, "idToken")
@@ -193,10 +218,19 @@ class AccountSyncer:
                     nintendo_id = jwt_payload.get("sub")
                     country = jwt_payload.get("country")
 
+            # 解析 sessionToken 的 iat（签发时间戳，用于判断 token 新旧）
+            session_token_iat = None
+            session_token = self._extract_xml_string(content, "sessionToken")
+            if session_token:
+                jwt_payload = self._decode_jwt_payload(session_token)
+                if jwt_payload:
+                    session_token_iat = jwt_payload.get("iat")
+
             return DeviceAccountInfo(
                 device_account=device_account,
                 nintendo_id=nintendo_id,
                 country=country,
+                session_token_iat=session_token_iat,
                 xml_content=xml_content,
             )
 
@@ -259,6 +293,21 @@ class AccountSyncer:
     def _run_su(self, cmd: str) -> Optional[str]:
         """执行 root 命令"""
         return self.adb.shell(f"su -c '{cmd}'")
+
+    def _should_update_xml(
+        self, account: Account, account_info: DeviceAccountInfo
+    ) -> bool:
+        """
+        判断是否应该更新 xml_content
+
+        基于 session_token_iat 比较，新 token 更新时返回 True
+        """
+        new_iat = account_info.session_token_iat
+        old_iat = account.session_token_iat
+        # 新 token 更新，或旧账号没有 xml_content
+        return (new_iat and (old_iat is None or new_iat > old_iat)) or (
+            account_info.xml_content and not account.xml_content
+        )
 
 
 def get_current_account(adb: AdbController) -> Optional[Account]:
