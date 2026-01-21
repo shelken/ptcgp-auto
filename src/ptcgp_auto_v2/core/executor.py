@@ -184,11 +184,26 @@ class TaskExecutor:
         self.task_instance.status = status.value
         if status == TaskStatus.COMPLETED:
             self.task_instance.last_completed_at = datetime.now()
+            # 恢复被阻塞的任务（前置任务完成后）
+            self._unblock_dependent_tasks()
         if error:
             self.task_instance.error_message = error
         self.task_instance.updated_at = datetime.now()
         # 保存到数据库
         self.task_instance.save()
+
+    def _unblock_dependent_tasks(self):
+        """恢复该账号被阻塞的任务"""
+        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
+
+        repo = TaskInstanceRepository()
+        blocked_tasks = repo.get_blocked_by_account(self.account.id)
+        for task in blocked_tasks:
+            logger.info(
+                f"恢复被阻塞任务: {task.task_type} (账号: {self.account.nickname})"
+            )
+            task.status = TaskStatus.PENDING.value
+            task.save()
 
     def run(self):
         """
@@ -196,6 +211,11 @@ class TaskExecutor:
 
         包含重试逻辑和错误处理。
         """
+        # 设置日志上下文（端口号和账号昵称）
+        from ptcgp_auto_v2.utils.logger import set_context, clear_context
+        port = self.device.address.split(":")[-1] if ":" in self.device.address else self.device.address
+        set_context(port=port, nickname=self.account.nickname or self.account.display_name)
+
         try:
             # 初始化组件
             self._init_components()
@@ -219,8 +239,7 @@ class TaskExecutor:
 
                     if result.success:
                         logger.info(
-                            f"任务完成: {self.task_instance.task_type} "
-                            f"(账号: {self.account.nickname})"
+                            f"任务完成: {self.task_instance.task_type}"
                         )
                         self._update_status(TaskStatus.COMPLETED)
                         return
@@ -244,8 +263,7 @@ class TaskExecutor:
 
             # 超过最大重试次数
             logger.error(
-                f"任务最终失败: {self.task_instance.task_type} "
-                f"(账号: {self.account.nickname})"
+                f"任务最终失败: {self.task_instance.task_type}"
             )
             self._update_status(TaskStatus.FAILED, last_error)
 
@@ -259,6 +277,8 @@ class TaskExecutor:
             # 归还设备
             self.device_pool.release(self.device)
             logger.debug(f"设备已归还: {self.device.address}")
+            # 清除日志上下文
+            clear_context()
 
 
 def run_executor(
