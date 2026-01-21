@@ -76,6 +76,11 @@ class Scheduler:
         self._task_instance_repo = TaskInstanceRepository()
         self._account_repo = AccountRepository()
 
+        # 启动时自动重置异常状态的任务
+        reset_count = self._task_instance_repo.reset_all_pending()
+        if reset_count > 0:
+            logger.info(f"已重置 {reset_count} 个异常状态的任务为待执行")
+
     @property
     def is_running(self) -> bool:
         """调度器是否正在运行"""
@@ -204,13 +209,14 @@ class Scheduler:
         Returns:
             需要执行的前置任务类型，或 None 表示无需前置任务
         """
-        account = task_instance.account
+        # 避免对 fetch_account_info 任务本身检查前置条件（防止循环）
+        if task_instance.task_type == "fetch_account_info":
+            return None
 
-        # 检查账号信息完整性（friend_id、nickname、level）
-        if not account.friend_id or not account.nickname or not account.level:
-            # 避免对 fetch_account_info 任务本身检查前置条件（防止循环）
-            if task_instance.task_type != "fetch_account_info":
-                return "fetch_account_info"
+        # 使用 FetchAccountInfoTask 的判断方法检查账号信息完整性
+        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
+        if FetchAccountInfoTask.needs_fetch(task_instance.account):
+            return "fetch_account_info"
 
         return None
 
@@ -220,14 +226,14 @@ class Scheduler:
         """
         在原任务前插入前置任务
 
-        将原任务状态改回 pending，创建前置任务优先执行。
+        将原任务状态改为 blocked，创建前置任务优先执行。
 
         Args:
             original_task: 原任务实例
             prerequisite_type: 前置任务类型
         """
-        # 将原任务改回 pending，等待前置任务完成后重新调度
-        original_task.status = TaskStatus.PENDING.value
+        # 将原任务改为 blocked，等待前置任务完成后重新调度
+        original_task.status = TaskStatus.BLOCKED.value
         original_task.save()
 
         # 创建前置任务

@@ -305,11 +305,8 @@ class TaskInstanceRepository:
         """获取下一个待执行的任务实例"""
         cursor = self.db.execute(
             """
-            SELECT ti.*, a.game_id, a.friend_id, a.nintendo_id, a.nickname,
-                   a.country, a.xml_content, a.task_plan_id,
-                   a.created_at as a_created_at, a.updated_at as a_updated_at
+            SELECT ti.*
             FROM task_instances ti
-            JOIN accounts a ON ti.account_id = a.id
             WHERE ti.status = 'pending'
             ORDER BY ti.created_at ASC
             LIMIT 1
@@ -321,17 +318,9 @@ class TaskInstanceRepository:
 
         instance = TaskInstance.from_row(row)
         if instance:
-            # 构建关联的账号
-            instance.account = Account(
-                id=row["account_id"],
-                game_id=row["game_id"],
-                friend_id=row["friend_id"],
-                nintendo_id=row["nintendo_id"],
-                nickname=row["nickname"],
-                country=row["country"],
-                xml_content=row["xml_content"],
-                task_plan_id=row["task_plan_id"],
-            )
+            # 使用 AccountRepository 加载完整的账号信息
+            account_repo = AccountRepository()
+            instance.account = account_repo.get_by_id(instance.account_id)
 
         return instance
 
@@ -341,6 +330,18 @@ class TaskInstanceRepository:
             """
             SELECT * FROM task_instances
             WHERE account_id = ? AND status = 'pending'
+            ORDER BY created_at ASC
+            """,
+            (account_id,),
+        )
+        return [TaskInstance.from_row(row) for row in cursor.fetchall()]
+
+    def get_blocked_by_account(self, account_id: int) -> List[TaskInstance]:
+        """获取账号的所有被阻塞任务"""
+        cursor = self.db.execute(
+            """
+            SELECT * FROM task_instances
+            WHERE account_id = ? AND status = 'blocked'
             ORDER BY created_at ASC
             """,
             (account_id,),
@@ -400,12 +401,17 @@ class TaskInstanceRepository:
         return True
 
     def reset_all_pending(self) -> int:
-        """将所有运行中的任务重置为待执行（用于程序重启后恢复）"""
+        """将所有异常状态的任务重置为待执行（用于程序重启后恢复）
+
+        重置的状态包括：
+        - running: 任务正在执行中被中断
+        - blocked: 任务等待前置任务完成，但前置任务没有完成就退出了
+        """
         cursor = self.db.execute(
             """
             UPDATE task_instances
             SET status = 'pending', updated_at = CURRENT_TIMESTAMP
-            WHERE status = 'running'
+            WHERE status IN ('running', 'blocked')
             """
         )
         self.db.commit()
