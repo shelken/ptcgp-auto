@@ -31,6 +31,11 @@ COMMON_PAGES = [
         "exact_match": True,
     },
     {
+        "name": "tap_to_continue",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "tap_to_continue"),
+        "priority": 45,
+    },
+    {
         "name": "game_open_page",
         "identifiers": _get_patterns(TEXT_PATTERNS, "game_open_page"),
         "priority": 50,

@@ -41,6 +41,15 @@ def build_common_handlers(
             text_patterns.get("continue_button", []),
         )
 
+    def h_tap_to_continue(page_info: dict) -> ActionResult:
+        """处理"點擊來繼續"类型的页面，点击该文字位置"""
+        return tap_text(
+            adb,
+            page_info.get("ocr_results", []),
+            text_patterns.get("tap_to_continue", []),
+            wait=1.0,
+        ) or tap_center(adb, wait=1.0)
+
     def h_game_open(page_info: dict) -> ActionResult:
         return tap_center(adb, wait=1.0)
 
@@ -62,6 +71,7 @@ def build_common_handlers(
         "popup_ok": h_popup_ok,
         "network_error_popup": h_network_error,
         "continue_button": h_continue,
+        "tap_to_continue": h_tap_to_continue,
         "game_open_page": h_game_open,
         "_main_page": h_main,
         "_close_app_popup": h_close_app,
