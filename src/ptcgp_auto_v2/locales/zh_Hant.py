@@ -30,6 +30,9 @@ TEXT_PATTERNS = {
     "pack_card_register": ["向上輕滑卡牌"],
     "pack_collection_result": ["繼續"],
     "pack_collection_exclude": ["開封結果", "點擊來繼續", "點擊以繼續"],
+    # 个人资料页
+    "profile_page": ["朋友ID"],
+    "profile_exclude": ["朋友ID", "Lv.", "戰績", "勳章", "請多多指教", "編輯", "設定", "登出"],
     # 通用页面
     "popup_ok": ["OK"],
     "network_error_popup": ["再試一次"],

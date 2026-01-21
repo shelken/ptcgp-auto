@@ -155,6 +155,61 @@ class TaskExecutor:
         self._adb.start_app(self.config.app_package)
         time.sleep(self.config.recovery_delay)
 
+    def _box_center(self, box: tuple) -> tuple:
+        """计算边界框中心点"""
+        x1, y1, x2, y2 = box
+        return ((x1 + x2) // 2, (y1 + y2) // 2)
+
+    def _ensure_account_info(self):
+        """
+        确保账号信息完整（friend_id、nickname、level）
+
+        如果账号缺少必要信息，自动执行 FetchAccountInfoTask 获取。
+        """
+        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
+
+        if not FetchAccountInfoTask.needs_fetch(self.account):
+            return  # 信息完整，跳过
+
+        logger.info(f"账号 {self.account.display_name} 信息不完整，自动获取...")
+
+        # 加载任务页面规则
+        self._page_detector.load_task_pages(FetchAccountInfoTask.pages)
+
+        task = FetchAccountInfoTask(
+            adb=self._adb,
+            recognizer=self._recognizer,
+            page_detector=self._page_detector,
+        )
+        task.bind_account(self.account)
+
+        if task.setup():
+            for _ in range(15):
+                result = task.check_completion()
+                if result:
+                    break
+                page_name, _ = self._page_detector.detect()
+                ocr_results = self._page_detector.get_last_ocr_results()
+                page_info = {
+                    "name": page_name,
+                    "ocr_results": [
+                        (r["text"], self._box_center(r["box"])) for r in ocr_results
+                    ],
+                }
+                action_result = task.process_page(page_info)
+                time.sleep(action_result.should_wait)
+            task.cleanup()
+
+        # 清理任务页面规则
+        self._page_detector.clear_task_pages()
+
+        # 刷新账号信息到内存
+        from ptcgp_auto_v2.db.repositories import AccountRepository
+
+        updated = AccountRepository().get_by_id(self.account.id)
+        if updated:
+            self.task_instance.account = updated
+
     def _try_recover(self):
         """尝试恢复到可执行状态"""
         logger.info("尝试恢复执行状态...")
@@ -208,6 +263,9 @@ class TaskExecutor:
                 if not self._switch_account():
                     self._update_status(TaskStatus.FAILED, "账号切换失败")
                     return
+
+            # 确保账号信息完整（自动获取 friend_id）
+            self._ensure_account_info()
 
             # 重试循环
             last_error = None
