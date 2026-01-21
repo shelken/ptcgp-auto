@@ -37,9 +37,12 @@ class Device:
         return self.status == DeviceStatus.AVAILABLE
 
     def mark_busy(self, account_id: Optional[int] = None):
-        """标记设备为忙碌状态"""
+        """
+        标记设备为忙碌状态
+
+        注意：不更新 current_account_id，该字段仅在 executor 实际完成账号切换后更新。
+        """
         self.status = DeviceStatus.BUSY
-        self.current_account_id = account_id
         self.last_used_at = datetime.now()
 
     def mark_available(self):
