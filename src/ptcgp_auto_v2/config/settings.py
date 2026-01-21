@@ -32,8 +32,9 @@ class Settings:
     app_activity: str = "com.unity3d.player.UnityPlayerActivity"
 
     # 屏幕配置
-    screen_width: int = 1080
-    screen_height: int = 1920
+    # 基准分辨率：用于坐标比例计算的参考值（模板图片基于此分辨率截取）
+    base_screen_width: int = 1080
+    base_screen_height: int = 1920
     template_base_width: int = 1080
 
     # 识别配置
