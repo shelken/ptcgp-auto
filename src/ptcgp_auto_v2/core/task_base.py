@@ -220,8 +220,8 @@ class Task(ABC):
                     )
                     self.on_complete(result)
                     return result
-                # 尝试返回键
-                self.adb.press_back()
+                # 未知页面时等待，不按返回键（避免页面加载过程中误退出）
+                # self.adb.press_back()
                 time.sleep(1)
                 continue
 
