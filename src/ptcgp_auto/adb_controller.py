@@ -21,9 +21,17 @@ class AdbController:
     """ADB 设备控制器"""
 
     def __init__(self, host: str = None, port: int = None):
-        self.host = host or config.ADB_HOST
-        self.port = port or config.ADB_PORT
+        if host and ":" in host and port is None:
+            parsed_host, parsed_port = host.rsplit(":", 1)
+            self.host = parsed_host
+            self.port = int(parsed_port)
+        else:
+            self.host = host or config.ADB_HOST
+            self.port = port or config.ADB_PORT
+        if self.host is None or self.port is None:
+            raise ValueError("ADB host/port 未配置")
         self.device: Optional[AdbDevice] = None
+        self.device_address = f"{self.host}:{self.port}"
         # 使用统一的数据目录
         self.data_dir = get_data_dir(self.port)
 
@@ -262,6 +270,46 @@ class AdbController:
 
         except Exception as e:
             logger.error(f"返回键失败: {e}")
+
+    def shell(self, command: str) -> Optional[str]:
+        """执行 adb shell 命令"""
+        if not self.device:
+            logger.error("设备未连接")
+            return None
+
+        try:
+            return self.device.shell(command)
+        except Exception as e:
+            logger.error(f"执行 shell 失败: {e}")
+            return None
+
+    def push(self, local_path: str, remote_path: str) -> bool:
+        """推送文件到设备"""
+        if not self.device:
+            logger.error("设备未连接")
+            return False
+
+        try:
+            self.device.push(local_path, remote_path)
+            logger.debug(f"推送文件: {local_path} -> {remote_path}")
+            return True
+        except Exception as e:
+            logger.error(f"推送文件失败: {e}")
+            return False
+
+    def pull(self, remote_path: str, local_path: str) -> bool:
+        """从设备拉取文件"""
+        if not self.device:
+            logger.error("设备未连接")
+            return False
+
+        try:
+            self.device.sync.pull(remote_path, local_path, exist_ok=True)
+            logger.debug(f"拉取文件: {remote_path} -> {local_path}")
+            return True
+        except Exception as e:
+            logger.error(f"拉取文件失败: {e}")
+            return False
 
     def force_stop_app(self, package_name: str):
         """强制停止应用"""

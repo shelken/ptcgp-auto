@@ -46,12 +46,13 @@ def _build_all_boosters(templates_dir: Path) -> List[Tuple[str, str, str, bool]]
         # 解析系列代码用于排序 (如 A1, A1a, B1, B1a)
         # 字母部分 + 数字部分 + 后缀
         import re
-        match = re.match(r'([A-Z])(\d+)([a-z]?)', pack_code)
+
+        match = re.match(r"([A-Z])(\d+)([a-z]?)", pack_code)
         if match:
             letter, num, suffix = match.groups()
             sort_tuple = (letter, int(num), suffix)
         else:
-            sort_tuple = (pack_code, 0, '')
+            sort_tuple = (pack_code, 0, "")
         # exists=True 排在前面 (0), exists=False 排在后面 (1)
         return (0 if exists else 1, sort_tuple, name)
 
@@ -121,7 +122,9 @@ def _calculate_scale_from_list(adb_controller, all_boosters, templates_dir):
     return scale
 
 
-def _run_detect_mode(adb_controller, selected_items, templates_dir, scale: float = None):
+def _run_detect_mode(
+    adb_controller, selected_items, templates_dir, scale: float = None
+):
     """
     检测模式：截图后匹配选中的子包
 
@@ -162,19 +165,27 @@ def _run_detect_mode(adb_controller, selected_items, templates_dir, scale: float
 
         # 根据是否指定缩放比例选择匹配方法
         if scale:
-            confidence = recognizer.get_template_confidence_at_scale(screenshot, template_rel_path, scale)
+            confidence = recognizer.get_template_confidence_at_scale(
+                screenshot, template_rel_path, scale
+            )
         else:
-            confidence = recognizer.get_template_confidence(screenshot, template_rel_path)
+            confidence = recognizer.get_template_confidence(
+                screenshot, template_rel_path
+            )
 
         if confidence >= threshold:
             if scale:
-                match_result = recognizer.find_template_at_scale(screenshot, template_rel_path, scale)
+                match_result = recognizer.find_template_at_scale(
+                    screenshot, template_rel_path, scale
+                )
             else:
                 match_result = recognizer.find_template(screenshot, template_rel_path)
             if match_result:
                 x1, y1, x2, y2 = match_result
                 cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                print(f"  {i}. [✓] {display:<25} 置信度: {confidence:.3f}  位置: ({cx}, {cy})")
+                print(
+                    f"  {i}. [✓] {display:<25} 置信度: {confidence:.3f}  位置: ({cx}, {cy})"
+                )
             else:
                 print(f"  {i}. [?] {display:<25} 置信度: {confidence:.3f}  匹配异常")
         else:
@@ -212,6 +223,7 @@ def run_crop_pack(adb_controller, templates_dir: Path):
 
         print()
         print("  d. 检测模式（选择后检测匹配）")
+        print("  a. 全部检测（所有已有模板）")
         print(f"  s. 设置缩放比例 [当前: {scale_display}]")
         print("  0. 退出")
         print()
@@ -223,9 +235,23 @@ def run_crop_pack(adb_controller, templates_dir: Path):
                 print("退出")
                 return
 
+            # 全部检测
+            if user_input.lower() == "a":
+                items_to_detect = [b for b in all_boosters if b[3]]
+                if not items_to_detect:
+                    print("没有可检测的项")
+                    continue
+
+                _run_detect_mode(
+                    adb_controller, items_to_detect, templates_dir, current_scale
+                )
+                continue
+
             # 检测模式 - 进入子菜单选择要检测的项
             if user_input.lower() == "d":
-                print("\n请输入要检测的编号 (可用逗号分隔，如 1,2,3，留空检测全部有模板的):")
+                print(
+                    "\n请输入要检测的编号 (可用逗号分隔，如 1,2,3，留空检测全部有模板的):"
+                )
                 detect_input = input("检测编号: ").strip()
 
                 if not detect_input:
@@ -248,7 +274,14 @@ def run_crop_pack(adb_controller, templates_dir: Path):
                     print("没有可检测的项")
                     continue
 
-                _run_detect_mode(adb_controller, items_to_detect, templates_dir, current_scale)
+                _run_detect_mode(
+                    adb_controller, items_to_detect, templates_dir, current_scale
+                )
+                continue
+
+                _run_detect_mode(
+                    adb_controller, items_to_detect, templates_dir, current_scale
+                )
                 continue
 
             # 设置缩放比例
@@ -259,7 +292,9 @@ def run_crop_pack(adb_controller, templates_dir: Path):
                     print(f"  {key}: {value}")
                 print()
                 print("输入 c 自动计算（框选屏幕上的目标）")
-                scale_input = input("输入缩放比例 (0.01-2.0, c=计算, 留空恢复原始): ").strip()
+                scale_input = input(
+                    "输入缩放比例 (0.01-2.0, c=计算, 留空恢复原始): "
+                ).strip()
                 if not scale_input:
                     current_scale = None
                     print("已恢复原始尺寸")
@@ -308,7 +343,7 @@ def run_crop_pack(adb_controller, templates_dir: Path):
 
             if cached_roi:
                 x, y, w, h = cached_roi
-                print(f"\n上次选区: ({x}, {y}) - ({x+w}, {y+h})  尺寸: {w}x{h}")
+                print(f"\n上次选区: ({x}, {y}) - ({x + w}, {y + h})  尺寸: {w}x{h}")
                 choice = input("复用上次选区? [Y/n]: ").strip().lower()
                 if choice != "n":
                     roi = cached_roi
@@ -332,7 +367,7 @@ def run_crop_pack(adb_controller, templates_dir: Path):
             cropped.save(template_path)
 
             print(f"\n模板已保存: {template_path}")
-            print(f"区域坐标: ({x}, {y}) - ({x+w}, {y+h})")
+            print(f"区域坐标: ({x}, {y}) - ({x + w}, {y + h})")
             print(f"尺寸: {w}x{h}")
 
             # 终端预览
@@ -343,6 +378,7 @@ def run_crop_pack(adb_controller, templates_dir: Path):
             print("\n=== 验证模板匹配 ===")
             if recognizer is None:
                 from ..recognizer import Recognizer
+
                 recognizer = Recognizer()
 
             # 重新加载模板（包含刚保存的）
@@ -350,7 +386,9 @@ def run_crop_pack(adb_controller, templates_dir: Path):
 
             # 获取置信度
             threshold = config.TEMPLATE_THRESHOLD
-            confidence = recognizer.get_template_confidence(screenshot, template_rel_path)
+            confidence = recognizer.get_template_confidence(
+                screenshot, template_rel_path
+            )
             print(f"置信度: {confidence:.3f} (阈值: {threshold})")
 
             if confidence >= threshold:

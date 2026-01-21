@@ -23,6 +23,7 @@ class StateManager:
         current_level = self.state.get("current_level")
         if current_level:
             from ptcgp_auto.logger import set_level
+
             set_level(current_level)
 
     def _load_state(self) -> Dict:
@@ -85,6 +86,7 @@ class StateManager:
             "current_level": None,  # 当前正在处理的等级
             "current_series": config.SERIES[0] if config.SERIES else "A",  # 当前系列
             "user": None,  # 用户信息：{username, friend_id, fetched_at}
+            "user_db": None,  # 数据库用户信息缓存
             "levels": {},
         }
 
@@ -170,6 +172,7 @@ class StateManager:
         self.state["current_level"] = level
         # 同步更新日志上下文中的等级
         from ptcgp_auto.logger import set_level
+
         set_level(level)
         self.save()
 
@@ -245,6 +248,20 @@ class StateManager:
             "fetched_at": datetime.now().isoformat(),
         }
         logger.info(f"[状态] 已保存用户信息: {username} ({friend_id})")
+        self.save()
+
+    def has_user_db(self) -> bool:
+        """检查是否已有数据库用户信息"""
+        return self.state.get("user_db") is not None
+
+    def get_user_db(self) -> Optional[Dict]:
+        """获取数据库用户信息"""
+        return self.state.get("user_db")
+
+    def set_user_db(self, user_db: Dict):
+        """设置数据库用户信息"""
+        self.state["user_db"] = user_db
+        logger.info("[状态] 已保存数据库用户信息")
         self.save()
 
     # ===== 工具方法 =====

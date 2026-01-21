@@ -124,15 +124,21 @@ class PageDetector:
         self, identifier: str, ocr_results: List[Dict], exact_match: bool
     ) -> Optional[Dict]:
         """查找单个标识符"""
+        identifier_lower = identifier.lower()
+        identifier_normalized = "".join(identifier_lower.split())
+
         for ocr_item in ocr_results:
             ocr_text = ocr_item["text"].strip()
+            ocr_lower = ocr_text.lower()
+            ocr_normalized = "".join(ocr_lower.split())
 
             if exact_match:
-                matched = identifier.lower() == ocr_text.lower()
+                matched = identifier_lower == ocr_lower
             else:
                 matched = (
-                    identifier.lower() == ocr_text.lower()
-                    or identifier.lower() in ocr_text.lower()
+                    identifier_lower == ocr_lower
+                    or identifier_lower in ocr_lower
+                    or identifier_normalized in ocr_normalized
                 )
 
             if matched:

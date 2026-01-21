@@ -1,8 +1,10 @@
 """用户信息相关动作模块"""
 
 import re
+import time
 from typing import Dict, Optional, Tuple
 
+from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
 from .utils import find_text_by_variants
 
@@ -166,3 +168,98 @@ class UserActions:
             logger.info(f"  -> 提取成功: {username} / {friend_id}")
 
         return username, friend_id
+
+
+def fetch_user_info_via_ui(
+    adb,
+    recognizer,
+    state,
+    page_detector,
+    action_handler,
+    allow_restart: bool = False,
+    max_steps: int = 120,
+    max_stuck_steps: int = 8,
+) -> bool:
+    """通过 UI 流程获取用户信息"""
+    logger.info("正在获取用户信息...")
+
+    step = 0
+    stuck_steps = 0
+    last_page = None
+
+    while not state.has_user_info() and step < max_steps:
+        step += 1
+        screenshot = adb.screenshot()
+        if not screenshot:
+            time.sleep(1)
+            continue
+
+        page_name, page_info, match_info = page_detector.detect(screenshot)
+        if not page_name:
+            time.sleep(1)
+            continue
+
+        if page_name == last_page:
+            stuck_steps += 1
+        else:
+            stuck_steps = 0
+        last_page = page_name
+
+        if page_name == "battle_in_progress":
+            logger.info("  -> 对战中，等待结束后再获取用户信息")
+            time.sleep(config.WAIT_BATTLE_CHECK_INTERVAL)
+            continue
+
+        if allow_restart and stuck_steps >= max_stuck_steps:
+            _restart_game(adb)
+            stuck_steps = 0
+            last_page = None
+            time.sleep(3)
+            continue
+
+        logger.debug(f"  [{page_name}]")
+
+        match_info["page_info"] = page_info
+
+        if page_name == "user_info_popup":
+            action_handler.execute("extract_user_info", screenshot, match_info)
+            break
+
+        if page_name == "friends_list":
+            action_handler.execute("click_add_friends", screenshot, match_info)
+        elif page_name == "community_page":
+            action_handler.execute("click_friends_tab", screenshot, match_info)
+        elif page_name == "game_home_main":
+            box = recognizer.find_template(screenshot, "icon_community", threshold=0.7)
+            if box:
+                logger.debug("  -> 点击社群图标")
+                adb.tap_center(box)
+            else:
+                adb.back()
+        elif page_name in ("_main_page", "game_open_page"):
+            action_handler.execute("click_identifier", screenshot, match_info)
+        else:
+            box = recognizer.find_template(screenshot, "icon_community", threshold=0.7)
+            if box:
+                logger.debug("  -> 点击社群图标")
+                adb.tap_center(box)
+            else:
+                adb.back()
+
+        time.sleep(config.WAIT_PAGE_TRANSITION)
+
+    if state.has_user_info():
+        logger.info("用户信息获取完成")
+        return True
+
+    logger.error("用户信息获取失败")
+    return False
+
+
+def _restart_game(adb):
+    """重启游戏应用"""
+    from ptcgp_auto.config import PTCGP_MAIN_ACTIVITY
+
+    logger.warning("  -> 尝试重启游戏")
+    adb.force_stop_app(config.PTCGP_PACKAGE_NAME)
+    adb.shell(f"am start -n {PTCGP_MAIN_ACTIVITY}")

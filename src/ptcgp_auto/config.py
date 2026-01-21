@@ -40,6 +40,9 @@ NOTIFICATION_SOUND = True
 # 自动开启自动对战
 AUTO_ENABLE_AUTO_BATTLE = True
 
+# 允许在无法回到主页时重启应用
+ALLOW_RESTART_ON_HOME_FAIL = False
+
 # ============================================================
 # 静态配置（不通过 CLI/.env 配置）
 # ============================================================
@@ -55,6 +58,8 @@ UNRECOGNIZED_THRESHOLD = 15
 
 # 应用包名
 PTCGP_PACKAGE_NAME = "jp.pokemon.pokemontcgp"
+# 游戏主 Activity
+PTCGP_MAIN_ACTIVITY = f"{PTCGP_PACKAGE_NAME}/com.unity3d.player.UnityPlayerActivity"
 
 # 屏幕分辨率（BlueStacks 默认）
 SCREEN_WIDTH = 1080
@@ -106,7 +111,7 @@ PAGES = None
 TEXT_PATTERNS = None
 DECK_KEYWORD = None
 SERIES = None
-CURRENT_MODE = "battle"  # 当前模式：battle, tutorial, daily
+CURRENT_MODE = "battle"  # 当前模式：battle, tutorial
 
 
 def load_language(lang: str = None):
@@ -126,13 +131,12 @@ def load_mode(mode: str = None):
     加载指定模式的 PAGES 配置
 
     Args:
-        mode: 模式名称，可选 "battle", "tutorial", "daily"
+        mode: 模式名称，可选 "battle", "tutorial"
               默认为 "battle"
 
     模式会合并多个页面组：
     - battle: common + user_info + battle + tutorial
     - tutorial: common + tutorial
-    - daily: common + user_info + daily
     """
     global PAGES, CURRENT_MODE
 

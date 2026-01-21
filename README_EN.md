@@ -80,6 +80,9 @@ python main.py
 python main.py -a 5556
 python main.py -a 192.168.1.100:5555
 
+# v2: auto-discover BlueStacks devices when -d omitted
+python main_v2.py --daemon
+
 # Debug tool
 python debug_tool.py
 python debug_tool.py -a 5556
@@ -115,6 +118,7 @@ ptcgp-auto/
 ├── src/
 │   └── ptcgp_auto/
 │       ├── __init__.py
+│       ├── runner.py       # Main automation loop
 │       ├── actions/        # Action handler module
 │       │   ├── __init__.py     # Exports ActionHandler
 │       │   ├── handler.py      # Facade class
@@ -156,10 +160,7 @@ ptcgp-auto/
 │       ├── recognizer_parts/   # Recognizer components
 │       ├── settings.py         # Runtime settings
 │       ├── state_manager.py    # State management
-│       ├── utils.py            # Utilities
-│       └── xml/                # XML account management module
-│           ├── __init__.py
-│           └── account_xml.py  # XML file operations
+│       └── utils.py            # Utilities
 ├── templates/              # Template images
 └── docs/                   # Documentation
 ```

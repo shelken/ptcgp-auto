@@ -58,30 +58,12 @@ CONFIG_DEFS: List[Tuple[str, str, type, Any, str, Optional[str], Optional[list]]
         None,
     ),
     (
-        "daily",
-        "DAILY_MODE",
+        "allow_restart",
+        "ALLOW_RESTART",
         bool,
         False,
-        "每日开包模式：自动轮换所有账号开免费包",
-        "--daily",
-        None,
-    ),
-    (
-        "db_path",
-        "DB_PATH",
-        str,
-        "",
-        "SQLite 数据库文件路径（默认: ~/.ptcgp_auto/accounts.db）",
-        "--db-path",
-        None,
-    ),
-    (
-        "xml_dir",
-        "XML_DIR",
-        str,
-        "",
-        "账号 XML 文件存储目录（默认: ~/.ptcgp_auto/accounts/）",
-        "--xml-dir",
+        "无法回到主页时允许重启应用",
+        "--allow-restart",
         None,
     ),
 ]
@@ -220,6 +202,9 @@ def apply_settings_to_config(settings: dict) -> None:
 
     if "no_notify_sound" in settings and settings["no_notify_sound"]:
         config.NOTIFICATION_SOUND = False
+
+    if "allow_restart" in settings:
+        config.ALLOW_RESTART_ON_HOME_FAIL = settings["allow_restart"]
 
 
 def print_active_settings(settings: dict) -> None:
