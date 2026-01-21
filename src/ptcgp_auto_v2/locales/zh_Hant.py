@@ -37,6 +37,7 @@ TEXT_PATTERNS = {
     "popup_ok": ["OK"],
     "network_error_popup": ["再試一次"],
     "continue_button": ["繼續"],
+    "tap_to_continue": ["點擊來繼續", "點擊以繼續", "点击继续"],
     "game_open_page": ["點擊畫面開始遊戲"],
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
