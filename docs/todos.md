@@ -7,15 +7,15 @@
 - [x] 基础设施：ADB、OCR、模板匹配、页面检测
 - [x] 账号同步：从设备提取 XML 文件 (`account_syncer.py`)
 - [x] 开包任务：`open_pack.py`
+- [x] 账号切换：XML 注入 (`account_switcher.py`) - 已测试通过
+- [x] session_token_iat 追踪：确保保存最新 token
 
 ## 进行中
 
-- [ ] 账号切换：XML 注入 (`account_switcher.py`) - 代码已写，待测试
 - [ ] `fetch_friend_id` 任务 - 通过 UI 获取 friend_id 和 nickname（参考 v1 `actions/user.py`）
 
 ## 高优先级
 
-- [ ] 测试账号切换功能
 - [ ] 实现 friend_id 填充任务
 - [ ] `send_gift` - 每日送礼任务
 

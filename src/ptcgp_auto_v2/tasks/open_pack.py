@@ -63,6 +63,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# 常量定义（基于 1080x1920 基准分辨率的像素值）
+# 使用时通过 adb.scaled_x/scaled_y 缩放到当前分辨率
+# ============================================================
+
+# 沙漏弹窗关闭点击位置（屏幕底部区域）
+# 1920 * 0.95 ≈ 1824，取 1820
+BASE_POPUP_CLOSE_TAP_Y = 1820
+
 
 def _get_patterns(text_patterns: dict, key: str) -> list[str]:
     """获取指定配置的文本列表"""
@@ -605,12 +614,14 @@ class OpenPackTask(Task):
             return result
 
         logger.info("  -> 点击屏幕底部关闭弹窗")
-        self.adb.tap(self.adb.screen_width // 10, int(self.adb.screen_height * 0.95))
+        self.adb.tap(self.adb.screen_width // 10, self.adb.scaled_y(BASE_POPUP_CLOSE_TAP_Y))
         return ActionResult.ok(wait=1.0)
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
         """滑动开包（pack_opening_swipe 页面）"""
         logger.info("  -> 从左往右滑动开包")
+        # 进入 滑动开包 说明开包成功，增加计数
+        self._packs_opened_count += 1
         start, end = swipe_pack_coords(self.adb)
         return swipe(self.adb, start, end, 500)
 
@@ -629,18 +640,16 @@ class OpenPackTask(Task):
 
         # fallback 到屏幕中心
         logger.warning("  -> 未找到長按文字，长按屏幕中心")
-        return long_press(self.adb, center_point(self.adb), 2000)
-
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
-        """向上滑动卡牌登录图鉴（pack_card_register 页面）"""
-        # 进入卡牌登录页面说明开包成功，增加计数
-        self._packs_opened_count += 1
-        logger.info(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
 
         # 开包流程即将结束，准备回到主页继续检测
         self._phase = OpenPackPhase.NAVIGATING_TO_HOME
         self._home_check_count = 0  # 重置主页检查计数
 
+        return long_press(self.adb, center_point(self.adb), 2000)
+
+    def _handle_card_register(self, page_info: dict) -> ActionResult:
+        """向上滑动卡牌登录图鉴（pack_card_register 页面）仅在有新卡时出现"""
+        logger.info(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         start, end = swipe_card_coords(self.adb)
         return swipe(self.adb, start, end, 300)
 
