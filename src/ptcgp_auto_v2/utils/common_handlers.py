@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from typing import Callable, Dict
+import time
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.utils.gesture import (
@@ -53,6 +54,10 @@ def build_common_handlers(
         patterns = text_patterns.get("close_app_popup", [])
         return tap_text(adb, ocr, patterns, wait=1.0) or press_back(adb, wait=1.0)
 
+    def h_wait(page_info: dict) -> ActionResult:
+        #TODO 后续需要让所有陷入停滞的流程发出通知。
+        return ActionResult.ok(wait=3)
+
     return {
         "popup_ok": h_popup_ok,
         "network_error_popup": h_network_error,
@@ -60,4 +65,5 @@ def build_common_handlers(
         "game_open_page": h_game_open,
         "_main_page": h_main,
         "_close_app_popup": h_close_app,
+        "_auth_again": h_wait,
     }

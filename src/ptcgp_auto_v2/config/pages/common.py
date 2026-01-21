@@ -48,6 +48,11 @@ COMMON_PAGES = [
         "exclude_identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
         "priority": 920,
     },
+    {
+        "name": "_auth_again",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "auth_again"),
+        "priority": 920,
+    },
 ]
 
 __all__ = ["COMMON_PAGES"]
