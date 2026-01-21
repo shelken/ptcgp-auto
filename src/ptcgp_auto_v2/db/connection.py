@@ -173,6 +173,7 @@ class Database:
             ("country", "TEXT"),
             ("xml_content", "BLOB"),
             ("session_token_iat", "INTEGER"),
+            ("level", "INTEGER"),
         ]
 
         for col_name, col_type in new_columns:
