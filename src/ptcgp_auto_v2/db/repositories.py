@@ -163,8 +163,8 @@ class AccountRepository:
         cursor = self.db.execute(
             """
             INSERT INTO accounts (game_id, friend_id, nintendo_id, nickname, country,
-                                  xml_content, task_plan_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                                  xml_content, session_token_iat, task_plan_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 account.game_id,
@@ -173,6 +173,7 @@ class AccountRepository:
                 account.nickname,
                 account.country,
                 account.xml_content,
+                account.session_token_iat,
                 account.task_plan_id,
             ),
         )
@@ -186,7 +187,8 @@ class AccountRepository:
             """
             UPDATE accounts
             SET game_id = ?, friend_id = ?, nintendo_id = ?, nickname = ?, country = ?,
-                xml_content = ?, task_plan_id = ?, updated_at = CURRENT_TIMESTAMP
+                xml_content = ?, session_token_iat = ?, task_plan_id = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (
@@ -196,6 +198,7 @@ class AccountRepository:
                 account.nickname,
                 account.country,
                 account.xml_content,
+                account.session_token_iat,
                 account.task_plan_id,
                 account.id,
             ),
