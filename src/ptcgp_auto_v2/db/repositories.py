@@ -162,15 +162,16 @@ class AccountRepository:
         """创建账号"""
         cursor = self.db.execute(
             """
-            INSERT INTO accounts (game_id, friend_id, nintendo_id, nickname, country,
+            INSERT INTO accounts (game_id, friend_id, nintendo_id, nickname, level, country,
                                   xml_content, session_token_iat, task_plan_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 account.game_id,
                 account.friend_id,
                 account.nintendo_id,
                 account.nickname,
+                account.level,
                 account.country,
                 account.xml_content,
                 account.session_token_iat,
@@ -186,7 +187,7 @@ class AccountRepository:
         self.db.execute(
             """
             UPDATE accounts
-            SET game_id = ?, friend_id = ?, nintendo_id = ?, nickname = ?, country = ?,
+            SET game_id = ?, friend_id = ?, nintendo_id = ?, nickname = ?, level = ?, country = ?,
                 xml_content = ?, session_token_iat = ?, task_plan_id = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
@@ -196,6 +197,7 @@ class AccountRepository:
                 account.friend_id,
                 account.nintendo_id,
                 account.nickname,
+                account.level,
                 account.country,
                 account.xml_content,
                 account.session_token_iat,

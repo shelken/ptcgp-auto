@@ -97,6 +97,7 @@ class Account:
     friend_id: Optional[str] = None  # 朋友 ID，格式 XXXX-XXXX-XXXX-XXXX
     nintendo_id: Optional[str] = None  # Nintendo 账号 ID
     nickname: Optional[str] = None  # 用户昵称
+    level: Optional[int] = None  # 账号等级（从 UI 获取）
     country: Optional[str] = None  # 国家/地区
     xml_content: Optional[bytes] = None  # XML 文件内容
     session_token_iat: Optional[int] = None  # sessionToken 的签发时间戳
@@ -116,6 +117,7 @@ class Account:
             friend_id=row["friend_id"],
             nintendo_id=row["nintendo_id"],
             nickname=row["nickname"],
+            level=row["level"] if "level" in row.keys() else None,
             country=row["country"],
             xml_content=row["xml_content"],
             session_token_iat=row["session_token_iat"] if "session_token_iat" in row.keys() else None,
@@ -132,6 +134,7 @@ class Account:
             "friend_id": self.friend_id,
             "nintendo_id": self.nintendo_id,
             "nickname": self.nickname,
+            "level": self.level,
             "country": self.country,
             "xml_content": self.xml_content.hex() if self.xml_content else None,
             "session_token_iat": self.session_token_iat,
