@@ -25,6 +25,14 @@ DEVICE_TEMP_PATH = "/sdcard/deviceAccount_temp.xml"
 DEVICE_SHARED_PREFS_DIR = "/data/data/jp.pokemon.pokemontcgp/shared_prefs"
 PTCGP_MAIN_ACTIVITY = f"{PTCGP_PACKAGE_NAME}/com.unity3d.player.UnityPlayerActivity"
 
+# 切换账号时需要清理的文件（避免服务端校验失败 102-243-017）
+# - PersistedInstallation.*.json: Firebase 设备绑定 ID，会与账号关联
+# - MissionUserPrefs: 任务进度缓存，可能与账号绑定
+FILES_TO_CLEAN_ON_SWITCH = [
+    "/data/data/jp.pokemon.pokemontcgp/files/PersistedInstallation.*.json",
+    "/data/data/jp.pokemon.pokemontcgp/files/UserPreferences/v1/MissionUserPrefs",
+]
+
 
 class AccountSwitcher:
     """
@@ -135,7 +143,10 @@ class AccountSwitcher:
             self.adb.force_stop(PTCGP_PACKAGE_NAME)
             time.sleep(wait_seconds)
 
-            # 2. 推送 XML 到 sdcard
+            # 2. 清理账号绑定相关文件（避免 102-243-017 错误）
+            self._clean_account_bound_files()
+
+            # 3. 推送 XML 到 sdcard
             logger.debug("推送 XML 到设备...")
             push_result = self.adb.push(str(xml_path), DEVICE_TEMP_PATH)
             if not push_result:
@@ -143,27 +154,27 @@ class AccountSwitcher:
                 return False
             time.sleep(wait_seconds * 0.5)
 
-            # 3. 确保 shared_prefs 目录存在
+            # 4. 确保 shared_prefs 目录存在
             self._run_su_command(f"mkdir -p {DEVICE_SHARED_PREFS_DIR}")
 
-            # 4. 复制 XML 到 shared_prefs
+            # 5. 复制 XML 到 shared_prefs
             logger.debug("复制 XML 到 shared_prefs...")
             result = self._run_su_command(f"cp {DEVICE_TEMP_PATH} {DEVICE_XML_PATH}")
             if result is None:
                 logger.error("复制 XML 到 shared_prefs 失败")
                 return False
 
-            # 5. 设置正确的权限和所有者
+            # 6. 设置正确的权限和所有者
             self._run_su_command(f"chmod 660 {DEVICE_XML_PATH}")
             self._run_su_command(
                 f"chown $(stat -c %u:%g {DEVICE_SHARED_PREFS_DIR}) {DEVICE_XML_PATH}"
             )
             time.sleep(wait_seconds * 0.5)
 
-            # 6. 清理临时文件
+            # 7. 清理临时文件
             self._run_su_command(f"rm {DEVICE_TEMP_PATH}")
 
-            # 7. 可选：重启游戏
+            # 8. 可选：重启游戏
             if restart_app:
                 logger.debug("启动游戏...")
                 self._start_app()
@@ -185,6 +196,18 @@ class AccountSwitcher:
         except Exception as e:
             logger.debug(f"执行 su 命令失败: {e}")
             return None
+
+    def _clean_account_bound_files(self):
+        """
+        清理账号绑定相关文件
+
+        切换账号前清理这些文件，避免服务端校验失败（错误码 102-243-017）。
+        这些文件会在游戏启动时自动重新生成。
+        """
+        logger.debug("清理账号绑定相关文件...")
+        for pattern in FILES_TO_CLEAN_ON_SWITCH:
+            self._run_su_command(f"rm -f {pattern}")
+        logger.debug("账号绑定文件清理完成")
 
     def _start_app(self):
         """启动游戏应用"""

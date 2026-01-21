@@ -81,6 +81,10 @@ def _get_patterns(text_patterns: dict, key: str) -> list[str]:
     return []
 
 
+# ============================================================
+# 页面识别规则
+# 注意：priority 数值越小优先级越高
+# ============================================================
 def _build_pack_pages(text_patterns: dict) -> list[dict]:
     """构建开包任务页面规则"""
     return [
@@ -303,6 +307,12 @@ class OpenPackTask(Task):
         if page_name == "pack_opening_result":
             logger.info("  -> 等待开包结果展示")
             return ActionResult.ok(wait=1.5)
+
+        # pack_opening_select：点击选择要开的扩充包
+        if page_name == "pack_opening_select":
+            self._phase = OpenPackPhase.OPENING
+            logger.info("  -> 点击屏幕中心选择扩充包")
+            return tap_center(self.adb, wait=1.0)
 
         # 其他页面由通用处理器处理
         logger.warning(
