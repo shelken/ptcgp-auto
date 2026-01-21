@@ -56,8 +56,9 @@ def parse_args():
     parser.add_argument(
         "--task",
         type=str,
-        choices=["open_pack", "send_gift", "add_friend", "battle"],
-        help="运行单个指定任务（调试用）",
+        nargs="+",
+        choices=TaskRegistry.all_types(),
+        help="运行指定任务（可传多个，依次执行）",
     )
 
     parser.add_argument(
@@ -201,9 +202,9 @@ def sync_account(device_address: str):
         return None
 
 
-def run_single_task(device: str, account_id: int, task_type: str, settings: Settings):
-    """运行单个任务（调试用）"""
-    logger.info(f"运行单个任务: {task_type} (账号ID: {account_id}, 设备: {device})")
+def run_single_task(device: str, account_id: int, task_types: list[str], settings: Settings):
+    """运行指定任务（可传多个，依次执行）"""
+    logger.info(f"运行任务: {', '.join(task_types)} (账号ID: {account_id}, 设备: {device})")
 
     scheduler = Scheduler(
         device_addresses=[device],
@@ -215,8 +216,16 @@ def run_single_task(device: str, account_id: int, task_type: str, settings: Sett
         ),
     )
 
-    success = scheduler.run_single_task(device, account_id, task_type)
-    return 0 if success else 1
+    # 依次执行每个任务
+    all_success = True
+    for task_type in task_types:
+        success = scheduler.run_single_task(device, account_id, task_type)
+        if not success:
+            logger.error(f"任务失败: {task_type}")
+            all_success = False
+            break  # 失败则中断后续任务
+
+    return 0 if all_success else 1
 
 
 def run_daemon(settings: Settings):
@@ -327,7 +336,8 @@ def main():
     print("  python main_v2.py --list-accounts             # 列出账号")
     print("  python main_v2.py --sync-account              # 同步当前设备账号")
     print("  python main_v2.py --sync-account -d 127.0.0.1:5556  # 指定设备同步")
-    print("  python main_v2.py --task open_pack --account 1      # 单任务")
+    print("  python main_v2.py --task open_pack --account 1              # 单任务")
+    print("  python main_v2.py --task claim_rewards open_pack --account 1  # 多任务")
     print()
     print("更多选项请使用 --help 查看")
 
