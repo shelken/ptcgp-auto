@@ -58,6 +58,24 @@ def main():
         default=None,
         help="模板匹配缩放比例（如 0.22, 0.81, 1.0）",
     )
+    parser.add_argument(
+        "--card-level",
+        type=str,
+        metavar="TEMPLATE",
+        help="非交互模式：检测卡片稀有度（钻石/星星数量），支持路径或模板名",
+    )
+    parser.add_argument(
+        "--gap",
+        type=float,
+        default=1.5,
+        help="--card-level 的聚类间距阈值（模板宽度的倍数，默认 1.5）",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="模板匹配置信度阈值（0-1，默认 0.8）",
+    )
     args = parser.parse_args()
 
     host = None
@@ -72,7 +90,7 @@ def main():
 
     context.set_current_address(host, port)
 
-    if args.ocr or args.template or args.screenshot or args.all_templates:
+    if args.ocr or args.template or args.screenshot or args.all_templates or args.card_level:
         run_non_interactive(args)
         return
 
