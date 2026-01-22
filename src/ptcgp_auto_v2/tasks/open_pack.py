@@ -643,7 +643,7 @@ class OpenPackTask(Task):
         long_press_patterns = TEXT_PATTERNS.get("long_press", [])
 
         # 使用工具函数长按文字位置
-        result = long_press_text(self.adb, ocr_results, long_press_patterns, duration=2000)
+        result = long_press_text(self.adb, ocr_results, long_press_patterns)
         if result:
             logger.info("  -> 长按文字跳过卡牌展示")
             return result
@@ -655,7 +655,7 @@ class OpenPackTask(Task):
         self._phase = OpenPackPhase.NAVIGATING_TO_HOME
         self._home_check_count = 0  # 重置主页检查计数
 
-        return long_press(self.adb, center_point(self.adb), 2000)
+        return long_press(self.adb, center_point(self.adb))
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（pack_card_register 页面）仅在有新卡时出现"""

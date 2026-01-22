@@ -205,7 +205,7 @@ class AdbController:
         y = (box[1] + box[3]) // 2
         self.tap(x, y)
 
-    def long_press(self, x: int, y: int, duration: int = 1000):
+    def long_press(self, x: int, y: int, duration: int = 3000):
         """
         长按屏幕指定位置
 
