@@ -17,7 +17,9 @@
 
 ## 进行中
 
-
+- [ ] 任务批量执行改造（见 `docs/plans/batch-task-execution.md`）
+  - 同一账号的任务在同一设备上按 task_plan 顺序连续执行
+  - 减少账号切换，提高效率
 
 ## 高优先级
 

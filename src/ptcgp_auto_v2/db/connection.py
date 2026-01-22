@@ -148,7 +148,7 @@ class Database:
 
         -- 插入默认任务计划
         INSERT OR IGNORE INTO task_plans (name, description, task_types)
-        VALUES ('daily', '每日任务计划', '["open_pack", "send_gift"]');
+        VALUES ('daily', '每日任务计划', '["open_pack", "claim_gifts", "claim_rewards"]');
         """
 
         conn = sqlite3.connect(str(self.db_path))
