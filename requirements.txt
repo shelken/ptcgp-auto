@@ -5,3 +5,5 @@ Pillow>=10.0.0
 numpy>=1.24.0
 loguru>=0.7.0  # 结构化日志
 questionary>=2.0.0  # 交互式 CLI 选择菜单
+sqlmodel>=0.0.16  # ORM with type hints
+alembic>=1.13.0  # Database migrations
