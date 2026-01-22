@@ -214,7 +214,8 @@ class ClaimGiftsTask(Task):
                 self._home_check_count = 0
                 self._phase = ClaimGiftsPhase.ENTERING_GIFTS
                 self.adb.tap_center(gift_icon.box)
-                return ActionResult.ok(wait=3.0)
+                time.sleep(4.0)
+                return ActionResult.ok(wait=1.0)
 
             logger.debug(f"  -> 未检测到礼物图标 ({i + 1}/2)")
             if i < 1:
