@@ -59,6 +59,7 @@ class Scheduler:
         self.config = config or SchedulerConfig()
         self.device_pool = DevicePool(device_addresses)
         self._running = False
+        self._stop_event = threading.Event()  # 停止事件，用于通知执行器
         self._executor_pool: Optional[ThreadPoolExecutor] = None
         self._last_task_generation = datetime.min
         self._lock = threading.Lock()
@@ -192,12 +193,13 @@ class Scheduler:
 
         优先级：
         1. 状态为 pending
-        2. 创建时间早的优先
+        2. 该账号没有正在执行的任务（防止同一账号被分配到多个设备）
+        3. 创建时间早的优先
 
         Returns:
             TaskInstance 或 None
         """
-        return self._task_instance_repo.get_next_pending()
+        return self._task_instance_repo.get_next_pending_excluding_busy_accounts()
 
     def _check_prerequisites(self, task_instance: "TaskInstance") -> Optional[str]:
         """
@@ -274,10 +276,24 @@ class Scheduler:
             logger.debug("没有可用设备，等待...")
             return
 
+        # 【关键】在提交到线程池之前，立即将状态改为 running
+        # 防止同一账号的任务被分配到多个设备
+        task_instance.status = TaskStatus.RUNNING.value
+        task_instance.save()
+
         logger.info(
             f"分配任务: {task_instance.task_type} "
             f"(账号: {task_instance.account.nickname}, "
             f"设备: {device.address})"
+        )
+
+        # 创建带停止事件的执行器配置
+        executor_config = ExecutorConfig(
+            max_retries=self.config.executor_config.max_retries,
+            retry_delay=self.config.executor_config.retry_delay,
+            recovery_delay=self.config.executor_config.recovery_delay,
+            app_package=self.config.executor_config.app_package,
+            stop_event=self._stop_event,
         )
 
         # 提交到线程池执行
@@ -286,7 +302,7 @@ class Scheduler:
             device=device,
             task_instance=task_instance,
             device_pool=self.device_pool,
-            config=self.config.executor_config,
+            config=executor_config,
         )
 
     def _main_loop(self):
@@ -352,6 +368,7 @@ class Scheduler:
 
         logger.info("停止调度器...")
         self._running = False
+        self._stop_event.set()  # 通知所有执行器停止
 
         if self._executor_pool:
             self._executor_pool.shutdown(wait=wait)
