@@ -204,7 +204,7 @@ def swipe(
 
 
 def long_press(
-    adb, point: Tuple[int, int], duration: int = 1000, wait: float = 1.0
+    adb, point: Tuple[int, int], duration: int = 3000, wait: float = 1.0
 ) -> ActionResult:
     """长按指定位置"""
     adb.long_press(point[0], point[1], duration)
@@ -215,7 +215,7 @@ def long_press_text(
     adb,
     ocr_results: list[dict],
     patterns: list[str],
-    duration: int = 2000,
+    duration: int = 3000,
     wait: float = 1.0,
 ) -> Optional[ActionResult]:
     """按文本列表匹配长按"""
