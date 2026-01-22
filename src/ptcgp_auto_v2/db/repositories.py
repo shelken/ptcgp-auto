@@ -324,6 +324,36 @@ class TaskInstanceRepository:
 
         return instance
 
+    def get_next_pending_excluding_busy_accounts(self) -> Optional[TaskInstance]:
+        """获取下一个待执行的任务实例（排除正在执行任务的账号）
+
+        用于防止同一账号被同时分配到多个设备。
+        """
+        cursor = self.db.execute(
+            """
+            SELECT ti.*
+            FROM task_instances ti
+            WHERE ti.status = 'pending'
+              AND ti.account_id NOT IN (
+                  SELECT DISTINCT account_id
+                  FROM task_instances
+                  WHERE status = 'running'
+              )
+            ORDER BY ti.created_at ASC
+            LIMIT 1
+            """
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        instance = TaskInstance.from_row(row)
+        if instance:
+            account_repo = AccountRepository()
+            instance.account = account_repo.get_by_id(instance.account_id)
+
+        return instance
+
     def get_pending_by_account(self, account_id: int) -> List[TaskInstance]:
         """获取账号的所有待执行任务"""
         cursor = self.db.execute(
