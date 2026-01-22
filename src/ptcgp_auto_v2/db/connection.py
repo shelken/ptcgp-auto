@@ -80,7 +80,7 @@ class Database:
             name TEXT UNIQUE NOT NULL,
             description TEXT,
             task_types TEXT NOT NULL,  -- JSON 数组: ["open_pack", "send_gift"]
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
         );
 
         -- 账号表
@@ -93,8 +93,8 @@ class Database:
             country TEXT,                  -- 国家/地区代码
             xml_content BLOB,              -- XML 文件内容
             task_plan_id INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+            updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (task_plan_id) REFERENCES task_plans(id) ON DELETE SET NULL
         );
 
@@ -107,8 +107,8 @@ class Database:
             reset_type TEXT NOT NULL DEFAULT 'daily',  -- daily/weekly/once
             error_message TEXT,
             last_completed_at TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+            updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
             UNIQUE(account_id, task_type)
         );
@@ -118,7 +118,7 @@ class Database:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             account_id INTEGER NOT NULL,
             pack_type TEXT NOT NULL,
-            opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            opened_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
         );
 
@@ -129,8 +129,8 @@ class Database:
             type TEXT NOT NULL,
             pack_code TEXT NOT NULL,
             booster_name TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
+            updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
             FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
             UNIQUE(account_id, type)
         );

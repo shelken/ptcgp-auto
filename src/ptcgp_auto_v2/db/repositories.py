@@ -189,7 +189,7 @@ class AccountRepository:
             UPDATE accounts
             SET game_id = ?, friend_id = ?, nintendo_id = ?, nickname = ?, level = ?, country = ?,
                 xml_content = ?, session_token_iat = ?, task_plan_id = ?,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = datetime('now', 'localtime')
             WHERE id = ?
             """,
             (
@@ -213,7 +213,7 @@ class AccountRepository:
         self.db.execute(
             """
             UPDATE accounts
-            SET friend_id = ?, updated_at = CURRENT_TIMESTAMP
+            SET friend_id = ?, updated_at = datetime('now', 'localtime')
             WHERE id = ?
             """,
             (friend_id, account_id),
@@ -232,7 +232,7 @@ class AccountRepository:
         self.db.execute(
             """
             UPDATE accounts
-            SET task_plan_id = ?, updated_at = CURRENT_TIMESTAMP
+            SET task_plan_id = ?, updated_at = datetime('now', 'localtime')
             WHERE id = ?
             """,
             (plan_id, account_id),
@@ -417,7 +417,7 @@ class TaskInstanceRepository:
             """
             UPDATE task_instances
             SET status = ?, error_message = ?, last_completed_at = ?,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = datetime('now', 'localtime')
             WHERE id = ?
             """,
             (
@@ -436,12 +436,13 @@ class TaskInstanceRepository:
         重置的状态包括：
         - running: 任务正在执行中被中断
         - blocked: 任务等待前置任务完成，但前置任务没有完成就退出了
+        - skipped: 任务被跳过（12小时内已开包等），重启后重新检查
         """
         cursor = self.db.execute(
             """
             UPDATE task_instances
-            SET status = 'pending', updated_at = CURRENT_TIMESTAMP
-            WHERE status IN ('running', 'blocked')
+            SET status = 'pending', updated_at = datetime('now', 'localtime')
+            WHERE status IN ('running', 'blocked', 'skipped')
             """
         )
         self.db.commit()
@@ -509,7 +510,7 @@ class AccountPackConfigRepository:
         self.db.execute(
             """
             UPDATE account_pack_config
-            SET type = ?, pack_code = ?, booster_name = ?, updated_at = CURRENT_TIMESTAMP
+            SET type = ?, pack_code = ?, booster_name = ?, updated_at = datetime('now', 'localtime')
             WHERE id = ?
             """,
             (config.type, config.pack_code, config.booster_name, config.id),
@@ -568,6 +569,19 @@ class PackRecordRepository:
     def has_opened_today(self, account_id: int) -> bool:
         """检查账号今日是否已开包"""
         return self.get_today(account_id) is not None
+
+    def has_opened_within_hours(self, account_id: int, hours: int = 12) -> bool:
+        """检查账号在指定小时内是否已开包"""
+        cursor = self.db.execute(
+            """
+            SELECT 1 FROM pack_records
+            WHERE account_id = ?
+              AND opened_at >= datetime('now', 'localtime', '-' || ? || ' hours')
+            LIMIT 1
+            """,
+            (account_id, hours),
+        )
+        return cursor.fetchone() is not None
 
     def create(self, record: PackRecord) -> PackRecord:
         """创建开包记录"""
