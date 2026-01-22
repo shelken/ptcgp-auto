@@ -14,14 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.db.models import Account
 from ptcgp_auto_v2.db.repositories import AccountRepository
 
 logger = logging.getLogger(__name__)
 
-# PTCGP 账号 XML 路径
-DEVICE_XML_PATH = "/data/data/jp.pokemon.pokemontcgp/shared_prefs/deviceAccount:.xml"
 # 注意：adb push/pull 无法处理带冒号的文件名，使用不带冒号的临时路径
 DEVICE_TEMP_PATH = "/sdcard/deviceAccount_temp.xml"
 
@@ -54,6 +53,7 @@ class AccountSyncer:
             storage_dir: XML 存储目录
         """
         self.adb = adb
+        self._settings = get_settings()
         if storage_dir is None:
             storage_dir = Path("data/accounts")
         self.storage_dir = Path(storage_dir)
@@ -164,7 +164,7 @@ class AccountSyncer:
                 return None
 
             # 复制 XML 到 sdcard
-            self._run_su(f"cp {DEVICE_XML_PATH} {DEVICE_TEMP_PATH}")
+            self._run_su(f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}")
             self._run_su(f"chmod 644 {DEVICE_TEMP_PATH}")
 
             # 拉取到本地（使用随机文件名，避免多设备并发冲突）
