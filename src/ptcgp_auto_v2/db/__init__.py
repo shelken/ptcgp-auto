@@ -2,32 +2,40 @@
 """
 数据库模块
 
-包含数据库连接、数据模型和数据访问层。
+包含 SQLModel 模型、数据库引擎和数据访问层。
 """
 
-from ptcgp_auto_v2.db.connection import Database, get_database
+from ptcgp_auto_v2.db.engine import get_engine, get_session, session_scope
 from ptcgp_auto_v2.db.models import (
     Account,
-    TaskPlan,
-    TaskInstance,
+    AccountPackConfig,
     PackRecord,
+    TaskInstance,
+    TaskPlan,
 )
 from ptcgp_auto_v2.db.repositories import (
+    AccountPackConfigRepository,
     AccountRepository,
-    TaskPlanRepository,
-    TaskInstanceRepository,
     PackRecordRepository,
+    TaskInstanceRepository,
+    TaskPlanRepository,
 )
 
 __all__ = [
-    "Database",
-    "get_database",
+    # 引擎和会话
+    "get_engine",
+    "get_session",
+    "session_scope",
+    # 模型
     "Account",
-    "TaskPlan",
-    "TaskInstance",
+    "AccountPackConfig",
     "PackRecord",
+    "TaskInstance",
+    "TaskPlan",
+    # 仓库
+    "AccountPackConfigRepository",
     "AccountRepository",
-    "TaskPlanRepository",
-    "TaskInstanceRepository",
     "PackRecordRepository",
+    "TaskInstanceRepository",
+    "TaskPlanRepository",
 ]
