@@ -34,6 +34,9 @@ class SchedulerConfig:
     poll_interval: float = 5.0           # 轮询间隔（秒）
     max_workers: int = 4                  # 最大并发执行器数
     task_generation_interval: float = 60.0  # 任务生成检查间隔（秒）
+    stale_task_timeout: float = 600.0  # running/blocked 任务超时时间（秒），默认 10 分钟
+    skipped_reset_timeout: float = 3600.0  # skipped 任务重置时间（秒），默认 1 小时
+    stale_task_check_interval: float = 60.0  # 异常任务检查间隔（秒）
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
 
 
@@ -66,6 +69,7 @@ class Scheduler:
         self._stop_event = threading.Event()  # 停止事件，用于通知执行器
         self._executor_pool: Optional[ThreadPoolExecutor] = None
         self._last_task_generation = datetime.min
+        self._last_stale_check = datetime.min  # 上次异常任务检查时间
         self._lock = threading.Lock()
 
         # 延迟初始化的仓库
@@ -95,6 +99,24 @@ class Scheduler:
         """检查是否应该生成任务"""
         elapsed = (datetime.now() - self._last_task_generation).total_seconds()
         return elapsed >= self.config.task_generation_interval
+
+    def _should_check_stale_tasks(self) -> bool:
+        """检查是否应该检查异常任务"""
+        elapsed = (datetime.now() - self._last_stale_check).total_seconds()
+        return elapsed >= self.config.stale_task_check_interval
+
+    def _check_and_reset_stale_tasks(self):
+        """检查并重置超时的异常任务"""
+        if not self._should_check_stale_tasks():
+            return
+
+        self._last_stale_check = datetime.now()
+        reset_count = self._task_instance_repo.reset_stale_tasks(
+            stale_timeout_seconds=int(self.config.stale_task_timeout),
+            skipped_timeout_seconds=int(self.config.skipped_reset_timeout),
+        )
+        if reset_count > 0:
+            logger.info(f"已重置 {reset_count} 个超时/异常状态的任务为待执行")
 
     def _generate_pending_tasks(self):
         """
@@ -470,6 +492,9 @@ class Scheduler:
             try:
                 # 生成待执行任务
                 self._generate_pending_tasks()
+
+                # 检查并重置超时的异常任务
+                self._check_and_reset_stale_tasks()
 
                 # 检查是否有空闲设备
                 if self.device_pool.available_count == 0:
