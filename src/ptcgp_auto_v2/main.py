@@ -132,26 +132,52 @@ def list_accounts():
     accounts = repo.get_all()
 
     print("\n账号列表:")
-    print("-" * 80)
-    print(
-        f"{'ID':<6} {'游戏ID':<18} {'朋友ID':<20} {'昵称':<12} {'国家':<6} {'计划':<10}"
-    )
-    print("-" * 80)
 
+    # 构建表格数据
+    headers = ["ID", "游戏ID", "朋友ID", "昵称", "等级", "国家", "计划", "备注"]
+    rows = []
     for account in accounts:
-        plan_name = account.task_plan.name if account.task_plan else "-"
-        friend_id = account.friend_id or "-"
-        nickname = account.nickname or "-"
-        country = account.country or "-"
-        # 截断过长的 game_id
-        game_id = (
-            account.game_id[:16] + ".."
-            if len(account.game_id) > 18
-            else account.game_id
-        )
-        print(
-            f"{account.id:<6} {game_id:<18} {friend_id:<20} {nickname:<12} {country:<6} {plan_name:<10}"
-        )
+        game_id = account.game_id[:16] if len(account.game_id) > 16 else account.game_id
+        rows.append([
+            account.id,
+            game_id,
+            account.friend_id or "-",
+            account.nickname or "-",
+            account.level or "-",
+            account.country or "-",
+            account.task_plan.name if account.task_plan else "-",
+            account.remark or "-",
+        ])
+
+    # 计算每列最大宽度（考虑中文字符占2个宽度）
+    def display_width(s):
+        """计算字符串显示宽度（中文占2格）"""
+        s = str(s)
+        width = 0
+        for c in s:
+            width += 2 if ord(c) > 127 else 1
+        return width
+
+    def pad(s, width):
+        """按显示宽度填充"""
+        s = str(s)
+        padding = width - display_width(s)
+        return s + " " * padding
+
+    # 计算列宽
+    col_widths = [display_width(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            col_widths[i] = max(col_widths[i], display_width(cell))
+
+    # 打印表头
+    header_line = "  ".join(pad(h, col_widths[i]) for i, h in enumerate(headers))
+    print(header_line)
+    print("-" * display_width(header_line))
+
+    # 打印数据行
+    for row in rows:
+        print("  ".join(pad(str(cell), col_widths[i]) for i, cell in enumerate(row)))
 
     print(f"\n共 {len(accounts)} 个账号\n")
 
