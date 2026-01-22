@@ -138,7 +138,7 @@ class Scheduler:
                 if not account.task_plan:
                     continue
 
-                for task_type in account.task_plan.task_types:
+                for task_type in account.task_plan.task_types_list:
                     self._ensure_task_instance(account, task_type)
 
         except Exception as e:
@@ -324,14 +324,14 @@ class Scheduler:
         Returns:
             按 task_plan.task_types 顺序排列的任务列表
         """
-        if not account.task_plan or not account.task_plan.task_types:
+        if not account.task_plan or not account.task_plan.task_types_list:
             # 没有任务计划，按创建时间排序
             return sorted(tasks, key=lambda x: x.created_at or datetime.min)
 
-        # 按照 task_plan.task_types 数组顺序排列
+        # 按照 task_plan.task_types_list 数组顺序排列
         plan_order = {
             task_type: idx
-            for idx, task_type in enumerate(account.task_plan.task_types)
+            for idx, task_type in enumerate(account.task_plan.task_types_list)
         }
         # 不在计划中的任务排在最后
         return sorted(tasks, key=lambda x: plan_order.get(x.task_type, 999))
