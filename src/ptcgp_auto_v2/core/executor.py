@@ -258,10 +258,19 @@ class TaskExecutor:
                     result = task.execute()
 
                     if result.success:
-                        logger.info(
-                            f"任务完成: {self.task_instance.task_type}"
-                        )
-                        self._update_status(TaskStatus.COMPLETED)
+                        if result.skipped:
+                            # 跳过的任务设为 skipped 状态，不会被重复调度
+                            logger.info(
+                                f"任务跳过: {self.task_instance.task_type} ({result.skip_reason})"
+                            )
+                            self.task_instance.status = TaskStatus.SKIPPED.value
+                            self.task_instance.error_message = f"跳过: {result.skip_reason}"
+                            self.task_instance.save()
+                        else:
+                            logger.info(
+                                f"任务完成: {self.task_instance.task_type}"
+                            )
+                            self._update_status(TaskStatus.COMPLETED)
                         return
                     else:
                         last_error = result.error
