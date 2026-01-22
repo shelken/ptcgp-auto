@@ -83,6 +83,9 @@ python main.py -a 192.168.1.100:5555
 # v2：未指定 -d 时自动发现 BlueStacks 设备
 python main_v2.py --daemon
 
+# v2：手动切换账号（支持端口简写，勿与 --task/--daemon 同时使用）
+python main_v2.py --switch-account 4 -d 5715
+
 # 调试工具
 python debug_tool.py
 python debug_tool.py -a 5556
