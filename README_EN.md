@@ -83,6 +83,9 @@ python main.py -a 192.168.1.100:5555
 # v2: auto-discover BlueStacks devices when -d omitted
 python main_v2.py --daemon
 
+# v2: switch account manually (port shorthand, avoid --task/--daemon)
+python main_v2.py --switch-account 4 -d 5715
+
 # Debug tool
 python debug_tool.py
 python debug_tool.py -a 5556

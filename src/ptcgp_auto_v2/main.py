@@ -17,6 +17,8 @@ from ptcgp_auto_v2.core.executor import ExecutorConfig
 from ptcgp_auto_v2.core.task_base import TaskRegistry
 from ptcgp_auto_v2.db.connection import get_database
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskInstanceRepository
+from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
+from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
 # 导入任务模块以触发注册
@@ -25,7 +27,20 @@ import ptcgp_auto_v2.tasks
 logger = logging.getLogger(__name__)
 
 
-def parse_args():
+def normalize_device_addresses(devices: list[str]) -> list[str]:
+    normalized = []
+    for device in devices:
+        if device.isdigit():
+            normalized.append(f"127.0.0.1:{device}")
+            continue
+        if ":" in device:
+            normalized.append(device)
+            continue
+        raise ValueError(f"设备地址格式不正确: {device}")
+    return normalized
+
+
+def parse_args(argv: list[str] | None = None):
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
         description="PTCGP Auto v2 - 任务队列架构自动化框架",
@@ -65,6 +80,12 @@ def parse_args():
         "--account",
         type=int,
         help="指定账号 ID（与 --task 配合使用）",
+    )
+
+    parser.add_argument(
+        "--switch-account",
+        type=int,
+        help="切换到指定账号",
     )
 
     parser.add_argument(
@@ -111,7 +132,7 @@ def parse_args():
         help="使用设备当前账号，不切换",
     )
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def list_tasks():
@@ -138,16 +159,18 @@ def list_accounts():
     rows = []
     for account in accounts:
         game_id = account.game_id[:16] if len(account.game_id) > 16 else account.game_id
-        rows.append([
-            account.id,
-            game_id,
-            account.friend_id or "-",
-            account.nickname or "-",
-            account.level or "-",
-            account.country or "-",
-            account.task_plan.name if account.task_plan else "-",
-            account.remark or "-",
-        ])
+        rows.append(
+            [
+                account.id,
+                game_id,
+                account.friend_id or "-",
+                account.nickname or "-",
+                account.level or "-",
+                account.country or "-",
+                account.task_plan.name if account.task_plan else "-",
+                account.remark or "-",
+            ]
+        )
 
     # 计算每列最大宽度（考虑中文字符占2个宽度）
     def display_width(s):
@@ -228,9 +251,39 @@ def sync_account(device_address: str):
         return None
 
 
-def run_single_task(device: str, account_id: int, task_types: list[str], settings: Settings):
+def run_switch_account(device: str, account_id: int) -> int:
+    """切换到指定账号"""
+    get_database()
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+    if not account or not account.xml_content:
+        logger.error(f"账号不存在或缺少 XML 内容: {account_id}")
+        return 1
+
+    adb = AdbController(device)
+    try:
+        adb.connect()
+        switcher = AccountSwitcher(adb)
+        success = switcher.switch_to(account, restart_app=True)
+        if not success:
+            logger.error("账号切换失败")
+            return 1
+        logger.info(f"账号切换成功: {account_id}")
+        return 0
+    except Exception:
+        logger.exception("切换账号失败")
+        return 1
+    finally:
+        adb.disconnect()
+
+
+def run_single_task(
+    device: str, account_id: int, task_types: list[str], settings: Settings
+):
     """运行指定任务（可传多个，依次执行）"""
-    logger.info(f"运行任务: {', '.join(task_types)} (账号ID: {account_id}, 设备: {device})")
+    logger.info(
+        f"运行任务: {', '.join(task_types)} (账号ID: {account_id}, 设备: {device})"
+    )
 
     scheduler = Scheduler(
         device_addresses=[device],
@@ -285,13 +338,19 @@ def main():
     """主入口函数"""
     args = parse_args()
 
-    device_addresses: str = args.devices
+    device_addresses: list[str] | None = args.devices
     discovered_devices = False
     if not device_addresses:
         device_addresses = discover_devices()
         discovered_devices = True
         if not device_addresses:
             device_addresses = ["127.0.0.1:5555"]
+    else:
+        try:
+            device_addresses = normalize_device_addresses(device_addresses)
+        except ValueError as exc:
+            print(f"错误: {exc}")
+            return 1
 
     # 配置设置
     settings = Settings(
@@ -332,22 +391,36 @@ def main():
                 success = False
         return 0 if success else 1
 
+    if args.switch_account is not None and args.task:
+        logger.error("--switch-account 不能与 --task 同时使用")
+        return 1
+
+    if args.switch_account is not None and args.daemon:
+        logger.error("--switch-account 不能与 --daemon 同时使用")
+        return 1
+
+    if args.switch_account is not None:
+        if len(device_addresses) > 1:
+            logger.warning("--switch-account 仅支持单设备，已使用第一个设备")
+        device = device_addresses[0]
+        return run_switch_account(device, args.switch_account)
+
     # 处理单任务模式
     if args.task:
-      # 原有错误处理保留
-      if not args.account and not args.disable_switch:
-          print("错误: --task 需要配合 --account 使用，或使用 --disable-switch")
-          return 1
-      device = device_addresses[0]
-      # 新增：disable_switch 时从设备获取账号
-      account_id = args.account
-      if args.disable_switch and account_id is None:
-          account_id = sync_account(device)
-          if account_id is None:
-              logger.error("无法获取设备当前账号")
-              return 1
+        # 原有错误处理保留
+        if not args.account and not args.disable_switch:
+            print("错误: --task 需要配合 --account 使用，或使用 --disable-switch")
+            return 1
+        device = device_addresses[0]
+        # 新增：disable_switch 时从设备获取账号
+        account_id = args.account
+        if args.disable_switch and account_id is None:
+            account_id = sync_account(device)
+            if account_id is None:
+                logger.error("无法获取设备当前账号")
+                return 1
 
-      return run_single_task(device, account_id, args.task, settings)
+        return run_single_task(device, account_id, args.task, settings)
 
     # 守护模式
     if args.daemon:
@@ -360,6 +433,7 @@ def main():
     print("  python main_v2.py --daemon                    # 守护模式")
     print("  python main_v2.py --list-tasks                # 列出任务")
     print("  python main_v2.py --list-accounts             # 列出账号")
+    print("  python main_v2.py --switch-account 4 -d 5715  # 切换账号")
     print("  python main_v2.py --sync-account              # 同步当前设备账号")
     print("  python main_v2.py --sync-account -d 127.0.0.1:5556  # 指定设备同步")
     print("  python main_v2.py --task open_pack --account 1              # 单任务")

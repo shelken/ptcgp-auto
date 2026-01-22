@@ -21,6 +21,7 @@ _db_lock = threading.Lock()
 def get_default_db_path() -> Path:
     """获取默认数据库路径（从 settings 获取）"""
     from ptcgp_auto_v2.config.settings import get_settings
+
     return get_settings().db_path
 
 
@@ -85,6 +86,7 @@ class Database:
             nintendo_id TEXT,              -- Nintendo 账号 ID（从 JWT 解析）
             nickname TEXT,                 -- 用户昵称
             country TEXT,                  -- 国家/地区代码
+            remark TEXT DEFAULT '',         -- 备注
             xml_content BLOB,              -- XML 文件内容
             task_plan_id INTEGER,
             created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
@@ -165,6 +167,7 @@ class Database:
             ("friend_id", "TEXT"),
             ("nintendo_id", "TEXT"),
             ("country", "TEXT"),
+            ("remark", "TEXT DEFAULT ''"),
             ("xml_content", "BLOB"),
             ("session_token_iat", "INTEGER"),
             ("level", "INTEGER"),
