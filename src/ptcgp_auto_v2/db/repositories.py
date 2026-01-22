@@ -480,6 +480,38 @@ class TaskInstanceRepository:
         self.db.commit()
         return cursor.rowcount
 
+    def reset_stale_tasks(
+        self, stale_timeout_seconds: int, skipped_timeout_seconds: int
+    ) -> int:
+        """重置超时的异常状态任务（用于 daemon 模式定期清理）
+
+        Args:
+            stale_timeout_seconds: running/blocked 状态的超时时间（秒）
+            skipped_timeout_seconds: skipped 状态的超时时间（秒）
+
+        Returns:
+            重置的任务数量
+        """
+        cursor = self.db.execute(
+            """
+            UPDATE task_instances
+            SET status = 'pending', updated_at = datetime('now', 'localtime')
+            WHERE (
+                -- running 超时
+                (status = 'running' AND updated_at < datetime('now', 'localtime', '-' || ? || ' seconds'))
+                -- failed 直接重试
+                OR status = 'failed'
+                -- blocked 超时
+                OR (status = 'blocked' AND updated_at < datetime('now', 'localtime', '-' || ? || ' seconds'))
+                -- skipped 超时后重新检查
+                OR (status = 'skipped' AND updated_at < datetime('now', 'localtime', '-' || ? || ' seconds'))
+            )
+            """,
+            (stale_timeout_seconds, stale_timeout_seconds, skipped_timeout_seconds),
+        )
+        self.db.commit()
+        return cursor.rowcount
+
     def delete(self, instance_id: int) -> bool:
         """删除任务实例"""
         self.db.execute("DELETE FROM task_instances WHERE id = ?", (instance_id,))

@@ -14,12 +14,18 @@
 - [x] 对所有账号进行轮询每日任务
 - [x] 领取所有任务奖励（每日）
 - [x] 领取所有礼物（每日）
+- [x] 任务批量执行改造（见 `docs/plans/batch-task-execution.md`）
+  - 同一账号的任务在同一设备上按 task_plan 顺序连续执行
+  - 减少账号切换，提高效率
+- [x] daemon 模式异常任务自动恢复
+  - 定期检测超时的 running/blocked/skipped/failed 任务
+  - running/blocked 超时 10 分钟自动重置
+  - skipped 超时 1 小时自动重置
+  - failed 每次检查都重置（依赖重试次数限制）
 
 ## 进行中
 
-- [ ] 任务批量执行改造（见 `docs/plans/batch-task-execution.md`）
-  - 同一账号的任务在同一设备上按 task_plan 顺序连续执行
-  - 减少账号切换，提高效率
+
 
 ## 高优先级
 
