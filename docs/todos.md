@@ -22,19 +22,31 @@
   - running/blocked 超时 10 分钟自动重置
   - skipped 超时 1 小时自动重置
   - failed 每次检查都重置（依赖重试次数限制）
+- [x] 数据库层迁移到 SQLModel + Alembic
+  - 使用 SQLModel ORM 替代 dataclass + 原生 SQL
+  - 集成 Alembic 支持自动生成迁移脚本
+  - 详见 `src/ptcgp_auto_v2/db/README.md`
 
 ## 进行中
+
+- [ ] 加个手动指定adb切换账号功能（方便我手动检查账号的任务完成情况）
 
 
 
 ## 高优先级
 
-- [ ] 任务失败通知（Webhook）
+- [ ] 识别卡种类和等级（）
+  - [ ] 使用相似度匹配匹配卡牌名字
+  - [ ] 识别每次账号开包情况，并记录到数据库（可配置记录哪些目标卡牌或哪些等级或哪些类型）
+  - [ ] 自动更新来自github的他人维护的基础数据（https://github.com/flibustier/pokemon-tcg-pocket-database）
+  - [ ] 搭建简单的web页面来展示所有账号开包记录情况，使用github他人维护的静态资源
+- [ ] `send_card` - 每日送卡任务
 
 ## 中优先级
 
+
 - [ ] `add_friend` - 加好友任务
-- [ ] `send_gift` - 每日送礼任务
+- [ ] 任务失败通知（Webhook）
 - [ ] `battle` - 自动对战任务（可复用 v1 逻辑）
 
 ## 低优先级
