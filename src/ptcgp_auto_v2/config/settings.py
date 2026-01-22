@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 _settings: Optional["Settings"] = None
 
 
+def get_project_root() -> Path:
+    """获取项目根目录（包含 main_v2.py 的目录）"""
+    # 从 settings.py 向上查找 4 级：config -> ptcgp_auto_v2 -> src -> 项目根目录
+    return Path(__file__).parent.parent.parent.parent
+
+
 @dataclass
 class Settings:
     """
@@ -30,6 +36,34 @@ class Settings:
     # 应用配置
     app_package: str = "jp.pokemon.pokemontcgp"
     app_activity: str = "com.unity3d.player.UnityPlayerActivity"
+
+    @property
+    def app_data_dir(self) -> str:
+        """应用数据目录路径"""
+        return f"/data/data/{self.app_package}"
+
+    @property
+    def device_xml_path(self) -> str:
+        """设备账号 XML 路径"""
+        return f"{self.app_data_dir}/shared_prefs/deviceAccount:.xml"
+
+    @property
+    def shared_prefs_dir(self) -> str:
+        """shared_prefs 目录路径"""
+        return f"{self.app_data_dir}/shared_prefs"
+
+    @property
+    def main_activity(self) -> str:
+        """应用主 Activity"""
+        return f"{self.app_package}/{self.app_activity}"
+
+    @property
+    def files_to_clean_on_switch(self) -> list[str]:
+        """切换账号时需要清理的文件列表"""
+        return [
+            f"{self.app_data_dir}/files/PersistedInstallation.*.json",
+            f"{self.app_data_dir}/files/UserPreferences/v1/MissionUserPrefs",
+        ]
 
     # 屏幕配置
     # 基准分辨率：用于坐标比例计算的参考值（模板图片基于此分辨率截取）
@@ -55,6 +89,16 @@ class Settings:
     # 路径配置
     templates_dir: Path = field(default_factory=lambda: Path("templates"))
     data_dir: Path = field(default_factory=lambda: Path("data"))
+    db_name: str = "ptcgp_v2.db"
+
+    @property
+    def db_path(self) -> Path:
+        """数据库文件完整路径"""
+        # 使用项目根目录下的 data 目录
+        root = get_project_root()
+        db_dir = root / self.data_dir
+        db_dir.mkdir(parents=True, exist_ok=True)
+        return db_dir / self.db_name
 
     # 日志配置
     log_level: str = "INFO"

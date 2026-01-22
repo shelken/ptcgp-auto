@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.infra.adb import AdbController
 
 if TYPE_CHECKING:
@@ -17,21 +18,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# 配置常量
-PTCGP_PACKAGE_NAME = "jp.pokemon.pokemontcgp"
-DEVICE_XML_PATH = "/data/data/jp.pokemon.pokemontcgp/shared_prefs/deviceAccount:.xml"
 # 注意：adb push 无法处理带冒号的文件名，使用不带冒号的临时路径
 DEVICE_TEMP_PATH = "/sdcard/deviceAccount_temp.xml"
-DEVICE_SHARED_PREFS_DIR = "/data/data/jp.pokemon.pokemontcgp/shared_prefs"
-PTCGP_MAIN_ACTIVITY = f"{PTCGP_PACKAGE_NAME}/com.unity3d.player.UnityPlayerActivity"
-
-# 切换账号时需要清理的文件（避免服务端校验失败 102-243-017）
-# - PersistedInstallation.*.json: Firebase 设备绑定 ID，会与账号关联
-# - MissionUserPrefs: 任务进度缓存，可能与账号绑定
-FILES_TO_CLEAN_ON_SWITCH = [
-    "/data/data/jp.pokemon.pokemontcgp/files/PersistedInstallation.*.json",
-    "/data/data/jp.pokemon.pokemontcgp/files/UserPreferences/v1/MissionUserPrefs",
-]
 
 
 class AccountSwitcher:
@@ -50,6 +38,7 @@ class AccountSwitcher:
         """
         self.adb = adb
         self._is_rooted: Optional[bool] = None
+        self._settings = get_settings()
 
     def is_rooted(self) -> bool:
         """
@@ -140,7 +129,7 @@ class AccountSwitcher:
         try:
             # 1. 强制关闭游戏
             logger.debug("关闭游戏...")
-            self.adb.force_stop(PTCGP_PACKAGE_NAME)
+            self.adb.force_stop(self._settings.app_package)
             time.sleep(wait_seconds)
 
             # 2. 清理账号绑定相关文件（避免 102-243-017 错误）
@@ -155,19 +144,19 @@ class AccountSwitcher:
             time.sleep(wait_seconds * 0.5)
 
             # 4. 确保 shared_prefs 目录存在
-            self._run_su_command(f"mkdir -p {DEVICE_SHARED_PREFS_DIR}")
+            self._run_su_command(f"mkdir -p {self._settings.shared_prefs_dir}")
 
             # 5. 复制 XML 到 shared_prefs
             logger.debug("复制 XML 到 shared_prefs...")
-            result = self._run_su_command(f"cp {DEVICE_TEMP_PATH} {DEVICE_XML_PATH}")
+            result = self._run_su_command(f"cp {DEVICE_TEMP_PATH} {self._settings.device_xml_path}")
             if result is None:
                 logger.error("复制 XML 到 shared_prefs 失败")
                 return False
 
             # 6. 设置正确的权限和所有者
-            self._run_su_command(f"chmod 660 {DEVICE_XML_PATH}")
+            self._run_su_command(f"chmod 660 {self._settings.device_xml_path}")
             self._run_su_command(
-                f"chown $(stat -c %u:%g {DEVICE_SHARED_PREFS_DIR}) {DEVICE_XML_PATH}"
+                f"chown $(stat -c %u:%g {self._settings.shared_prefs_dir}) {self._settings.device_xml_path}"
             )
             time.sleep(wait_seconds * 0.5)
 
@@ -205,13 +194,13 @@ class AccountSwitcher:
         这些文件会在游戏启动时自动重新生成。
         """
         logger.debug("清理账号绑定相关文件...")
-        for pattern in FILES_TO_CLEAN_ON_SWITCH:
+        for pattern in self._settings.files_to_clean_on_switch:
             self._run_su_command(f"rm -f {pattern}")
         logger.debug("账号绑定文件清理完成")
 
     def _start_app(self):
         """启动游戏应用"""
-        self.adb.shell(f"am start -n {PTCGP_MAIN_ACTIVITY}")
+        self.adb.shell(f"am start -n {self._settings.main_activity}")
 
     def extract_current_account_xml(self, local_path: Path) -> bool:
         """
@@ -229,7 +218,7 @@ class AccountSwitcher:
 
         try:
             # 复制到 sdcard
-            self._run_su_command(f"cp {DEVICE_XML_PATH} {DEVICE_TEMP_PATH}")
+            self._run_su_command(f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}")
             time.sleep(0.5)
 
             # 拉取到本地
@@ -257,7 +246,7 @@ class AccountSwitcher:
             return None
 
         try:
-            result = self._run_su_command(f"md5sum {DEVICE_XML_PATH}")
+            result = self._run_su_command(f"md5sum {self._settings.device_xml_path}")
             if result:
                 # 输出格式: "hash  /path/to/file"
                 return result.split()[0]
