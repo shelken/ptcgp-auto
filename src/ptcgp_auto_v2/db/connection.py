@@ -17,17 +17,11 @@ logger = logging.getLogger(__name__)
 _db_instance: Optional["Database"] = None
 _db_lock = threading.Lock()
 
-# 默认数据库路径
-DEFAULT_DB_NAME = "ptcgp_v2.db"
-
 
 def get_default_db_path() -> Path:
-    """获取默认数据库路径"""
-    # 优先使用项目的 data 目录
-    project_root = Path(__file__).parent.parent.parent.parent
-    data_dir = project_root / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir / DEFAULT_DB_NAME
+    """获取默认数据库路径（从 settings 获取）"""
+    from ptcgp_auto_v2.config.settings import get_settings
+    return get_settings().db_path
 
 
 class Database:

@@ -8,6 +8,7 @@
 import logging
 import threading
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
@@ -31,11 +32,173 @@ class ExecutorConfig:
     max_retries: int = 3  # 最大重试次数
     retry_delay: float = 30.0  # 重试间隔（秒）
     recovery_delay: float = 5.0  # 恢复等待时间（秒）
-    app_package: str = "jp.pokemon.pokemontcgp"
+    app_package: str = ""  # 应用包名（应从 settings 传入）
     stop_event: Optional[threading.Event] = field(default=None)  # 停止事件
 
+    def __post_init__(self):
+        """初始化后处理"""
+        if not self.app_package:
+            from ptcgp_auto_v2.config.settings import get_settings
+            self.app_package = get_settings().app_package
 
-class TaskExecutor:
+
+class BaseExecutor(ABC):
+    """
+    执行器基类
+
+    提供账号切换、组件初始化等共享功能。
+    """
+
+    def __init__(
+        self,
+        device: Device,
+        device_pool: DevicePool,
+        config: Optional[ExecutorConfig] = None,
+    ):
+        """
+        初始化执行器
+
+        Args:
+            device: 执行任务的设备
+            device_pool: 设备池（用于归还设备）
+            config: 执行器配置
+        """
+        self.device = device
+        self.device_pool = device_pool
+        self.config = config or ExecutorConfig()
+
+        # 延迟初始化的组件（在 run 时创建）
+        self._adb = None
+        self._recognizer = None
+        self._page_detector = None
+        self._account_switcher = None
+        self._account_syncer = None
+
+    def _should_stop(self) -> bool:
+        """检查是否应该停止执行"""
+        if self.config.stop_event and self.config.stop_event.is_set():
+            return True
+        return False
+
+    def _init_components(self):
+        """初始化基础设施组件"""
+        from ptcgp_auto_v2.infra.adb import AdbController
+        from ptcgp_auto_v2.infra.ocr import OcrEngine
+        from ptcgp_auto_v2.infra.template import TemplateMatcher
+        from ptcgp_auto_v2.infra.page_detector import PageDetector
+        from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
+        from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+
+        self._adb = AdbController(self.device.address)
+        if not self._adb.connect():
+            raise RuntimeError(f"无法连接设备: {self.device.address}")
+        ocr_engine = OcrEngine()
+        template_matcher = TemplateMatcher()
+        self._recognizer = (ocr_engine, template_matcher)
+        self._page_detector = PageDetector(
+            adb=self._adb,
+            ocr_engine=ocr_engine,
+            template_matcher=template_matcher,
+        )
+        self._page_detector.load_base_pages(COMMON_PAGES)
+        self._account_switcher = AccountSwitcher(self._adb)
+        self._account_syncer = AccountSyncer(self._adb)
+
+    def _is_current_account(self, target_account: "Account") -> bool:
+        """
+        检查设备当前是否已登录目标账号
+
+        通过从设备提取账号 XML 并比较来确定当前登录的账号。
+        同时会比较设备与数据库的 session_token_iat，如果设备更新则同步到数据库。
+
+        Args:
+            target_account: 目标账号
+
+        Returns:
+            True 表示当前已登录目标账号
+        """
+        current_account = self._account_syncer.get_current_account()
+        if current_account:
+            self.device.update_current_account(current_account.id)
+            logger.debug(
+                f"设备当前账号: {current_account.nickname or current_account.game_id}"
+            )
+            return current_account.id == target_account.id
+
+        logger.warning("无法获取设备当前账号，将尝试切换")
+        return False
+
+    def _switch_account(self, target_account: "Account") -> bool:
+        """
+        切换到目标账号
+
+        Args:
+            target_account: 目标账号
+
+        Returns:
+            True 表示切换成功
+        """
+        logger.info(f"切换账号: {target_account.nickname} (ID: {target_account.id})")
+        try:
+            success = self._account_switcher.switch_to(target_account)
+            if success:
+                self.device.update_current_account(target_account.id)
+                self._restart_app()
+            return success
+        except Exception as e:
+            logger.error(f"账号切换失败: {e}")
+            return False
+
+    def _restart_app(self):
+        """重启游戏应用"""
+        logger.debug("重启游戏应用...")
+        self._adb.force_stop(self.config.app_package)
+        time.sleep(2)
+        self._adb.start_app(self.config.app_package)
+        time.sleep(self.config.recovery_delay)
+
+    def _try_recover(self):
+        """尝试恢复到可执行状态"""
+        logger.info("尝试恢复执行状态...")
+        self._restart_app()
+
+    def _unblock_dependent_tasks(self, account: "Account"):
+        """恢复该账号被阻塞的任务"""
+        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
+
+        repo = TaskInstanceRepository()
+        blocked_tasks = repo.get_blocked_by_account(account.id)
+        for task in blocked_tasks:
+            logger.info(
+                f"恢复被阻塞任务: {task.task_type} (账号: {account.nickname})"
+            )
+            task.status = TaskStatus.PENDING.value
+            task.save()
+
+    def _sync_account_on_finish(self):
+        """任务结束时同步账号 XML"""
+        if self._account_syncer:
+            try:
+                self._account_syncer.get_current_account()
+                logger.debug("已同步设备账号 XML")
+            except Exception as e:
+                logger.warning(f"同步账号 XML 失败: {e}")
+
+    def _cleanup(self):
+        """清理资源"""
+        self._sync_account_on_finish()
+        if self._adb:
+            self._adb.disconnect()
+        self.device_pool.release(self.device)
+        logger.debug(f"设备已归还: {self.device.address}")
+
+    @abstractmethod
+    def run(self):
+        """执行任务（子类实现）"""
+        pass
+
+
+class TaskExecutor(BaseExecutor):
     """
     任务执行器
 
@@ -63,107 +226,13 @@ class TaskExecutor:
             device_pool: 设备池（用于归还设备）
             config: 执行器配置
         """
-        self.device = device
+        super().__init__(device, device_pool, config)
         self.task_instance = task_instance
-        self.device_pool = device_pool
-        self.config = config or ExecutorConfig()
-
-        # 延迟初始化的组件（在 run 时创建）
-        self._adb = None
-        self._recognizer = None
-        self._page_detector = None
-        self._account_switcher = None
-        self._account_syncer = None
 
     @property
     def account(self) -> "Account":
         """获取任务关联的账号"""
         return self.task_instance.account
-
-    def _should_stop(self) -> bool:
-        """检查是否应该停止执行"""
-        if self.config.stop_event and self.config.stop_event.is_set():
-            return True
-        return False
-
-    def _init_components(self):
-        """初始化基础设施组件"""
-        # 延迟导入，避免循环依赖
-        from ptcgp_auto_v2.infra.adb import AdbController
-        from ptcgp_auto_v2.infra.ocr import OcrEngine
-        from ptcgp_auto_v2.infra.template import TemplateMatcher
-        from ptcgp_auto_v2.infra.page_detector import PageDetector
-        from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
-        from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
-
-        self._adb = AdbController(self.device.address)
-        if not self._adb.connect():
-            raise RuntimeError(f"无法连接设备: {self.device.address}")
-        ocr_engine = OcrEngine()
-        template_matcher = TemplateMatcher()
-        self._recognizer = (ocr_engine, template_matcher)
-        self._page_detector = PageDetector(
-            adb=self._adb,
-            ocr_engine=ocr_engine,
-            template_matcher=template_matcher,
-        )
-        self._page_detector.load_base_pages(COMMON_PAGES)
-        self._account_switcher = AccountSwitcher(self._adb)
-        self._account_syncer = AccountSyncer(self._adb)
-
-    def _is_current_account(self) -> bool:
-        """
-        检查设备当前是否已登录目标账号
-
-        通过从设备提取账号 XML 并比较来确定当前登录的账号。
-        同时会比较设备与数据库的 session_token_iat，如果设备更新则同步到数据库。
-        """
-        # 始终从设备获取当前账号（同时会比较 iat 并同步）
-        current_account = self._account_syncer.get_current_account()
-        if current_account:
-            # 更新设备缓存
-            self.device.update_current_account(current_account.id)
-            logger.debug(
-                f"设备当前账号: {current_account.nickname or current_account.game_id}"
-            )
-            return current_account.id == self.account.id
-
-        # 无法获取当前账号（可能设备未 Root 或无账号登录）
-        logger.warning("无法获取设备当前账号，将尝试切换")
-        return False
-
-    def _switch_account(self) -> bool:
-        """
-        切换到目标账号
-
-        Returns:
-            True 表示切换成功
-        """
-        logger.info(f"切换账号: {self.account.nickname} (ID: {self.account.id})")
-        try:
-            # 使用账号切换器注入 XML
-            success = self._account_switcher.switch_to(self.account)
-            if success:
-                self.device.update_current_account(self.account.id)
-                # 重启应用以应用账号切换
-                self._restart_app()
-            return success
-        except Exception as e:
-            logger.error(f"账号切换失败: {e}")
-            return False
-
-    def _restart_app(self):
-        """重启游戏应用"""
-        logger.debug("重启游戏应用...")
-        self._adb.force_stop(self.config.app_package)
-        time.sleep(2)
-        self._adb.start_app(self.config.app_package)
-        time.sleep(self.config.recovery_delay)
-
-    def _try_recover(self):
-        """尝试恢复到可执行状态"""
-        logger.info("尝试恢复执行状态...")
-        self._restart_app()
 
     def _create_task(self) -> Task:
         """创建任务实例"""
@@ -195,25 +264,12 @@ class TaskExecutor:
         if status == TaskStatus.COMPLETED:
             self.task_instance.last_completed_at = datetime.now()
             # 恢复被阻塞的任务（前置任务完成后）
-            self._unblock_dependent_tasks()
+            self._unblock_dependent_tasks(self.account)
         if error:
             self.task_instance.error_message = error
         self.task_instance.updated_at = datetime.now()
         # 保存到数据库
         self.task_instance.save()
-
-    def _unblock_dependent_tasks(self):
-        """恢复该账号被阻塞的任务"""
-        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-
-        repo = TaskInstanceRepository()
-        blocked_tasks = repo.get_blocked_by_account(self.account.id)
-        for task in blocked_tasks:
-            logger.info(
-                f"恢复被阻塞任务: {task.task_type} (账号: {self.account.nickname})"
-            )
-            task.status = TaskStatus.PENDING.value
-            task.save()
 
     def run(self):
         """
@@ -243,8 +299,8 @@ class TaskExecutor:
             self._update_status(TaskStatus.RUNNING)
 
             # 账号切换（如需要）
-            if not self._is_current_account():
-                if not self._switch_account():
+            if not self._is_current_account(self.account):
+                if not self._switch_account(self.account):
                     self._update_status(TaskStatus.FAILED, "账号切换失败")
                     return
 
@@ -308,20 +364,7 @@ class TaskExecutor:
             self._update_status(TaskStatus.FAILED, str(e))
 
         finally:
-            # 停止前同步最后的账号 XML（更新 iat）
-            if self._account_syncer:
-                try:
-                    self._account_syncer.get_current_account()
-                    logger.debug("已同步设备账号 XML")
-                except Exception as e:
-                    logger.warning(f"同步账号 XML 失败: {e}")
-
-            if self._adb:
-                self._adb.disconnect()
-            # 归还设备
-            self.device_pool.release(self.device)
-            logger.debug(f"设备已归还: {self.device.address}")
-            # 清除日志上下文
+            self._cleanup()
             clear_context()
 
 
@@ -346,7 +389,7 @@ def run_executor(
     executor.run()
 
 
-class AccountBatchExecutor:
+class AccountBatchExecutor(BaseExecutor):
     """
     账号批量任务执行器
 
@@ -372,82 +415,9 @@ class AccountBatchExecutor:
             device_pool: 设备池（用于归还设备）
             config: 执行器配置
         """
-        self.device = device
+        super().__init__(device, device_pool, config)
         self.account = account
         self.task_instances = task_instances
-        self.device_pool = device_pool
-        self.config = config or ExecutorConfig()
-
-        # 延迟初始化的组件（在 run 时创建）
-        self._adb = None
-        self._recognizer = None
-        self._page_detector = None
-        self._account_switcher = None
-        self._account_syncer = None
-
-    def _should_stop(self) -> bool:
-        """检查是否应该停止执行"""
-        if self.config.stop_event and self.config.stop_event.is_set():
-            return True
-        return False
-
-    def _init_components(self):
-        """初始化基础设施组件"""
-        from ptcgp_auto_v2.infra.adb import AdbController
-        from ptcgp_auto_v2.infra.ocr import OcrEngine
-        from ptcgp_auto_v2.infra.template import TemplateMatcher
-        from ptcgp_auto_v2.infra.page_detector import PageDetector
-        from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
-        from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
-
-        self._adb = AdbController(self.device.address)
-        if not self._adb.connect():
-            raise RuntimeError(f"无法连接设备: {self.device.address}")
-        ocr_engine = OcrEngine()
-        template_matcher = TemplateMatcher()
-        self._recognizer = (ocr_engine, template_matcher)
-        self._page_detector = PageDetector(
-            adb=self._adb,
-            ocr_engine=ocr_engine,
-            template_matcher=template_matcher,
-        )
-        self._page_detector.load_base_pages(COMMON_PAGES)
-        self._account_switcher = AccountSwitcher(self._adb)
-        self._account_syncer = AccountSyncer(self._adb)
-
-    def _is_current_account(self) -> bool:
-        """检查设备当前是否已登录目标账号"""
-        current_account = self._account_syncer.get_current_account()
-        if current_account:
-            self.device.update_current_account(current_account.id)
-            logger.debug(
-                f"设备当前账号: {current_account.nickname or current_account.game_id}"
-            )
-            return current_account.id == self.account.id
-
-        logger.warning("无法获取设备当前账号，将尝试切换")
-        return False
-
-    def _switch_account(self) -> bool:
-        """切换到目标账号"""
-        logger.info(f"切换账号: {self.account.nickname} (ID: {self.account.id})")
-        try:
-            success = self._account_switcher.switch_to(self.account)
-            if success:
-                self.device.update_current_account(self.account.id)
-                self._restart_app()
-            return success
-        except Exception as e:
-            logger.error(f"账号切换失败: {e}")
-            return False
-
-    def _restart_app(self):
-        """重启游戏应用"""
-        logger.debug("重启游戏应用...")
-        self._adb.force_stop(self.config.app_package)
-        time.sleep(2)
-        self._adb.start_app(self.config.app_package)
-        time.sleep(self.config.recovery_delay)
 
     def _execute_single_task(self, task_instance: "TaskInstance"):
         """
@@ -502,7 +472,7 @@ class AccountBatchExecutor:
                     task_instance.last_completed_at = datetime.now()
                     task_instance.error_message = None
                     # 恢复被阻塞的任务
-                    self._unblock_dependent_tasks()
+                    self._unblock_dependent_tasks(self.account)
             else:
                 logger.error(f"任务失败: {task_instance.task_type} - {result.error}")
                 task_instance.status = TaskStatus.FAILED.value
@@ -517,19 +487,6 @@ class AccountBatchExecutor:
             task_instance.error_message = str(e)
             task_instance.updated_at = datetime.now()
             task_instance.save()
-
-    def _unblock_dependent_tasks(self):
-        """恢复该账号被阻塞的任务"""
-        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-
-        repo = TaskInstanceRepository()
-        blocked_tasks = repo.get_blocked_by_account(self.account.id)
-        for task in blocked_tasks:
-            logger.info(
-                f"恢复被阻塞任务: {task.task_type} (账号: {self.account.nickname})"
-            )
-            task.status = TaskStatus.PENDING.value
-            task.save()
 
     def run(self):
         """
@@ -561,8 +518,8 @@ class AccountBatchExecutor:
                 return
 
             # 账号切换（如需要）
-            if not self._is_current_account():
-                if not self._switch_account():
+            if not self._is_current_account(self.account):
+                if not self._switch_account(self.account):
                     # 账号切换失败，将所有任务标记为失败
                     for task_instance in self.task_instances:
                         task_instance.status = TaskStatus.FAILED.value
@@ -596,19 +553,7 @@ class AccountBatchExecutor:
                     task_instance.save()
 
         finally:
-            # 同步账号 XML
-            if self._account_syncer:
-                try:
-                    self._account_syncer.get_current_account()
-                    logger.debug("已同步设备账号 XML")
-                except Exception as e:
-                    logger.warning(f"同步账号 XML 失败: {e}")
-
-            if self._adb:
-                self._adb.disconnect()
-            # 归还设备
-            self.device_pool.release(self.device)
-            logger.debug(f"设备已归还: {self.device.address}")
+            self._cleanup()
             clear_context()
 
 
