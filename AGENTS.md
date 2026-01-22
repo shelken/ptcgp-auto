@@ -19,6 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Python 代码使用 `datetime.now()` 获取本地时间
   - SQL 查询中时间比较使用 `datetime('now', 'localtime', ...)` 格式
   - 禁止混用 UTC 和本地时间，避免时区转换问题
+- 在执行复杂计划前，把本次计划持久化文档到目录`docs/plans/`下，并在阶段性完成后更新进度，文档中要把用户最开始的诉求写明，原文保存（简单的小改动可以不需要）
 
 ## 知识获取与整理原则
 
