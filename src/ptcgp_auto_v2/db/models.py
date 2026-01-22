@@ -99,6 +99,7 @@ class Account:
     nickname: Optional[str] = None  # 用户昵称
     level: Optional[int] = None  # 账号等级（从 UI 获取）
     country: Optional[str] = None  # 国家/地区
+    remark: Optional[str] = None  # 备注
     xml_content: Optional[bytes] = None  # XML 文件内容
     session_token_iat: Optional[int] = None  # sessionToken 的签发时间戳
     task_plan_id: Optional[int] = None
@@ -119,6 +120,7 @@ class Account:
             nickname=row["nickname"],
             level=row["level"] if "level" in row.keys() else None,
             country=row["country"],
+            remark=row["remark"] if "remark" in row.keys() else None,
             xml_content=row["xml_content"],
             session_token_iat=row["session_token_iat"] if "session_token_iat" in row.keys() else None,
             task_plan_id=row["task_plan_id"],
@@ -136,6 +138,7 @@ class Account:
             "nickname": self.nickname,
             "level": self.level,
             "country": self.country,
+            "remark": self.remark,
             "xml_content": self.xml_content.hex() if self.xml_content else None,
             "session_token_iat": self.session_token_iat,
             "task_plan_id": self.task_plan_id,
