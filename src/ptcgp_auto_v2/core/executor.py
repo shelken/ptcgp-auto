@@ -6,8 +6,9 @@
 """
 
 import logging
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -31,6 +32,7 @@ class ExecutorConfig:
     retry_delay: float = 30.0  # 重试间隔（秒）
     recovery_delay: float = 5.0  # 恢复等待时间（秒）
     app_package: str = "jp.pokemon.pokemontcgp"
+    stop_event: Optional[threading.Event] = field(default=None)  # 停止事件
 
 
 class TaskExecutor:
@@ -78,6 +80,12 @@ class TaskExecutor:
         """获取任务关联的账号"""
         return self.task_instance.account
 
+    def _should_stop(self) -> bool:
+        """检查是否应该停止执行"""
+        if self.config.stop_event and self.config.stop_event.is_set():
+            return True
+        return False
+
     def _init_components(self):
         """初始化基础设施组件"""
         # 延迟导入，避免循环依赖
@@ -107,17 +115,14 @@ class TaskExecutor:
         """
         检查设备当前是否已登录目标账号
 
-        通过从设备提取账号 XML 并比较哈希来确定当前登录的账号。
+        通过从设备提取账号 XML 并比较来确定当前登录的账号。
+        同时会比较设备与数据库的 session_token_iat，如果设备更新则同步到数据库。
         """
-        # 首先检查内存缓存
-        if self.device.current_account_id == self.account.id:
-            return True
-
-        # 如果缓存未命中，从设备实际获取当前账号
+        # 始终从设备获取当前账号（同时会比较 iat 并同步）
         current_account = self._account_syncer.get_current_account()
         if current_account:
             # 更新设备缓存
-            self.device.current_account_id = current_account.id
+            self.device.update_current_account(current_account.id)
             logger.debug(
                 f"设备当前账号: {current_account.nickname or current_account.game_id}"
             )
@@ -139,7 +144,7 @@ class TaskExecutor:
             # 使用账号切换器注入 XML
             success = self._account_switcher.switch_to(self.account)
             if success:
-                self.device.current_account_id = self.account.id
+                self.device.update_current_account(self.account.id)
                 # 重启应用以应用账号切换
                 self._restart_app()
             return success
@@ -177,6 +182,11 @@ class TaskExecutor:
             build_common_handlers(self._adb, self._page_detector, TEXT_PATTERNS)
         )
         task.bind_account(self.account)
+
+        # 传递停止事件给任务
+        if self.config.stop_event:
+            task.set_stop_event(self.config.stop_event)
+
         return task
 
     def _update_status(self, status: TaskStatus, error: Optional[str] = None):
@@ -220,6 +230,11 @@ class TaskExecutor:
             # 初始化组件
             self._init_components()
 
+            # 检查是否收到停止信号
+            if self._should_stop():
+                logger.info("收到停止信号，取消执行")
+                return
+
             # 更新状态为运行中
             self._update_status(TaskStatus.RUNNING)
 
@@ -232,6 +247,11 @@ class TaskExecutor:
             # 重试循环
             last_error = None
             for attempt in range(self.config.max_retries):
+                # 每次重试前检查停止信号
+                if self._should_stop():
+                    logger.info("收到停止信号，中断重试")
+                    break
+
                 try:
                     # 创建并执行任务
                     task = self._create_task()
@@ -256,8 +276,11 @@ class TaskExecutor:
                         f"任务异常 (尝试 {attempt + 1}/{self.config.max_retries}): {e}"
                     )
 
-                # 如果不是最后一次尝试，进行恢复
+                # 如果不是最后一次尝试，进行恢复（但先检查停止信号）
                 if attempt < self.config.max_retries - 1:
+                    if self._should_stop():
+                        logger.info("收到停止信号，跳过恢复")
+                        break
                     self._try_recover()
                     time.sleep(self.config.retry_delay)
 
@@ -272,6 +295,14 @@ class TaskExecutor:
             self._update_status(TaskStatus.FAILED, str(e))
 
         finally:
+            # 停止前同步最后的账号 XML（更新 iat）
+            if self._account_syncer:
+                try:
+                    self._account_syncer.get_current_account()
+                    logger.debug("已同步设备账号 XML")
+                except Exception as e:
+                    logger.warning(f"同步账号 XML 失败: {e}")
+
             if self._adb:
                 self._adb.disconnect()
             # 归还设备
