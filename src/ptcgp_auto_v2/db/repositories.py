@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlmodel import Session, col, func, select
+from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import (
@@ -110,7 +111,11 @@ class AccountRepository:
     def get_all(self) -> List[Account]:
         """获取所有账号"""
         with Session(get_engine()) as session:
-            statement = select(Account).order_by(Account.id)
+            statement = (
+                select(Account)
+                .options(selectinload(Account.task_plan))
+                .order_by(Account.id)
+            )
             return list(session.exec(statement).all())
 
     def get_accounts_without_friend_id(self) -> List[Account]:
@@ -393,12 +398,9 @@ class TaskInstanceRepository:
         - failed: 任务执行失败，重启后重试
         """
         with Session(get_engine()) as session:
-            statement = (
-                select(TaskInstance)
-                .where(
-                    col(TaskInstance.status).in_(
-                        ["running", "blocked", "skipped", "failed"]
-                    )
+            statement = select(TaskInstance).where(
+                col(TaskInstance.status).in_(
+                    ["running", "blocked", "skipped", "failed"]
                 )
             )
             instances = session.exec(statement).all()
@@ -434,13 +436,22 @@ class TaskInstanceRepository:
 
             statement = select(TaskInstance).where(
                 # running 超时
-                ((TaskInstance.status == "running") & (TaskInstance.updated_at < stale_threshold))
+                (
+                    (TaskInstance.status == "running")
+                    & (TaskInstance.updated_at < stale_threshold)
+                )
                 # failed 直接重试
                 | (TaskInstance.status == "failed")
                 # blocked 超时
-                | ((TaskInstance.status == "blocked") & (TaskInstance.updated_at < stale_threshold))
+                | (
+                    (TaskInstance.status == "blocked")
+                    & (TaskInstance.updated_at < stale_threshold)
+                )
                 # skipped 超时后重新检查
-                | ((TaskInstance.status == "skipped") & (TaskInstance.updated_at < skipped_threshold))
+                | (
+                    (TaskInstance.status == "skipped")
+                    & (TaskInstance.updated_at < skipped_threshold)
+                )
             )
             instances = session.exec(statement).all()
             count = 0
