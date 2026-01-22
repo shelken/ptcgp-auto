@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
+import threading
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -123,6 +124,17 @@ class Task(ABC):
         self.page_detector = page_detector
         self._account: Optional["Account"] = None
         self._handlers: dict[str, Callable[[dict], ActionResult]] = {}
+        self._stop_event: Optional[threading.Event] = None
+
+    def set_stop_event(self, stop_event: threading.Event):
+        """设置停止事件，用于响应外部中断信号"""
+        self._stop_event = stop_event
+
+    def _should_stop(self) -> bool:
+        """检查是否应该停止执行"""
+        if self._stop_event and self._stop_event.is_set():
+            return True
+        return False
 
     def register_handlers(self, mapping: dict[str, Callable[[dict], ActionResult]]):
         """注册页面处理器映射（后注册覆盖同名）"""
@@ -201,6 +213,12 @@ class Task(ABC):
         unknown_count = 0
 
         for iteration in range(self.max_iterations):
+            # 检查停止信号
+            if self._should_stop():
+                result = TaskResult.fail("收到停止信号", iterations=iteration)
+                self.on_complete(result)
+                return result
+
             # 检查目标状态
             if self.is_completed():
                 result = TaskResult.ok(iterations=iteration)
