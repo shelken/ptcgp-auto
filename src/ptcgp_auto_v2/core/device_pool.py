@@ -36,7 +36,15 @@ class Device:
         """检查设备是否可用"""
         return self.status == DeviceStatus.AVAILABLE
 
-    def mark_busy(self, account_id: Optional[int] = None):
+    def update_current_account(self, account_id: int):
+        """
+        更新当前登录的账号 ID
+
+        仅在确认账号已切换成功后调用（从设备实际获取或切换完成后）。
+        """
+        self.current_account_id = account_id
+
+    def mark_busy(self):
         """
         标记设备为忙碌状态
 
@@ -121,13 +129,13 @@ class DevicePool:
             # 优先查找已登录该账号的空闲设备
             for device in self._devices.values():
                 if device.is_available and device.current_account_id == account_id:
-                    device.mark_busy(account_id)
+                    device.mark_busy()
                     return device
 
             # 其次查找任意空闲设备
             for device in self._devices.values():
                 if device.is_available:
-                    device.mark_busy(account_id)
+                    device.mark_busy()
                     return device
 
             return None
