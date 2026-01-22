@@ -160,6 +160,12 @@ class AccountRepository:
 
     def create(self, account: Account) -> Account:
         """创建账号"""
+        # 如果没有指定 task_plan，自动关联 "daily"
+        if account.task_plan_id is None:
+            daily_plan = TaskPlanRepository().get_by_name("daily")
+            if daily_plan:
+                account.task_plan_id = daily_plan.id
+
         cursor = self.db.execute(
             """
             INSERT INTO accounts (game_id, friend_id, nintendo_id, nickname, level, country,
@@ -386,6 +392,31 @@ class TaskInstanceRepository:
         row = cursor.fetchone()
         return row["cnt"] if row else 0
 
+    def get_accounts_with_pending_tasks(self) -> List[int]:
+        """获取所有有待执行任务的账号 ID 列表"""
+        cursor = self.db.execute(
+            """
+            SELECT DISTINCT account_id
+            FROM task_instances
+            WHERE status = 'pending'
+            ORDER BY account_id
+            """
+        )
+        return [row["account_id"] for row in cursor.fetchall()]
+
+    def has_running_tasks(self, account_id: int) -> bool:
+        """检查账号是否有正在执行的任务"""
+        cursor = self.db.execute(
+            """
+            SELECT 1
+            FROM task_instances
+            WHERE account_id = ? AND status = 'running'
+            LIMIT 1
+            """,
+            (account_id,),
+        )
+        return cursor.fetchone() is not None
+
     def create(self, instance: TaskInstance) -> TaskInstance:
         """创建任务实例"""
         cursor = self.db.execute(
@@ -437,12 +468,13 @@ class TaskInstanceRepository:
         - running: 任务正在执行中被中断
         - blocked: 任务等待前置任务完成，但前置任务没有完成就退出了
         - skipped: 任务被跳过（12小时内已开包等），重启后重新检查
+        - failed: 任务执行失败，重启后重试
         """
         cursor = self.db.execute(
             """
             UPDATE task_instances
             SET status = 'pending', updated_at = datetime('now', 'localtime')
-            WHERE status IN ('running', 'blocked', 'skipped')
+            WHERE status IN ('running', 'blocked', 'skipped', 'failed')
             """
         )
         self.db.commit()

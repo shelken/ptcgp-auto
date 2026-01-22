@@ -14,11 +14,16 @@ from datetime import datetime, timedelta
 from typing import Callable, Optional, TYPE_CHECKING
 
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
-from ptcgp_auto_v2.core.executor import TaskExecutor, ExecutorConfig, run_executor
+from ptcgp_auto_v2.core.executor import (
+    TaskExecutor,
+    ExecutorConfig,
+    run_executor,
+    run_account_batch_executor,
+)
 from ptcgp_auto_v2.core.task_base import TaskRegistry, TaskStatus, ResetType
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import TaskInstance
+    from ptcgp_auto_v2.db.models import TaskInstance, Account
     from ptcgp_auto_v2.db.repositories import TaskInstanceRepository, AccountRepository
 
 logger = logging.getLogger(__name__)
@@ -201,6 +206,161 @@ class Scheduler:
         """
         return self._task_instance_repo.get_next_pending_excluding_busy_accounts()
 
+    def _get_next_account_batch(
+        self,
+    ) -> Optional[tuple["Account", list["TaskInstance"]]]:
+        """
+        获取下一个有待执行任务的账号及其所有待执行任务
+
+        按账号级别批量调度，避免频繁切换账号。
+
+        Returns:
+            (Account, task_instances_list) 或 None
+        """
+        # 获取所有有待执行任务的账号
+        account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
+
+        for account_id in account_ids:
+            # 检查该账号是否已经有正在执行的任务
+            if self._task_instance_repo.has_running_tasks(account_id):
+                continue
+
+            # 获取账号信息
+            account = self._account_repo.get_by_id(account_id)
+            if not account:
+                continue
+
+            # 获取该账号的所有待执行任务
+            pending_tasks = self._task_instance_repo.get_pending_by_account(account_id)
+            if not pending_tasks:
+                continue
+
+            # 检查是否需要前置任务（如 fetch_account_info）
+            pending_tasks = self._ensure_prerequisites_in_batch(account, pending_tasks)
+
+            # 按照任务计划顺序排列
+            ordered_tasks = self._order_tasks_by_plan(account, pending_tasks)
+
+            return (account, ordered_tasks)
+
+        return None
+
+    def _ensure_prerequisites_in_batch(
+        self, account: "Account", tasks: list["TaskInstance"]
+    ) -> list["TaskInstance"]:
+        """
+        确保批量任务包含必要的前置任务
+
+        如果账号信息不完整，在任务列表开头插入 fetch_account_info 任务。
+
+        Args:
+            account: 账号
+            tasks: 待执行任务列表
+
+        Returns:
+            可能添加了前置任务的任务列表
+        """
+        # 检查是否需要 fetch_account_info
+        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
+
+        if not FetchAccountInfoTask.needs_fetch(account):
+            return tasks
+
+        # 检查任务列表中是否已有 fetch_account_info
+        has_fetch_task = any(t.task_type == "fetch_account_info" for t in tasks)
+        if has_fetch_task:
+            return tasks
+
+        # 创建或获取 fetch_account_info 任务实例
+        task_class = TaskRegistry.get("fetch_account_info")
+        prereq_instance = self._task_instance_repo.get_or_create(
+            account_id=account.id,
+            task_type="fetch_account_info",
+            reset_type=task_class.reset_type.value,
+        )
+
+        # 确保前置任务是 pending 状态
+        if prereq_instance.status != TaskStatus.PENDING.value:
+            prereq_instance.status = TaskStatus.PENDING.value
+            prereq_instance.save()
+
+        # 插入到任务列表开头
+        tasks.insert(0, prereq_instance)
+        logger.info(f"批量任务插入前置任务: fetch_account_info (账号: {account.nickname})")
+
+        return tasks
+
+    def _order_tasks_by_plan(
+        self, account: "Account", tasks: list["TaskInstance"]
+    ) -> list["TaskInstance"]:
+        """
+        按照账号的 task_plan 顺序排列任务
+
+        Args:
+            account: 账号
+            tasks: 待排序的任务列表
+
+        Returns:
+            按 task_plan.task_types 顺序排列的任务列表
+        """
+        if not account.task_plan or not account.task_plan.task_types:
+            # 没有任务计划，按创建时间排序
+            return sorted(tasks, key=lambda x: x.created_at or datetime.min)
+
+        # 按照 task_plan.task_types 数组顺序排列
+        plan_order = {
+            task_type: idx
+            for idx, task_type in enumerate(account.task_plan.task_types)
+        }
+        # 不在计划中的任务排在最后
+        return sorted(tasks, key=lambda x: plan_order.get(x.task_type, 999))
+
+    def _dispatch_account_batch(
+        self, account: "Account", task_instances: list["TaskInstance"]
+    ):
+        """
+        批量分配账号的所有任务到同一设备执行
+
+        Args:
+            account: 账号
+            task_instances: 按顺序排列的任务列表
+        """
+        # 获取设备（优先获取已登录该账号的设备）
+        device = self.device_pool.acquire_for_account(account.id)
+        if not device:
+            logger.debug(f"账号 {account.nickname} 没有可用设备，等待...")
+            return
+
+        # 将所有任务状态改为 running，防止被其他线程分配
+        for task_instance in task_instances:
+            task_instance.status = TaskStatus.RUNNING.value
+            task_instance.save()
+
+        task_types = [t.task_type for t in task_instances]
+        logger.info(
+            f"分配批量任务: {task_types} "
+            f"(账号: {account.nickname}, 设备: {device.address})"
+        )
+
+        # 创建带停止事件的执行器配置
+        executor_config = ExecutorConfig(
+            max_retries=self.config.executor_config.max_retries,
+            retry_delay=self.config.executor_config.retry_delay,
+            recovery_delay=self.config.executor_config.recovery_delay,
+            app_package=self.config.executor_config.app_package,
+            stop_event=self._stop_event,
+        )
+
+        # 提交到线程池执行批量任务
+        self._executor_pool.submit(
+            run_account_batch_executor,
+            device=device,
+            account=account,
+            task_instances=task_instances,
+            device_pool=self.device_pool,
+            config=executor_config,
+        )
+
     def _check_prerequisites(self, task_instance: "TaskInstance") -> Optional[str]:
         """
         检查任务是否有未满足的前置条件
@@ -306,7 +466,7 @@ class Scheduler:
         )
 
     def _main_loop(self):
-        """调度器主循环"""
+        """调度器主循环（批量任务调度）"""
         while self._running:
             try:
                 # 生成待执行任务
@@ -317,14 +477,15 @@ class Scheduler:
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # 获取下一个待执行任务
-                task_instance = self._get_next_task()
-                if not task_instance:
+                # 获取下一个账号的批量任务
+                batch = self._get_next_account_batch()
+                if not batch:
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # 分配任务
-                self._dispatch_task(task_instance)
+                account, task_instances = batch
+                # 批量分配任务
+                self._dispatch_account_batch(account, task_instances)
 
             except Exception as e:
                 logger.exception(f"调度器主循环异常: {e}")

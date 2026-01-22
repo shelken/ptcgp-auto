@@ -47,6 +47,8 @@ def _get_context():
         _thread_local.port_color = "white"
     if not hasattr(_thread_local, "nickname"):
         _thread_local.nickname = ""
+    if not hasattr(_thread_local, "task"):
+        _thread_local.task = ""
     return _thread_local
 
 
@@ -89,15 +91,17 @@ def _format(record):
     port = record["extra"].get("port", ctx.port)
     nickname = record["extra"].get("nickname", ctx.nickname)
     color = record["extra"].get("port_color", ctx.port_color)
+    task = record["extra"].get("task", ctx.task)
 
     port_part = _format_color_tag(color, f"[{port}]")
     nick_part = _format_color_tag(color, f"[{nickname}]") + " " if nickname else ""
+    task_part = f"<cyan>[{task}]</cyan>: " if task else ""
 
     return (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <5}</level> | "
         f"{port_part} {nick_part}"
-        "<cyan>{name}</cyan>: "
+        f"{task_part}"
         "<level>{message}</level>\n"
     )
 
@@ -128,7 +132,7 @@ def setup_logging(level: str = "INFO") -> None:
     logging.getLogger("adbutils").setLevel(logging.WARNING)
 
 
-def set_context(port: str = None, nickname: str = None, color: str = None):
+def set_context(port: str = None, nickname: str = None, color: str = None, task: str = None):
     """
     设置当前线程的日志上下文
 
@@ -136,6 +140,7 @@ def set_context(port: str = None, nickname: str = None, color: str = None):
         port: 端口号
         nickname: 账号昵称
         color: 端口颜色（可选，自动分配）
+        task: 当前任务名称
     """
     ctx = _get_context()
 
@@ -147,6 +152,9 @@ def set_context(port: str = None, nickname: str = None, color: str = None):
     if nickname is not None:
         ctx.nickname = nickname
 
+    if task is not None:
+        ctx.task = task
+
 
 def clear_context():
     """清除当前线程的日志上下文"""
@@ -154,6 +162,7 @@ def clear_context():
     ctx.port = "----"
     ctx.port_color = "white"
     ctx.nickname = ""
+    ctx.task = ""
 
 
 def get_logger(name: str) -> "logger":

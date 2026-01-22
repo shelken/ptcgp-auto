@@ -340,10 +340,7 @@ class OpenPackTask(Task):
         """
         任务完成后的处理
 
-        根据任务结果更新状态：
-        - 跳过：设为 skipped 状态，不更新 last_completed_at
-        - 成功：更新 last_completed_at，创建开包记录
-        - 失败：标记失败状态
+        状态更新由 executor 统一处理，此处仅负责创建开包记录。
         """
         logger.info(
             f"任务完成，阶段: {self._phase.name}, 已开包: {self._packs_opened_count}, "
@@ -351,32 +348,8 @@ class OpenPackTask(Task):
         )
 
         if self.account.id is None:
-            logger.error(f"账号 {self.account.display_name} ID 为空，无法更新状态")
+            logger.error(f"账号 {self.account.display_name} ID 为空，无法创建记录")
             return
-
-        if self._task_instance_repo is None:
-            logger.error("任务实例仓储未初始化")
-            return
-
-        # 更新任务实例状态
-        task_instance = self._task_instance_repo.get_by_account_and_type(
-            self.account.id, self.task_type
-        )
-        if task_instance:
-            if result.skipped:
-                # 跳过：设为 skipped 状态，不更新 last_completed_at
-                task_instance.status = "skipped"
-                task_instance.error_message = f"跳过: {result.skip_reason}"
-            elif result.success:
-                # 真正完成
-                task_instance.status = "completed"
-                task_instance.last_completed_at = datetime.now()
-                task_instance.error_message = None
-            else:
-                # 失败
-                task_instance.status = "failed"
-                task_instance.error_message = result.error
-            task_instance.save()
 
         # 只有真正完成且开过包才创建记录
         if (
