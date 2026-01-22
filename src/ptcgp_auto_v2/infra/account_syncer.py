@@ -167,8 +167,9 @@ class AccountSyncer:
             self._run_su(f"cp {DEVICE_XML_PATH} {DEVICE_TEMP_PATH}")
             self._run_su(f"chmod 644 {DEVICE_TEMP_PATH}")
 
-            # 拉取到本地
-            temp_path = self.storage_dir / "temp.xml"
+            # 拉取到本地（使用随机文件名，避免多设备并发冲突）
+            import uuid
+            temp_path = self.storage_dir / f"temp_{uuid.uuid4().hex[:8]}.xml"
             if not self.adb.pull(DEVICE_TEMP_PATH, str(temp_path)):
                 return None
 
@@ -304,10 +305,33 @@ class AccountSyncer:
         """
         new_iat = account_info.session_token_iat
         old_iat = account.session_token_iat
-        # 新 token 更新，或旧账号没有 xml_content
-        return (new_iat and (old_iat is None or new_iat > old_iat)) or (
-            account_info.xml_content and not account.xml_content
-        )
+
+        # 条件1：设备 iat 比数据库更新
+        iat_is_newer = new_iat and (old_iat is None or new_iat > old_iat)
+        # 条件2：数据库没有 xml_content 但设备有
+        db_missing_xml = account_info.xml_content and not account.xml_content
+
+        should_update = iat_is_newer or db_missing_xml
+
+        # 打印调试日志
+        if should_update:
+            if iat_is_newer:
+                logger.debug(
+                    f"XML 需更新: 设备 iat ({new_iat}) > 数据库 iat ({old_iat})"
+                )
+            elif db_missing_xml:
+                logger.debug("XML 需更新: 数据库缺少 xml_content")
+        else:
+            if new_iat and old_iat and new_iat == old_iat:
+                logger.debug(f"XML 无需更新: iat 相同 ({new_iat})")
+            elif new_iat and old_iat and new_iat < old_iat:
+                logger.debug(
+                    f"XML 无需更新: 数据库 iat ({old_iat}) > 设备 iat ({new_iat})"
+                )
+            elif not new_iat:
+                logger.debug("XML 无需更新: 设备无 iat")
+
+        return should_update
 
 
 def get_current_account(adb: AdbController) -> Optional[Account]:
