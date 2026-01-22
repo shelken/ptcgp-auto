@@ -32,6 +32,7 @@ class TaskStatus(Enum):
     RUNNING = "running"  # 执行中
     COMPLETED = "completed"  # 已完成
     FAILED = "failed"  # 失败
+    SKIPPED = "skipped"  # 跳过（不更新 last_completed_at，等待下次重置）
 
 
 @dataclass
@@ -71,6 +72,8 @@ class TaskResult:
     """
 
     success: bool
+    skipped: bool = False  # 是否被跳过（不更新 last_completed_at）
+    skip_reason: Optional[str] = None  # 跳过原因
     error: Optional[str] = None
     data: dict = field(default_factory=dict)  # 附加数据
 
@@ -83,6 +86,11 @@ class TaskResult:
     def fail(cls, error: str, **data) -> "TaskResult":
         """创建失败结果"""
         return cls(success=False, error=error, data=data)
+
+    @classmethod
+    def skip(cls, reason: str, **data) -> "TaskResult":
+        """创建跳过结果（不更新 last_completed_at）"""
+        return cls(success=True, skipped=True, skip_reason=reason, data=data)
 
 
 class Task(ABC):
@@ -221,7 +229,14 @@ class Task(ABC):
 
             # 检查目标状态
             if self.is_completed():
-                result = TaskResult.ok(iterations=iteration)
+                # 检查是否是跳过的情况
+                if hasattr(self, "was_skipped") and self.was_skipped():
+                    skip_reason = getattr(self, "_skip_reason", None)
+                    result = TaskResult.skip(
+                        reason=skip_reason or "未知原因", iterations=iteration
+                    )
+                else:
+                    result = TaskResult.ok(iterations=iteration)
                 self.on_complete(result)
                 return result
 

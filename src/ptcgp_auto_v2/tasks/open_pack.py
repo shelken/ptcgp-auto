@@ -33,7 +33,14 @@ class OpenPackPhase(Enum):
     OPENING = auto()             # 开包动画中
     REGISTERING = auto()         # 卡牌登录图鉴
     PACK_OPENED = auto()         # 成功开了一包
-    NO_FREE_PACK = auto()        # 确认无免费包
+    NO_FREE_PACK = auto()        # 确认无免费包（真正完成）
+    SKIPPED = auto()             # 任务被跳过（不更新 last_completed_at）
+
+
+# 跳过原因常量
+SKIP_REASON_NO_ACCOUNT_ID = "账号 ID 为空"
+SKIP_REASON_RECENTLY_OPENED = "12 小时内已开包"
+SKIP_REASON_NO_PACK_CONFIG = "未配置开包目标"
 
 
 from ptcgp_auto_v2.utils.gesture import (
@@ -183,6 +190,7 @@ class OpenPackTask(Task):
         self._phase = OpenPackPhase.INIT
         self._home_check_count = 0  # 主页无免费包检查次数
         self._packs_opened_count = 0  # 本次任务已开包数量
+        self._skip_reason: Optional[str] = None  # 跳过原因
 
         # 目标卡包配置
         self.target_pack = None  # {"pack_code": "A1", "booster_name": "Charizard"}
@@ -213,13 +221,15 @@ class OpenPackTask(Task):
         # 1. 检查账号 ID
         if self.account.id is None:
             logger.error(f"账号 {self.account.display_name} ID 为空")
-            self._phase = OpenPackPhase.NO_FREE_PACK
+            self._phase = OpenPackPhase.SKIPPED
+            self._skip_reason = SKIP_REASON_NO_ACCOUNT_ID
             return
 
-        # 2. 查询今日是否已开包
-        if self._pack_record_repo.has_opened_today(self.account.id):
-            logger.info(f"账号 {self.account.display_name} 今日已开包，任务跳过")
-            self._phase = OpenPackPhase.NO_FREE_PACK
+        # 2. 检查 12 小时内是否已开包
+        if self._pack_record_repo.has_opened_within_hours(self.account.id, hours=12):
+            logger.info(f"账号 {self.account.display_name} 12 小时内已开包，任务跳过")
+            self._phase = OpenPackPhase.SKIPPED
+            self._skip_reason = SKIP_REASON_RECENTLY_OPENED
             return
 
         # 3. 加载开包配置
@@ -228,7 +238,8 @@ class OpenPackTask(Task):
         )
         if not config:
             logger.info(f"账号 {self.account.display_name} 未配置开包目标，任务跳过")
-            self._phase = OpenPackPhase.NO_FREE_PACK
+            self._phase = OpenPackPhase.SKIPPED
+            self._skip_reason = SKIP_REASON_NO_PACK_CONFIG
             return
 
         self.target_pack = {
@@ -248,10 +259,15 @@ class OpenPackTask(Task):
         """
         判断任务是否已完成
 
-        唯一结束条件：在主页确认无免费包
-        开包成功后会回到主页继续检测，直到确认没有免费包。
+        结束条件：
+        - 在主页确认无免费包（真正完成）
+        - 任务被跳过（SKIPPED）
         """
-        return self._phase == OpenPackPhase.NO_FREE_PACK
+        return self._phase in (OpenPackPhase.NO_FREE_PACK, OpenPackPhase.SKIPPED)
+
+    def was_skipped(self) -> bool:
+        """判断任务是否被跳过（用于 Task.execute 判断是否更新 last_completed_at）"""
+        return self._phase == OpenPackPhase.SKIPPED
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """
@@ -324,11 +340,14 @@ class OpenPackTask(Task):
         """
         任务完成后的处理
 
-        根据本次任务开包数量创建记录。
+        根据任务结果更新状态：
+        - 跳过：设为 skipped 状态，不更新 last_completed_at
+        - 成功：更新 last_completed_at，创建开包记录
+        - 失败：标记失败状态
         """
         logger.info(
             f"任务完成，阶段: {self._phase.name}, 已开包: {self._packs_opened_count}, "
-            f"结果: {'成功' if result.success else '失败'}"
+            f"结果: {'跳过' if result.skipped else ('成功' if result.success else '失败')}"
         )
 
         if self.account.id is None:
@@ -344,14 +363,25 @@ class OpenPackTask(Task):
             self.account.id, self.task_type
         )
         if task_instance:
-            task_instance.status = "completed" if result.success else "failed"
-            task_instance.error_message = result.error
-            task_instance.last_completed_at = datetime.now()
+            if result.skipped:
+                # 跳过：设为 skipped 状态，不更新 last_completed_at
+                task_instance.status = "skipped"
+                task_instance.error_message = f"跳过: {result.skip_reason}"
+            elif result.success:
+                # 真正完成
+                task_instance.status = "completed"
+                task_instance.last_completed_at = datetime.now()
+                task_instance.error_message = None
+            else:
+                # 失败
+                task_instance.status = "failed"
+                task_instance.error_message = result.error
             task_instance.save()
 
-        # 如果本次任务开过包，创建记录
+        # 只有真正完成且开过包才创建记录
         if (
             result.success
+            and not result.skipped
             and self._packs_opened_count > 0
             and self._pack_record_repo
             and self.target_pack
@@ -363,7 +393,7 @@ class OpenPackTask(Task):
                 self.account.id, pack_type=pack_type
             )
             logger.info(f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包）")
-        elif result.success:
+        elif result.success and not result.skipped:
             logger.info("任务完成（无免费包），不创建开包记录")
 
     def _handle_home(self, page_info: dict) -> ActionResult:
