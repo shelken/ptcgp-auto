@@ -93,7 +93,7 @@ class BaseExecutor(ABC):
         if not self._adb.connect():
             raise RuntimeError(f"无法连接设备: {self.device.address}")
         ocr_engine = OcrEngine()
-        template_matcher = TemplateMatcher()
+        template_matcher = TemplateMatcher(threshold=self.config.template_threshold)
         # 初始化时立即注入设备真实分辨率
         template_matcher.set_screen_width(self._adb.screen_width)
 
