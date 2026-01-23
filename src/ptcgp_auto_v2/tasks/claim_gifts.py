@@ -27,6 +27,7 @@ from ptcgp_auto_v2.utils.gesture import (
     swipe_card_coords,
     tap_home_icon,
     tap_text,
+    normalize_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,7 +126,6 @@ class ClaimGiftsTask(Task):
 
         # 核心状态机
         self._phase = ClaimGiftsPhase.INIT
-        self._home_check_count = 0  # 主页无礼物检查次数
         self._claim_attempt_count = 0  # 领取尝试次数（用于判断无礼物）
 
     def on_start(self):
@@ -181,54 +181,32 @@ class ClaimGiftsTask(Task):
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """
-        处理主页：检测是否有礼物图标
-
-        1. 有礼物 → 进入礼物盒页面
-        2. 无礼物 → 连续检测 2 次（每次间隔 2 秒），全部无礼物才确认完成
+        处理主页：点击礼物图标
         """
         self._phase = ClaimGiftsPhase.CHECKING_HOME
 
-        if not self.recognizer:
-            logger.warning("  -> 无法获取识别器")
+        screenshot, _ = self.page_detector.capture()
+        if not screenshot:
+            logger.warning("  -> 无法获取截图")
             return ActionResult.ok(wait=1.0)
 
-        _, template_matcher = self.recognizer
+        # 检测 icon_gift 模板
+        gift_icon = self.page_detector.find_template_with_scale(
+            "icon_gift",
+            screenshot=screenshot,
+        )
 
-        # 连续检测 2 次，每次间隔 2 秒
-        for i in range(2):
-            # 每次循环重新截图
-            screenshot = self.adb.screenshot()
-            if not screenshot:
-                logger.warning("  -> 无法获取截图")
-                time.sleep(2.0)
-                continue
+        if gift_icon:
+            # 有礼物，点击进入
+            logger.info("  -> 检测到礼物图标，进入礼物盒页面")
+            self._phase = ClaimGiftsPhase.ENTERING_GIFTS
+            self.adb.tap_center(gift_icon.box)
+            time.sleep(4.0)
+            return ActionResult.ok(wait=1.0)
 
-            # 检测 icon_gift 模板
-            gift_icon = template_matcher.find_with_scale(
-                screenshot, "icon_gift", scale=1.0, threshold=0.8
-            )
-
-            if gift_icon:
-                # 有礼物，点击进入
-                logger.info("  -> 检测到礼物图标，进入礼物盒页面")
-                self._home_check_count = 0
-                self._phase = ClaimGiftsPhase.ENTERING_GIFTS
-                self.adb.tap_center(gift_icon.box)
-                time.sleep(4.0)
-                return ActionResult.ok(wait=1.0)
-
-            logger.debug(f"  -> 未检测到礼物图标 ({i + 1}/2)")
-            if i < 1:
-                time.sleep(2.0)
-
-        # 2 次都无礼物，累计检查次数
-        self._home_check_count += 1
-        logger.info(f"  -> 确认无礼物图标（第 {self._home_check_count} 轮检查）")
-
-        if self._home_check_count >= 2:
-            logger.info("  -> 确认无礼物，任务完成")
-            self._phase = ClaimGiftsPhase.NO_GIFTS
-
+        # 未找到礼物图标，直接结束
+        logger.info("  -> 未检测到礼物图标，任务完成")
+        self._phase = ClaimGiftsPhase.NO_GIFTS
         return ActionResult.ok(wait=1.0)
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
@@ -306,9 +284,9 @@ class ClaimGiftsTask(Task):
         # 获取"領取紀錄"的 y 坐标（用于过滤 Tab 按钮）
         record_y = None
         for item in ocr_results:
-            text = "".join(item["text"].lower().split())
+            text = normalize_text(item["text"])
             for pattern in record_patterns:
-                if "".join(pattern.lower().split()) in text:
+                if normalize_text(pattern) in text:
                     box = item["box"]
                     record_y = (box[1] + box[3]) // 2
                     break
@@ -318,8 +296,8 @@ class ClaimGiftsTask(Task):
         # 按优先级遍历领取按钮
         for pattern in claim_patterns:
             for item in ocr_results:
-                text = "".join(item["text"].lower().split())
-                if "".join(pattern.lower().split()) == text:
+                text = normalize_text(item["text"])
+                if normalize_text(pattern) == text:
                     box = item["box"]
                     button_y = (box[1] + box[3]) // 2
 

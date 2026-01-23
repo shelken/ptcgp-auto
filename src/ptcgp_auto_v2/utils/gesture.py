@@ -56,6 +56,30 @@ def press_back(adb, wait: float = 1.0) -> ActionResult:
     return ActionResult.wait(wait)
 
 
+def normalize_text(text: str) -> str:
+    """Normalize text for OCR matching."""
+    return "".join(text.lower().split())
+
+
+def is_text_visible(
+    ocr_results: list[dict],
+    patterns: list[str],
+    exact: bool = False,
+) -> bool:
+    """Check if any pattern is visible in OCR results."""
+    for pattern in patterns:
+        pattern_normalized = normalize_text(pattern)
+        for item in ocr_results:
+            text = normalize_text(item["text"])
+            if exact:
+                matched = pattern_normalized == text
+            else:
+                matched = pattern_normalized in text
+            if matched:
+                return True
+    return False
+
+
 def tap_text(
     adb,
     ocr_results: list[dict],
@@ -63,27 +87,19 @@ def tap_text(
     wait: float = 1.0,
     exact: bool = False,
 ) -> Optional[ActionResult]:
-    """按文本列表匹配点击
-
-    Args:
-        adb: ADB 控制器
-        ocr_results: OCR 识别结果
-        patterns: 待匹配的文本列表
-        wait: 点击后等待时间
-        exact: 是否精确匹配（默认 False 为包含匹配）
-    """
+    """Tap by matching text patterns."""
     for pattern in patterns:
-      for item in ocr_results:
-        text = "".join(item["text"].lower().split())
-        pattern_normalized = "".join(pattern.lower().split())
-        if exact:
-            matched = pattern_normalized == text
-        else:
-            matched = pattern_normalized in text
-        if matched:
-            adb.tap_center(item["box"])
-            logger.debug(f"点击文字: {pattern}")
-            return ActionResult.ok(wait=wait)
+        pattern_normalized = normalize_text(pattern)
+        for item in ocr_results:
+            text = normalize_text(item["text"])
+            if exact:
+                matched = pattern_normalized == text
+            else:
+                matched = pattern_normalized in text
+            if matched:
+                adb.tap_center(item["box"])
+                logger.debug(f"点击文字: {pattern}")
+                return ActionResult.ok(wait=wait)
     return None
 
 
@@ -151,7 +167,7 @@ def tap_template_with_scale(
     page_detector,
     template_name: str,
     scale: float,
-    threshold: float = 0.7,
+    threshold: Optional[float] = None,
     wait: float = 1.0,
 ) -> Optional[ActionResult]:
     """按缩放比例匹配模板并点击"""
@@ -174,7 +190,12 @@ def scroll_until_template(
     wait: float,
 ) -> Optional[ActionResult]:
     """循环上滑直到命中模板或达到上限"""
-    last_signature = None
+    screenshot, ocr_results = page_detector.get_last_page_context()
+    if not screenshot:
+        screenshot, ocr_results = page_detector.capture()
+        if not screenshot:
+            return None
+    last_signature = "|".join(sorted([item["text"] for item in ocr_results]))
     for attempt in range(max_attempts):
         logger.info(f"  -> 第 {attempt + 1} 次上滑查找模板: {template_name}")
         swipe_up(page_detector.adb, ratio=swipe_ratio, wait=wait)
@@ -188,7 +209,7 @@ def scroll_until_template(
             page_detector.adb.tap_center(match.box)
             return ActionResult.ok(wait=1.0)
         current_signature = "|".join(sorted([item["text"] for item in ocr_results]))
-        if last_signature and current_signature == last_signature:
+        if current_signature == last_signature:
             logger.warning("  -> 滑动到底部，未找到目标模板")
             break
         last_signature = current_signature
@@ -206,7 +227,9 @@ def cycle_until_template(
     """循环点击右侧切换直到命中模板或回到起点"""
     screenshot, ocr_results = page_detector.get_last_page_context()
     if not screenshot:
-        return None
+        screenshot, ocr_results = page_detector.capture()
+        if not screenshot:
+            return None
     first_signature = "|".join(sorted([item["text"] for item in ocr_results]))
     for attempt in range(max_attempts):
         logger.info(f"  -> 第 {attempt + 1} 次切换子包")
