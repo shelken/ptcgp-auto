@@ -27,6 +27,7 @@ from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     tap_home_icon,
     tap_text,
+    tap_box,
     is_text_visible,
 )
 
@@ -220,8 +221,7 @@ class ClaimRewardsTask(Task):
                 logger.info("  -> 检测到奖励图标，进入任务页面")
                 self._home_check_count = 0
                 self._phase = ClaimRewardsPhase.ENTERING_REWARDS
-                self.adb.tap_center(reward_icon.box)
-                return ActionResult.ok(wait=3.0)
+                return tap_box(self.adb, reward_icon.box, wait=3.0)
 
             logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/{rounds})")
             if i < rounds - 1:
@@ -257,8 +257,7 @@ class ClaimRewardsTask(Task):
                     box = item["box"]
                     if screenshot and is_button_clickable(screenshot, box, threshold=0.1):
                         logger.info(f"  -> 点击领取按钮: {pattern}")
-                        self.adb.tap_center(box)
-                        return ActionResult.ok(wait=1.0)
+                        return tap_box(self.adb, box, wait=1.0)
                     else:
                         logger.debug(f"  -> 按钮 {pattern} 已置灰，跳过")
 

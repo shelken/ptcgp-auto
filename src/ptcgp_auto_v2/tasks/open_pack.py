@@ -54,6 +54,8 @@ from ptcgp_auto_v2.utils.gesture import (
     long_press_text,
     tap_home_icon,
     click_close,
+    tap_bottom_close,
+    tap_box,
     center_point,
     swipe_pack_coords,
     swipe_card_coords,
@@ -433,9 +435,8 @@ class OpenPackTask(Task):
                 "icon_pack_open", screenshot=screenshot
             )
             if pack_open_box:
-                self.adb.tap_center(pack_open_box.box)
-            else:
-                logger.warning("  -> 未找到开包图标，跳过点击免费包图标")
+                return tap_box(self.adb, pack_open_box.box, wait=1.0)
+            logger.warning("  -> 未找到开包图标，跳过点击免费包图标")
             return ActionResult.ok(wait=1.0)
 
         # 无免费包，累计计数
@@ -621,10 +622,7 @@ class OpenPackTask(Task):
             return result
 
         logger.info("  -> 点击屏幕底部关闭弹窗")
-        self.adb.tap(
-            self.adb.screen_width // 10, self.adb.scaled_y(BASE_POPUP_CLOSE_TAP_Y)
-        )
-        return ActionResult.ok(wait=1.0)
+        return tap_bottom_close(self.adb, BASE_POPUP_CLOSE_TAP_Y, wait=1.0)
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
         """滑动开包（pack_opening_swipe 页面）"""
@@ -632,7 +630,7 @@ class OpenPackTask(Task):
         # 进入 滑动开包 说明开包成功，增加计数
         self._packs_opened_count += 1
         start, end = swipe_pack_coords(self.adb)
-        return swipe(self.adb, start, end, 500)
+        return swipe(self.adb, start, end, duration=500)
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """
@@ -660,7 +658,7 @@ class OpenPackTask(Task):
         """向上滑动卡牌登录图鉴（pack_card_register 页面）仅在有新卡时出现"""
         logger.info(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, 300)
+        return swipe(self.adb, start, end, duration=300)
 
     def _load_boosters_list(self, pack_code: str) -> list:
         """从 packs.json 加载子包列表"""
