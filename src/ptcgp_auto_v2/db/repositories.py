@@ -20,9 +20,157 @@ from ptcgp_auto_v2.db.models import (
     PackRecord,
     TaskInstance,
     TaskPlan,
+    Card,
+    CardSet,
+    CardPack,
 )
 
 logger = logging.getLogger(__name__)
+
+
+class CardRepository:
+    """卡牌数据访问层"""
+
+    def get_set_by_code(self, code: str) -> Optional[CardSet]:
+        """根据代码获取系列"""
+        with Session(get_engine()) as session:
+            return session.get(CardSet, code)
+
+    def upsert_set(self, card_set: CardSet) -> CardSet:
+        """更新或创建系列"""
+        with Session(get_engine()) as session:
+            existing = session.get(CardSet, card_set.code)
+            if existing:
+                existing.name = card_set.name
+                existing.release_date = card_set.release_date
+                existing.total_cards = card_set.total_cards
+                existing.updated_at = datetime.now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+                return existing
+            session.add(card_set)
+            session.commit()
+            session.refresh(card_set)
+            return card_set
+
+    def get_card_by_set_and_number(self, set_code: str, number: int) -> Optional[Card]:
+        """根据系列和编号获取卡牌"""
+        with Session(get_engine()) as session:
+            statement = select(Card).where(
+                Card.set_code == set_code, Card.number == number
+            )
+            return session.exec(statement).first()
+
+    def upsert_card(self, card: Card) -> Card:
+        """更新或创建卡牌"""
+        with Session(get_engine()) as session:
+            statement = select(Card).where(
+                Card.set_code == card.set_code, Card.number == card.number
+            )
+            existing = session.exec(statement).first()
+            if existing:
+                existing.name = card.name
+                existing.rarity = card.rarity
+                existing.image_url = card.image_url
+                # local_image_path 不覆盖，除非显式传入了新值
+                if card.local_image_path:
+                    existing.local_image_path = card.local_image_path
+                existing.data = card.data
+                existing.updated_at = datetime.now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+                return existing
+            session.add(card)
+            session.commit()
+            session.refresh(card)
+            return card
+
+    def clear_card_packs(self, card_id: int):
+        """清除卡牌的卡包关联"""
+        with Session(get_engine()) as session:
+            statement = select(CardPack).where(CardPack.card_id == card_id)
+            results = session.exec(statement).all()
+            for item in results:
+                session.delete(item)
+            session.commit()
+
+    def add_card_pack(self, card_id: int, pack_name: str):
+        """添加卡牌与卡包的关联"""
+        with Session(get_engine()) as session:
+            # 检查是否已存在
+            statement = select(CardPack).where(
+                CardPack.card_id == card_id, CardPack.pack_name == pack_name
+            )
+            if session.exec(statement).first():
+                return
+
+            pack = CardPack(card_id=card_id, pack_name=pack_name)
+            session.add(pack)
+            session.commit()
+
+    def get_packs_by_set(self, set_code: str) -> dict:
+        """
+        获取指定系列的子包结构（用于生成兼容的 packs.json）
+        Returns:
+            {
+                "set_code": {
+                    "name": "SetName",
+                    "boosters": ["Pack1", "Pack2"]
+                }
+            }
+        """
+        with Session(get_engine()) as session:
+            # 获取系列信息
+            card_set = session.get(CardSet, set_code)
+            if not card_set:
+                return {}
+
+            # 获取该系列下所有卡牌关联的 pack_name
+            # JOIN: CardSet -> Card -> CardPack
+            statement = (
+                select(CardPack.pack_name)
+                .join(Card, CardPack.card_id == Card.id)
+                .where(Card.set_code == set_code)
+                .distinct()
+            )
+            boosters = list(session.exec(statement).all())
+            boosters.sort()
+
+            return {
+                set_code: {
+                    "name": card_set.name,
+                    "boosters": boosters,
+                }
+            }
+
+    def get_all_sets(self) -> List[CardSet]:
+        """获取所有系列"""
+        with Session(get_engine()) as session:
+            statement = select(CardSet).order_by(CardSet.code)
+            return list(session.exec(statement).all())
+
+    def get_cards_by_set(self, set_code: str) -> List[Card]:
+        """获取系列下的所有卡牌"""
+        with Session(get_engine()) as session:
+            statement = (
+                select(Card)
+                .where(Card.set_code == set_code)
+                .options(selectinload(Card.packs))
+            )
+            return list(session.exec(statement).all())
+
+    def get_cards_by_pack(self, pack_name: str, set_code: str) -> List[Card]:
+        """获取指定子包下的所有卡牌"""
+        with Session(get_engine()) as session:
+            statement = (
+                select(Card)
+                .join(CardPack, Card.id == CardPack.card_id)
+                .where(Card.set_code == set_code, CardPack.pack_name == pack_name)
+                .options(selectinload(Card.packs))
+            )
+            return list(session.exec(statement).all())
 
 
 class TaskPlanRepository:
