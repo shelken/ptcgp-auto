@@ -39,6 +39,7 @@ def _load_template_from_path(recognizer, template_path: str) -> Optional[str]:
 
     if not path.suffix.lower() == ".png":
         print(f"WARNING: 模板文件不是 PNG 格式: {path}")
+        return None
 
     # 使用文件名（不含扩展名）作为模板名
     template_name = path.stem

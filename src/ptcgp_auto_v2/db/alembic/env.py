@@ -14,18 +14,12 @@ from sqlalchemy import pool
 from sqlmodel import SQLModel
 
 # 确保项目 src 目录在 sys.path 中
-src_path = Path(__file__).parent.parent.parent.parent.parent
+src_path = Path(__file__).resolve().parent.parent.parent.parent
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 # 导入所有模型以注册到 SQLModel.metadata
-from ptcgp_auto_v2.db.models import (  # noqa: E402, F401
-    Account,
-    AccountPackConfig,
-    PackRecord,
-    TaskInstance,
-    TaskPlan,
-)
+from ptcgp_auto_v2.db.models import *  # noqa: E402, F403
 
 # Alembic Config 对象，提供对 .ini 文件中值的访问
 config = context.config
@@ -40,12 +34,8 @@ target_metadata = SQLModel.metadata
 
 def get_url() -> str:
     """获取数据库 URL"""
-    # 优先从配置获取
-    url = config.get_main_option("sqlalchemy.url")
-    if url:
-        return url
-
-    # 回退到 settings
+    # 强制使用 settings 中的配置，忽略 alembic.ini 中的 sqlalchemy.url
+    # 这样可以确保路径统一由 settings 管理（支持环境变量等）
     from ptcgp_auto_v2.config.settings import get_settings
 
     settings = get_settings()
