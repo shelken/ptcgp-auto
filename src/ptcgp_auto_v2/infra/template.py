@@ -17,7 +17,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # 默认配置
-DEFAULT_THRESHOLD = 0.8
+DEFAULT_THRESHOLD = 0.7
 DEFAULT_TEMPLATE_BASE_WIDTH = 1080
 
 

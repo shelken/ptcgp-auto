@@ -267,7 +267,7 @@ class PageDetector:
     ) -> Optional[dict]:
         """检查模板匹配"""
         for template_name in templates:
-            match = self.template_matcher.find(screenshot, template_name, threshold=0.7)
+            match = self.template_matcher.find(screenshot, template_name)
             if match:
                 return {
                     "type": "template",
@@ -324,16 +324,17 @@ class PageDetector:
     def find_template_with_scale(
         self,
         template_name: str,
-        scale: float,
-        threshold: float = 0.7,
+        scale: float = 1.0,
+        threshold: Optional[float] = None,
         screenshot: Optional[Image.Image] = None,
     ) -> Optional[TemplateMatch]:
-        """按指定缩放比例匹配模板"""
+        """按指定缩放比例匹配模板（缩放为相对系数）"""
         if screenshot is None:
             screenshot = self._last_screenshot or self.adb.screenshot()
             if screenshot is None:
                 return None
-            self._last_screenshot = screenshot
+        self._last_screenshot = screenshot
+
         return self.template_matcher.find_with_scale(
             screenshot, template_name, scale=scale, threshold=threshold
         )
@@ -381,8 +382,9 @@ class PageDetector:
             模板的边界框 (x1, y1, x2, y2) 或 None
         """
         if screenshot is None:
-            screenshot = self.adb.screenshot()
+            screenshot = self._last_screenshot or self.adb.screenshot()
             if screenshot is None:
                 return None
+        self._last_screenshot = screenshot
 
         return self.template_matcher.find_box(screenshot, template_name, threshold)

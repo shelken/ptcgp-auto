@@ -74,7 +74,7 @@ class Settings:
     # 识别配置
     ocr_languages: List[str] = field(default_factory=lambda: ["zh-Hant", "en-US"])
     ocr_recognition_level: str = "accurate"  # "fast" or "accurate"
-    template_threshold: float = 0.8
+    template_threshold: float = 0.7
 
     # 调度配置
     poll_interval: float = 5.0
