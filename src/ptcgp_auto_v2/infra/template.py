@@ -63,7 +63,39 @@ class TemplateMatcher:
         self.threshold = threshold
         self.base_width = base_width
         self.templates: Dict[str, np.ndarray] = {}
+        self._core_loaded = False  # 标记核心模板是否已加载
         self._current_scale = 1.0
+        self._screen_width: Optional[int] = None  # 当前设备分辨率宽度
+        # 记录已加载的附加模板（用于卸载）
+        self._loaded_pack_templates: List[str] = []
+
+    def set_screen_width(self, width: int):
+        """
+        设置当前屏幕宽度并更新缩放比例
+
+        Args:
+            width: 屏幕宽度
+        """
+        if self._screen_width == width:
+            return
+
+        self._screen_width = width
+        self._current_scale = width / self.base_width
+        logger.info(
+            f"设置模板缩放比例: {self._current_scale:.2f} "
+            f"({width}/{self.base_width})"
+        )
+
+        # 如果比例发生变化且已加载了模板，可能需要清空或重新缩放
+        # 为简单起见，如果 scale 变化显著，我们清空当前模板以强制重新加载
+        # 但我们保留附加模板列表，以便知道哪些是 pack 模板（虽然它们也被清除了）
+        # 这里只清空 self.templates，_loaded_pack_templates 仅用于记录名称
+        # 更好的做法可能是重新加载所有已知的模板，但这里我们假设调用方会按需重新加载
+        if self.templates:
+            logger.info("缩放比例变化，清空已加载模板")
+            self.templates.clear()
+            self._core_loaded = False
+            self._loaded_pack_templates.clear()  # 它们也没了
 
     def _normalize_name(self, name: str) -> str:
         """规范化模板名称：移除 .png 后缀"""
@@ -75,25 +107,24 @@ class TemplateMatcher:
         """PIL Image 转 OpenCV 格式"""
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
-    def load_templates(self, screen_width: int = DEFAULT_TEMPLATE_BASE_WIDTH):
+    def load_core_templates(self, screen_width: Optional[int] = None):
         """
         加载核心模板图片（不包含 cards/ 目录下的卡牌图片）
 
+        不清除现有模板（如卡包模板），只增量加载核心模板。
+
         Args:
-            screen_width: 当前屏幕宽度，用于计算缩放比例
+            screen_width: 当前屏幕宽度（可选，若提供则更新缩放比例）
         """
-        self.templates.clear()
+        if screen_width:
+            self.set_screen_width(screen_width)
+
+        if self._core_loaded:
+            return
 
         if not self.templates_dir.exists():
             logger.warning(f"模板目录不存在: {self.templates_dir}")
             return
-
-        self._current_scale = screen_width / self.base_width
-        if abs(self._current_scale - 1.0) > 0.01:
-            logger.info(
-                f"模板缩放比例: {self._current_scale:.2f} "
-                f"({screen_width}/{self.base_width})"
-            )
 
         count = 0
         for file in self.templates_dir.glob("**/*.png"):
@@ -105,7 +136,55 @@ class TemplateMatcher:
             if self._load_template_file(file):
                 count += 1
 
-        logger.info(f"共加载 {count} 个核心模板")
+        logger.info(f"加载核心模板: {count} 个")
+        self._core_loaded = True
+
+    # 兼容旧接口
+    def load_templates(self, screen_width: int = DEFAULT_TEMPLATE_BASE_WIDTH):
+        self.load_core_templates(screen_width)
+
+    def load_pack_templates(self, pack_code: str, booster_name: str) -> int:
+        """
+        加载指定卡包的模板（卡牌图片）
+
+        Args:
+            pack_code: 卡包代码，如 "A1"
+            booster_name: 子包名称，如 "Charizard"
+
+        Returns:
+            加载数量
+        """
+        # 路径规则: cards/{pack_code}/{booster_name_safe}
+        # 确保空格被替换为下划线
+        safe_booster = booster_name.replace(" ", "_")
+        sub_dir = f"cards/{pack_code}/{safe_booster}"
+
+        target_dir = self.templates_dir / sub_dir
+        if not target_dir.exists():
+            logger.warning(f"卡包模板目录不存在: {target_dir}")
+            return 0
+
+        count = 0
+        for file in target_dir.glob("**/*.png"):
+            if self._load_template_file(file, is_pack_template=True):
+                count += 1
+
+        logger.info(f"加载卡包模板 {pack_code}/{booster_name}: {count} 个")
+        return count
+
+    def unload_pack_templates(self):
+        """卸载所有已加载的卡包模板，释放内存"""
+        if not self._loaded_pack_templates:
+            return
+
+        count = 0
+        for name in self._loaded_pack_templates:
+            if name in self.templates:
+                del self.templates[name]
+                count += 1
+
+        self._loaded_pack_templates.clear()
+        logger.info(f"已卸载 {count} 个卡包模板")
 
     def load_additional_templates(self, sub_dir: str):
         """
@@ -126,7 +205,7 @@ class TemplateMatcher:
 
         logger.info(f"加载附加模板 {sub_dir}: {count} 个")
 
-    def _load_template_file(self, file_path: Path) -> bool:
+    def _load_template_file(self, file_path: Path, is_pack_template: bool = False) -> bool:
         """加载单个模板文件"""
         try:
             # 使用相对路径作为模板名（支持子目录）
@@ -148,15 +227,21 @@ class TemplateMatcher:
                 img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
             self.templates[name] = img
+            if is_pack_template:
+                self._loaded_pack_templates.append(name)
             return True
         except Exception as e:
             logger.error(f"加载模板失败 {file_path}: {e}")
             return False
 
     def _ensure_templates_loaded(self):
-        """确保模板已加载"""
-        if not self.templates:
-            self.load_templates()
+        """确保核心模板已加载"""
+        if not self._core_loaded:
+            self.load_core_templates()
+
+    def _load_core_templates_only(self):
+        """已弃用，使用 load_core_templates"""
+        self.load_core_templates()
 
     def find(
         self,
