@@ -21,6 +21,8 @@ from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
 from ptcgp_auto_v2.utils.gesture import (
     press_back,
     tap_home_icon,
+    tap_above_point,
+    tap_top_center,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,23 +201,20 @@ class FetchAccountInfoTask(Task):
         lv_pos = self._find_lv_position(ocr_results)
         if lv_pos:
             # 点击 Lv. 上方区域（头像位置）
-            tap_x = lv_pos[0]
-            offset_y = self.adb.scaled_y(BASE_AVATAR_OFFSET_Y)
-            tap_y = max(lv_pos[1] - offset_y, MIN_TAP_Y)
-
-            logger.info(f"  -> 点击头像区域 ({tap_x}, {tap_y}) 进入个人资料")
+            logger.info("  -> 点击头像区域进入个人资料")
             self._phase = FetchPhase.ENTERING_PROFILE
-            self.adb.tap(tap_x, tap_y)
-            return ActionResult.ok(wait=1.0)
+            return tap_above_point(
+                self.adb,
+                lv_pos,
+                base_offset_y=BASE_AVATAR_OFFSET_Y,
+                min_y=MIN_TAP_Y,
+                wait=1.0,
+            )
 
         # 没找到 Lv.，尝试点击屏幕中上方
-        tap_x = self.adb.screen_width // 2
-        tap_y = self.adb.scaled_y(BASE_FALLBACK_TAP_Y)
-
-        logger.info(f"  -> 未找到 Lv.，点击中上方 ({tap_x}, {tap_y})")
+        logger.info("  -> 未找到 Lv.，点击中上方")
         self._phase = FetchPhase.ENTERING_PROFILE
-        self.adb.tap(tap_x, tap_y)
-        return ActionResult.ok(wait=1.0)
+        return tap_top_center(self.adb, BASE_FALLBACK_TAP_Y, wait=2.0)
 
     def _handle_profile(self, page_info: dict) -> ActionResult:
         """处理个人资料页"""

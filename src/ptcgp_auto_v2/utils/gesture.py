@@ -6,6 +6,8 @@
 import logging
 from typing import Callable, Optional, Tuple
 
+Box = tuple[int, int, int, int]
+
 from ptcgp_auto_v2.core.task_base import ActionResult
 
 logger = logging.getLogger(__name__)
@@ -36,18 +38,28 @@ def tap_template(
     return ActionResult.ok(wait=wait)
 
 
+def tap(adb, x: int, y: int, wait: float = 1.0) -> ActionResult:
+    """点击指定坐标"""
+    adb.tap(x, y)
+    return ActionResult.ok(wait=wait)
+
+
+def tap_box(adb, box: Box, wait: float = 1.0) -> ActionResult:
+    """点击边界框中心"""
+    adb.tap_center(box)
+    return ActionResult.ok(wait=wait)
+
+
 def tap_center(adb, wait: float = 1.0) -> ActionResult:
     """点击屏幕中心"""
-    adb.tap(adb.screen_width // 2, adb.screen_height // 2)
-    return ActionResult.ok(wait=wait)
+    return tap(adb, adb.screen_width // 2, adb.screen_height // 2, wait=wait)
 
 
 def tap_right_side(adb, ratio: float = 0.75, wait: float = 1.0) -> ActionResult:
     """点击屏幕右侧区域"""
     tap_x = int(adb.screen_width * ratio)
     tap_y = adb.screen_height // 2
-    adb.tap(tap_x, tap_y)
-    return ActionResult.ok(wait=wait)
+    return tap(adb, tap_x, tap_y, wait=wait)
 
 
 def press_back(adb, wait: float = 1.0) -> ActionResult:
@@ -176,8 +188,40 @@ def tap_template_with_scale(
     )
     if not match:
         return None
-    page_detector.adb.tap_center(match.box)
-    return ActionResult.ok(wait=wait)
+    return tap_box(page_detector.adb, match.box, wait=wait)
+
+
+def tap_template_box(
+    page_detector,
+    template_name: str,
+    wait: float = 1.0,
+) -> Optional[ActionResult]:
+    """查找模板并点击中心（使用 page_detector 最新截图）"""
+    box = page_detector.find_template(template_name)
+    if not box:
+        return None
+    return tap_box(page_detector.adb, box, wait=wait)
+
+
+def tap_above_point(
+    adb,
+    point: Tuple[int, int],
+    base_offset_y: int,
+    min_y: int = 0,
+    wait: float = 1.0,
+) -> ActionResult:
+    """点击指定点上方（基准像素 + 缩放）"""
+    offset_y = adb.scaled_y(base_offset_y)
+    tap_x = point[0]
+    tap_y = max(point[1] - offset_y, min_y)
+    return tap(adb, tap_x, tap_y, wait=wait)
+
+
+def tap_top_center(adb, base_y: int, wait: float = 1.0) -> ActionResult:
+    """点击屏幕中上方（基准像素 + 缩放）"""
+    tap_x = adb.screen_width // 2
+    tap_y = adb.scaled_y(base_y)
+    return tap(adb, tap_x, tap_y, wait=wait)
 
 
 def scroll_until_template(
@@ -298,6 +342,18 @@ def click_close(
     )
 
 
+def tap_bottom_close(
+    adb,
+    base_y: int,
+    wait: float = 1.0,
+    ratio_x: float = 0.1,
+) -> ActionResult:
+    """点击底部关闭区域（基准像素 + 缩放）"""
+    tap_x = int(adb.screen_width * ratio_x)
+    tap_y = adb.scaled_y(base_y)
+    return tap(adb, tap_x, tap_y, wait=wait)
+
+
 def tap_home_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
     """点击主页图标"""
     result = tap_template(adb, page_detector, "icon_home", wait=wait)
@@ -343,6 +399,25 @@ def swipe(
     """执行自定义滑动"""
     adb.swipe(*start, *end, duration)
     return ActionResult.ok(wait=wait)
+
+
+def swipe_scaled(
+    adb,
+    start_x: int,
+    start_y: int,
+    end_x: int,
+    end_y: int,
+    duration: int = 300,
+    wait: float = 1.0,
+) -> ActionResult:
+    """基于基准像素执行滑动"""
+    return swipe(
+        adb,
+        (adb.scaled_x(start_x), adb.scaled_y(start_y)),
+        (adb.scaled_x(end_x), adb.scaled_y(end_y)),
+        duration=duration,
+        wait=wait,
+    )
 
 
 def long_press(
