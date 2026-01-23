@@ -3,26 +3,11 @@
 卡包数据工具模块
 
 提供 pack_code 与 boosters 的映射查询功能。
+底层使用 CardRepository 从数据库查询。
 """
 
-import json
-from pathlib import Path
-from typing import List, Optional
-
-PACKS_DATA_PATH = Path(__file__).parent.parent.parent.parent / "data" / "packs.json"
-_packs_cache: Optional[dict] = None
-
-
-def _load_packs_data() -> dict:
-    """加载 packs.json 数据（带缓存）"""
-    global _packs_cache
-    if _packs_cache is None:
-        if not PACKS_DATA_PATH.exists():
-            _packs_cache = {}
-        else:
-            with open(PACKS_DATA_PATH, "r", encoding="utf-8") as f:
-                _packs_cache = json.load(f)
-    return _packs_cache
+from typing import List
+from ptcgp_auto_v2.db.repositories import CardRepository
 
 
 def get_boosters(pack_code: str) -> List[str]:
@@ -36,9 +21,11 @@ def get_boosters(pack_code: str) -> List[str]:
         boosters 名称列表，如 ["Charizard", "Mewtwo", "Pikachu"]
         如果 pack_code 不存在，返回空列表
     """
-    data = _load_packs_data()
-    pack_info = data.get(pack_code, {})
-    return pack_info.get("boosters", [])
+    repo = CardRepository()
+    data = repo.get_packs_by_set(pack_code)
+    if not data or pack_code not in data:
+        return []
+    return data[pack_code].get("boosters", [])
 
 
 def get_booster_count(pack_code: str) -> int:

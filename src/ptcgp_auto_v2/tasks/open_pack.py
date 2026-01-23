@@ -24,17 +24,17 @@ from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
 class OpenPackPhase(Enum):
     """开包任务阶段"""
 
-    INIT = auto()                # 初始化，尚未开始
+    INIT = auto()  # 初始化，尚未开始
     NAVIGATING_TO_HOME = auto()  # 正在导航到主页
-    CHECKING_HOME = auto()       # 在主页检查免费包
-    ENTERING_PACK = auto()       # 进入开包流程
-    SELECTING_SERIES = auto()    # 选择扩充包系列
-    SELECTING_BOOSTER = auto()   # 选择子包
-    OPENING = auto()             # 开包动画中
-    REGISTERING = auto()         # 卡牌登录图鉴
-    PACK_OPENED = auto()         # 成功开了一包
-    NO_FREE_PACK = auto()        # 确认无免费包（真正完成）
-    SKIPPED = auto()             # 任务被跳过（不更新 last_completed_at）
+    CHECKING_HOME = auto()  # 在主页检查免费包
+    ENTERING_PACK = auto()  # 进入开包流程
+    SELECTING_SERIES = auto()  # 选择扩充包系列
+    SELECTING_BOOSTER = auto()  # 选择子包
+    OPENING = auto()  # 开包动画中
+    REGISTERING = auto()  # 卡牌登录图鉴
+    PACK_OPENED = auto()  # 成功开了一包
+    NO_FREE_PACK = auto()  # 确认无免费包（真正完成）
+    SKIPPED = auto()  # 任务被跳过（不更新 last_completed_at）
 
 
 # 跳过原因常量
@@ -248,10 +248,32 @@ class OpenPackTask(Task):
         }
         logger.info(f"目标卡包: {config.pack_code}/{config.booster_name}")
 
-        # 4. 加载子包列表
+        # 4. 准备图片资源 (按需加载)
+        try:
+            from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
+
+            manager = ImageResourceManager()
+            pack_code = config.pack_code
+            booster_name = config.booster_name
+
+            # 1. 下载/处理图片
+            manager.ensure_pack_ready(booster_name, pack_code)
+
+            # 2. 加载特定卡包的模板到匹配器
+            if self.recognizer:
+                _, template_matcher = self.recognizer
+                # 路径规则: cards/{pack_code}/{booster_name_safe}
+                safe_booster = booster_name.replace(" ", "_")
+                sub_dir = f"cards/{pack_code}/{safe_booster}"
+                template_matcher.load_additional_templates(sub_dir)
+
+        except Exception as e:
+            logger.error(f"准备图片资源失败: {e}")
+
+        # 5. 加载子包列表
         self._boosters_list = self._load_boosters_list(config.pack_code)
 
-        # 5. 进入导航阶段
+        # 6. 进入导航阶段
         self._phase = OpenPackPhase.NAVIGATING_TO_HOME
         logger.info(f"开包任务开始，当前阶段: {self._phase.name}")
 
@@ -365,7 +387,9 @@ class OpenPackTask(Task):
             self._pack_record_repo.create_for_account(
                 self.account.id, pack_type=pack_type
             )
-            logger.info(f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包）")
+            logger.info(
+                f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包）"
+            )
         elif result.success and not result.skipped:
             logger.info("任务完成（无免费包），不创建开包记录")
 
@@ -585,7 +609,9 @@ class OpenPackTask(Task):
                 threshold=0.7,
             )
             if not box:
-                logger.info(f"  -> 当前卡包不是目标卡包 ({template_name})，返回主页重新寻找")
+                logger.info(
+                    f"  -> 当前卡包不是目标卡包 ({template_name})，返回主页重新寻找"
+                )
                 return navigate_back(
                     self.adb,
                     self.page_detector,
@@ -627,7 +653,9 @@ class OpenPackTask(Task):
             return result
 
         logger.info("  -> 点击屏幕底部关闭弹窗")
-        self.adb.tap(self.adb.screen_width // 10, self.adb.scaled_y(BASE_POPUP_CLOSE_TAP_Y))
+        self.adb.tap(
+            self.adb.screen_width // 10, self.adb.scaled_y(BASE_POPUP_CLOSE_TAP_Y)
+        )
         return ActionResult.ok(wait=1.0)
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
