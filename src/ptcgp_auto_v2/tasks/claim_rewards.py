@@ -27,6 +27,7 @@ from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     tap_home_icon,
     tap_text,
+    is_text_visible,
 )
 
 logger = logging.getLogger(__name__)
@@ -197,24 +198,21 @@ class ClaimRewardsTask(Task):
         """
         self._phase = ClaimRewardsPhase.CHECKING_HOME
 
-        if not self.recognizer:
-            logger.warning("  -> 无法获取识别器")
-            return ActionResult.ok(wait=1.0)
+        rounds = 2
+        interval = 2.0
 
-        _, template_matcher = self.recognizer
-
-        # 连续检测 2 次，每次间隔 2 秒
-        for i in range(2):
-            # 每次循环重新截图
-            screenshot = self.adb.screenshot()
+        # 连续检测，间隔固定秒数
+        for i in range(rounds):
+            screenshot, _ = self.page_detector.capture()
             if not screenshot:
                 logger.warning("  -> 无法获取截图")
-                time.sleep(2.0)
+                time.sleep(interval)
                 continue
 
             # 检测 icon_has_reward 模板
-            reward_icon = template_matcher.find_with_scale(
-                screenshot, "icon_has_reward", scale=1.0, threshold=0.8
+            reward_icon = self.page_detector.find_template_with_scale(
+                "icon_has_reward",
+                screenshot=screenshot,
             )
 
             if reward_icon:
@@ -225,15 +223,15 @@ class ClaimRewardsTask(Task):
                 self.adb.tap_center(reward_icon.box)
                 return ActionResult.ok(wait=3.0)
 
-            logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/2)")
-            if i < 1:
-                time.sleep(2.0)
+            logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/{rounds})")
+            if i < rounds - 1:
+                time.sleep(interval)
 
         # 2 次都无奖励，累计检查次数
         self._home_check_count += 1
         logger.info(f"  -> 确认无奖励图标（第 {self._home_check_count} 轮检查）")
 
-        if self._home_check_count >= 2 or self._round_count >= MAX_ROUNDS:
+        if self._home_check_count >= rounds or self._round_count >= MAX_ROUNDS:
             logger.info("  -> 确认无奖励，任务完成")
             self._phase = ClaimRewardsPhase.NO_REWARDS
 
@@ -276,8 +274,7 @@ class ClaimRewardsTask(Task):
         4. 全部完成后返回主页
         """
         self._phase = ClaimRewardsPhase.CLAIMING_TAB
-        ocr_results = page_info.get("ocr_results", [])
-        screenshot = self.page_detector.get_last_screenshot()
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
 
         # 1. 尝试点击领取按钮
         result = self._try_claim_buttons(ocr_results, screenshot)
@@ -285,24 +282,32 @@ class ClaimRewardsTask(Task):
             return result
 
         # 2. 当前 Tab 无可领取，切换 Tab
-        first_tab = TAB_ORDER[0]  # "daily"
-        first_tab_patterns = TEXT_PATTERNS.get(f"rewards_tab_{first_tab}", [])
-        first_tab_visible = any(
-            "".join(first_tab_patterns[0].lower().split()) == "".join(item["text"].lower().split())
-            for item in ocr_results
-        ) if first_tab_patterns else False
+        tab_patterns_map = {
+            tab: TEXT_PATTERNS.get(f"rewards_tab_{tab}", []) for tab in TAB_ORDER
+        }
+
+        def is_visible(tab: str) -> bool:
+            patterns = tab_patterns_map.get(tab, [])
+            if not patterns:
+                return False
+            return is_text_visible(ocr_results, patterns, exact=True)
+
+        def tap_tab(tab: str) -> ActionResult | None:
+            patterns = tab_patterns_map.get(tab, [])
+            if not patterns:
+                return None
+            return tap_text(self.adb, ocr_results, patterns, wait=1.0)
+
+        first_tab = TAB_ORDER[0]
+        first_tab_visible = is_visible(first_tab)
 
         # 阶段1：往左走，直到"每日"可见
         if self._going_left:
             if first_tab_visible:
-                # "每日"已可见，切换到往右走阶段
                 self._going_left = False
             else:
-                # 点屏幕上可见的最左边的 Tab
                 for tab in TAB_ORDER:
-                    tab_key = f"rewards_tab_{tab}"
-                    tab_patterns = TEXT_PATTERNS.get(tab_key, [])
-                    result = tap_text(self.adb, ocr_results, tab_patterns, wait=1.0)
+                    result = tap_tab(tab)
                     if result:
                         logger.info(f"  -> 往左走，点击 {tab} Tab")
                         return result
@@ -312,26 +317,15 @@ class ClaimRewardsTask(Task):
             for tab in TAB_ORDER:
                 if tab in self._visited_tabs:
                     continue
-                tab_key = f"rewards_tab_{tab}"
-                tab_patterns = TEXT_PATTERNS.get(tab_key, [])
-                # 检查这个 Tab 是否可见
-                tab_visible = any(
-                    "".join(tab_patterns[0].lower().split()) == "".join(item["text"].lower().split())
-                    for item in ocr_results
-                ) if tab_patterns else False
-
-                if tab_visible:
-                    result = tap_text(self.adb, ocr_results, tab_patterns, wait=1.0)
+                if is_visible(tab):
+                    result = tap_tab(tab)
                     if result:
                         logger.info(f"  -> 点击 {tab} Tab")
                         self._visited_tabs.add(tab)
                         return result
                 else:
-                    # Tab 不可见（在右边），点屏幕上可见的最右边的 Tab 往右走
                     for right_tab in reversed(TAB_ORDER):
-                        right_key = f"rewards_tab_{right_tab}"
-                        right_patterns = TEXT_PATTERNS.get(right_key, [])
-                        result = tap_text(self.adb, ocr_results, right_patterns, wait=1.0)
+                        result = tap_tab(right_tab)
                         if result:
                             logger.info(f"  -> 往右走，点击 {right_tab} Tab")
                             return result
@@ -369,8 +363,7 @@ class ClaimRewardsTask(Task):
     def _handle_theme_collection(self, page_info: dict) -> ActionResult:
         """处理主题收藏页面：领取后返回"""
         self._phase = ClaimRewardsPhase.CLAIMING_THEME_COLLECTION
-        ocr_results = page_info.get("ocr_results", [])
-        screenshot = self.page_detector.get_last_screenshot()
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
 
         result = self._try_claim_buttons(ocr_results, screenshot)
         if result:
@@ -383,8 +376,7 @@ class ClaimRewardsTask(Task):
 
     def _handle_reward_detail(self, page_info: dict) -> ActionResult:
         """处理奖励详情页面：点击達成按钮"""
-        ocr_results = page_info.get("ocr_results", [])
-        screenshot = self.page_detector.get_last_screenshot()
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
 
         # 尝试点击達成按钮
         result = self._try_claim_buttons(ocr_results, screenshot)

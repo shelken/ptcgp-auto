@@ -419,7 +419,7 @@ class OpenPackTask(Task):
 
         # 检查是否有免费包图标
         free_pack_box = self.page_detector.find_template_with_scale(
-            "icon_free_pack_available", scale=1.0, threshold=0.7, screenshot=screenshot
+            "icon_free_pack_available", screenshot=screenshot
         )
 
         if free_pack_box:
@@ -428,9 +428,9 @@ class OpenPackTask(Task):
             self._home_check_count = 0
             self._phase = OpenPackPhase.ENTERING_PACK
 
-            # 点击开包入口图标，若未找到则点击免费包图标
+            # 点击开包入口图标
             pack_open_box = self.page_detector.find_template_with_scale(
-                "icon_pack_open", scale=1.0, threshold=0.7, screenshot=screenshot
+                "icon_pack_open", screenshot=screenshot
             )
             if pack_open_box:
                 self.adb.tap_center(pack_open_box.box)
@@ -465,7 +465,6 @@ class OpenPackTask(Task):
             self.page_detector,
             template_name,
             scale=settings.scale_pack_series_select,
-            threshold=0.7,
             wait=1.0,
         )
         if result:
@@ -496,7 +495,6 @@ class OpenPackTask(Task):
             self.page_detector,
             template_name,
             scale=settings.scale_pack_series_select,
-            threshold=0.7,
             max_attempts=max_attempts,
             swipe_ratio=0.21,
             wait=1.2,
@@ -524,7 +522,6 @@ class OpenPackTask(Task):
             self.page_detector,
             template_name,
             scale=settings.scale_pack_list,
-            threshold=0.7,
             wait=1.0,
         )
         if result:
@@ -536,7 +533,6 @@ class OpenPackTask(Task):
             self.page_detector,
             template_name,
             scale=settings.scale_pack_list,
-            threshold=0.7,
             max_attempts=len(self._boosters_list),
             wait=1.0,
         )
@@ -570,7 +566,6 @@ class OpenPackTask(Task):
             match = self.page_detector.find_template_with_scale(
                 template_name,
                 scale=settings.scale_pack_detail,
-                threshold=0.7,
                 screenshot=screenshot,
             )
             if not match:
