@@ -679,4 +679,7 @@ class Scheduler:
 
         # 刷新任务实例状态
         instance = self._task_instance_repo.get_by_id(instance.id)
-        return instance.status == TaskStatus.COMPLETED.value
+        return instance.status in {
+            TaskStatus.COMPLETED.value,
+            TaskStatus.SKIPPED.value,
+        }

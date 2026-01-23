@@ -184,10 +184,10 @@ def scroll_until_template(
     page_detector,
     template_name: str,
     scale: float,
-    threshold: float,
     max_attempts: int,
     swipe_ratio: float,
     wait: float,
+    threshold: Optional[float] = None,
 ) -> Optional[ActionResult]:
     """循环上滑直到命中模板或达到上限"""
     screenshot, ocr_results = page_detector.get_last_page_context()
@@ -220,9 +220,9 @@ def cycle_until_template(
     page_detector,
     template_name: str,
     scale: float,
-    threshold: float,
     max_attempts: int,
     wait: float,
+    threshold: Optional[float] = None,
 ) -> Optional[ActionResult]:
     """循环点击右侧切换直到命中模板或回到起点"""
     screenshot, ocr_results = page_detector.get_last_page_context()
