@@ -27,6 +27,7 @@ from ptcgp_auto_v2.utils.gesture import (
     swipe_card_coords,
     tap_home_icon,
     tap_text,
+    tap_box,
     normalize_text,
 )
 
@@ -200,7 +201,7 @@ class ClaimGiftsTask(Task):
             # 有礼物，点击进入
             logger.info("  -> 检测到礼物图标，进入礼物盒页面")
             self._phase = ClaimGiftsPhase.ENTERING_GIFTS
-            self.adb.tap_center(gift_icon.box)
+            tap_box(self.adb, gift_icon.box, wait=1.0)
             time.sleep(4.0)
             return ActionResult.ok(wait=1.0)
 
@@ -311,7 +312,6 @@ class ClaimGiftsTask(Task):
                         continue
 
                     logger.info(f"  -> 点击领取按钮: {pattern}")
-                    self.adb.tap_center(box)
-                    return ActionResult.ok(wait=1.5)
+                    return tap_box(self.adb, box, wait=1.5)
 
         return None
