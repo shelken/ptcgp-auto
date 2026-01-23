@@ -13,3 +13,4 @@ build/
 .claude/settings.local.json
 _out
 data/*.db
+templates/cards/
