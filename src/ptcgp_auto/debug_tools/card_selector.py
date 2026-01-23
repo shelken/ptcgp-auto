@@ -84,10 +84,7 @@ class CardSelector:
                     # 为了清晰起见，这里去除 .png 后缀，让 non_interactive 决定
                     # 但是 ImageResourceManager.get_card_filename 强制返回 .png
                     # 所以我们需要 strip
-                    if full_filename.endswith(".png"):
-                        card_filename = full_filename[:-4]
-                    else:
-                        card_filename = full_filename
+                    card_filename = full_filename.removesuffix(".png")
 
                     identifier = f"{series_code}/{target_pack}/{card_filename}"
                     results.append(identifier)

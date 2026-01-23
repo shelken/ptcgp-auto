@@ -47,6 +47,16 @@ class ImageResourceManager:
             }
         )
 
+    def close(self):
+        """关闭会话"""
+        self.session.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def ensure_series_ready(self, series_code: str, rarity: Optional[str] = None, max_workers: int = 5):
         """
         确保指定系列的所有卡牌图片已准备就绪
