@@ -24,6 +24,7 @@ DEFAULT_TEMPLATE_BASE_WIDTH = 1080
 @dataclass
 class TemplateMatch:
     """模板匹配结果"""
+
     template_name: str
     box: Tuple[int, int, int, int]  # (x1, y1, x2, y2)
     confidence: float
@@ -76,7 +77,7 @@ class TemplateMatcher:
 
     def load_templates(self, screen_width: int = DEFAULT_TEMPLATE_BASE_WIDTH):
         """
-        加载所有模板图片
+        加载核心模板图片（不包含 cards/ 目录下的卡牌图片）
 
         Args:
             screen_width: 当前屏幕宽度，用于计算缩放比例
@@ -94,23 +95,63 @@ class TemplateMatcher:
                 f"({screen_width}/{self.base_width})"
             )
 
+        count = 0
         for file in self.templates_dir.glob("**/*.png"):
-            # 使用相对路径作为模板名（支持子目录）
+            # 使用相对路径判断是否在 cards 目录下
             rel_path = file.relative_to(self.templates_dir)
+            if str(rel_path).startswith("cards"):
+                continue
+
+            if self._load_template_file(file):
+                count += 1
+
+        logger.info(f"共加载 {count} 个核心模板")
+
+    def load_additional_templates(self, sub_dir: str):
+        """
+        加载指定子目录的模板（增量加载）
+
+        Args:
+            sub_dir: 相对于 templates 的子目录，如 "cards/A1/Charizard"
+        """
+        target_dir = self.templates_dir / sub_dir
+        if not target_dir.exists():
+            logger.warning(f"附加模板目录不存在: {target_dir}")
+            return
+
+        count = 0
+        for file in target_dir.glob("**/*.png"):
+            if self._load_template_file(file):
+                count += 1
+
+        logger.info(f"加载附加模板 {sub_dir}: {count} 个")
+
+    def _load_template_file(self, file_path: Path) -> bool:
+        """加载单个模板文件"""
+        try:
+            # 使用相对路径作为模板名（支持子目录）
+            rel_path = file_path.relative_to(self.templates_dir)
             name = str(rel_path.with_suffix(""))
-            img = cv2.imread(str(file))
 
-            if img is not None:
-                # 按屏幕比例缩放
-                if abs(self._current_scale - 1.0) > 0.01:
-                    new_w = int(img.shape[1] * self._current_scale)
-                    new_h = int(img.shape[0] * self._current_scale)
-                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            # 如果已存在，跳过（避免重复加载）
+            if name in self.templates:
+                return False
 
-                self.templates[name] = img
-                # 单个模板加载日志过于冗余，仅在最后显示总数
+            img = cv2.imread(str(file_path))
+            if img is None:
+                return False
 
-        logger.info(f"共加载 {len(self.templates)} 个模板")
+            # 按屏幕比例缩放
+            if abs(self._current_scale - 1.0) > 0.01:
+                new_w = int(img.shape[1] * self._current_scale)
+                new_h = int(img.shape[0] * self._current_scale)
+                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+            self.templates[name] = img
+            return True
+        except Exception as e:
+            logger.error(f"加载模板失败 {file_path}: {e}")
+            return False
 
     def _ensure_templates_loaded(self):
         """确保模板已加载"""
@@ -358,7 +399,9 @@ class TemplateMatcher:
         if abs(scale - 1.0) > 0.01:
             new_w = int(template.shape[1] * scale)
             new_h = int(template.shape[0] * scale)
-            template = cv2.resize(template, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            template = cv2.resize(
+                template, (new_w, new_h), interpolation=cv2.INTER_AREA
+            )
 
         screen = self._pil_to_cv2(screenshot)
 

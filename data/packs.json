@@ -83,5 +83,31 @@
     "boosters": [
       "Crimson Blaze"
     ]
+  },
+  "PROMO-A": {
+    "name": "Promo A",
+    "boosters": [
+      "Vol. 1",
+      "Vol. 10",
+      "Vol. 11",
+      "Vol. 12",
+      "Vol. 13",
+      "Vol. 2",
+      "Vol. 3",
+      "Vol. 4",
+      "Vol. 5",
+      "Vol. 6",
+      "Vol. 7",
+      "Vol. 8",
+      "Vol. 9"
+    ]
+  },
+  "PROMO-B": {
+    "name": "Promo B",
+    "boosters": [
+      "B Series Vol. 1",
+      "B Series Vol. 2",
+      "B Series Vol. 3"
+    ]
   }
 }
