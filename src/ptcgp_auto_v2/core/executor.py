@@ -94,6 +94,9 @@ class BaseExecutor(ABC):
             raise RuntimeError(f"无法连接设备: {self.device.address}")
         ocr_engine = OcrEngine()
         template_matcher = TemplateMatcher()
+        # 初始化时立即注入设备真实分辨率
+        template_matcher.set_screen_width(self._adb.screen_width)
+
         self._recognizer = (ocr_engine, template_matcher)
         self._page_detector = PageDetector(
             adb=self._adb,

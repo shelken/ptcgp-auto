@@ -262,10 +262,7 @@ class OpenPackTask(Task):
             # 2. 加载特定卡包的模板到匹配器
             if self.recognizer:
                 _, template_matcher = self.recognizer
-                # 路径规则: cards/{pack_code}/{booster_name_safe}
-                safe_booster = booster_name.replace(" ", "_")
-                sub_dir = f"cards/{pack_code}/{safe_booster}"
-                template_matcher.load_additional_templates(sub_dir)
+                template_matcher.load_pack_templates(pack_code, booster_name)
 
         except Exception as e:
             logger.error(f"准备图片资源失败: {e}")
@@ -392,6 +389,14 @@ class OpenPackTask(Task):
             )
         elif result.success and not result.skipped:
             logger.info("任务完成（无免费包），不创建开包记录")
+
+        # 清理卡包模板资源
+        if self.recognizer:
+            try:
+                _, template_matcher = self.recognizer
+                template_matcher.unload_pack_templates()
+            except Exception as e:
+                logger.warning(f"卸载卡包模板失败: {e}")
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """
