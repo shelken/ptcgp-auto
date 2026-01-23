@@ -59,22 +59,52 @@ def main():
         help="模板匹配缩放比例（如 0.22, 0.81, 1.0）",
     )
     parser.add_argument(
-        "--card-level",
+        "--cards",
         type=str,
         metavar="TEMPLATE",
-        help="非交互模式：检测卡片稀有度（钻石/星星数量），支持路径或模板名",
+        help="非交互模式：匹配卡牌模板（自动下载/缩放），支持路径或模板名，多个用逗号分隔",
     )
     parser.add_argument(
-        "--gap",
-        type=float,
-        default=1.5,
-        help="--card-level 的聚类间距阈值（模板宽度的倍数，默认 1.5）",
+        "--rarity",
+        type=str,
+        default=None,
+        help="配合 --cards 使用：仅匹配指定稀有度的卡牌 (e.g. RR, AR, SAR)",
+    )
+    parser.add_argument(
+        "--select",
+        action="store_true",
+        help="配合 --cards 使用：交互式选择卡牌",
     )
     parser.add_argument(
         "--threshold",
         type=float,
         default=None,
         help="模板匹配置信度阈值（0-1，默认 0.8）",
+    )
+
+    parser.add_argument(
+        "--scale-min",
+        type=float,
+        default=0.1,
+        help="自动缩放扫描：最小缩放比例（默认 0.1）",
+    )
+    parser.add_argument(
+        "--scale-max",
+        type=float,
+        default=3.0,
+        help="自动缩放扫描：最大缩放比例（默认 3.0）",
+    )
+    parser.add_argument(
+        "--scale-step",
+        type=float,
+        default=0.02,
+        help="自动缩放扫描：步进（默认 0.02）",
+    )
+    parser.add_argument(
+        "--roi",
+        type=str,
+        default=None,
+        help="匹配区域 (x,y,w,h)，例如: '100,200,500,500'。仅在指定区域内进行匹配以提升速度。",
     )
     args = parser.parse_args()
 
@@ -90,7 +120,7 @@ def main():
 
     context.set_current_address(host, port)
 
-    if args.ocr or args.template or args.screenshot or args.all_templates or args.card_level:
+    if args.ocr or args.template or args.screenshot or args.all_templates or args.cards:
         run_non_interactive(args)
         return
 
