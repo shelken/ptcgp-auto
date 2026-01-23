@@ -304,6 +304,40 @@ class PageDetector:
         """获取最近一次 OCR 结果"""
         return self._last_ocr_results
 
+    def get_last_page_context(self) -> tuple[Optional[Image.Image], List[dict]]:
+        """获取最近一次页面上下文（截图 + OCR 结果）"""
+        return self._last_screenshot, self._last_ocr_results
+
+    def capture(
+        self, screenshot: Optional[Image.Image] = None
+    ) -> tuple[Optional[Image.Image], List[dict]]:
+        """刷新截图与 OCR 结果，并写入缓存"""
+        if screenshot is None:
+            screenshot = self.adb.screenshot()
+            if screenshot is None:
+                return None, []
+        self._last_screenshot = screenshot
+        ocr_results = self.ocr_engine.recognize_as_dict(screenshot)
+        self._last_ocr_results = ocr_results
+        return screenshot, ocr_results
+
+    def find_template_with_scale(
+        self,
+        template_name: str,
+        scale: float,
+        threshold: float = 0.7,
+        screenshot: Optional[Image.Image] = None,
+    ) -> Optional[TemplateMatch]:
+        """按指定缩放比例匹配模板"""
+        if screenshot is None:
+            screenshot = self._last_screenshot or self.adb.screenshot()
+            if screenshot is None:
+                return None
+            self._last_screenshot = screenshot
+        return self.template_matcher.find_with_scale(
+            screenshot, template_name, scale=scale, threshold=threshold
+        )
+
     def find_text(
         self,
         text: str,
