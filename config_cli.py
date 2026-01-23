@@ -24,24 +24,11 @@ from ptcgp_auto_v2.db.models import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     AccountPackConfigRepository,
+    CardRepository,
 )
-
-PACKS_PATH = ROOT_DIR / "data" / "packs.json"
 
 # 特殊值：返回上一级
 BACK = "__BACK__"
-
-
-def load_packs() -> dict:
-    if not PACKS_PATH.exists():
-        print(f"找不到卡包数据: {PACKS_PATH}")
-        return {}
-    try:
-        with PACKS_PATH.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"读取卡包数据失败: {e}")
-        return {}
 
 
 def list_accounts():
@@ -199,18 +186,19 @@ def _account_menu(account) -> int | str:
 
 def _interactive_set_config(account_id: int) -> int | str:
     """交互式设置开包配置，返回 BACK 表示返回上一级"""
-    packs = load_packs()
-    if not packs:
-        print("无法加载卡包数据")
+    repo = CardRepository()
+    sets = repo.get_all_sets()
+    if not sets:
+        print("数据库中没有卡包数据，请先运行 sync_metadata.py")
         return 1
 
     # 选择扩充包（方向键）
     pack_choices = [
         Choice(
-            title=f"{code}: {info.get('name', '-')}",
-            value=code,
+            title=f"{s.code}: {s.name}",
+            value=s.code,
         )
-        for code, info in packs.items()
+        for s in sets
     ]
     pack_choices.insert(0, Choice(title="← 返回", value=BACK))
 
@@ -223,7 +211,10 @@ def _interactive_set_config(account_id: int) -> int | str:
         return BACK
 
     # 选择子包（方向键）
-    boosters = packs[pack_code].get("boosters", [])
+    # 从数据库获取子包列表
+    pack_data = repo.get_packs_by_set(pack_code)
+    boosters = pack_data.get(pack_code, {}).get("boosters", [])
+
     if not boosters:
         print(f"扩充包 {pack_code} 没有子包数据")
         return 1
