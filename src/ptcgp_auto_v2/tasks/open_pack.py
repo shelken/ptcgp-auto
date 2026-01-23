@@ -47,10 +47,8 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_template,
     tap_text,
     tap_center,
-    tap_right_side,
     press_back,
     navigate_back,
-    swipe_up,
     swipe,
     long_press,
     long_press_text,
@@ -59,6 +57,10 @@ from ptcgp_auto_v2.utils.gesture import (
     center_point,
     swipe_pack_coords,
     swipe_card_coords,
+    tap_template_or_text,
+    tap_template_with_scale,
+    scroll_until_template,
+    cycle_until_template,
 )
 
 if TYPE_CHECKING:
@@ -409,20 +411,15 @@ class OpenPackTask(Task):
         4. 无免费包 → 累计计数，达到阈值则设置 NO_FREE_PACK
         """
         self._phase = OpenPackPhase.CHECKING_HOME
-        screenshot = self.page_detector.get_last_screenshot()
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
 
-        if not self.recognizer or not screenshot:
-            logger.warning("  -> 无法获取截图或识别器")
+        if not screenshot:
+            logger.warning("  -> 无法获取截图")
             return ActionResult.ok(wait=1.0)
 
-        _, template_matcher = self.recognizer
-
         # 检查是否有免费包图标
-        free_pack_box = template_matcher.find_with_scale(
-            screenshot,
-            "icon_free_pack_available",
-            scale=1.0,
-            threshold=0.7,
+        free_pack_box = self.page_detector.find_template_with_scale(
+            "icon_free_pack_available", scale=1.0, threshold=0.7, screenshot=screenshot
         )
 
         if free_pack_box:
@@ -431,18 +428,14 @@ class OpenPackTask(Task):
             self._home_check_count = 0
             self._phase = OpenPackPhase.ENTERING_PACK
 
-            # 点击开包入口图标
-            pack_open_box = template_matcher.find_with_scale(
-                screenshot,
-                "icon_pack_open",
-                scale=1.0,
-                threshold=0.7,
+            # 点击开包入口图标，若未找到则点击免费包图标
+            pack_open_box = self.page_detector.find_template_with_scale(
+                "icon_pack_open", scale=1.0, threshold=0.7, screenshot=screenshot
             )
             if pack_open_box:
                 self.adb.tap_center(pack_open_box.box)
             else:
-                logger.warning("  -> 未找到开包图标，尝试点击免费包图标")
-                self.adb.tap_center(free_pack_box.box)
+                logger.warning("  -> 未找到开包图标，跳过点击免费包图标")
             return ActionResult.ok(wait=1.0)
 
         # 无免费包，累计计数
@@ -459,27 +452,25 @@ class OpenPackTask(Task):
 
     def _handle_pack_series_select(self, page_info: dict) -> ActionResult:
         """选择扩充包系列（pack_series_select 页面）"""
-        ocr_results = page_info.get("ocr_results", [])
-        screenshot = self.page_detector.get_last_screenshot()
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
 
-        if not self.recognizer or not screenshot:
-            return ActionResult.fail("未配置识别器或截图失败")
+        if not screenshot:
+            return ActionResult.fail("截图失败")
 
-        ocr_engine, template_matcher = self.recognizer
         settings = get_settings()
+        template_name = self._get_target_template_name()
 
         # 1. 模板匹配查找目标扩充包（优先）
-        template_name = self._get_target_template_name()
-        box = template_matcher.find_with_scale(
-            screenshot,
+        result = tap_template_with_scale(
+            self.page_detector,
             template_name,
             scale=settings.scale_pack_series_select,
             threshold=0.7,
+            wait=1.0,
         )
-        if box:
+        if result:
             logger.info("  -> 找到目标扩充包，点击进入")
-            self.adb.tap_center(box.box)
-            return ActionResult.ok(wait=1.0)
+            return result
 
         # 2. 尝试切换到目标系列
         target_series = self._get_target_series()
@@ -487,41 +478,31 @@ class OpenPackTask(Task):
             series_patterns = TEXT_PATTERNS.get("series", {})
             if target_series in series_patterns:
                 patterns = series_patterns[target_series]
-                if tap_text(self.adb, ocr_results, patterns):
+                result = tap_template_or_text(
+                    self.adb,
+                    self.page_detector,
+                    ocr_results,
+                    None,
+                    patterns,
+                    wait=1.0,
+                )
+                if result:
                     logger.info(f"  -> 点击切换到 {target_series} 系列")
-                    return ActionResult.ok(wait=1.0)
+                    return result
 
         # 3. 上滑查找
-        last_signature = self._get_ocr_signature(ocr_results)
         max_attempts = settings.max_scroll_attempts
-
-        for attempt in range(max_attempts):
-            logger.info(f"  -> 第 {attempt + 1} 次上滑查找扩充包")
-            swipe_up(self.adb, ratio=0.21, wait=1.2)
-
-            screenshot = self.adb.screenshot()
-            if not screenshot:
-                continue
-
-            # 检查模板匹配
-            box = template_matcher.find_with_scale(
-                screenshot,
-                template_name,
-                scale=settings.scale_pack_series_select,
-                threshold=0.7,
-            )
-            if box:
-                logger.info("  -> 找到目标扩充包，点击进入")
-                self.adb.tap_center(box.box)
-                return ActionResult.ok(wait=1.0)
-
-            # 检测是否到底
-            ocr_results = ocr_engine.recognize_as_dict(screenshot)
-            current_signature = self._get_ocr_signature(ocr_results)
-            if current_signature == last_signature:
-                logger.warning("  -> 滑动到底部，未找到目标扩充包")
-                break
-            last_signature = current_signature
+        result = scroll_until_template(
+            self.page_detector,
+            template_name,
+            scale=settings.scale_pack_series_select,
+            threshold=0.7,
+            max_attempts=max_attempts,
+            swipe_ratio=0.21,
+            wait=1.2,
+        )
+        if result:
+            return result
 
         # 未找到，返回上一页
         return navigate_back(
@@ -530,60 +511,38 @@ class OpenPackTask(Task):
 
     def _handle_pack_list(self, page_info: dict) -> ActionResult:
         """选择子包（pack_list 页面）"""
-        screenshot = self.page_detector.get_last_screenshot()
-        ocr_results = page_info.get("ocr_results", [])
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
 
-        if not self.recognizer or not screenshot:
-            return ActionResult.fail("未配置识别器或截图失败")
+        if not screenshot:
+            return ActionResult.fail("截图失败")
 
-        ocr_engine, template_matcher = self.recognizer
         settings = get_settings()
         template_name = self._get_target_template_name()
 
         # 1. 先检查当前是否是目标子包
-        box = template_matcher.find_with_scale(
-            screenshot,
+        result = tap_template_with_scale(
+            self.page_detector,
             template_name,
             scale=settings.scale_pack_list,
             threshold=0.7,
+            wait=1.0,
         )
-        if box:
+        if result:
             logger.info("  -> 当前是目标子包，点击进入详情")
-            self.adb.tap_center(box.box)
-            return ActionResult.ok(wait=1.0)
+            return result
 
-        # 2. 记录初始签名，用于检测循环一圈
-        first_signature = self._get_ocr_signature(ocr_results)
-
-        # 3. 点击右侧切换子包，最多切换到子包数量
-        for attempt in range(len(self._boosters_list)):
-            logger.info(f"  -> 第 {attempt + 1} 次切换子包")
-            from ptcgp_auto_v2.utils.gesture import tap_right_side
-
-            tap_right_side(self.adb, wait=1.0)
-
-            screenshot = self.adb.screenshot()
-            if not screenshot:
-                continue
-
-            # 检查模板匹配
-            box = template_matcher.find_with_scale(
-                screenshot,
-                template_name,
-                scale=settings.scale_pack_list,
-                threshold=0.7,
-            )
-            if box:
-                logger.info("  -> 找到目标子包，点击进入详情")
-                self.adb.tap_center(box.box)
-                return ActionResult.ok(wait=1.0)
-
-            # 检测是否循环一圈
-            ocr_results = ocr_engine.recognize_as_dict(screenshot)
-            current_signature = self._get_ocr_signature(ocr_results)
-            if current_signature == first_signature:
-                logger.warning("  -> 循环一圈，未找到目标子包")
-                break
+        # 2. 点击右侧切换子包，最多切换到子包数量
+        result = cycle_until_template(
+            self.page_detector,
+            template_name,
+            scale=settings.scale_pack_list,
+            threshold=0.7,
+            max_attempts=len(self._boosters_list),
+            wait=1.0,
+        )
+        if result:
+            logger.info("  -> 找到目标子包，点击进入详情")
+            return result
 
         # 未找到，返回上一页
         return navigate_back(
@@ -598,22 +557,23 @@ class OpenPackTask(Task):
         2. 检查是否是付费包
         3. 点击开封按钮
         """
-        ocr_results = page_info.get("ocr_results", [])
-        screenshot = self.page_detector.get_last_screenshot()
+        screenshot, ocr_results = self.page_detector.get_last_page_context()
+
+        if not screenshot:
+            return ActionResult.fail("截图失败")
 
         # 1. 检查当前卡包是否是目标卡包（模板匹配）
-        if self.recognizer and screenshot and self.target_pack:
-            _, template_matcher = self.recognizer
+        if self.target_pack:
             settings = get_settings()
             template_name = self._get_target_template_name()
 
-            box = template_matcher.find_with_scale(
-                screenshot,
+            match = self.page_detector.find_template_with_scale(
                 template_name,
                 scale=settings.scale_pack_detail,
                 threshold=0.7,
+                screenshot=screenshot,
             )
-            if not box:
+            if not match:
                 logger.info(
                     f"  -> 当前卡包不是目标卡包 ({template_name})，返回主页重新寻找"
                 )
@@ -639,10 +599,18 @@ class OpenPackTask(Task):
 
         # 3. 点击"開封"按钮
         open_pack_patterns = TEXT_PATTERNS.get("open_pack", [])
-        if tap_text(self.adb, ocr_results, open_pack_patterns):
+        result = tap_template_or_text(
+            self.adb,
+            self.page_detector,
+            ocr_results,
+            None,
+            open_pack_patterns,
+            wait=1.0,
+        )
+        if result:
             logger.info("  -> 点击开封按钮，进入开包流程")
             self._phase = OpenPackPhase.OPENING
-            return ActionResult.ok(wait=1.0)
+            return result
 
         logger.warning("  -> 未找到开包按钮")
         return ActionResult.ok(wait=1.0)

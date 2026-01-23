@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 
@@ -105,6 +105,125 @@ def tap_by_priority(
     if result:
         return result
 
+    return None
+
+
+def tap_template_or_text(
+    adb,
+    page_detector,
+    ocr_results: list[dict],
+    template_name: Optional[str],
+    patterns: list[str],
+    wait: float = 1.0,
+) -> Optional[ActionResult]:
+    """模板优先、文本兜底的点击（统一日志与等待）"""
+    result = tap_by_priority(
+        adb,
+        page_detector,
+        ocr_results,
+        patterns,
+        template_name=template_name,
+        wait=wait,
+    )
+    if result:
+        return result
+
+    if template_name:
+        logger.debug(f"未匹配模板或文本: {template_name}")
+    return None
+
+
+def tap_template_or_fallback(
+    adb,
+    page_detector,
+    template_name: str,
+    fallback_action: Callable[[], ActionResult],
+    wait: float = 1.0,
+) -> ActionResult:
+    """模板点击优先，否则执行回退动作"""
+    result = tap_template(adb, page_detector, template_name, wait=wait)
+    if result:
+        return result
+    return fallback_action()
+
+
+def tap_template_with_scale(
+    page_detector,
+    template_name: str,
+    scale: float,
+    threshold: float = 0.7,
+    wait: float = 1.0,
+) -> Optional[ActionResult]:
+    """按缩放比例匹配模板并点击"""
+    match = page_detector.find_template_with_scale(
+        template_name, scale=scale, threshold=threshold
+    )
+    if not match:
+        return None
+    page_detector.adb.tap_center(match.box)
+    return ActionResult.ok(wait=wait)
+
+
+def scroll_until_template(
+    page_detector,
+    template_name: str,
+    scale: float,
+    threshold: float,
+    max_attempts: int,
+    swipe_ratio: float,
+    wait: float,
+) -> Optional[ActionResult]:
+    """循环上滑直到命中模板或达到上限"""
+    last_signature = None
+    for attempt in range(max_attempts):
+        logger.info(f"  -> 第 {attempt + 1} 次上滑查找模板: {template_name}")
+        swipe_up(page_detector.adb, ratio=swipe_ratio, wait=wait)
+        screenshot, ocr_results = page_detector.capture()
+        if not screenshot:
+            continue
+        match = page_detector.find_template_with_scale(
+            template_name, scale=scale, threshold=threshold, screenshot=screenshot
+        )
+        if match:
+            page_detector.adb.tap_center(match.box)
+            return ActionResult.ok(wait=1.0)
+        current_signature = "|".join(sorted([item["text"] for item in ocr_results]))
+        if last_signature and current_signature == last_signature:
+            logger.warning("  -> 滑动到底部，未找到目标模板")
+            break
+        last_signature = current_signature
+    return None
+
+
+def cycle_until_template(
+    page_detector,
+    template_name: str,
+    scale: float,
+    threshold: float,
+    max_attempts: int,
+    wait: float,
+) -> Optional[ActionResult]:
+    """循环点击右侧切换直到命中模板或回到起点"""
+    screenshot, ocr_results = page_detector.get_last_page_context()
+    if not screenshot:
+        return None
+    first_signature = "|".join(sorted([item["text"] for item in ocr_results]))
+    for attempt in range(max_attempts):
+        logger.info(f"  -> 第 {attempt + 1} 次切换子包")
+        tap_right_side(page_detector.adb, wait=wait)
+        screenshot, ocr_results = page_detector.capture()
+        if not screenshot:
+            continue
+        match = page_detector.find_template_with_scale(
+            template_name, scale=scale, threshold=threshold, screenshot=screenshot
+        )
+        if match:
+            page_detector.adb.tap_center(match.box)
+            return ActionResult.ok(wait=1.0)
+        current_signature = "|".join(sorted([item["text"] for item in ocr_results]))
+        if current_signature == first_signature:
+            logger.warning("  -> 循环一圈，未找到目标模板")
+            break
     return None
 
 
