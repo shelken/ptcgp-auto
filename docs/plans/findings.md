@@ -17,9 +17,12 @@
 4. 任务模块倾向直接调用 template_matcher 与 adb 的细节，导致跨模块耦合提升，难以复用或替换底层实现。
 
 ## 当前状态补充（Phase 3）
-1. open_pack 仍直接调用 template_matcher 与 ocr_engine，且存在多处“滑动/切换 + 重新截图 + 再匹配”的重复流程，尚未真正收敛为可复用函数。
-2. page_detector 已有截图与 OCR 缓存，但任务层仍在自行截图与识别，缺乏统一入口。
-3. 需要将模板/OCR 相关操作收敛到 page_detector 或 gesture 的封装函数，任务层只调用高层动作。
+1. open_pack 已将模板匹配/滑动/切换流程下沉到 gesture/page_detector，任务层不再直接操作底层细节。
+2. claim_gifts/claim_rewards 已改为使用 page_detector.capture + find_template_with_scale，移除 recognizer + adb.screenshot 组合。
+3. claim_rewards 已统一使用 page_detector.get_last_page_context，避免重复取 screenshot。
+4. OCR 文本匹配已集中到 gesture.normalize_text/is_text_visible，减少任务层重复逻辑。
+5. 图标模板匹配的 scale=1.0 明确改为默认参数形式，避免业务层冗余。
+6. 模板阈值默认值统一为 0.7，代码中已移除与默认一致的显式传参。
 
 ## 线索（来自现有扫描）
 - src/ptcgp_auto_v2/tasks/open_pack.py
