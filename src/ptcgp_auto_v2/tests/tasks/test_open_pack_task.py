@@ -60,7 +60,9 @@ class FakePageDetector:
         self._last_ocr_results = []
         return None, []
 
-    def find_template_with_scale(self, template_name, scale, threshold=0.7, screenshot=None):
+    def find_template_with_scale(
+        self, template_name, scale=1.0, threshold=0.7, screenshot=None
+    ):
         if template_name == "icon_free_pack_available":
             return self._free_match
         if template_name == "icon_pack_open":
@@ -133,7 +135,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
             page_detector,
             template_name="target",
             scale=1.0,
-            threshold=0.7,
             max_attempts=3,
             swipe_ratio=0.2,
             wait=0.1,
@@ -155,7 +156,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
             page_detector,
             template_name="target",
             scale=1.0,
-            threshold=0.7,
             max_attempts=3,
             swipe_ratio=0.2,
             wait=0.1,
@@ -179,7 +179,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
             page_detector,
             template_name="target",
             scale=1.0,
-            threshold=0.7,
             max_attempts=3,
             wait=0.1,
         )
@@ -200,7 +199,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
             page_detector,
             template_name="target",
             scale=1.0,
-            threshold=0.7,
             max_attempts=3,
             wait=0.1,
         )
