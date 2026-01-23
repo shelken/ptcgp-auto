@@ -302,7 +302,7 @@ def run_single_task(
         if not success:
             logger.error(f"任务失败: {task_type}")
             all_success = False
-            break  # 失败则中断后续任务
+            continue
 
     return 0 if all_success else 1
 

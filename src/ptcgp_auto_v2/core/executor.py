@@ -33,13 +33,18 @@ class ExecutorConfig:
     retry_delay: float = 30.0  # 重试间隔（秒）
     recovery_delay: float = 5.0  # 恢复等待时间（秒）
     app_package: str = ""  # 应用包名（应从 settings 传入）
+    template_threshold: float = 0.7  # 模板匹配阈值
     stop_event: Optional[threading.Event] = field(default=None)  # 停止事件
 
     def __post_init__(self):
         """初始化后处理"""
+        from ptcgp_auto_v2.config.settings import get_settings
+
+        settings = get_settings()
         if not self.app_package:
-            from ptcgp_auto_v2.config.settings import get_settings
-            self.app_package = get_settings().app_package
+            self.app_package = settings.app_package
+        if not self.template_threshold:
+            self.template_threshold = settings.template_threshold
 
 
 class BaseExecutor(ABC):
