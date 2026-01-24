@@ -171,6 +171,26 @@ class OcrEngine:
         results = self.recognize(image)
         return [r.to_dict() for r in results]
 
+    def _normalize_text(self, text: str) -> tuple[str, str]:
+        text_lower = text.strip().lower()
+        text_normalized = "".join(text_lower.split())
+        return text_lower, text_normalized
+
+    def _matches(self, target_lower: str, target_normalized: str, text: str, exact_match: bool) -> bool:
+        text_lower, text_normalized = self._normalize_text(text)
+        if exact_match:
+            return target_lower == text_lower
+        return (
+            target_lower == text_lower
+            or target_lower in text_lower
+            or target_normalized in text_normalized
+        )
+
+    def match_text(self, target: str, text: str, exact_match: bool = False) -> bool:
+        """判断文本是否匹配（公共接口）"""
+        target_lower, target_normalized = self._normalize_text(target)
+        return self._matches(target_lower, target_normalized, text, exact_match)
+
     def find_text(
         self,
         image: Image.Image,
@@ -189,21 +209,11 @@ class OcrEngine:
             找到的 OcrResult，未找到返回 None
         """
         results = self.recognize(image)
-        target_lower = target.lower()
-        target_normalized = "".join(target_lower.split())
+        target_lower, target_normalized = self._normalize_text(target)
 
         for result in results:
-            text_lower = result.text.strip().lower()
-            text_normalized = "".join(text_lower.split())
-
-            if exact_match:
-                if target_lower == text_lower:
-                    return result
-            else:
-                if (target_lower == text_lower or
-                    target_lower in text_lower or
-                    target_normalized in text_normalized):
-                    return result
+            if self._matches(target_lower, target_normalized, result.text, exact_match):
+                return result
 
         return None
 
@@ -225,21 +235,11 @@ class OcrEngine:
             匹配的 OcrResult 列表
         """
         results = self.recognize(image)
-        target_lower = target.lower()
-        target_normalized = "".join(target_lower.split())
+        target_lower, target_normalized = self._normalize_text(target)
         matches = []
 
         for result in results:
-            text_lower = result.text.strip().lower()
-            text_normalized = "".join(text_lower.split())
-
-            if exact_match:
-                if target_lower == text_lower:
-                    matches.append(result)
-            else:
-                if (target_lower == text_lower or
-                    target_lower in text_lower or
-                    target_normalized in text_normalized):
-                    matches.append(result)
+            if self._matches(target_lower, target_normalized, result.text, exact_match):
+                matches.append(result)
 
         return matches

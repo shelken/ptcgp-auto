@@ -112,6 +112,22 @@ class BaseExecutor(ABC):
         self._account_switcher = AccountSwitcher(self._adb)
         self._account_syncer = AccountSyncer(self._adb)
 
+    def _build_task(self, task_instance: "TaskInstance", account: "Account") -> Task:
+        task_class = TaskRegistry.get(task_instance.task_type)
+        self._page_detector.load_task_pages(task_class.pages)
+        task = task_class(
+            adb=self._adb,
+            recognizer=self._recognizer,
+            page_detector=self._page_detector,
+        )
+        task.register_handlers(
+            build_common_handlers(self._adb, self._page_detector, TEXT_PATTERNS)
+        )
+        task.bind_account(account)
+        if self.config.stop_event:
+            task.set_stop_event(self.config.stop_event)
+        return task
+
     def _is_current_account(self, target_account: "Account") -> bool:
         """
         检查设备当前是否已登录目标账号
@@ -200,6 +216,28 @@ class BaseExecutor(ABC):
         self.device_pool.release(self.device)
         logger.debug(f"设备已归还: {self.device.address}")
 
+    def _apply_task_status(
+        self,
+        task_instance: "TaskInstance",
+        account: "Account",
+        status: TaskStatus,
+        error_message: Optional[str] = None,
+        clear_error_on_success: bool = True,
+    ):
+        """更新任务实例状态"""
+        task_instance.status = status.value
+        if status == TaskStatus.COMPLETED:
+            task_instance.last_completed_at = datetime.now()
+            # 恢复被阻塞的任务（前置任务完成后）
+            self._unblock_dependent_tasks(account)
+            if clear_error_on_success:
+                task_instance.error_message = None
+        if error_message:
+            task_instance.error_message = error_message
+        task_instance.updated_at = datetime.now()
+        # 保存到数据库
+        task_instance.save()
+
     @abstractmethod
     def run(self):
         """执行任务（子类实现）"""
@@ -244,40 +282,17 @@ class TaskExecutor(BaseExecutor):
 
     def _create_task(self) -> Task:
         """创建任务实例"""
-        task_class = TaskRegistry.get(self.task_instance.task_type)
-
-        # 加载任务专用页面规则
-        self._page_detector.load_task_pages(task_class.pages)
-
-        # 创建任务实例
-        task = task_class(
-            adb=self._adb,
-            recognizer=self._recognizer,
-            page_detector=self._page_detector,
-        )
-        task.register_handlers(
-            build_common_handlers(self._adb, self._page_detector, TEXT_PATTERNS)
-        )
-        task.bind_account(self.account)
-
-        # 传递停止事件给任务
-        if self.config.stop_event:
-            task.set_stop_event(self.config.stop_event)
-
-        return task
+        return self._build_task(self.task_instance, self.account)
 
     def _update_status(self, status: TaskStatus, error: Optional[str] = None):
         """更新任务实例状态"""
-        self.task_instance.status = status.value
-        if status == TaskStatus.COMPLETED:
-            self.task_instance.last_completed_at = datetime.now()
-            # 恢复被阻塞的任务（前置任务完成后）
-            self._unblock_dependent_tasks(self.account)
-        if error:
-            self.task_instance.error_message = error
-        self.task_instance.updated_at = datetime.now()
-        # 保存到数据库
-        self.task_instance.save()
+        self._apply_task_status(
+            task_instance=self.task_instance,
+            account=self.account,
+            status=status,
+            error_message=error,
+            clear_error_on_success=True,
+        )
 
     def run(self):
         """
@@ -331,9 +346,13 @@ class TaskExecutor(BaseExecutor):
                             logger.info(
                                 f"任务跳过: {self.task_instance.task_type} ({result.skip_reason})"
                             )
-                            self.task_instance.status = TaskStatus.SKIPPED.value
-                            self.task_instance.error_message = f"跳过: {result.skip_reason}"
-                            self.task_instance.save()
+                            self._apply_task_status(
+                                task_instance=self.task_instance,
+                                account=self.account,
+                                status=TaskStatus.SKIPPED,
+                                error_message=f"跳过: {result.skip_reason}",
+                                clear_error_on_success=False,
+                            )
                         else:
                             logger.info(
                                 f"任务完成: {self.task_instance.task_type}"
@@ -442,28 +461,8 @@ class AccountBatchExecutor(BaseExecutor):
         logger.info(f"执行任务: {task_instance.task_type}")
 
         try:
-            # 获取任务类
-            task_class = TaskRegistry.get(task_instance.task_type)
-
-            # 加载任务专用页面规则
-            self._page_detector.load_task_pages(task_class.pages)
-
-            # 创建任务实例
-            task = task_class(
-                adb=self._adb,
-                recognizer=self._recognizer,
-                page_detector=self._page_detector,
-            )
-            task.register_handlers(
-                build_common_handlers(self._adb, self._page_detector, TEXT_PATTERNS)
-            )
-            task.bind_account(self.account)
-
-            # 传递停止事件给任务
-            if self.config.stop_event:
-                task.set_stop_event(self.config.stop_event)
-
-            # 执行任务
+            # 创建并执行任务
+            task = self._build_task(task_instance, self.account)
             result = task.execute()
 
             # 更新任务状态
@@ -472,29 +471,40 @@ class AccountBatchExecutor(BaseExecutor):
                     logger.info(
                         f"任务跳过: {task_instance.task_type} ({result.skip_reason})"
                     )
-                    task_instance.status = TaskStatus.SKIPPED.value
-                    task_instance.error_message = f"跳过: {result.skip_reason}"
+                    self._apply_task_status(
+                        task_instance=task_instance,
+                        account=self.account,
+                        status=TaskStatus.SKIPPED,
+                        error_message=f"跳过: {result.skip_reason}",
+                        clear_error_on_success=False,
+                    )
                 else:
                     logger.info(f"任务完成: {task_instance.task_type}")
-                    task_instance.status = TaskStatus.COMPLETED.value
-                    task_instance.last_completed_at = datetime.now()
-                    task_instance.error_message = None
-                    # 恢复被阻塞的任务
-                    self._unblock_dependent_tasks(self.account)
+                    self._apply_task_status(
+                        task_instance=task_instance,
+                        account=self.account,
+                        status=TaskStatus.COMPLETED,
+                        clear_error_on_success=True,
+                    )
             else:
                 logger.error(f"任务失败: {task_instance.task_type} - {result.error}")
-                task_instance.status = TaskStatus.FAILED.value
-                task_instance.error_message = result.error
-
-            task_instance.updated_at = datetime.now()
-            task_instance.save()
+                self._apply_task_status(
+                    task_instance=task_instance,
+                    account=self.account,
+                    status=TaskStatus.FAILED,
+                    error_message=result.error,
+                    clear_error_on_success=False,
+                )
 
         except Exception as e:
             logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
-            task_instance.status = TaskStatus.FAILED.value
-            task_instance.error_message = str(e)
-            task_instance.updated_at = datetime.now()
-            task_instance.save()
+            self._apply_task_status(
+                task_instance=task_instance,
+                account=self.account,
+                status=TaskStatus.FAILED,
+                error_message=str(e),
+                clear_error_on_success=False,
+            )
 
     def run(self):
         """
@@ -555,10 +565,13 @@ class AccountBatchExecutor(BaseExecutor):
             # 将所有仍为 running 状态的任务标记为失败
             for task_instance in self.task_instances:
                 if task_instance.status == TaskStatus.RUNNING.value:
-                    task_instance.status = TaskStatus.FAILED.value
-                    task_instance.error_message = str(e)
-                    task_instance.updated_at = datetime.now()
-                    task_instance.save()
+                    self._apply_task_status(
+                        task_instance=task_instance,
+                        account=self.account,
+                        status=TaskStatus.FAILED,
+                        error_message=str(e),
+                        clear_error_on_success=False,
+                    )
 
         finally:
             self._cleanup()

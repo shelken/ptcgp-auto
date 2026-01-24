@@ -344,7 +344,8 @@ def main():
         device_addresses = discover_devices()
         discovered_devices = True
         if not device_addresses:
-            device_addresses = ["127.0.0.1:5555"]
+            print("错误: 未发现 BlueStacks 设备，请通过 --devices 指定")
+            return 1
     else:
         try:
             device_addresses = normalize_device_addresses(device_addresses)
@@ -361,11 +362,8 @@ def main():
     )
     set_settings(settings)
     settings.configure_logging()
-    if discovered_devices:
-        if device_addresses:
-            logger.info(f"自动发现设备: {', '.join(device_addresses)}")
-        else:
-            logger.warning("未发现 BlueStacks 设备，回退到默认地址")
+    if discovered_devices and device_addresses:
+        logger.info(f"自动发现设备: {', '.join(device_addresses)}")
 
     # 初始化数据库
     get_database()

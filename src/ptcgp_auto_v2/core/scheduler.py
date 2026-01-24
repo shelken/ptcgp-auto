@@ -281,35 +281,7 @@ class Scheduler:
         Returns:
             可能添加了前置任务的任务列表
         """
-        # 检查是否需要 fetch_account_info
-        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
-
-        if not FetchAccountInfoTask.needs_fetch(account):
-            return tasks
-
-        # 检查任务列表中是否已有 fetch_account_info
-        has_fetch_task = any(t.task_type == "fetch_account_info" for t in tasks)
-        if has_fetch_task:
-            return tasks
-
-        # 创建或获取 fetch_account_info 任务实例
-        task_class = TaskRegistry.get("fetch_account_info")
-        prereq_instance = self._task_instance_repo.get_or_create(
-            account_id=account.id,
-            task_type="fetch_account_info",
-            reset_type=task_class.reset_type.value,
-        )
-
-        # 确保前置任务是 pending 状态
-        if prereq_instance.status != TaskStatus.PENDING.value:
-            prereq_instance.status = TaskStatus.PENDING.value
-            prereq_instance.save()
-
-        # 插入到任务列表开头
-        tasks.insert(0, prereq_instance)
-        logger.info(f"批量任务插入前置任务: fetch_account_info (账号: {account.nickname})")
-
-        return tasks
+        return self._ensure_fetch_account_info(account, tasks)
 
     def _order_tasks_by_plan(
         self, account: "Account", tasks: list["TaskInstance"]
@@ -352,35 +324,7 @@ class Scheduler:
             logger.debug(f"账号 {account.nickname} 没有可用设备，等待...")
             return
 
-        # 将所有任务状态改为 running，防止被其他线程分配
-        for task_instance in task_instances:
-            task_instance.status = TaskStatus.RUNNING.value
-            task_instance.save()
-
-        task_types = [t.task_type for t in task_instances]
-        logger.info(
-            f"分配批量任务: {task_types} "
-            f"(账号: {account.nickname}, 设备: {device.address})"
-        )
-
-        # 创建带停止事件的执行器配置
-        executor_config = ExecutorConfig(
-            max_retries=self.config.executor_config.max_retries,
-            retry_delay=self.config.executor_config.retry_delay,
-            recovery_delay=self.config.executor_config.recovery_delay,
-            app_package=self.config.executor_config.app_package,
-            stop_event=self._stop_event,
-        )
-
-        # 提交到线程池执行批量任务
-        self._executor_pool.submit(
-            run_account_batch_executor,
-            device=device,
-            account=account,
-            task_instances=task_instances,
-            device_pool=self.device_pool,
-            config=executor_config,
-        )
+        self._submit_account_batch_executor(device, account, task_instances)
 
     def _check_prerequisites(self, task_instance: "TaskInstance") -> Optional[str]:
         """
@@ -403,6 +347,44 @@ class Scheduler:
 
         return None
 
+    def _ensure_fetch_account_info(
+        self, account: "Account", tasks: list["TaskInstance"]
+    ) -> list["TaskInstance"]:
+        """确保任务列表包含 fetch_account_info 前置任务"""
+        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
+
+        if not FetchAccountInfoTask.needs_fetch(account):
+            return tasks
+
+        has_fetch_task = any(t.task_type == "fetch_account_info" for t in tasks)
+        if has_fetch_task:
+            return tasks
+
+        prereq_instance = self._get_or_reset_prerequisite_instance(
+            account_id=account.id,
+            task_type="fetch_account_info",
+        )
+
+        tasks.insert(0, prereq_instance)
+        logger.info(f"批量任务插入前置任务: fetch_account_info (账号: {account.nickname})")
+
+        return tasks
+
+    def _get_or_reset_prerequisite_instance(self, account_id: int, task_type: str):
+        """获取前置任务实例并保证其为 pending 状态"""
+        task_class = TaskRegistry.get(task_type)
+        prerequisite = self._task_instance_repo.get_or_create(
+            account_id=account_id,
+            task_type=task_type,
+            reset_type=task_class.reset_type.value,
+        )
+
+        if prerequisite.status != TaskStatus.PENDING.value:
+            prerequisite.status = TaskStatus.PENDING.value
+            prerequisite.save()
+
+        return prerequisite
+
     def _insert_prerequisite_task(
         self, original_task: "TaskInstance", prerequisite_type: str
     ):
@@ -419,22 +401,74 @@ class Scheduler:
         original_task.status = TaskStatus.BLOCKED.value
         original_task.save()
 
-        # 创建前置任务
-        task_class = TaskRegistry.get(prerequisite_type)
-        prerequisite = self._task_instance_repo.get_or_create(
+        prerequisite = self._get_or_reset_prerequisite_instance(
             account_id=original_task.account_id,
             task_type=prerequisite_type,
-            reset_type=task_class.reset_type.value,
         )
-
-        # 确保前置任务是 pending 状态
-        if prerequisite.status != TaskStatus.PENDING.value:
-            prerequisite.status = TaskStatus.PENDING.value
-            prerequisite.save()
 
         logger.info(
             f"插入前置任务: {prerequisite_type} -> {original_task.task_type} "
             f"(账号: {original_task.account.nickname})"
+        )
+
+    def _build_executor_config(self) -> ExecutorConfig:
+        """构建带停止事件的执行器配置"""
+        return ExecutorConfig(
+            max_retries=self.config.executor_config.max_retries,
+            retry_delay=self.config.executor_config.retry_delay,
+            recovery_delay=self.config.executor_config.recovery_delay,
+            app_package=self.config.executor_config.app_package,
+            stop_event=self._stop_event,
+        )
+
+    def _submit_task_executor(self, device: Device, task_instance: "TaskInstance"):
+        """提交单任务执行"""
+        # 【关键】在提交到线程池之前，立即将状态改为 running
+        # 防止同一账号的任务被分配到多个设备
+        task_instance.status = TaskStatus.RUNNING.value
+        task_instance.save()
+
+        logger.info(
+            f"分配任务: {task_instance.task_type} "
+            f"(账号: {task_instance.account.nickname}, "
+            f"设备: {device.address})"
+        )
+
+        executor_config = self._build_executor_config()
+        self._executor_pool.submit(
+            run_executor,
+            device=device,
+            task_instance=task_instance,
+            device_pool=self.device_pool,
+            config=executor_config,
+        )
+
+    def _submit_account_batch_executor(
+        self,
+        device: Device,
+        account: "Account",
+        task_instances: list["TaskInstance"],
+    ):
+        """提交批量任务执行"""
+        # 将所有任务状态改为 running，防止被其他线程分配
+        for task_instance in task_instances:
+            task_instance.status = TaskStatus.RUNNING.value
+            task_instance.save()
+
+        task_types = [t.task_type for t in task_instances]
+        logger.info(
+            f"分配批量任务: {task_types} "
+            f"(账号: {account.nickname}, 设备: {device.address})"
+        )
+
+        executor_config = self._build_executor_config()
+        self._executor_pool.submit(
+            run_account_batch_executor,
+            device=device,
+            account=account,
+            task_instances=task_instances,
+            device_pool=self.device_pool,
+            config=executor_config,
         )
 
     def _dispatch_task(self, task_instance: "TaskInstance"):
@@ -457,34 +491,7 @@ class Scheduler:
             logger.debug("没有可用设备，等待...")
             return
 
-        # 【关键】在提交到线程池之前，立即将状态改为 running
-        # 防止同一账号的任务被分配到多个设备
-        task_instance.status = TaskStatus.RUNNING.value
-        task_instance.save()
-
-        logger.info(
-            f"分配任务: {task_instance.task_type} "
-            f"(账号: {task_instance.account.nickname}, "
-            f"设备: {device.address})"
-        )
-
-        # 创建带停止事件的执行器配置
-        executor_config = ExecutorConfig(
-            max_retries=self.config.executor_config.max_retries,
-            retry_delay=self.config.executor_config.retry_delay,
-            recovery_delay=self.config.executor_config.recovery_delay,
-            app_package=self.config.executor_config.app_package,
-            stop_event=self._stop_event,
-        )
-
-        # 提交到线程池执行
-        self._executor_pool.submit(
-            run_executor,
-            device=device,
-            task_instance=task_instance,
-            device_pool=self.device_pool,
-            config=executor_config,
-        )
+        self._submit_task_executor(device, task_instance)
 
     def _main_loop(self):
         """调度器主循环（批量任务调度）"""
