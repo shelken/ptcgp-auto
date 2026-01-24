@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Optional, List, Tuple
 
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
+from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline, get_terminal_support
 from .region_selector import select_region, get_cached_roi
-from .terminal_preview import preview_image_inline, get_terminal_support
 
 
 def _build_all_boosters(templates_dir: Path) -> List[Tuple[str, str, str, bool]]:
