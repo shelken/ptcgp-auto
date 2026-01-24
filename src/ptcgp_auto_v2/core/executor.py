@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Optional
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult, TaskStatus
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
-from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
 from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
 from ptcgp_auto_v2.infra.page_detector import DEFAULT_TEMPLATE_THRESHOLD
 
@@ -114,6 +113,9 @@ class BaseExecutor(ABC):
         self._account_syncer = AccountSyncer(self._adb)
 
     def _build_task(self, task_instance: "TaskInstance", account: "Account") -> Task:
+        assert self._page_detector is not None
+        assert self._adb is not None
+
         task_class = TaskRegistry.get(task_instance.task_type)
         self._page_detector.load_task_pages(task_class.pages)
         task = task_class(
@@ -122,7 +124,7 @@ class BaseExecutor(ABC):
             page_detector=self._page_detector,
         )
         task.register_handlers(
-            build_common_handlers(self._adb, self._page_detector, TEXT_PATTERNS)
+            build_common_handlers(self._adb, self._page_detector)
         )
         task.bind_account(account)
         if self.config.stop_event:
@@ -142,9 +144,14 @@ class BaseExecutor(ABC):
         Returns:
             True 表示当前已登录目标账号
         """
+        assert self._account_syncer is not None
+        if target_account.id is None:
+            return False
+
         current_account = self._account_syncer.get_current_account()
         if current_account:
-            self.device.update_current_account(current_account.id)
+            if current_account.id is not None:
+                self.device.update_current_account(current_account.id)
             logger.debug(
                 f"设备当前账号: {current_account.nickname or current_account.game_id}"
             )
@@ -163,6 +170,11 @@ class BaseExecutor(ABC):
         Returns:
             True 表示切换成功
         """
+        assert self._account_switcher is not None
+        if target_account.id is None:
+            logger.error("目标账号 ID 为空，无法切换")
+            return False
+
         logger.info(f"切换账号: {target_account.nickname} (ID: {target_account.id})")
         try:
             success = self._account_switcher.switch_to(target_account)
@@ -176,6 +188,7 @@ class BaseExecutor(ABC):
 
     def _restart_app(self):
         """重启游戏应用"""
+        assert self._adb is not None
         logger.debug("重启游戏应用...")
         self._adb.force_stop(self.config.app_package)
         time.sleep(2)
@@ -189,6 +202,9 @@ class BaseExecutor(ABC):
 
     def _unblock_dependent_tasks(self, account: "Account"):
         """恢复该账号被阻塞的任务"""
+        if account.id is None:
+            return
+
         from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 
         repo = TaskInstanceRepository()
