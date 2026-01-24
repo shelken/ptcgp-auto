@@ -15,30 +15,30 @@ COMMON_PAGES = [
     {
         "name": "popup_ok",
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_ok"),
-        "priority": 20,
+        "priority": 150,
         "exact_match": True,
     },
     {
         "name": "network_error_popup",
         "identifiers": _get_patterns(TEXT_PATTERNS, "network_error_popup"),
-        "priority": 30,
+        "priority": 150,
         "exact_match": True,
     },
     {
         "name": "continue_button",
         "identifiers": _get_patterns(TEXT_PATTERNS, "continue_button"),
-        "priority": 40,
+        "priority": 150,
         "exact_match": True,
     },
     {
         "name": "tap_to_continue",
         "identifiers": _get_patterns(TEXT_PATTERNS, "tap_to_continue"),
-        "priority": 45,
+        "priority": 150,
     },
     {
         "name": "game_open_page",
         "identifiers": _get_patterns(TEXT_PATTERNS, "game_open_page"),
-        "priority": 50,
+        "priority": 150,
     },
     {
         # 游戏内通用关闭按钮（模板匹配）

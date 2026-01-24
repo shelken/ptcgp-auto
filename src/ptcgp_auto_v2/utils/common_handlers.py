@@ -3,6 +3,7 @@ from typing import Callable, Dict
 import time
 
 from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
     click_confirm,
     click_continue,
@@ -16,14 +17,14 @@ Handler = Callable[[dict], ActionResult]
 
 
 def build_common_handlers(
-    adb, page_detector, text_patterns: dict
+    adb, page_detector
 ) -> Dict[str, Handler]:
     def h_popup_ok(page_info: dict) -> ActionResult:
         return click_confirm(
             adb,
             page_detector,
             page_info.get("ocr_results", []),
-            text_patterns.get("popup_ok", []),
+            get_text_patterns("popup_ok"),
         )
 
     def h_network_error(page_info: dict) -> ActionResult:
@@ -31,7 +32,7 @@ def build_common_handlers(
             adb,
             page_detector,
             page_info.get("ocr_results", []),
-            text_patterns.get("network_error_popup", []),
+            get_text_patterns("network_error_popup"),
         )
 
     def h_continue(page_info: dict) -> ActionResult:
@@ -39,7 +40,7 @@ def build_common_handlers(
             adb,
             page_detector,
             page_info.get("ocr_results", []),
-            text_patterns.get("continue_button", []),
+            get_text_patterns("continue_button"),
         )
 
     def h_tap_to_continue(page_info: dict) -> ActionResult:
@@ -47,7 +48,7 @@ def build_common_handlers(
         return tap_text(
             adb,
             page_info.get("ocr_results", []),
-            text_patterns.get("tap_to_continue", []),
+            get_text_patterns("tap_to_continue"),
             wait=1.0,
         ) or tap_center(adb, wait=1.0)
 
@@ -56,12 +57,12 @@ def build_common_handlers(
 
     def h_main(page_info: dict) -> ActionResult:
         ocr = page_info.get("ocr_results", [])
-        patterns = text_patterns.get("main_page", [])
+        patterns = get_text_patterns("main_page")
         return tap_text(adb, ocr, patterns, wait=1.0) or tap_center(adb, wait=1.0)
 
     def h_close_app(page_info: dict) -> ActionResult:
         ocr = page_info.get("ocr_results", [])
-        patterns = text_patterns.get("close_app_popup", [])
+        patterns = get_text_patterns("close_app_popup")
         return tap_text(adb, ocr, patterns, wait=1.0) or press_back(adb, wait=1.0)
 
     def h_btn_close(page_info: dict) -> ActionResult:

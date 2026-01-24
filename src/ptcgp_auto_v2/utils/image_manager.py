@@ -189,7 +189,7 @@ class ImageResourceManager:
             processed_img = self._crop_and_resize(img)
 
             # 保存到所有目标目录
-            filename = get_card_filename(card)
+            filename = get_card_filename(card.number, card.name)
 
             saved_paths = []
 

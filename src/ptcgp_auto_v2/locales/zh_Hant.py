@@ -26,7 +26,7 @@ TEXT_PATTERNS = {
     "pack_paid_detail": ["開封1包", "開封10包", "使用寶可金塊縮短時間"],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
-    "pack_opening_result": ["開封結果"],
+    "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
     "pack_card_register": ["向上輕滑卡牌"],
     "pack_collection_result": ["繼續"],
     "pack_collection_exclude": ["開封結果", "點擊來繼續", "點擊以繼續"],
