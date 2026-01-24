@@ -6,6 +6,7 @@
 """
 
 import logging
+import time
 from datetime import datetime
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
@@ -384,7 +385,8 @@ class OpenPackTask(Task):
         """
         任务完成后的处理
 
-        状态更新由 executor 统一处理，此处仅负责创建开包记录。
+        状态更新由 executor 统一处理，此处仅负责清理资源和记录日志。
+        注意：开包记录已在识别阶段即时保存，此处不再重复创建。
         """
         logger.info(
             f"任务完成，阶段: {self._phase.name}, 已开包: {self._packs_opened_count}, "
@@ -392,31 +394,18 @@ class OpenPackTask(Task):
         )
 
         if self.account.id is None:
-            logger.error(f"账号 {self.account.display_name} ID 为空，无法创建记录")
             return
 
-        # 只有真正完成且开过包才创建记录
+        # 仅记录统计日志
         if (
             result.success
             and not result.skipped
             and self._packs_opened_count > 0
-            and self._pack_record_repo
-            and self.target_pack
         ):
-            pack_type = (
-                f"{self.target_pack['pack_code']}/{self.target_pack['booster_name']}"
-            )
-            self._pack_record_repo.create_for_account(
-                self.account.id,
-                pack_type=pack_type,
-                cards=self._current_pack_cards
-            )
             logger.info(
-                f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包，"
-                f"识别到 {len(self._current_pack_cards)} 张卡牌）"
+                f"任务统计: 本次共开 {self._packs_opened_count} 包，"
+                f"累计识别 {len(self._current_pack_cards)} 张卡牌"
             )
-        elif result.success and not result.skipped:
-            logger.info("任务完成（无免费包），不创建开包记录")
 
         # 清理卡包模板资源
         if self.recognizer:
@@ -726,61 +715,82 @@ class OpenPackTask(Task):
         2. 点击继续按钮
         """
         if not self._result_recognized:
-            try:
-                # 调用 Infra 层服务进行识别
-                cards = self.card_recognizer.scan_pack_result()
-                if cards:
-                    # 识别成功，重置计数
-                    self._recognition_retry_count = 0
+            # 防止结果页动画未结束导致截图不全，先强制等待
+            logger.debug("  -> 等待 2s 让结果页动画稳定...")
+            time.sleep(2.0)
 
-                    # 关键修复：如果我们识别到了卡牌，说明至少开了一包
-                    # 如果是从结果页启动任务的，_packs_opened_count 可能为 0，需要修正
-                    if self._packs_opened_count == 0:
-                        self._packs_opened_count = 1
-                        self._phase = OpenPackPhase.PACK_OPENED
+            # 内部循环重试识别，防止跳出后被误操作
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # 调用 Infra 层服务进行识别
+                    cards = self.card_recognizer.scan_pack_result()
+                    if cards:
+                        # 识别成功
+                        # 关键修复：如果我们识别到了卡牌，说明至少开了一包
+                        # 如果是从结果页启动任务的，_packs_opened_count 可能为 0，需要修正
+                        if self._packs_opened_count == 0:
+                            self._packs_opened_count = 1
+                            self._phase = OpenPackPhase.PACK_OPENED
 
-                    card_names = [f"{c.name}({c.confidence:.2f})" for c in cards]
-                    logger.debug(f"====== 识别到 {len(cards)} 张卡牌 ======")
+                        card_names = [f"{c.name}({c.confidence:.2f})" for c in cards]
+                        logger.debug(f"====== 识别到 {len(cards)} 张卡牌 ======")
 
-                    # 保存识别结果
-                    set_code = self.target_pack["pack_code"]
+                        # 保存识别结果
+                        set_code = self.target_pack["pack_code"]
+                        current_batch_cards = []  # 本次（单包）识别到的卡牌
 
-                    for i, c in enumerate(cards):
-                        logger.debug(f"  - {c.name} (Conf: {c.confidence:.2f})")
+                        for i, c in enumerate(cards):
+                            logger.debug(f"  - {c.name} (Conf: {c.confidence:.2f})")
 
-                        # 查询卡牌详细信息
-                        card_obj = None
-                        if self._card_repo:
-                            card_obj = self._card_repo.get_card_by_template_name(set_code, c.name)
+                            # 查询卡牌详细信息
+                            card_obj = None
+                            if self._card_repo:
+                                card_obj = self._card_repo.get_card_by_template_name(set_code, c.name)
 
-                        # 构建记录数据
-                        card_data = {
-                            "card_name": card_obj.name if card_obj else c.name,
-                            "rarity": card_obj.rarity if card_obj else "Unknown",
-                            "card_id": card_obj.id if card_obj else None,
-                            "is_new": False,  # TODO: 识别 New 标志
-                            "position": i + 1,
-                            "confidence": float(c.confidence)
-                        }
-                        self._current_pack_cards.append(card_data)
+                            # 构建记录数据
+                            card_data = {
+                                "card_name": card_obj.name if card_obj else c.name,
+                                "rarity": card_obj.rarity if card_obj else "Unknown",
+                                "card_id": card_obj.id if card_obj else None,
+                                "is_new": False,  # TODO: 识别 New 标志
+                                "position": i + 1,
+                                "confidence": float(c.confidence)
+                            }
+                            current_batch_cards.append(card_data)
+                            self._current_pack_cards.append(card_data)
 
-                    logger.debug("==================================")
-                    self._result_recognized = True
-                else:
-                    # 识别失败，尝试重试
-                    self._recognition_retry_count += 1
-                    if self._recognition_retry_count <= 3:
-                        logger.debug(f"未识别到卡牌，等待重试 ({self._recognition_retry_count}/3)")
-                        # 返回等待，不点击继续，让下次循环重新进入此函数
-                        return ActionResult.ok(wait=2.0)
-                    else:
-                        logger.warning("卡牌识别连续失败 3 次，跳过识别")
+                        # 即时保存数据库
+                        if self._pack_record_repo and self.account.id:
+                            try:
+                                pack_type = f"{self.target_pack['pack_code']}/{self.target_pack['booster_name']}"
+                                self._pack_record_repo.create_for_account(
+                                    self.account.id,
+                                    pack_type=pack_type,
+                                    cards=current_batch_cards
+                                )
+                                logger.info(f"已即时保存开包记录: {pack_type} ({len(current_batch_cards)} 张)")
+                            except Exception as e:
+                                logger.error(f"保存开包记录失败: {e}")
+
+                        logger.debug("==================================")
                         self._result_recognized = True
+                        break  # 识别成功，跳出循环
 
-            except Exception as e:
-                logger.error(f"识别卡牌失败: {e}")
-                self._result_recognized = True
-                self._recognition_retry_count = 0
+                    else:
+                        # 识别失败，等待后重试
+                        if attempt < max_retries - 1:
+                            logger.debug(f"未识别到卡牌，等待重试 ({attempt + 1}/{max_retries})")
+                            time.sleep(2.0)
+                        else:
+                            logger.warning(f"卡牌识别连续失败 {max_retries} 次，跳过识别")
+                            self._result_recognized = True
+
+                except Exception as e:
+                    logger.error(f"识别卡牌失败: {e}")
+                    # 发生异常也算作一次失败，如果是最后一次则跳过
+                    if attempt >= max_retries - 1:
+                        self._result_recognized = True
 
         logger.debug("  -> 点击继续")
         # return ActionResult.ok(wait=1.0)
