@@ -23,6 +23,10 @@
 4. OCR 文本匹配已集中到 gesture.normalize_text/is_text_visible，减少任务层重复逻辑。
 5. 图标模板匹配的 scale=1.0 明确改为默认参数形式，避免业务层冗余。
 6. 模板阈值默认值统一为 0.7，代码中已移除与默认一致的显式传参。
+7. executor 中任务构建与通用 handler 注册在 TaskExecutor / AccountBatchExecutor 之间存在重复。
+8. ocr 中 find_text / find_all_text 存在相同的文本标准化与匹配逻辑，可集中抽取。
+9. scheduler 中批量与单任务路径的前置任务插入与 executor 提交流程存在重复，可统一为 helper。
+10. page_detector 的文本匹配逻辑与 ocr 的标准化/匹配重复，可统一复用。
 
 ## 线索（来自现有扫描）
 - src/ptcgp_auto_v2/tasks/open_pack.py
