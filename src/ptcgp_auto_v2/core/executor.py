@@ -183,7 +183,7 @@ class BaseExecutor(ABC):
 
     def _try_recover(self):
         """尝试恢复到可执行状态"""
-        logger.info("尝试恢复执行状态...")
+        logger.debug("尝试恢复执行状态...")
         self._restart_app()
 
     def _unblock_dependent_tasks(self, account: "Account"):

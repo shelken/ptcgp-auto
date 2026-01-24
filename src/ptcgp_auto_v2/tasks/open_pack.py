@@ -306,7 +306,7 @@ class OpenPackTask(Task):
 
         # home_icon：点击底部主页图标回到游戏主页
         if page_name == "home_icon":
-            logger.info("  -> 点击主页图标回到游戏主页")
+            logger.debug("  -> 点击主页图标回到游戏主页")
             return tap_home_icon(self.adb, self.page_detector, wait=1.0)
 
         # pack_series_select：选择扩充包系列
@@ -344,13 +344,13 @@ class OpenPackTask(Task):
 
         # pack_opening_result：等待自动流转
         if page_name == "pack_opening_result":
-            logger.info("  -> 等待开包结果展示")
+            logger.debug("  -> 等待开包结果展示")
             return ActionResult.ok(wait=1.5)
 
         # pack_opening_select：点击选择要开的扩充包
         if page_name == "pack_opening_select":
             self._phase = OpenPackPhase.OPENING
-            logger.info("  -> 点击屏幕中心选择扩充包")
+            logger.debug("  -> 点击屏幕中心选择扩充包")
             return tap_center(self.adb, wait=1.0)
 
         # 其他页面由通用处理器处理
@@ -426,7 +426,7 @@ class OpenPackTask(Task):
 
         if free_pack_box:
             # 有免费包，重置计数，进入开包流程
-            logger.info("  -> 检测到免费包，进入开包流程")
+            logger.debug("  -> 检测到免费包，进入开包流程")
             self._home_check_count = 0
             self._phase = OpenPackPhase.ENTERING_PACK
 
@@ -441,12 +441,12 @@ class OpenPackTask(Task):
 
         # 无免费包，累计计数
         self._home_check_count += 1
-        logger.info(
+        logger.debug(
             f"  -> 未检测到免费包 ({self._home_check_count}/{self.HOME_CHECK_THRESHOLD})"
         )
 
         if self._home_check_count >= self.HOME_CHECK_THRESHOLD:
-            logger.info("  -> 确认无免费包，任务完成")
+            logger.debug("  -> 确认无免费包，任务完成")
             self._phase = OpenPackPhase.NO_FREE_PACK
 
         return ActionResult.ok(wait=1.0)
@@ -469,7 +469,7 @@ class OpenPackTask(Task):
             wait=1.0,
         )
         if result:
-            logger.info("  -> 找到目标扩充包，点击进入")
+            logger.debug("  -> 找到目标扩充包，点击进入")
             return result
 
         # 2. 尝试切换到目标系列
@@ -487,7 +487,7 @@ class OpenPackTask(Task):
                     wait=1.0,
                 )
                 if result:
-                    logger.info(f"  -> 点击切换到 {target_series} 系列")
+                    logger.debug(f"  -> 点击切换到 {target_series} 系列")
                     return result
 
         # 3. 上滑查找
@@ -526,7 +526,7 @@ class OpenPackTask(Task):
             wait=1.0,
         )
         if result:
-            logger.info("  -> 当前是目标子包，点击进入详情")
+            logger.debug("  -> 当前是目标子包，点击进入详情")
             return result
 
         # 2. 点击右侧切换子包，最多切换到子包数量
@@ -538,7 +538,7 @@ class OpenPackTask(Task):
             wait=1.0,
         )
         if result:
-            logger.info("  -> 找到目标子包，点击进入详情")
+            logger.debug("  -> 找到目标子包，点击进入详情")
             return result
 
         # 未找到，返回上一页

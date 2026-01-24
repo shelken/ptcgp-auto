@@ -65,7 +65,7 @@ class AdbController:
         """
         try:
             output = adb.connect(self.address)
-            logger.info(f"ADB 连接: {output}")
+            logger.debug(f"ADB 连接: {output}")
 
             self.device = adb.device(serial=self.address)
             logger.info(f"已连接设备: {self.device.serial}")
@@ -367,7 +367,7 @@ class AdbController:
 
         try:
             self.device.shell(f"am force-stop {package_name}")
-            logger.info(f"已强制停止应用: {package_name}")
+            logger.debug(f"已强制停止应用: {package_name}")
         except Exception as e:
             logger.error(f"停止应用失败: {e}")
 
@@ -391,6 +391,6 @@ class AdbController:
                 self.device.shell(
                     f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
                 )
-            logger.info(f"已启动应用: {package_name}")
+            logger.debug(f"已启动应用: {package_name}")
         except Exception as e:
             logger.error(f"启动应用失败: {e}")

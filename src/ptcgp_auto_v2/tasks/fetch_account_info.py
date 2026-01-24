@@ -138,7 +138,7 @@ class FetchAccountInfoTask(Task):
         """初始化任务"""
         # 注意：页面规则通过 pages 类属性定义，由 executor 统一加载
         self._phase = FetchPhase.NAVIGATING_TO_HOME
-        logger.info("开始获取账号信息任务")
+        logger.debug("开始获取账号信息任务")
         return True
 
     def cleanup(self):
@@ -201,7 +201,7 @@ class FetchAccountInfoTask(Task):
         lv_pos = self._find_lv_position(ocr_results)
         if lv_pos:
             # 点击 Lv. 上方区域（头像位置）
-            logger.info("  -> 点击头像区域进入个人资料")
+            logger.debug("  -> 点击头像区域进入个人资料")
             self._phase = FetchPhase.ENTERING_PROFILE
             return tap_above_point(
                 self.adb,
@@ -212,7 +212,7 @@ class FetchAccountInfoTask(Task):
             )
 
         # 没找到 Lv.，尝试点击屏幕中上方
-        logger.info("  -> 未找到 Lv.，点击中上方")
+        logger.debug("  -> 未找到 Lv.，点击中上方")
         self._phase = FetchPhase.ENTERING_PROFILE
         return tap_top_center(self.adb, BASE_FALLBACK_TAP_Y, wait=2.0)
 
@@ -225,31 +225,31 @@ class FetchAccountInfoTask(Task):
         friend_id = self._extract_friend_id(ocr_results)
         if friend_id:
             self._fetched_friend_id = friend_id
-            logger.info(f"  -> 获取到 friend_id: {friend_id}")
+            logger.debug(f"  -> 获取到 friend_id: {friend_id}")
 
         # 提取 level
         level = self._extract_level(ocr_results)
         if level:
             self._fetched_level = level
-            logger.info(f"  -> 获取到 level: {level}")
+            logger.debug(f"  -> 获取到 level: {level}")
 
         # 提取 nickname
         nickname = self._extract_nickname(ocr_results)
         if nickname:
             self._fetched_nickname = nickname
-            logger.info(f"  -> 获取到 nickname: {nickname}")
+            logger.debug(f"  -> 获取到 nickname: {nickname}")
 
         # 更新数据库
         self._update_account()
 
         # 返回主页
         self._phase = FetchPhase.DONE
-        logger.info("  -> 获取完成，返回主页")
+        logger.debug("  -> 获取完成，返回主页")
         return press_back(self.adb)
 
     def _handle_home_icon(self, page_info: dict) -> ActionResult:
         """处理有 home_icon 的页面"""
-        logger.info("  -> 点击 Home 图标返回主页")
+        logger.debug("  -> 点击 Home 图标返回主页")
         return tap_home_icon(self.adb, self.page_detector)
 
     def _box_center(self, box: tuple) -> tuple:
