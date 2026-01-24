@@ -20,6 +20,7 @@ from PIL import Image
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.infra.template import TemplateMatcher
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD, PACK_RESULT_ROI, PACK_RESULT_SCALE
+from ptcgp_auto_v2.utils.debug_visualizer import DebugVisualizer
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +91,13 @@ class CardRecognizer:
             logger.error("无法获取截图，跳过识别")
             return []
 
-        # 2. 获取候选模板（仅限当前加载的卡包模板）
+        # 2. 获取候选模板
         candidate_templates = self.template_matcher._loaded_pack_templates
         if not candidate_templates:
             logger.warning("未加载任何卡包模板，无法进行识别")
             return []
 
-        logger.info(f"开始识别卡牌 (候选模板数: {len(candidate_templates)})...")
+        logger.debug(f"开始识别卡牌 (候选模板数: {len(candidate_templates)})...")
         start_time = time.time()
 
         # 3. 准备图像数据 (Pre-processing)
@@ -176,18 +177,50 @@ class CardRecognizer:
                 logger.error(f"模板匹配异常 {t_name}: {e}")
 
         # 5. 结果去重与排序
-        # 按置信度降序排列
+        # 按置信度降序排列以进行 NMS
         matches.sort(key=lambda x: x.confidence, reverse=True)
 
         # 去除重叠 (NMS)
         final_cards = self._filter_overlapping(matches)
 
+        # 最终按视觉位置排序 (Top-Left -> Bottom-Right)
+        # 这里的 Y 阈值 100 可以根据实际卡牌行高调整，用于将同一行的卡牌归为一组
+        final_cards.sort(key=lambda c: (int(c.box[1] / 100), c.box[0]))
+
         duration = time.time() - start_time
-        logger.info(
+        logger.debug(
             f"识别完成，耗时 {duration:.2f}s, "
             f"扫描 {len(candidate_templates)} 个模板, "
             f"命中 {len(matches)}, 去重后 {len(final_cards)}"
         )
+
+        # --- 调试绘图逻辑 ---
+        if logger.isEnabledFor(logging.DEBUG):
+            try:
+                # 获取原始图像用于绘图
+                debug_img = self._pil_to_cv2(screenshot)
+
+                # 计算缩放后的 ROI 坐标
+                final_roi = None
+                if roi:
+                    h, w = debug_img.shape[:2]
+                    base_w, base_h = 1080, 1920
+                    scale_x = w / base_w
+                    scale_y = h / base_h
+                    rx, ry, rw, rh = roi
+                    s_rx, s_ry = int(rx * scale_x), int(ry * scale_y)
+                    s_rw, s_rh = int(rw * scale_x), int(rh * scale_y)
+                    final_roi = (s_rx, s_ry, s_rw, s_rh)
+
+                # 调用可视化工具
+                DebugVisualizer.draw_recognition_result(
+                    image=debug_img,
+                    roi=final_roi,
+                    cards=final_cards,
+                    filename_prefix="rec_pack"
+                )
+            except Exception as e:
+                logger.warning(f"生成调试图失败: {e}")
 
         return final_cards
 
