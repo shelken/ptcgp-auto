@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Card, CardPack
 from ptcgp_auto_v2.db.repositories import CardRepository
-from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
+from ptcgp_auto_v2.utils.card_naming import get_card_filename
 
 
 class CardSelector:
@@ -75,7 +75,7 @@ class CardSelector:
                     # 构造文件名
                     # 使用 ImageResourceManager 的统一命名规则
                     # get_card_filename 返回带 .png 后缀的文件名
-                    full_filename = ImageResourceManager.get_card_filename(card)
+                    full_filename = get_card_filename(card.number, card.name)
 
                     # 这里的 identifier 需要不带后缀的名称还是带后缀的？
                     # non_interactive.py 里 parts[-1] 会被当做 card_name
