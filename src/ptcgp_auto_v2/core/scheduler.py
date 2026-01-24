@@ -28,15 +28,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_POLL_INTERVAL = 5.0  # 轮询间隔（秒）
+DEFAULT_MAX_WORKERS = 4  # 最大并发执行器数
+DEFAULT_TASK_GENERATION_INTERVAL = 60.0  # 任务生成检查间隔（秒）
+DEFAULT_STALE_TASK_TIMEOUT = 600.0  # running/blocked 任务超时时间（秒），默认 10 分钟
+DEFAULT_SKIPPED_RESET_TIMEOUT = 3600.0  # skipped 任务重置时间（秒），默认 1 小时
+DEFAULT_STALE_CHECK_INTERVAL = 60.0  # 异常任务检查间隔（秒）
+
+
 @dataclass
 class SchedulerConfig:
     """调度器配置"""
-    poll_interval: float = 5.0           # 轮询间隔（秒）
-    max_workers: int = 4                  # 最大并发执行器数
-    task_generation_interval: float = 60.0  # 任务生成检查间隔（秒）
-    stale_task_timeout: float = 600.0  # running/blocked 任务超时时间（秒），默认 10 分钟
-    skipped_reset_timeout: float = 3600.0  # skipped 任务重置时间（秒），默认 1 小时
-    stale_task_check_interval: float = 60.0  # 异常任务检查间隔（秒）
+    poll_interval: float = DEFAULT_POLL_INTERVAL
+    max_workers: int = DEFAULT_MAX_WORKERS
+    task_generation_interval: float = DEFAULT_TASK_GENERATION_INTERVAL
+    stale_task_timeout: float = DEFAULT_STALE_TASK_TIMEOUT
+    skipped_reset_timeout: float = DEFAULT_SKIPPED_RESET_TIMEOUT
+    stale_task_check_interval: float = DEFAULT_STALE_CHECK_INTERVAL
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
 
 

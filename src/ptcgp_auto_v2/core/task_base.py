@@ -35,6 +35,11 @@ class TaskStatus(Enum):
     SKIPPED = "skipped"  # 跳过（不更新 last_completed_at，等待下次重置）
 
 
+DEFAULT_WAIT_SECONDS = 1.0  # 默认等待时间(秒)
+MAX_TASK_ITERATIONS = 100  # 最大执行迭代次数
+MAX_UNKNOWN_PAGES = 30  # 连续未知页面上限
+
+
 @dataclass
 class ActionResult:
     """
@@ -45,10 +50,10 @@ class ActionResult:
 
     success: bool = True
     error: Optional[str] = None
-    should_wait: float = 1.0  # 建议等待时间（秒）
+    should_wait: float = DEFAULT_WAIT_SECONDS  # 建议等待时间（秒）
 
     @classmethod
-    def ok(cls, wait: float = 1.0) -> "ActionResult":
+    def ok(cls, wait: float = DEFAULT_WAIT_SECONDS) -> "ActionResult":
         """创建成功结果"""
         return cls(success=True, should_wait=wait)
 
@@ -113,10 +118,10 @@ class Task(ABC):
     pages: list[dict] = []
 
     # 最大执行迭代次数
-    max_iterations: int = 100
+    max_iterations: int = MAX_TASK_ITERATIONS
 
     # 连续未知页面上限
-    max_unknown_pages: int = 30
+    max_unknown_pages: int = MAX_UNKNOWN_PAGES
 
     def __init__(self, adb, recognizer, page_detector):
         """

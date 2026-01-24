@@ -12,11 +12,9 @@ from typing import List, Optional
 
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from ptcgp_auto_v2.config.constants import DEFAULT_OCR_LANGUAGES, DEFAULT_OCR_LEVEL
 
-# 默认配置
-DEFAULT_RECOGNITION_LEVEL = "accurate"  # "fast" or "accurate"
-DEFAULT_LANGUAGES = ["zh-Hant", "en-US"]
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,7 +43,7 @@ class OcrEngine:
 
     def __init__(
         self,
-        recognition_level: str = DEFAULT_RECOGNITION_LEVEL,
+        recognition_level: str = DEFAULT_OCR_LEVEL,
         languages: Optional[List[str]] = None,
     ):
         """
@@ -56,7 +54,7 @@ class OcrEngine:
             languages: 识别语言列表，如 ["zh-Hant", "en-US"]
         """
         self.recognition_level = recognition_level
-        self.languages = languages or DEFAULT_LANGUAGES
+        self.languages = languages or DEFAULT_OCR_LANGUAGES
 
         # 验证平台
         self._validate_platform()

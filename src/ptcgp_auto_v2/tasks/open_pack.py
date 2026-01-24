@@ -83,6 +83,11 @@ logger = logging.getLogger(__name__)
 # 1920 * 0.95 ≈ 1824，取 1820
 BASE_POPUP_CLOSE_TAP_Y = 1820
 
+# 开包滑动时长 (ms)
+SWIPE_DURATION_OPEN = 500
+# 登录图鉴滑动时长 (ms)
+SWIPE_DURATION_REGISTER = 300
+
 
 def _get_patterns(text_patterns: dict, key: str) -> list[str]:
     """获取指定配置的文本列表"""
@@ -630,7 +635,7 @@ class OpenPackTask(Task):
         # 进入 滑动开包 说明开包成功，增加计数
         self._packs_opened_count += 1
         start, end = swipe_pack_coords(self.adb)
-        return swipe(self.adb, start, end, duration=500)
+        return swipe(self.adb, start, end, duration=SWIPE_DURATION_OPEN)
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """
@@ -658,7 +663,7 @@ class OpenPackTask(Task):
         """向上滑动卡牌登录图鉴（pack_card_register 页面）仅在有新卡时出现"""
         logger.info(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, duration=300)
+        return swipe(self.adb, start, end, duration=SWIPE_DURATION_REGISTER)
 
     def _load_boosters_list(self, pack_code: str) -> list:
         """从 packs.json 加载子包列表"""
@@ -682,8 +687,3 @@ class OpenPackTask(Task):
             return None
         pack_code = self.target_pack["pack_code"]
         return pack_code[0].upper() if pack_code else None
-
-    def _get_ocr_signature(self, ocr_results) -> str:
-        """获取 OCR 签名"""
-        texts = sorted([item["text"] for item in ocr_results])
-        return "|".join(texts)

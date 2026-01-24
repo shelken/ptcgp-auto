@@ -40,6 +40,11 @@ logger = logging.getLogger(__name__)
 # 最大领取轮数
 MAX_ROUNDS = 3
 
+# 主页检查轮数
+HOME_CHECK_ROUNDS = 2
+# 主页检查间隔 (s)
+HOME_CHECK_INTERVAL = 2.0
+
 # Tab 遍历顺序
 TAB_ORDER = ["daily", "collection", "deck", "drop"]
 
@@ -199,8 +204,8 @@ class ClaimRewardsTask(Task):
         """
         self._phase = ClaimRewardsPhase.CHECKING_HOME
 
-        rounds = 2
-        interval = 2.0
+        rounds = HOME_CHECK_ROUNDS
+        interval = HOME_CHECK_INTERVAL
 
         # 连续检测，间隔固定秒数
         for i in range(rounds):

@@ -14,11 +14,9 @@ import cv2
 import numpy as np
 from PIL import Image
 
-logger = logging.getLogger(__name__)
+from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD, TEMPLATE_BASE_WIDTH
 
-# 默认配置
-DEFAULT_THRESHOLD = 0.7
-DEFAULT_TEMPLATE_BASE_WIDTH = 1080
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,8 +46,8 @@ class TemplateMatcher:
     def __init__(
         self,
         templates_dir: str = "templates",
-        threshold: float = DEFAULT_THRESHOLD,
-        base_width: int = DEFAULT_TEMPLATE_BASE_WIDTH,
+        threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
+        base_width: int = TEMPLATE_BASE_WIDTH,
     ):
         """
         初始化模板匹配器
@@ -140,7 +138,7 @@ class TemplateMatcher:
         self._core_loaded = True
 
     # 兼容旧接口
-    def load_templates(self, screen_width: int = DEFAULT_TEMPLATE_BASE_WIDTH):
+    def load_templates(self, screen_width: int = TEMPLATE_BASE_WIDTH):
         self.load_core_templates(screen_width)
 
     def load_pack_templates(self, pack_code: str, booster_name: str) -> int:

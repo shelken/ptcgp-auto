@@ -40,6 +40,13 @@ logger = logging.getLogger(__name__)
 # 过滤同行按钮的 y 坐标差值阈值（基于 1080x1920）
 Y_THRESHOLD = 50
 
+# 等待礼物盒加载时间 (s)
+WAIT_GIFT_BOX_LOAD = 4.0
+# 卡牌登录图鉴滑动时长 (ms)
+SWIPE_DURATION_REGISTER = 300
+# 连续多少次无可领取则判断为完成
+MAX_EMPTY_CHECK_ATTEMPTS = 2
+
 
 class ClaimGiftsPhase(Enum):
     """礼物领取阶段"""
@@ -202,7 +209,7 @@ class ClaimGiftsTask(Task):
             logger.debug("  -> 检测到礼物图标，进入礼物盒页面")
             self._phase = ClaimGiftsPhase.ENTERING_GIFTS
             tap_box(self.adb, gift_icon.box, wait=1.0)
-            time.sleep(4.0)
+            time.sleep(WAIT_GIFT_BOX_LOAD)
             return ActionResult.ok(wait=1.0)
 
         # 未找到礼物图标，直接结束
@@ -218,7 +225,7 @@ class ClaimGiftsTask(Task):
         """
         logger.debug("  -> 卡牌登录页面，向上滑动登录卡牌")
         start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, duration=300, wait=1.0)
+        return swipe(self.adb, start, end, duration=SWIPE_DURATION_REGISTER, wait=1.0)
 
     def _handle_send_thanks(self, page_info: dict) -> ActionResult:
         """
@@ -258,7 +265,7 @@ class ClaimGiftsTask(Task):
 
         # 2. 无可领取，检查是否真的没有礼物
         self._claim_attempt_count += 1
-        if self._claim_attempt_count >= 2:
+        if self._claim_attempt_count >= MAX_EMPTY_CHECK_ATTEMPTS:
             # 连续 2 次无可点击，返回主页
             logger.debug("  -> 礼物领取完成，返回主页")
             self._phase = ClaimGiftsPhase.RETURNING_HOME

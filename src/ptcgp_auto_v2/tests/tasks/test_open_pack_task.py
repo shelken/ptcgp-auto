@@ -8,6 +8,7 @@ sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.open_pack import OpenPackPhase, OpenPackTask
 from ptcgp_auto_v2.utils.gesture import cycle_until_template, scroll_until_template
+from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 
 
 class FakeAdb:
@@ -61,7 +62,7 @@ class FakePageDetector:
         return None, []
 
     def find_template_with_scale(
-        self, template_name, scale=1.0, threshold=0.7, screenshot=None
+        self, template_name, scale=1.0, threshold=DEFAULT_TEMPLATE_THRESHOLD, screenshot=None
     ):
         if template_name == "icon_free_pack_available":
             return self._free_match

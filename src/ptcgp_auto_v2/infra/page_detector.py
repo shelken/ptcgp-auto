@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from PIL import Image
 
+from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.infra.ocr import OcrEngine, OcrResult
 from ptcgp_auto_v2.infra.template import TemplateMatcher, TemplateMatch
@@ -353,7 +354,7 @@ class PageDetector:
         self,
         template_name: str,
         screenshot: Optional[Image.Image] = None,
-        threshold: float = 0.7,
+        threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
     ) -> Optional[Tuple[int, int, int, int]]:
         """
         在屏幕上查找模板
