@@ -19,6 +19,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
+from ptcgp_auto_v2.locales import get_text_patterns, get_config_value
 from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
 
 
@@ -57,6 +58,7 @@ from ptcgp_auto_v2.utils.gesture import (
     click_close,
     tap_bottom_close,
     tap_box,
+    tap_continue,
     center_point,
     swipe_pack_coords,
     swipe_card_coords,
@@ -207,6 +209,7 @@ class OpenPackTask(Task):
         self._home_check_count = 0  # 主页无免费包检查次数
         self._packs_opened_count = 0  # 本次任务已开包数量
         self._result_recognized = False  # 本次开包是否已识别结果
+        self._recognition_retry_count = 0  # 结果页识别重试次数
         self._skip_reason: Optional[str] = None  # 跳过原因
         self._current_pack_cards: list[dict] = []  # 本次开包识别到的卡牌数据
 
@@ -230,6 +233,7 @@ class OpenPackTask(Task):
             AccountPackConfigRepository,
             PackRecordRepository,
             TaskInstanceRepository,
+            CardRepository,
         )
 
         # 初始化仓储
@@ -275,15 +279,16 @@ class OpenPackTask(Task):
 
             manager = ImageResourceManager()
             pack_code = config.pack_code
-            booster_name = config.booster_name
+            # booster_name = config.booster_name
 
             # 1. 下载/处理图片
-            manager.ensure_pack_ready(booster_name, pack_code)
+            manager.ensure_series_ready(pack_code)
 
-            # 2. 加载特定卡包的模板到匹配器
+            # 2. 加载特定系列的模板到匹配器
+            # 为什么换回加载系列，目前元数据有些错误。。。子包对应不对，因此载入整个系列，好在性能尚可，问题不大。
             if self.recognizer:
                 _, template_matcher = self.recognizer
-                template_matcher.load_pack_templates(pack_code, booster_name)
+                template_matcher.load_pack_templates(pack_code)
 
         except Exception as e:
             logger.error(f"准备图片资源失败: {e}")
@@ -479,6 +484,8 @@ class OpenPackTask(Task):
 
         settings = get_settings()
         template_name = self._get_target_template_name()
+        if not template_name:
+            return ActionResult.fail("未配置目标卡包模板")
 
         # 1. 模板匹配查找目标扩充包（优先）
         result = tap_template_with_scale(
@@ -494,8 +501,8 @@ class OpenPackTask(Task):
         # 2. 尝试切换到目标系列
         target_series = self._get_target_series()
         if target_series:
-            series_patterns = TEXT_PATTERNS.get("series", {})
-            if target_series in series_patterns:
+            series_patterns = get_config_value("series")
+            if isinstance(series_patterns, dict) and target_series in series_patterns:
                 patterns = series_patterns[target_series]
                 result = tap_template_or_text(
                     self.adb,
@@ -524,7 +531,7 @@ class OpenPackTask(Task):
 
         # 未找到，返回上一页
         return navigate_back(
-            self.adb, self.page_detector, ocr_results, TEXT_PATTERNS["back_button"]
+          self.adb, self.page_detector, ocr_results, get_text_patterns("back_button")
         )
 
     def _handle_pack_list(self, page_info: dict) -> ActionResult:
@@ -536,6 +543,8 @@ class OpenPackTask(Task):
 
         settings = get_settings()
         template_name = self._get_target_template_name()
+        if not template_name:
+            return ActionResult.fail("未配置目标卡包模板")
 
         # 1. 先检查当前是否是目标子包
         result = tap_template_with_scale(
@@ -582,6 +591,8 @@ class OpenPackTask(Task):
         if self.target_pack:
             settings = get_settings()
             template_name = self._get_target_template_name()
+            if not template_name:
+                return ActionResult.fail("未配置目标卡包模板")
 
             match = self.page_detector.find_template_with_scale(
                 template_name,
@@ -664,6 +675,9 @@ class OpenPackTask(Task):
         result = long_press_text(self.adb, ocr_results, long_press_patterns)
         if result:
             logger.info("  -> 长按文字跳过卡牌展示")
+            # 强制等待 4 秒，确保转场动画结束且结果页标题已显示
+            # 防止过早识别成通用的 "点击继续" 按钮
+            result.wait = 4.0
             return result
 
         # fallback 到屏幕中心
@@ -677,7 +691,7 @@ class OpenPackTask(Task):
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（pack_card_register 页面）仅在有新卡时出现"""
-        logger.info(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
+        logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         start, end = swipe_card_coords(self.adb)
         return swipe(self.adb, start, end, duration=SWIPE_DURATION_REGISTER)
 
@@ -686,8 +700,15 @@ class OpenPackTask(Task):
         from ptcgp_auto_v2.utils.packs import get_boosters
 
         boosters = get_boosters(pack_code)
-        logger.info(f"系列 {pack_code} 有 {len(boosters)} 个子包: {boosters}")
+        logger.debug(f"系列 {pack_code} 有 {len(boosters)} 个子包: {boosters}")
         return boosters
+
+    def _get_target_series(self) -> Optional[str]:
+        """根据 pack_code 获取目标系列（A/B）"""
+        if not self.target_pack:
+            return None
+        pack_code = self.target_pack["pack_code"]
+        return pack_code[0].upper() if pack_code else None
 
     def _get_target_template_name(self) -> Optional[str]:
         """获取目标卡包的模板名称"""
@@ -702,21 +723,30 @@ class OpenPackTask(Task):
         处理开包结果页（pack_opening_result）
 
         1. 识别卡牌（如果尚未识别）
-        2. 点击屏幕中心继续
+        2. 点击继续按钮
         """
         if not self._result_recognized:
             try:
                 # 调用 Infra 层服务进行识别
                 cards = self.card_recognizer.scan_pack_result()
                 if cards:
+                    # 识别成功，重置计数
+                    self._recognition_retry_count = 0
+
+                    # 关键修复：如果我们识别到了卡牌，说明至少开了一包
+                    # 如果是从结果页启动任务的，_packs_opened_count 可能为 0，需要修正
+                    if self._packs_opened_count == 0:
+                        self._packs_opened_count = 1
+                        self._phase = OpenPackPhase.PACK_OPENED
+
                     card_names = [f"{c.name}({c.confidence:.2f})" for c in cards]
-                    logger.info(f"====== 识别到 {len(cards)} 张卡牌 ======")
+                    logger.debug(f"====== 识别到 {len(cards)} 张卡牌 ======")
 
                     # 保存识别结果
                     set_code = self.target_pack["pack_code"]
 
                     for i, c in enumerate(cards):
-                        logger.info(f"  - {c.name} (Conf: {c.confidence:.2f})")
+                        logger.debug(f"  - {c.name} (Conf: {c.confidence:.2f})")
 
                         # 查询卡牌详细信息
                         card_obj = None
@@ -729,18 +759,29 @@ class OpenPackTask(Task):
                             "rarity": card_obj.rarity if card_obj else "Unknown",
                             "card_id": card_obj.id if card_obj else None,
                             "is_new": False,  # TODO: 识别 New 标志
-                            "position": i,
+                            "position": i + 1,
                             "confidence": float(c.confidence)
                         }
                         self._current_pack_cards.append(card_data)
 
-                    logger.info("==================================")
+                    logger.debug("==================================")
+                    self._result_recognized = True
                 else:
-                    logger.info("未识别到卡牌")
+                    # 识别失败，尝试重试
+                    self._recognition_retry_count += 1
+                    if self._recognition_retry_count <= 3:
+                        logger.debug(f"未识别到卡牌，等待重试 ({self._recognition_retry_count}/3)")
+                        # 返回等待，不点击继续，让下次循环重新进入此函数
+                        return ActionResult.ok(wait=2.0)
+                    else:
+                        logger.warning("卡牌识别连续失败 3 次，跳过识别")
+                        self._result_recognized = True
+
             except Exception as e:
                 logger.error(f"识别卡牌失败: {e}")
-            finally:
                 self._result_recognized = True
+                self._recognition_retry_count = 0
 
-        logger.debug("  -> 点击屏幕中心继续")
-        return tap_center(self.adb, wait=1.5)
+        logger.debug("  -> 点击继续")
+        # return ActionResult.ok(wait=1.0)
+        return tap_continue(self.adb,  page_info.get("ocr_results", []), wait=1.5)
