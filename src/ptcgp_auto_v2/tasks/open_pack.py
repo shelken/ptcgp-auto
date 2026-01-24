@@ -397,7 +397,9 @@ class OpenPackTask(Task):
                 f"{self.target_pack['pack_code']}/{self.target_pack['booster_name']}"
             )
             self._pack_record_repo.create_for_account(
-                self.account.id, pack_type=pack_type
+                self.account.id,
+                pack_type=pack_type,
+                cards=self._current_pack_cards
             )
             logger.info(
                 f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包）"
