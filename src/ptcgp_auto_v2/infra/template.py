@@ -142,21 +142,24 @@ class TemplateMatcher:
     def load_templates(self, screen_width: int = TEMPLATE_BASE_WIDTH):
         self.load_core_templates(screen_width)
 
-    def load_pack_templates(self, pack_code: str, booster_name: str) -> int:
+    def load_pack_templates(self, pack_code: str, booster_name: Optional[str] = None) -> int:
         """
         加载指定卡包的模板（卡牌图片）
 
         Args:
             pack_code: 卡包代码，如 "A1"
-            booster_name: 子包名称，如 "Charizard"
+            booster_name: 子包名称，如 "Charizard" (可选，若不传则加载该系列下所有卡牌)
 
         Returns:
             加载数量
         """
-        # 路径规则: cards/{pack_code}/{booster_name_safe}
-        # 确保空格被替换为下划线
-        safe_booster = normalize_name_str(booster_name)
-        sub_dir = f"cards/{pack_code}/{safe_booster}"
+        # 路径规则: cards/{pack_code}[/{booster_name_safe}]
+        sub_dir = f"cards/{pack_code}"
+
+        if booster_name:
+            # 确保空格被替换为下划线
+            safe_booster = normalize_name_str(booster_name)
+            sub_dir = f"{sub_dir}/{safe_booster}"
 
         target_dir = self.templates_dir / sub_dir
         if not target_dir.exists():
@@ -168,7 +171,8 @@ class TemplateMatcher:
             if self._load_template_file(file, is_pack_template=True):
                 count += 1
 
-        logger.debug(f"加载卡包模板 {pack_code}/{booster_name}: {count} 个")
+        label = f"{pack_code}/{booster_name}" if booster_name else f"{pack_code}(All)"
+        logger.debug(f"加载卡包模板 {label}: {count} 个")
         return count
 
     def unload_pack_templates(self):
