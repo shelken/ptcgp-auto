@@ -6,8 +6,10 @@
 import os
 from pathlib import Path
 from typing import Optional, List
+from dataclasses import dataclass
 
 import cv2
+import numpy as np
 from PIL import ImageDraw
 
 from ptcgp_auto.debug_tools import context
@@ -16,7 +18,15 @@ from ptcgp_auto.recognizer_parts.template_matcher import _normalize_template_nam
 from ptcgp_auto import config
 from ptcgp_auto.debug_tools.card_matcher import scan_best_scale
 from ptcgp_auto.debug_tools.card_selector import CardSelector
-from ptcgp_auto_v2.utils.card_naming import normalize_name_str
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str, get_card_filename
+from ptcgp_auto_v2.utils.debug_visualizer import DebugVisualizer
+
+@dataclass
+class SimpleRecognizedCard:
+    """用于 DebugVisualizer 的简单适配器"""
+    name: str
+    confidence: float
+    box: tuple
 
 # -----------------------------------------------------------------------------
 # 辅助函数
@@ -154,8 +164,6 @@ def _prepare_and_load_templates(
                             from sqlmodel import select, Session
                             from ptcgp_auto_v2.db.engine import get_engine
 
-                            from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
-
                             with Session(get_engine()) as session:
                                 query = (
                                     select(Card)
@@ -166,7 +174,7 @@ def _prepare_and_load_templates(
                                 )
                                 cards = session.exec(query).all()
                                 target_filenames = {
-                                    ImageResourceManager.get_card_filename(c)[:-4]  # remove .png
+                                    get_card_filename(c.number, c.name)[:-4]  # remove .png
                                     for c in cards
                                 }
                                 print(f"Found {len(target_filenames)} cards with rarity {rarity}")
@@ -237,7 +245,7 @@ def _prepare_and_load_templates(
                                 )
                                 cards = session.exec(query).all()
                                 target_filenames = {
-                                    ImageResourceManager.get_card_filename(c)[:-4]
+                                    get_card_filename(c.number, c.name)[:-4]
                                     for c in cards
                                 }
                                 print(f"Found {len(target_filenames)} cards with rarity {rarity}")
@@ -346,6 +354,8 @@ def _run_cards_match(adb, args):
     start_time = time.time()
 
     preview_img = img.copy()
+    # 备份原始全图用于 DebugVisualizer (因为 img 可能会被 crop)
+    original_full_img = img.copy()
 
     # --- ROI 处理 ---
     roi_offset = (0, 0)
@@ -443,6 +453,8 @@ def _run_cards_match(adb, args):
             results.append(f.result())
 
     # 处理结果
+    recognized_cards = []  # 收集结果用于 DebugVisualizer
+
     for idx, result in enumerate(results):
         t_name = result["name"]
         color = colors[idx % len(colors)]
@@ -468,6 +480,13 @@ def _run_cards_match(adb, args):
                     x2 += roi_offset[0]
                     y2 += roi_offset[1]
 
+                    # 添加到可视化列表
+                    recognized_cards.append(SimpleRecognizedCard(
+                        name=t_name,
+                        confidence=conf,
+                        box=(x1, y1, x2, y2)
+                    ))
+
                     for offset in range(2):
                         draw.rectangle(
                             [x1 - offset, y1 - offset, x2 + offset, y2 + offset],
@@ -487,10 +506,35 @@ def _run_cards_match(adb, args):
     print(f"  Match Hits       : {match_hits}")
     print("-" * 50)
 
-    # 5. 终端预览
-    from ptcgp_auto.debug_tools.terminal_preview import preview_image_inline
-    print("\nPREVIEW:")
-    preview_image_inline(preview_img)
+    # 5. 调用 DebugVisualizer 生成可视化图片
+    # 将 PIL 图片转回 CV2 格式 (使用未裁剪的全图)
+    img_cv = cv2.cvtColor(np.array(original_full_img), cv2.COLOR_RGB2BGR)
+
+    # 构造 ROI 参数 (x, y, w, h)
+    roi_tuple = None
+    if args.roi:
+        try:
+            rx, ry, rw, rh = map(int, args.roi.split(","))
+            roi_tuple = (rx, ry, rw, rh)
+        except:
+            pass
+
+    # 强制启用 debug 模式以确保生成图片 (因为 debug tool 本身就是调试用的)
+    # 临时覆盖 settings.debug
+    from ptcgp_auto_v2.config.settings import get_settings
+    settings = get_settings()
+    original_debug = settings.debug
+    settings.debug = True
+
+    try:
+        DebugVisualizer.draw_recognition_result(
+            image=img_cv,
+            roi=roi_tuple,
+            cards=recognized_cards,
+            filename_prefix="debug_cards"
+        )
+    finally:
+        settings.debug = original_debug
 
 
 def run_non_interactive(args):
