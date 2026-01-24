@@ -81,78 +81,111 @@ class OcrEngine:
         from Foundation import NSData
         import objc
 
+        if image is None:
+            logger.error("OCR 输入图片为 None")
+            return []
+
         width = image.width
         height = image.height
 
+        if width <= 0 or height <= 0:
+            logger.warning(f"OCR 忽略无效图片尺寸: {width}x{height}")
+            return []
+
         # 转换图片为 PNG 数据
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        png_data = buffer.getvalue()
-        buffer.close()
+        try:
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            png_data = buffer.getvalue()
+            buffer.close()
+        except Exception as e:
+            logger.error(f"OCR 图片转换 PNG 失败: {e}")
+            return []
+
+        if not png_data:
+            logger.warning("OCR 图片转换后数据为空")
+            return []
 
         results = []
 
-        with objc.autorelease_pool():
-            # 创建 CGImage
-            ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
-            image_source = Quartz.CGImageSourceCreateWithData(ns_data, None)
-            cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
+        try:
+            with objc.autorelease_pool():
+                # 创建 CGImage
+                ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
+                if ns_data is None:
+                    logger.error("无法创建 NSData")
+                    return []
 
-            if cg_image is None:
-                logger.error("无法创建 CGImage")
-                return []
+                image_source = Quartz.CGImageSourceCreateWithData(ns_data, None)
+                if image_source is None:
+                    logger.error("无法创建 CGImageSource")
+                    return []
 
-            # 创建识别请求
-            request = Vision.VNRecognizeTextRequest.alloc().init()
+                cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
 
-            # 设置识别级别
-            if self.recognition_level == "fast":
-                request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
-            else:
-                request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+                if cg_image is None:
+                    logger.error("无法创建 CGImage")
+                    return []
 
-            # 设置识别语言
-            request.setRecognitionLanguages_(self.languages)
-            request.setAutomaticallyDetectsLanguage_(True)
+                # 创建识别请求
+                request = Vision.VNRecognizeTextRequest.alloc().init()
 
-            # 执行识别
-            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-                cg_image, None
-            )
+                # 设置识别级别
+                if self.recognition_level == "fast":
+                    request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
+                else:
+                    request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
 
-            success = handler.performRequests_error_([request], None)
+                # 设置识别语言
+                request.setRecognitionLanguages_(self.languages)
+                request.setAutomaticallyDetectsLanguage_(True)
 
-            if not success:
-                logger.error("OCR 请求执行失败")
-                return []
+                # 执行识别
+                handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
+                    cg_image, None
+                )
 
-            # 处理结果
-            observations = request.results()
+                success = handler.performRequests_error_([request], None)
 
-            if observations:
-                for observation in observations:
-                    top_candidate = observation.topCandidates_(1)
-                    if top_candidate and len(top_candidate) > 0:
-                        text = str(top_candidate[0].string())
-                        confidence = float(top_candidate[0].confidence())
+                # 处理 PyObjC 可能返回 (bool, error) 元组的情况
+                if isinstance(success, tuple):
+                    success = success[0]
 
-                        # 转换坐标（Vision 坐标系原点在左下角）
-                        bounding_box = observation.boundingBox()
-                        x = bounding_box.origin.x
-                        y = bounding_box.origin.y
-                        w = bounding_box.size.width
-                        h = bounding_box.size.height
+                if not success:
+                    logger.error("OCR 请求执行失败")
+                    return []
 
-                        x1 = int(x * width)
-                        y1 = int((1 - y - h) * height)
-                        x2 = int((x + w) * width)
-                        y2 = int((1 - y) * height)
+                # 处理结果
+                observations = request.results()
 
-                        results.append(OcrResult(
-                            text=text,
-                            box=(x1, y1, x2, y2),
-                            confidence=confidence,
-                        ))
+                if observations:
+                    for observation in observations:
+                        top_candidate = observation.topCandidates_(1)
+                        if top_candidate and len(top_candidate) > 0:
+                            text = str(top_candidate[0].string())
+                            confidence = float(top_candidate[0].confidence())
+
+                            # 转换坐标（Vision 坐标系原点在左下角）
+                            bounding_box = observation.boundingBox()
+                            x = bounding_box.origin.x
+                            y = bounding_box.origin.y
+                            w = bounding_box.size.width
+                            h = bounding_box.size.height
+
+                            x1 = int(x * width)
+                            y1 = int((1 - y - h) * height)
+                            x2 = int((x + w) * width)
+                            y2 = int((1 - y) * height)
+
+                            results.append(OcrResult(
+                                text=text,
+                                box=(x1, y1, x2, y2),
+                                confidence=confidence,
+                            ))
+
+        except Exception as e:
+            logger.error(f"OCR 引擎内部异常: {e}")
+            return []
 
         return results
 
