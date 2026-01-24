@@ -166,7 +166,7 @@ class ClaimGiftsTask(Task):
 
         # home_icon：点击回主页
         if page_name == "home_icon":
-            logger.info("  -> 点击主页图标回到游戏主页")
+            logger.debug("  -> 点击主页图标回到游戏主页")
             return tap_home_icon(self.adb, self.page_detector, wait=3.0)
 
         # 其他页面
@@ -199,14 +199,14 @@ class ClaimGiftsTask(Task):
 
         if gift_icon:
             # 有礼物，点击进入
-            logger.info("  -> 检测到礼物图标，进入礼物盒页面")
+            logger.debug("  -> 检测到礼物图标，进入礼物盒页面")
             self._phase = ClaimGiftsPhase.ENTERING_GIFTS
             tap_box(self.adb, gift_icon.box, wait=1.0)
             time.sleep(4.0)
             return ActionResult.ok(wait=1.0)
 
         # 未找到礼物图标，直接结束
-        logger.info("  -> 未检测到礼物图标，任务完成")
+        logger.debug("  -> 未检测到礼物图标，任务完成")
         self._phase = ClaimGiftsPhase.NO_GIFTS
         return ActionResult.ok(wait=1.0)
 
@@ -216,7 +216,7 @@ class ClaimGiftsTask(Task):
 
         领取礼物后可能展示新卡牌，需要向上滑动将卡牌登录至图�的。
         """
-        logger.info("  -> 卡牌登录页面，向上滑动登录卡牌")
+        logger.debug("  -> 卡牌登录页面，向上滑动登录卡牌")
         start, end = swipe_card_coords(self.adb)
         return swipe(self.adb, start, end, duration=300, wait=1.0)
 
@@ -232,11 +232,11 @@ class ClaimGiftsTask(Task):
         # 精确匹配「謝謝！」按钮
         result = tap_text(self.adb, ocr_results, thanks_patterns, wait=1.5, exact=True)
         if result:
-            logger.info("  -> 点击「謝謝！」按钮")
+            logger.debug("  -> 点击「謝謝！」按钮")
             return result
 
         # 未找到按钮，等待
-        logger.warning("  -> 未找到「謝謝！」按钮")
+        logger.debug("  -> 未找到「謝謝！」按钮")
         return ActionResult.ok(wait=1.0)
 
     def _handle_gift_box(self, page_info: dict) -> ActionResult:
@@ -260,7 +260,7 @@ class ClaimGiftsTask(Task):
         self._claim_attempt_count += 1
         if self._claim_attempt_count >= 2:
             # 连续 2 次无可点击，返回主页
-            logger.info("  -> 礼物领取完成，返回主页")
+            logger.debug("  -> 礼物领取完成，返回主页")
             self._phase = ClaimGiftsPhase.RETURNING_HOME
             back_patterns = _get_patterns(TEXT_PATTERNS, "back_button")
             return navigate_back(
@@ -311,7 +311,7 @@ class ClaimGiftsTask(Task):
                         logger.debug(f"  -> 跳过 Tab 按钮: {pattern} @ y={button_y}")
                         continue
 
-                    logger.info(f"  -> 点击领取按钮: {pattern}")
+                    logger.debug(f"  -> 点击领取按钮: {pattern}")
                     return tap_box(self.adb, box, wait=1.5)
 
         return None

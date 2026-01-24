@@ -71,7 +71,7 @@ class AccountSwitcher:
             True 表示切换成功
         """
         if not account.xml_content:
-            logger.error(f"账号 {account.nickname} 没有 XML 内容")
+            logger.warning(f"账号 {account.nickname} 没有 XML 内容")
             return False
 
         xml_path = self._write_temp_xml(account)
@@ -123,7 +123,7 @@ class AccountSwitcher:
             return False
 
         if not self.is_rooted():
-            logger.error("设备未 Root，无法注入 XML")
+            logger.warning("设备未 Root，无法注入 XML")
             return False
 
         try:
@@ -213,7 +213,7 @@ class AccountSwitcher:
             是否提取成功
         """
         if not self.is_rooted():
-            logger.error("设备未 Root，无法提取 XML")
+            logger.warning("设备未 Root，无法提取 XML")
             return False
 
         try:

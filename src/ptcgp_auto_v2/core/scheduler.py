@@ -366,7 +366,7 @@ class Scheduler:
         )
 
         tasks.insert(0, prereq_instance)
-        logger.info(f"批量任务插入前置任务: fetch_account_info (账号: {account.nickname})")
+        logger.debug(f"批量任务插入前置任务: fetch_account_info (账号: {account.nickname})")
 
         return tasks
 
@@ -428,7 +428,7 @@ class Scheduler:
         task_instance.status = TaskStatus.RUNNING.value
         task_instance.save()
 
-        logger.info(
+        logger.debug(
             f"分配任务: {task_instance.task_type} "
             f"(账号: {task_instance.account.nickname}, "
             f"设备: {device.address})"
@@ -456,7 +456,7 @@ class Scheduler:
             task_instance.save()
 
         task_types = [t.task_type for t in task_instances]
-        logger.info(
+        logger.debug(
             f"分配批量任务: {task_types} "
             f"(账号: {account.nickname}, 设备: {device.address})"
         )
