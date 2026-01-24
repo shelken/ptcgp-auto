@@ -59,3 +59,4 @@ Phase 3
 ## Notes
 - 严格限制在 src/ptcgp_auto_v2
 - 不触碰 v1 代码
+- 2026-01-24：继续检查 infra 与 core 简化重构点

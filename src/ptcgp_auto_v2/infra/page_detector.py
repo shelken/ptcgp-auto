@@ -233,24 +233,9 @@ class PageDetector:
         exact_match: bool,
     ) -> Optional[dict]:
         """查找单个标识符"""
-        identifier_lower = identifier.lower()
-        identifier_normalized = "".join(identifier_lower.split())
-
         for ocr_item in ocr_results:
             ocr_text = ocr_item["text"].strip()
-            ocr_lower = ocr_text.lower()
-            ocr_normalized = "".join(ocr_lower.split())
-
-            if exact_match:
-                matched = identifier_lower == ocr_lower
-            else:
-                matched = (
-                    identifier_lower == ocr_lower
-                    or identifier_lower in ocr_lower
-                    or identifier_normalized in ocr_normalized
-                )
-
-            if matched:
+            if self.ocr_engine.match_text(identifier, ocr_text, exact_match):
                 return {
                     "type": "text",
                     "identifier": identifier,
