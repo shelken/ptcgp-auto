@@ -7,6 +7,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import List, Optional
 
@@ -23,7 +24,9 @@ from ptcgp_auto_v2.db.models import (
     Card,
     CardSet,
     CardPack,
+    PackCard,
 )
+from ptcgp_auto_v2.utils.card_naming import parse_card_number_from_filename
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,25 @@ class CardRepository:
                 Card.set_code == set_code, Card.number == number
             )
             return session.exec(statement).first()
+
+    def get_card_by_template_name(self, set_code: str, template_name: str) -> Optional[Card]:
+        """
+        根据模板名称获取卡牌
+
+        Args:
+            set_code: 系列代码 (如 A1)
+            template_name: 模板名称 (如 "001_Bulbasaur" 或 "025")
+
+        Returns:
+            Card对象或None
+        """
+        # 尝试提取开头的数字部分
+        number = parse_card_number_from_filename(template_name)
+        if number is not None:
+            return self.get_card_by_set_and_number(set_code, number)
+
+        logger.warning(f"Failed to parse card number from template: {template_name}")
+        return None
 
     def upsert_card(self, card: Card) -> Card:
         """更新或创建卡牌"""
@@ -744,10 +766,43 @@ class PackRecordRepository:
             session.refresh(record)
             return record
 
-    def create_for_account(self, account_id: int, pack_type: str = "") -> PackRecord:
-        """为账号创建开包记录"""
-        record = PackRecord(account_id=account_id, pack_type=pack_type)
-        return self.create(record)
+    def create_for_account(
+        self, account_id: int, pack_type: str = "", cards: List[dict] = None
+    ) -> PackRecord:
+        """
+        为账号创建开包记录
+
+        Args:
+            account_id: 账号ID
+            pack_type: 卡包类型
+            cards: 包含卡牌信息的字典列表 [{"card_name":..., "rarity":..., "card_id":..., "is_new":..., "position":...}]
+        """
+        with Session(get_engine()) as session:
+            # 1. 创建 PackRecord
+            record = PackRecord(account_id=account_id, pack_type=pack_type)
+            session.add(record)
+            # 使用 flush 而不是 commit，确保在同一个事务中
+            session.flush()
+
+            # 2. 如果有卡牌明细，创建 PackCard
+            if cards:
+                for card_data in cards:
+                    pack_card = PackCard(
+                        pack_record_id=record.id,
+                        card_id=card_data.get("card_id"),
+                        card_name=card_data.get("card_name", "Unknown"),
+                        rarity=card_data.get("rarity"),
+                        is_new=card_data.get("is_new", False),
+                        position=card_data.get("position", 0),
+                        confidence=card_data.get("confidence", 0.0)
+                    )
+                    session.add(pack_card)
+
+            # 3. 统一提交
+            session.commit()
+            session.refresh(record)
+
+            return record
 
     def count_by_account(self, account_id: int) -> int:
         """统计账号的开包总数"""
