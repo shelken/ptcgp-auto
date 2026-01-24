@@ -9,6 +9,7 @@ from .account import Account
 from .account_pack_config import AccountPackConfig
 from .base import TimestampMixin
 from .pack_record import PackRecord
+from .pack_card import PackCard
 from .task_instance import TaskInstance
 from .task_plan import TaskPlan
 from .card import Card, CardSet, CardPack
@@ -19,6 +20,7 @@ __all__ = [
     "Account",
     "TaskInstance",
     "PackRecord",
+    "PackCard",
     "AccountPackConfig",
     "Card",
     "CardSet",

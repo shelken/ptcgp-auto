@@ -12,6 +12,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from .account import Account
+    from .pack_card import PackCard
 
 
 class PackRecord(SQLModel, table=True):
@@ -30,6 +31,7 @@ class PackRecord(SQLModel, table=True):
 
     # 关系
     account: Optional["Account"] = Relationship(back_populates="pack_records")
+    cards: list["PackCard"] = Relationship(back_populates="pack_record", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
     def to_dict(self) -> dict:
         """转换为字典"""

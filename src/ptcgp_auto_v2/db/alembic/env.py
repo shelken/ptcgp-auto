@@ -68,12 +68,16 @@ def run_migrations_online() -> None:
 
     创建数据库引擎并执行迁移。
     """
-    from sqlalchemy import create_engine
+    from sqlalchemy import create_engine, text
 
     url = get_url()
     connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
+        # [关键修复] 在 Batch 迁移前显式关闭 SQLite 外键约束
+        # 防止表重命名时，SQLite 自动将外键引用更新到临时表 (_old)
+        connection.execute(text("PRAGMA foreign_keys=OFF"))
+
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
