@@ -81,7 +81,7 @@ class TemplateMatcher:
 
         self._screen_width = width
         self._current_scale = width / self.base_width
-        logger.info(
+        logger.debug(
             f"设置模板缩放比例: {self._current_scale:.2f} "
             f"({width}/{self.base_width})"
         )
@@ -92,7 +92,7 @@ class TemplateMatcher:
         # 这里只清空 self.templates，_loaded_pack_templates 仅用于记录名称
         # 更好的做法可能是重新加载所有已知的模板，但这里我们假设调用方会按需重新加载
         if self.templates:
-            logger.info("缩放比例变化，清空已加载模板")
+            logger.debug("缩放比例变化，清空已加载模板")
             self.templates.clear()
             self._core_loaded = False
             self._loaded_pack_templates.clear()  # 它们也没了
@@ -136,7 +136,7 @@ class TemplateMatcher:
             if self._load_template_file(file):
                 count += 1
 
-        logger.info(f"加载核心模板: {count} 个")
+        logger.debug(f"加载核心模板: {count} 个")
         self._core_loaded = True
 
     # 兼容旧接口
@@ -169,7 +169,7 @@ class TemplateMatcher:
             if self._load_template_file(file, is_pack_template=True):
                 count += 1
 
-        logger.info(f"加载卡包模板 {pack_code}/{booster_name}: {count} 个")
+        logger.debug(f"加载卡包模板 {pack_code}/{booster_name}: {count} 个")
         return count
 
     def unload_pack_templates(self):
@@ -184,7 +184,7 @@ class TemplateMatcher:
                 count += 1
 
         self._loaded_pack_templates.clear()
-        logger.info(f"已卸载 {count} 个卡包模板")
+        logger.debug(f"已卸载 {count} 个卡包模板")
 
     def load_additional_templates(self, sub_dir: str):
         """
@@ -203,7 +203,7 @@ class TemplateMatcher:
             if self._load_template_file(file):
                 count += 1
 
-        logger.info(f"加载附加模板 {sub_dir}: {count} 个")
+        logger.debug(f"加载附加模板 {sub_dir}: {count} 个")
 
     def _load_template_file(self, file_path: Path, is_pack_template: bool = False) -> bool:
         """加载单个模板文件"""

@@ -175,7 +175,7 @@ class ClaimRewardsTask(Task):
 
         # home_icon：点击回主页
         if page_name == "home_icon":
-            logger.info("  -> 点击主页图标回到游戏主页")
+            logger.debug("  -> 点击主页图标回到游戏主页")
             return tap_home_icon(self.adb, self.page_detector, wait=3.0)
 
         # 其他页面
@@ -218,7 +218,7 @@ class ClaimRewardsTask(Task):
 
             if reward_icon:
                 # 有奖励，点击进入
-                logger.info("  -> 检测到奖励图标，进入任务页面")
+                logger.debug("  -> 检测到奖励图标，进入任务页面")
                 self._home_check_count = 0
                 self._phase = ClaimRewardsPhase.ENTERING_REWARDS
                 return tap_box(self.adb, reward_icon.box, wait=3.0)
@@ -229,10 +229,10 @@ class ClaimRewardsTask(Task):
 
         # 2 次都无奖励，累计检查次数
         self._home_check_count += 1
-        logger.info(f"  -> 确认无奖励图标（第 {self._home_check_count} 轮检查）")
+        logger.debug(f"  -> 确认无奖励图标（第 {self._home_check_count} 轮检查）")
 
         if self._home_check_count >= rounds or self._round_count >= MAX_ROUNDS:
-            logger.info("  -> 确认无奖励，任务完成")
+            logger.debug("  -> 确认无奖励，任务完成")
             self._phase = ClaimRewardsPhase.NO_REWARDS
 
         return ActionResult.ok(wait=1.0)
@@ -256,7 +256,7 @@ class ClaimRewardsTask(Task):
                 if "".join(pattern.lower().split()) == text:
                     box = item["box"]
                     if screenshot and is_button_clickable(screenshot, box, threshold=0.1):
-                        logger.info(f"  -> 点击领取按钮: {pattern}")
+                        logger.debug(f"  -> 点击领取按钮: {pattern}")
                         return tap_box(self.adb, box, wait=1.0)
                     else:
                         logger.debug(f"  -> 按钮 {pattern} 已置灰，跳过")
@@ -308,7 +308,7 @@ class ClaimRewardsTask(Task):
                 for tab in TAB_ORDER:
                     result = tap_tab(tab)
                     if result:
-                        logger.info(f"  -> 往左走，点击 {tab} Tab")
+                        logger.debug(f"  -> 往左走，点击 {tab} Tab")
                         return result
 
         # 阶段2：往右走，从左往右依次点击未访问的 Tab
@@ -319,14 +319,14 @@ class ClaimRewardsTask(Task):
                 if is_visible(tab):
                     result = tap_tab(tab)
                     if result:
-                        logger.info(f"  -> 点击 {tab} Tab")
+                        logger.debug(f"  -> 点击 {tab} Tab")
                         self._visited_tabs.add(tab)
                         return result
                 else:
                     for right_tab in reversed(TAB_ORDER):
                         result = tap_tab(right_tab)
                         if result:
-                            logger.info(f"  -> 往右走，点击 {right_tab} Tab")
+                            logger.debug(f"  -> 往右走，点击 {right_tab} Tab")
                             return result
 
         # 3. 所有 Tab 完成，进入主题收藏
@@ -334,7 +334,7 @@ class ClaimRewardsTask(Task):
             theme_patterns = TEXT_PATTERNS.get("theme_collection", [])
             result = tap_text(self.adb, ocr_results, theme_patterns, wait=1.0)
             if result:
-                logger.info("  -> 进入主题收藏")
+                logger.debug("  -> 进入主题收藏")
                 self._phase = ClaimRewardsPhase.CLAIMING_THEME_COLLECTION
                 self._theme_collection_done = True
                 return result
@@ -342,7 +342,7 @@ class ClaimRewardsTask(Task):
         # 4. 全部完成，返回主页
         self._round_count += 1
         self._reset_tab_state()
-        logger.info(f"  -> 本轮领取完成，返回主页（第 {self._round_count} 轮）")
+        logger.debug(f"  -> 本轮领取完成，返回主页（第 {self._round_count} 轮）")
 
         close_patterns = TEXT_PATTERNS.get("close_button", [])
         result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
@@ -369,7 +369,7 @@ class ClaimRewardsTask(Task):
             return result
 
         # 无可领取，返回任务页面
-        logger.info("  -> 主题收藏领取完成，返回")
+        logger.debug("  -> 主题收藏领取完成，返回")
         back_patterns = TEXT_PATTERNS.get("back_button", [])
         return navigate_back(self.adb, self.page_detector, ocr_results, back_patterns)
 

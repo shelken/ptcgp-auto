@@ -160,7 +160,7 @@ class AccountSyncer:
         try:
             # 检查是否有 Root 权限
             if not self._is_rooted():
-                logger.debug("设备未 Root")
+                logger.warning("设备未 Root")
                 return None
 
             # 复制 XML 到 sdcard
