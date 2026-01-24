@@ -18,6 +18,7 @@ from sqlmodel import Session
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.db.engine import get_engine
+from ptcgp_auto_v2.utils.card_naming import get_card_filename, normalize_name_str, parse_card_number_from_filename
 
 logger = logging.getLogger(__name__)
 
@@ -153,20 +154,6 @@ class ImageResourceManager:
         # 假设 local_image_path 是相对于项目根目录的路径 (templates/cards/...)
         return Path(card.local_image_path).exists()
 
-    @staticmethod
-    def normalize_name_str(name: str) -> str:
-        """统一的文件名标准化逻辑：过滤特殊字符 + 空格转下划线"""
-        # 保留字母数字、横杠、下划线、空格
-        safe_name = "".join([c for c in name if c.isalnum() or c in " -_"])
-        # 将空格替换为下划线
-        return safe_name.replace(" ", "_")
-
-    @staticmethod
-    def get_card_filename(card: Card) -> str:
-        """生成标准化的卡牌文件名 (空格替换为下划线)"""
-        safe_name = ImageResourceManager.normalize_name_str(card.name)
-        return f"{card.number:03d}_{safe_name}.png"
-
     def _process_single_card(self, card: Card) -> bool:
         """处理单张卡牌：下载 -> 裁剪 -> 保存 -> 更新DB"""
         if not card.image_url:
@@ -202,12 +189,12 @@ class ImageResourceManager:
             processed_img = self._crop_and_resize(img)
 
             # 保存到所有目标目录
-            filename = self.get_card_filename(card)
+            filename = get_card_filename(card)
 
             saved_paths = []
 
             for pack_name in pack_names:
-                safe_pack = pack_name.replace(" ", "_")
+                safe_pack = normalize_name_str(pack_name)
                 # 目录：templates/cards/{set_code}/{safe_pack}/
                 save_dir = self.cards_dir / card.set_code / safe_pack
                 save_dir.mkdir(parents=True, exist_ok=True)

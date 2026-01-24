@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD, TEMPLATE_BASE_WIDTH
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,7 @@ class TemplateMatcher:
         """
         # 路径规则: cards/{pack_code}/{booster_name_safe}
         # 确保空格被替换为下划线
-        safe_booster = booster_name.replace(" ", "_")
+        safe_booster = normalize_name_str(booster_name)
         sub_dir = f"cards/{pack_code}/{safe_booster}"
 
         target_dir = self.templates_dir / sub_dir

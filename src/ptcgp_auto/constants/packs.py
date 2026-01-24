@@ -8,6 +8,8 @@
 import json
 from pathlib import Path
 
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str
+
 # 数据文件路径
 DATA_FILE = Path(__file__).resolve().parent.parent.parent.parent / "data" / "packs.json"
 
@@ -57,10 +59,10 @@ def get_booster_choices(pack_code: str) -> list[tuple[str, str]]:
     boosters = pack.get("boosters", [])
     if not boosters:
         # 无子包时，使用扩充包名称
-        name = pack["name"].replace(" ", "_")
+        name = normalize_name_str(pack["name"])
         return [(name, pack["name"])]
 
-    return [(b.replace(" ", "_"), b) for b in boosters]
+    return [(normalize_name_str(b), b) for b in boosters]
 
 
 def get_template_path(pack_code: str, booster_name: str) -> str:
