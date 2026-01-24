@@ -7,6 +7,7 @@
 from pathlib import Path
 from typing import Optional, List, Tuple
 
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from .region_selector import select_region, get_cached_roi
 from .terminal_preview import preview_image_inline, get_terminal_support
 
@@ -27,14 +28,14 @@ def _build_all_boosters(templates_dir: Path) -> List[Tuple[str, str, str, bool]]
         boosters = info.get("boosters", [])
         if not boosters:
             # 无子包时，使用扩充包名称
-            name = info["name"].replace(" ", "_")
+            name = normalize_name_str(info["name"])
             display = f"{pack_code} - {info['name']}"
             template_path = templates_dir / get_template_path(pack_code, name)
             exists = template_path.exists()
             all_boosters.append((pack_code, name, display, exists))
         else:
             for booster in boosters:
-                name = booster.replace(" ", "_")
+                name = normalize_name_str(booster)
                 display = f"{pack_code} - {booster}"
                 template_path = templates_dir / get_template_path(pack_code, name)
                 exists = template_path.exists()

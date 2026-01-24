@@ -16,6 +16,7 @@ from ptcgp_auto.recognizer_parts.template_matcher import _normalize_template_nam
 from ptcgp_auto import config
 from ptcgp_auto.debug_tools.card_matcher import scan_best_scale
 from ptcgp_auto.debug_tools.card_selector import CardSelector
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 # -----------------------------------------------------------------------------
 # 辅助函数
@@ -102,7 +103,7 @@ def _prepare_and_load_templates(
 
                 if not card_name.lower().endswith(".png"):
                     card_name += ".png"
-                safe_pack = pack_name.replace(" ", "_")
+                safe_pack = normalize_name_str(pack_name)
                 local_path = (
                     Path("templates/cards") / series_code / safe_pack / card_name
                 )
@@ -135,7 +136,7 @@ def _prepare_and_load_templates(
                 # 传递 rarity 给 ensure_pack_ready
                 mgr.ensure_pack_ready(pack_name, series_code, rarity=rarity)
 
-                safe_pack = pack_name.replace(" ", "_")
+                safe_pack = normalize_name_str(pack_name)
                 pack_dir = Path("templates/cards") / series_code / safe_pack
 
                 if pack_dir.exists():
@@ -182,7 +183,7 @@ def _prepare_and_load_templates(
                             if file.stem in target_filenames:
                                 pass
                             # 2. 尝试规范化后匹配 (处理旧文件带空格的情况)
-                            elif file.stem.replace(" ", "_") in target_filenames:
+                            elif normalize_name_str(file.stem) in target_filenames:
                                 pass
                             else:
                                 continue
@@ -249,7 +250,7 @@ def _prepare_and_load_templates(
                             if file.stem in target_filenames:
                                 pass
                             # 2. 尝试规范化后匹配
-                            elif file.stem.replace(" ", "_") in target_filenames:
+                            elif normalize_name_str(file.stem) in target_filenames:
                                 pass
                             else:
                                 continue
