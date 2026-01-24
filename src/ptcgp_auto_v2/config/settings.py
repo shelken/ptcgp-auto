@@ -99,6 +99,9 @@ class Settings:
     ocr_recognition_level: str = DEFAULT_OCR_LEVEL  # "fast" or "accurate"
     template_threshold: float = DEFAULT_TEMPLATE_THRESHOLD
 
+    # 语言配置
+    locale: str = "zh_Hant"  # 默认界面语言 (对应 locales/ 下的文件名)
+
     # 调度配置
     poll_interval: float = DEFAULT_POLL_INTERVAL
     max_workers: int = DEFAULT_MAX_WORKERS

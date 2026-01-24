@@ -9,6 +9,7 @@ from typing import Callable, Optional, Tuple
 Box = tuple[int, int, int, int]
 
 from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.locales import get_text_patterns
 
 logger = logging.getLogger(__name__)
 
@@ -327,6 +328,17 @@ def click_continue(
         return result
     return tap_center(adb, wait=1.0)
 
+# 点继续文字
+def tap_continue(
+    adb, ocr_results: list[dict], patterns: Optional[list[str]] = None, wait: float = 1.0
+) -> ActionResult:
+    """点击继续文本"""
+    if not patterns:
+      patterns = get_text_patterns("continue_button")
+    result = tap_text(adb, ocr_results, patterns, exact=True, wait=wait)
+    if result:
+        return result
+    return tap_center(adb, wait=wait)
 
 def click_close(
     adb, page_detector, ocr_results: list[dict], patterns: list[str]
