@@ -18,6 +18,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
 
 
@@ -207,6 +208,7 @@ class OpenPackTask(Task):
         self._packs_opened_count = 0  # 本次任务已开包数量
         self._result_recognized = False  # 本次开包是否已识别结果
         self._skip_reason: Optional[str] = None  # 跳过原因
+        self._current_pack_cards: list[dict] = []  # 本次开包识别到的卡牌数据
 
         # 目标卡包配置
         self.target_pack = None  # {"pack_code": "A1", "booster_name": "Charizard"}
@@ -216,6 +218,7 @@ class OpenPackTask(Task):
         self._pack_config_repo: "AccountPackConfigRepository | None" = None
         self._pack_record_repo: "PackRecordRepository | None" = None
         self._task_instance_repo: "TaskInstanceRepository | None" = None
+        self._card_repo: "CardRepository | None" = None
 
     def on_start(self):
         """
@@ -233,6 +236,8 @@ class OpenPackTask(Task):
         self._pack_config_repo = AccountPackConfigRepository()
         self._pack_record_repo = PackRecordRepository()
         self._task_instance_repo = TaskInstanceRepository()
+        self._card_repo = CardRepository()
+        self._current_pack_cards = []
 
         # 1. 检查账号 ID
         if self.account.id is None:
@@ -402,7 +407,8 @@ class OpenPackTask(Task):
                 cards=self._current_pack_cards
             )
             logger.info(
-                f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包）"
+                f"已创建开包记录: {pack_type}（本次共开 {self._packs_opened_count} 包，"
+                f"识别到 {len(self._current_pack_cards)} 张卡牌）"
             )
         elif result.success and not result.skipped:
             logger.info("任务完成（无免费包），不创建开包记录")
@@ -688,7 +694,7 @@ class OpenPackTask(Task):
         if not self.target_pack:
             return None
         # 模板文件名使用下划线，需要将空格替换为下划线
-        booster_name = self.target_pack["booster_name"].replace(" ", "_")
+        booster_name = normalize_name_str(self.target_pack["booster_name"])
         return f"packs/{self.target_pack['pack_code']}/{booster_name}"
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
@@ -701,12 +707,33 @@ class OpenPackTask(Task):
         if not self._result_recognized:
             try:
                 # 调用 Infra 层服务进行识别
-                cards = self.card_recognizer.analyze_result_screen()
+                cards = self.card_recognizer.scan_pack_result()
                 if cards:
                     card_names = [f"{c.name}({c.confidence:.2f})" for c in cards]
                     logger.info(f"====== 识别到 {len(cards)} 张卡牌 ======")
-                    for c in cards:
+
+                    # 保存识别结果
+                    set_code = self.target_pack["pack_code"]
+
+                    for i, c in enumerate(cards):
                         logger.info(f"  - {c.name} (Conf: {c.confidence:.2f})")
+
+                        # 查询卡牌详细信息
+                        card_obj = None
+                        if self._card_repo:
+                            card_obj = self._card_repo.get_card_by_template_name(set_code, c.name)
+
+                        # 构建记录数据
+                        card_data = {
+                            "card_name": card_obj.name if card_obj else c.name,
+                            "rarity": card_obj.rarity if card_obj else "Unknown",
+                            "card_id": card_obj.id if card_obj else None,
+                            "is_new": False,  # TODO: 识别 New 标志
+                            "position": i,
+                            "confidence": float(c.confidence)
+                        }
+                        self._current_pack_cards.append(card_data)
+
                     logger.info("==================================")
                 else:
                     logger.info("未识别到卡牌")
