@@ -10,6 +10,29 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from ptcgp_auto_v2.config.constants import (
+    APP_ACTIVITY,
+    APP_PACKAGE,
+    BASE_SCREEN_HEIGHT,
+    BASE_SCREEN_WIDTH,
+    DEFAULT_ADB_ADDRESS,
+    DEFAULT_DB_NAME,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_MAX_SCROLL_ATTEMPTS,
+    DEFAULT_MAX_WORKERS,
+    DEFAULT_OCR_LANGUAGES,
+    DEFAULT_OCR_LEVEL,
+    DEFAULT_POLL_INTERVAL,
+    DEFAULT_RETRY_DELAY,
+    DEFAULT_TASK_GENERATION_INTERVAL,
+    DEFAULT_TEMPLATE_THRESHOLD,
+    DEFAULT_WAIT_AFTER_CLICK,
+    SCALE_PACK_DETAIL,
+    SCALE_PACK_LIST,
+    SCALE_PACK_SERIES_SELECT,
+    TEMPLATE_BASE_WIDTH,
+)
+
 logger = logging.getLogger(__name__)
 
 # 全局配置实例
@@ -31,11 +54,11 @@ class Settings:
     """
 
     # ADB 配置
-    device_addresses: List[str] = field(default_factory=lambda: ["127.0.0.1:5555"])
+    device_addresses: List[str] = field(default_factory=lambda: [DEFAULT_ADB_ADDRESS])
 
     # 应用配置
-    app_package: str = "jp.pokemon.pokemontcgp"
-    app_activity: str = "com.unity3d.player.UnityPlayerActivity"
+    app_package: str = APP_PACKAGE
+    app_activity: str = APP_ACTIVITY
 
     @property
     def app_data_dir(self) -> str:
@@ -67,29 +90,29 @@ class Settings:
 
     # 屏幕配置
     # 基准分辨率：用于坐标比例计算的参考值（模板图片基于此分辨率截取）
-    base_screen_width: int = 1080
-    base_screen_height: int = 1920
-    template_base_width: int = 1080
+    base_screen_width: int = BASE_SCREEN_WIDTH
+    base_screen_height: int = BASE_SCREEN_HEIGHT
+    template_base_width: int = TEMPLATE_BASE_WIDTH
 
     # 识别配置
-    ocr_languages: List[str] = field(default_factory=lambda: ["zh-Hant", "en-US"])
-    ocr_recognition_level: str = "accurate"  # "fast" or "accurate"
-    template_threshold: float = 0.7
+    ocr_languages: List[str] = field(default_factory=lambda: DEFAULT_OCR_LANGUAGES)
+    ocr_recognition_level: str = DEFAULT_OCR_LEVEL  # "fast" or "accurate"
+    template_threshold: float = DEFAULT_TEMPLATE_THRESHOLD
 
     # 调度配置
-    poll_interval: float = 5.0
-    max_workers: int = 4
-    task_generation_interval: float = 60.0
+    poll_interval: float = DEFAULT_POLL_INTERVAL
+    max_workers: int = DEFAULT_MAX_WORKERS
+    task_generation_interval: float = DEFAULT_TASK_GENERATION_INTERVAL
 
     # 执行配置
-    max_retries: int = 3
-    retry_delay: float = 30.0
-    wait_after_click: float = 0.3
+    max_retries: int = DEFAULT_MAX_RETRIES
+    retry_delay: float = DEFAULT_RETRY_DELAY
+    wait_after_click: float = DEFAULT_WAIT_AFTER_CLICK
 
     # 路径配置
     templates_dir: Path = field(default_factory=lambda: Path("templates"))
     data_dir: Path = field(default_factory=lambda: Path("data"))
-    db_name: str = "ptcgp_v2.db"
+    db_name: str = DEFAULT_DB_NAME
 
     @property
     def db_path(self) -> Path:
@@ -105,12 +128,12 @@ class Settings:
     debug: bool = False
 
     # 模板缩放比例
-    scale_pack_series_select: float = 0.23
-    scale_pack_list: float = 0.81
-    scale_pack_detail: float = 1.0
+    scale_pack_series_select: float = SCALE_PACK_SERIES_SELECT
+    scale_pack_list: float = SCALE_PACK_LIST
+    scale_pack_detail: float = SCALE_PACK_DETAIL
 
     # 最大尝试次数
-    max_scroll_attempts: int = 10
+    max_scroll_attempts: int = DEFAULT_MAX_SCROLL_ATTEMPTS
 
     def __post_init__(self):
         """初始化后处理"""

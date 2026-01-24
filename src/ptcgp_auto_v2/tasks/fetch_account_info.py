@@ -50,6 +50,9 @@ FRIEND_ID_PATTERN = re.compile(r"\d{4}-\d{4}-\d{4}-\d{4}")
 # level 格式：Lv. 或 Lv 后跟数字
 LEVEL_PATTERN = re.compile(r"Lv\.?\s*(\d+)")
 
+# 最大重试次数
+MAX_ATTEMPTS = 3
+
 
 class FetchPhase(Enum):
     """任务阶段"""
@@ -131,7 +134,7 @@ class FetchAccountInfoTask(Task):
         self._fetched_friend_id: Optional[str] = None
         self._fetched_nickname: Optional[str] = None
         self._fetched_level: Optional[int] = None
-        self._max_attempts = 3
+        self._max_attempts = MAX_ATTEMPTS
         self._attempt_count = 0
 
     def setup(self) -> bool:
