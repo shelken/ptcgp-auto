@@ -17,39 +17,22 @@ PTCGP Auto
 
 ---
 
-Pokemon TCG Pocket 单人对战自动化脚本，支持任何可通过 ADB 连接的 Android 设备或模拟器。
+Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
+**v2 版本全新架构**：采用任务队列 + 多设备调度模式，专为多账号日常托管设计。
 
-## 功能
+## ✨ 核心功能 (v2)
 
-- 自动单人对战（分级对战）
-- 按优先级自动遍历等级和卡包
-- 支持多设备同时控制
-- **每日开包模式**（开发中）- 自动轮换账号开免费包
+- **多账号管理**：自动轮换账号，支持数十个账号托管
+- **任务队列架构**：支持 `每日开包`、`领取奖励`、`领取礼物` 等原子任务
+- **智能调度**：根据任务优先级和设备空闲状态自动分配任务
+- **数据持久化**：使用 SQLite 记录账号信息、任务状态和开包历史
+- **断点续传**：任务执行失败自动重试，进程重启后自动恢复进度
 
-## 运行模式
+## 🚀 快速开始
 
-| 模式 | 命令 | 说明 |
-|------|------|------|
-| 对战模式 | `python main.py` | 默认模式，自动单人对战 |
-| 教程模式 | `python main.py -t` | 解锁单人对战的教程流程 |
-| 每日开包 | `python main.py --daily` | 轮换账号开免费包（需 root） |
+### 1. 环境准备
 
-## 技术栈
-
-- **ADB 控制**: adbutils
-- **OCR**: Apple Vision Framework (GPU 加速)
-- **模板匹配**: OpenCV
-- **状态管理**: JSON
-
-## 前置条件
-
-- 设备需开启 ADB 调试
-- 游戏语言需设为**繁体中文**（或配置对应语言）
-- **启动前需手动进入游戏对战页面**（能看到"單人對戰"按钮的界面）
-
-## 安装
-
-### 使用 Nix (推荐)
+推荐使用 [Nix](https://nixos.org/) 管理环境（可选）：
 
 ```bash
 nix develop
@@ -57,123 +40,79 @@ nix develop
 direnv allow
 ```
 
-### 手动安装
-
+手动安装依赖：
 ```bash
 pip install -r requirements.txt
 ```
 
-依赖：
-- Python 3.10+
-- adbutils
-- opencv-python
-- Pillow
-- pyobjc-framework-Vision (macOS)
-
-## 使用
+### 2. 启动 v2 守护进程
 
 ```bash
-# 默认连接 127.0.0.1:5555
-python main.py
-
-# 指定 ADB 地址
-python main.py -a 5556
-python main.py -a 192.168.1.100:5555
-
-# v2：未指定 -d 时自动发现 BlueStacks 设备
+# 自动发现 BlueStacks 模拟器并启动守护模式
 python main_v2.py --daemon
 
-# v2：手动切换账号（支持端口简写，勿与 --task/--daemon 同时使用）
-python main_v2.py --switch-account 4 -d 5715
-
-# 调试工具
-python debug_tool.py
-python debug_tool.py -a 5556
+# 指定设备启动
+python main_v2.py --daemon -d 127.0.0.1:5555
 ```
 
-## 配置
+### 3. 常用命令
 
-编辑 `config.py` 查看和修改所有配置项，包括：
-- `LANGUAGE` - 语言配置（可选: "zh_Hant", "en_US"）
-- `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔
-- `DEBUG` - 调试模式
-
-## 多设备
-
-每个设备使用独立的临时目录：
-
-```
-/tmp/ptcgp_auto_5555/state.json
-/tmp/ptcgp_auto_5556/state.json
-```
-
-重置进度：
 ```bash
-rm /tmp/ptcgp_auto_5555/state.json
+# 查看帮助
+python main_v2.py --help
+
+# 列出所有账号
+python main_v2.py --list-accounts
+
+# 列出支持的任务类型
+python main_v2.py --list-tasks
+
+# 手动执行单次任务（调试用）
+python main_v2.py --task open_pack --account 1
+
+# 同步当前设备登录的账号到数据库
+python main_v2.py --sync-account
 ```
 
-## 文件结构
+## 🏗️ 架构说明
+
+v2 版本采用 `Scheduler` (调度器) + `Executor` (执行器) 架构：
+
+- **Scheduler**: 负责生成任务、监控设备状态、分发任务。
+- **Executor**: 运行在具体设备线程中，负责执行原子任务逻辑（如 OCR 识别、点击操作）。
+- **Database**: SQLite (`data/ptcgp_v2.db`) 存储所有状态，确保数据安全。
+
+## 📂 文件结构
 
 ```
 ptcgp-auto/
-├── main.py                 # 主程序入口
-├── debug_tool.py           # 调试工具入口
+├── main_v2.py                  # v2 入口（推荐）
+├── main.py                     # v1 入口（旧版对战，即将在 v2 中重构）
+├── debug_tool.py               # 调试工具
 ├── src/
-│   └── ptcgp_auto/
-│       ├── __init__.py
-│       ├── runner.py       # 主流程状态机
-│       ├── actions/        # 动作处理器模块
-│       │   ├── __init__.py     # 导出 ActionHandler
-│       │   ├── handler.py      # 门面类
-│       │   ├── base.py         # 基础动作
-│       │   ├── battle.py       # 对战动作
-│       │   ├── level.py        # 等级选择
-│       │   ├── deck.py         # 牌组列表
-│       │   ├── expansion.py    # 扩充组选择
-│       │   ├── home.py         # 主页动作
-│       │   └── utils/          # 工具模块
-│       │       ├── scroll.py       # 滚动辅助
-│       │       ├── ocr_helpers.py  # OCR 工具
-│       │       └── navigation.py   # 导航工具
-│       ├── adb_controller.py   # ADB 控制
-│       ├── config.py           # 配置（含模式加载）
-│       ├── daily/              # 每日开包模块
-│       │   ├── __init__.py
-│       │   ├── runner.py       # 每日模式运行器
-│       │   └── pack_opener.py  # 开包逻辑
-│       ├── db/                 # 数据库模块
-│       │   ├── __init__.py
-│       │   └── account_db.py   # 账号数据库
-│       ├── debug_tools/        # 调试工具实现
-│       ├── device_discovery.py # 设备发现
-│       ├── locales/            # 多语言配置
-│       │   ├── zh_Hant.py          # 繁体中文主配置
-│       │   ├── zh_Hant_pages/      # 繁体中文页面配置
-│       │   │   ├── __init__.py     # 导出所有页面组
-│       │   │   ├── common.py       # 通用页面
-│       │   │   ├── user_info.py    # 用户信息页面
-│       │   │   ├── battle.py       # 对战模式页面
-│       │   │   ├── tutorial.py     # 教程模式页面
-│       │   │   └── daily.py        # 开包模式页面
-│       │   └── en_US.py            # 英文配置
-│       ├── logger.py           # 日志
-│       ├── notifier.py         # 通知
-│       ├── page_detector.py    # 页面检测器
-│       ├── recognizer.py       # OCR + 模板匹配
-│       ├── recognizer_parts/   # 识别器拆分模块
-│       ├── settings.py         # 运行时配置
-│       ├── state_manager.py    # 状态管理
-│       └── utils.py            # 工具函数
-├── templates/              # 模板图片
-└── docs/                   # 文档
+│   ├── ptcgp_auto_v2/          # v2 核心代码
+│   │   ├── core/               # 调度核心 (Scheduler, Executor)
+│   │   ├── tasks/              # 任务实现 (OpenPack, ClaimRewards...)
+│   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
+│   │   ├── infra/              # 基础设施 (ADB, OCR, PageDetector)
+│   │   ├── config/             # 配置文件
+│   │   └── utils/              # 工具函数
+│   └── ptcgp_auto/             # v1 旧版代码 (Legacy)
+└── docs/                       # 文档
 ```
 
-## 注意事项
+## ⚠️ v1 旧版功能 (Legacy)
 
-- 目前仅支持 macOS（依赖 Apple Vision Framework），后续计划支持其他平台
-- 游戏语言需与 `config.py` 中的 `LANGUAGE` 配置一致
-- 启动脚本前，请确保游戏已进入对战菜单页面
-- **截取模板图片时，模拟器分辨率必须为 1080p**（脚本会根据实际分辨率自动缩放模板）
+v1 版本主要用于单人对战刷经验，目前作为遗留模块存在，后续将被迁移至 v2 架构的任务体系中。
+
+```bash
+# 启动 v1 自动对战
+python main.py
+```
+
+## 开发指南
+
+请参考 [AGENTS.md](AGENTS.md) 获取详细的开发和代码规范指引。
 
 ## License
 

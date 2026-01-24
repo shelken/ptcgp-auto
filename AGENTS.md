@@ -37,260 +37,89 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-这是一个用于 PTCGP（Pokemon TCG Pocket）单人对战的 Python 自动化脚本，运行在 Mac 上的 BlueStacks Air 模拟器。使用 ADB 进行设备控制，Apple Vision Framework OCR + OpenCV 模板匹配进行界面识别。
+这是一个用于 PTCGP（Pokemon TCG Pocket）的 Python 自动化框架。
+**v2 版本 (当前主版本)** 采用任务队列 + 调度器架构，支持多账号、多设备、原子任务（开包、领奖等）。
+**v1 版本 (Legacy)** 仅用于单人对战刷经验，保留在 `src/ptcgp_auto` 中。
 
-## 核心文件
+## 核心架构 (v2)
 
-源代码位于 `src/ptcgp_auto/` 目录下：
+源代码位于 `src/ptcgp_auto_v2/` 目录下：
 
-- `main.py` - 入口文件，支持命令行参数指定 ADB 地址
-- `src/ptcgp_auto/`
-  - `runner.py` - 主流程状态机
-  - `adb_controller.py` - ADB 封装（截图、点击、滑动）
-  - `recognizer.py` - Apple Vision OCR + OpenCV 模板匹配
-  - `page_detector.py` - 页面检测器，识别当前游戏界面
-  - `state_manager.py` - 状态管理器，保存和加载自动化进度
-  - `config.py` - 配置常量和界面识别规则
-  - `settings.py` - 运行时配置加载
-  - `device_discovery.py` - 设备发现
-  - `logger.py` - 日志系统
-  - `src/ptcgp_auto_v2/utils/device_discovery.py` - v2 自动发现 BlueStacks 设备
-
-  - `notifier.py` - 通知系统
-  - `utils.py` - 工具函数
-  - `actions/` - 动作处理器模块（模块化架构）
-    - `handler.py` - ActionHandler 门面类
-    - `base.py` - 基础动作（点击、等待等）
-    - `battle.py` - 对战相关动作
-    - `level.py` - 等级选择动作
-    - `deck.py` - 牌组列表动作
-    - `expansion.py` - 扩充组选择动作
-    - `home.py` - 主页动作
-    - `user.py` - 用户信息动作
-    - `tutorial.py` - 教程动作
-    - `utils/` - 工具模块（滚动、OCR辅助、导航）
-  - `recognizer_parts/` - 识别器拆分模块
-    - `ocr.py` - OCR 相关
-    - `template_matcher.py` - 模板匹配
-    - `text.py` - 文本处理
-    - `color.py` - 颜色处理
+- `main_v2.py` - v2 入口文件
+- `src/ptcgp_auto_v2/`
+  - `core/` - 核心调度模块
+    - `scheduler.py` - 任务调度器 (Scheduler)
+    - `executor.py` - 任务执行器 (Executor)
+    - `task_base.py` - 任务基类 (Task) 和注册表
+    - `device_pool.py` - 设备池管理
+  - `tasks/` - 具体任务实现
+    - `open_pack.py` - 开包任务
+    - `claim_rewards.py` - 领取奖励任务
+    - `fetch_account_info.py` - 账号信息同步任务
+  - `infra/` - 基础设施层
+    - `adb.py` - ADB 控制封装
+    - `ocr.py` - OCR 引擎封装
+    - `page_detector.py` - 页面检测器
+    - `account_switcher.py` - 账号切换逻辑
+  - `db/` - 数据库层
+    - `models/` - 数据模型 (Account, TaskInstance)
+    - `repositories.py` - 数据访问对象 (DAO)
+  - `config/` - 配置管理
   - `locales/` - 多语言配置
-    - `zh_Hant.py` - 繁体中文主配置
-    - `zh_Hant_pages/` - 繁体中文页面配置（按模式分离）
-      - `common.py` - 通用页面
-      - `user_info.py` - 用户信息页面
-      - `battle.py` - 对战模式页面
-      - `tutorial.py` - 教程模式页面
-    - `en_US.py` - 英文
-  - `debug_tools/` - 调试工具实现
-- `debug_tool.py` - 调试工具入口
-- `templates/` - 按钮模板图片
-- `src/ptcgp_auto_v2/` - v2 版本（每日开包功能）
 
-## 架构
+### 调度流程
+
+```
+Main (Daemon)
+  ↓
+Scheduler (Loop)
+  ├── 1. Generate Tasks (检查 AccountPlan 生成 TaskInstance)
+  ├── 2. Check Devices (获取空闲 Device)
+  └── 3. Dispatch (将 Task 分配给 Executor)
+         ↓
+      Executor (Thread)
+         ├── Bind Device & Task
+         ├── Switch Account (if needed)
+         └── Run Task Logic (OCR -> Action -> Loop)
+```
+
+## 文件结构概览
 
 ```
 ptcgp-auto/
-├── main.py                     # 主程序入口（v1 自动对战）
-├── main_v2.py                  # v2 入口（每日开包）
-├── config_cli.py               # 开包配置 CLI
-├── debug_tool.py               # 调试工具入口
+├── main_v2.py                  # [v2] 主入口
+├── main.py                     # [v1] 旧版入口 (Legacy)
+├── debug_tool.py               # 调试工具
 ├── src/
-│   ├── ptcgp_auto/             # v1 自动对战模块
-│   │   ├── __init__.py
-│   │   ├── runner.py           # 主流程状态机
-│   │   ├── adb_controller.py   # ADB 控制
-│   │   ├── config.py           # 配置 + 模式加载
-│   │   ├── device_discovery.py # 设备发现
-│   │   ├── logger.py           # 日志
-│   │   ├── notifier.py         # 通知
-│   │   ├── page_detector.py    # 页面检测器
-│   │   ├── recognizer.py       # OCR + 模板匹配
-│   │   ├── settings.py         # 运行时配置
-│   │   ├── state_manager.py    # 状态管理
-│   │   ├── utils.py            # 工具函数
-│   │   ├── actions/            # 动作处理器模块
-│   │   ├── recognizer_parts/   # 识别器拆分模块
-│   │   ├── locales/            # 多语言配置
-│   │   │   ├── zh_Hant.py          # 繁体中文主配置
-│   │   │   ├── zh_Hant_pages/      # 页面配置（按模式分离）
-│   │   │   │   ├── common.py       # 通用页面
-│   │   │   │   ├── battle.py       # 对战模式
-│   │   │   │   └── tutorial.py     # 教程模式
-│   │   │   └── en_US.py
-│   │   └── debug_tools/        # 调试工具实现
-│   └── ptcgp_auto_v2/          # v2 每日开包模块
-│       ├── core/               # 核心框架（任务基类、调度器）
-│       ├── tasks/              # 任务实现（open_pack.py）
-│       ├── db/                 # 数据库（账号、开包记录）
-│       ├── utils/              # 工具（手势、设备发现）
-│       └── locales/            # 多语言配置
-├── templates/                  # 模板图片
-├── data/                       # 数据文件（packs.json）
+│   ├── ptcgp_auto_v2/          # [v2] 核心代码
+│   │   ├── core/               # 核心框架
+│   │   ├── tasks/              # 任务实现
+│   │   ├── db/                 # 数据库
+│   │   ├── infra/              # 基础设施
+│   │   ├── config/             # 配置
+│   │   └── utils/              # 工具
+│   └── ptcgp_auto/             # [v1] 旧版代码
 └── docs/                       # 文档
-```
-
-运行时架构：
-
-```
-main.py (入口)
-    ↓
-PTCGPAuto (runner.py)
-    ├── AdbController (adb_controller.py)
-    │       截图、点击、滑动、返回键
-    ├── Recognizer (recognizer.py)
-    │       Apple Vision OCR、OpenCV 模板匹配
-    ├── PageDetector (page_detector.py)
-    │       根据 OCR 和模板识别当前界面
-    ├── ActionHandler (actions/)
-    │       执行各界面对应的动作
-    │       ├── BaseActions - 基础动作
-    │       ├── BattleActions - 对战动作
-    │       ├── LevelActions - 等级选择
-    │       ├── DeckActions - 牌组列表
-    │       ├── ExpansionActions - 扩充组选择
-    │       ├── HomeActions - 主页动作
-    │       ├── UserActions - 用户信息
-    │       └── utils/ - 工具（滚动、OCR、导航）
-    └── StateManager (state_manager.py)
-            保存/加载等级和卡包完成状态
-```
-
-## 状态机流程
-
-```
-主循环:
-    截图 → 识别界面 → 执行动作 → 等待 → 重复
-
-界面识别按优先级排序（config.PAGES），支持：
-- 文字标识符匹配（精确/包含）
-- 模板图片匹配
-- 排除条件
 ```
 
 ## 常用命令
 
 ```bash
-# 环境初始化
-nix develop                    # 推荐，自动创建 venv 并安装依赖
-direnv allow                   # 或使用 direnv
-pip install -r requirements.txt  # 手动安装（需 Python 3.10+）
-
-# 运行主程序
-python main.py                 # 默认连接 127.0.0.1:5555，繁体中文
-python main.py -a 5556         # 指定端口
-python main.py -l en_US        # 使用英文界面
-python main.py -a 5556 -l en_US  # 指定端口和语言
+# v2 守护模式 (推荐)
+python main_v2.py --daemon
 
 # 调试工具
-python debug_tool.py           # 交互式调试（OCR 测试、截图、滑动等）
-python debug_tool.py -a 5556
-
-# 重置进度
-rm /tmp/ptcgp_auto_5555/state.json
+python debug_tool.py
 ```
 
-## 多设备支持
+## 调试与开发
 
-每个设备使用独立的数据目录 `/tmp/ptcgp_auto_{port}/`，包含 `state.json` 和调试截图。
-
-## 配置说明
-
-关键配置项（config.py）：
-- `BATTLE_LEVELS` - 等级遍历顺序（默认精英→初级）
-- `WAIT_BATTLE_CHECK_INTERVAL` - 对战中检测间隔
-- `PAGES` - 界面识别规则（由 `load_mode()` 动态加载）
-- `CURRENT_MODE` - 当前运行模式（battle/tutorial）
-
-### 模式系统
-
-v1 支持两种运行模式：
-
-| 模式 | 入口参数 | 说明 |
-|------|----------|------|
-| `battle` | 默认 | 自动对战（含教程检测） |
-| `tutorial` | `-t` | 教程解锁模式 |
-
-v2 每日开包模式使用独立入口 `main_v2.py`。
-
-切换模式：
-```python
-from ptcgp_auto import config
-config.load_mode("battle")  # 加载对战模式的页面
-```
-
-## 调试技巧
-
-1. 使用 `debug_tool.py` 进行交互式调试
-2. 设置 `config.DEBUG = True` 查看详细日志
-3. OCR 结果格式：`"文字"@(x, y)`
-4. 模板匹配会显示最高置信度
-
-## 扩展新页面
-
-1. 根据页面所属模式，在 `locales/zh_Hant_pages/` 对应文件中添加页面定义
-   - `common.py` - 所有模式共享的页面
-   - `battle.py` - 对战模式专用
-   - `tutorial.py` - 教程模式专用
-2. 在 `actions/` 对应模块中实现动作方法，并在 `actions/handler.py` 中添加委托方法
+1. **新增任务**: 在 `src/ptcgp_auto_v2/tasks/` 创建新文件，继承 `Task` 类并使用 `@TaskRegistry.register` 装饰器。
+2. **页面定义**: 在 `src/ptcgp_auto_v2/config/pages/` 中定义页面识别规则。
+3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id>` 单独测试任务。
 
 ## 注意事项
 
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
-- BlueStacks Air 的 ADB 端口通常是 5555，但可能有所不同
-- 模板图片通过 debug_tool.py 的自动检测功能截取
-- 状态文件保存在系统临时目录，重启系统后可能被清理
-- 更新 README 时需同步更新 `README_EN.md`
-- 新功能开发使用 git worktree 创建独立分支，完成后提交 PR 合并
-
-## 清理 BlueStacks VM 中的 PTCGP 用户数据
-
-当需要制作干净的 VM 模板（保留游戏资源但清除用户登录数据）时，使用以下步骤：
-
-### 前置条件
-
-1. 已安装 Lima：`brew install lima`
-2. 已创建 Lima Ubuntu VM（配置文件：`lima-ubuntu.yaml`）
-3. 目标 BlueStacks VM 已关闭
-
-### 启动 Lima VM
-
-```bash
-# 首次创建
-limactl create --name=ubuntu-qcow2 lima-ubuntu.yaml
-limactl start ubuntu-qcow2
-
-# 后续使用
-limactl start ubuntu-qcow2
-```
-
-### 清理 PTCGP 用户数据
-
-```bash
-# 替换 Tiramisu64_XX 为目标 VM 名称（如 Tiramisu64_10）
-limactl shell ubuntu-qcow2 -- bash -c "sudo guestfish -a /bluestacks/Tiramisu64_XX/data.qcow2 run : mount /dev/sda1 / : rm-rf /data/jp.pokemon.pokemontcgp/shared_prefs : rm-rf /data/jp.pokemon.pokemontcgp/databases : rm-rf /data/jp.pokemon.pokemontcgp/files : rm-rf /data/jp.pokemon.pokemontcgp/no_backup : rm-rf /data/jp.pokemon.pokemontcgp/cache : rm-rf /data/jp.pokemon.pokemontcgp/code_cache : rm-rf /data/jp.pokemon.pokemontcgp/app_databases : rm-rf /data/jp.pokemon.pokemontcgp/app_webview : rm-rf /data/jp.pokemon.pokemontcgp/app_textures"
-```
-
-### 验证清理结果
-
-```bash
-limactl shell ubuntu-qcow2 -- bash -c "sudo guestfish --ro -a /bluestacks/Tiramisu64_XX/data.qcow2 run : mount /dev/sda1 / : ll /data/jp.pokemon.pokemontcgp/"
-# 应该只显示空目录（仅 . 和 ..）
-```
-
-### VM 名称对照
-
-查看 BlueStacks 配置获取 VM 名称：
-```bash
-grep 'display_name' "/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf"
-```
-
-### 停止 Lima VM
-
-```bash
-limactl stop ubuntu-qcow2
-```
-
-## 参考文档
-
-- `docs/design.md`: 详细设计文档（游戏界面结构、状态机流程、界面优先级表）
+- **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)，修改模型后无需迁移（目前自动初始化，复杂变更需手动处理）
+- **时间处理**: 统一使用 `localtime`，禁止使用 UTC

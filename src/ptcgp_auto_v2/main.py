@@ -27,6 +27,9 @@ import ptcgp_auto_v2.tasks
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_WORKERS = 4  # 默认并发工作线程数
+
+
 def normalize_device_addresses(devices: list[str]) -> list[str]:
     normalized = []
     for device in devices:
@@ -116,8 +119,8 @@ def parse_args(argv: list[str] | None = None):
         "-w",
         "--workers",
         type=int,
-        default=4,
-        help="最大并发执行器数（默认: 4）",
+        default=DEFAULT_WORKERS,
+        help=f"最大并发执行器数（默认: {DEFAULT_WORKERS}）",
     )
 
     parser.add_argument(

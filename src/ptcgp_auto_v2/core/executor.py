@@ -18,6 +18,7 @@ from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult, TaskSta
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
 from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
+from ptcgp_auto_v2.infra.page_detector import DEFAULT_TEMPLATE_THRESHOLD
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account, TaskInstance
@@ -33,7 +34,7 @@ class ExecutorConfig:
     retry_delay: float = 30.0  # 重试间隔（秒）
     recovery_delay: float = 5.0  # 恢复等待时间（秒）
     app_package: str = ""  # 应用包名（应从 settings 传入）
-    template_threshold: float = 0.7  # 模板匹配阈值
+    template_threshold: float = DEFAULT_TEMPLATE_THRESHOLD  # 模板匹配阈值
     stop_event: Optional[threading.Event] = field(default=None)  # 停止事件
 
     def __post_init__(self):

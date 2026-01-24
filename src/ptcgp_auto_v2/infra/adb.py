@@ -14,6 +14,13 @@ from typing import Optional, Tuple
 from adbutils import adb, AdbDevice
 from PIL import Image
 
+from ptcgp_auto_v2.config.constants import (
+    DEFAULT_ADB_PORT,
+    DEFAULT_LONG_PRESS_DURATION,
+    DEFAULT_SCROLL_DURATION,
+    DEFAULT_SCROLL_RATIO,
+    DEFAULT_SWIPE_DURATION,
+)
 from ptcgp_auto_v2.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -39,7 +46,7 @@ class AdbController:
             self.port = int(port_str)
         else:
             self.host = address
-            self.port = 5555
+            self.port = DEFAULT_ADB_PORT
 
         # 从 settings 获取配置
         settings = get_settings()
@@ -205,7 +212,7 @@ class AdbController:
         y = (box[1] + box[3]) // 2
         self.tap(x, y)
 
-    def long_press(self, x: int, y: int, duration: int = 3000):
+    def long_press(self, x: int, y: int, duration: int = DEFAULT_LONG_PRESS_DURATION):
         """
         长按屏幕指定位置
 
@@ -225,7 +232,7 @@ class AdbController:
         except Exception as e:
             logger.error(f"长按失败: {e}")
 
-    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: int = 300):
+    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: int = DEFAULT_SWIPE_DURATION):
         """
         滑动屏幕
 
@@ -246,7 +253,7 @@ class AdbController:
         except Exception as e:
             logger.error(f"滑动失败: {e}")
 
-    def swipe_up(self, ratio: float = 0.26, duration: int = 500):
+    def swipe_up(self, ratio: float = DEFAULT_SCROLL_RATIO, duration: int = DEFAULT_SCROLL_DURATION):
         """
         向上滑动
 
@@ -260,7 +267,7 @@ class AdbController:
         end_y = self.screen_height // 2 - distance // 2
         self.swipe(center_x, start_y, center_x, end_y, duration)
 
-    def swipe_down(self, ratio: float = 0.26, duration: int = 500):
+    def swipe_down(self, ratio: float = DEFAULT_SCROLL_RATIO, duration: int = DEFAULT_SCROLL_DURATION):
         """
         向下滑动
 
