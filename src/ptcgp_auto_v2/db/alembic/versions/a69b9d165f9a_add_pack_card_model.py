@@ -9,7 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+import sqlmodel
 
 # revision identifiers, used by Alembic.
 revision: str = 'a69b9d165f9a'
@@ -66,8 +66,7 @@ def upgrade() -> None:
                existing_server_default=sa.text("(datetime('now', 'localtime'))"))
         batch_op.drop_index(batch_op.f('idx_pack_config_account'))
         batch_op.drop_index(batch_op.f('idx_pack_config_type'))
-        batch_op.drop_constraint(batch_op.f('fk_account_pack_config_accounts'), type_='foreignkey')
-        batch_op.create_foreign_key(None, 'accounts', ['account_id'], ['id'])
+        batch_op.create_foreign_key('fk_account_pack_config_accounts', 'accounts', ['account_id'], ['id'])
 
     with op.batch_alter_table('accounts', schema=None) as batch_op:
         batch_op.alter_column('game_id',
@@ -112,7 +111,7 @@ def upgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_accounts_friend_id'))
         batch_op.drop_index(batch_op.f('ix_accounts_game_id'))
         batch_op.drop_index(batch_op.f('ix_accounts_task_plan_id'))
-        batch_op.create_unique_constraint(None, ['game_id'])
+        batch_op.create_unique_constraint('uq_accounts_game_id', ['game_id'])
 
     with op.batch_alter_table('pack_records', schema=None) as batch_op:
         batch_op.alter_column('pack_type',
@@ -125,8 +124,7 @@ def upgrade() -> None:
                nullable=False,
                existing_server_default=sa.text("(datetime('now', 'localtime'))"))
         batch_op.drop_index(batch_op.f('ix_pack_records_account_id'))
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(None, 'accounts', ['account_id'], ['id'])
+        batch_op.create_foreign_key('fk_pack_records_accounts', 'accounts', ['account_id'], ['id'])
 
     with op.batch_alter_table('task_instances', schema=None) as batch_op:
         batch_op.alter_column('task_type',
@@ -162,8 +160,7 @@ def upgrade() -> None:
                existing_nullable=False,
                existing_server_default=sa.text("(datetime('now', 'localtime'))"))
         batch_op.drop_index(batch_op.f('ix_task_instances_account_id'))
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(None, 'accounts', ['account_id'], ['id'])
+        batch_op.create_foreign_key('fk_task_instances_accounts', 'accounts', ['account_id'], ['id'])
 
     with op.batch_alter_table('task_plans', schema=None) as batch_op:
         batch_op.alter_column('id',
