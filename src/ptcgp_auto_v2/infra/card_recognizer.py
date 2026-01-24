@@ -19,7 +19,7 @@ from PIL import Image
 
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.infra.template import TemplateMatcher
-from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
+from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD, PACK_RESULT_ROI, PACK_RESULT_SCALE
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +60,29 @@ class CardRecognizer:
         """PIL Image 转 OpenCV 格式"""
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
-    def analyze_result_screen(self, threshold: float = DEFAULT_TEMPLATE_THRESHOLD, scale: Optional[float] = None) -> List[RecognizedCard]:
+    def scan_pack_result(self) -> List[RecognizedCard]:
         """
-        分析开包结果屏幕，识别其中的卡牌
+        扫描开包结果页
+        使用预定义的 ROI 区域进行识别，提高准确率并减少无关区域干扰
+        """
+        return self._analyze_screen(roi=PACK_RESULT_ROI, scale=PACK_RESULT_SCALE)
+
+    def _analyze_screen(
+        self,
+        threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
+        scale: Optional[float] = None,
+        roi: Optional[Tuple[int, int, int, int]] = None
+    ) -> List[RecognizedCard]:
+        """
+        分析屏幕指定区域，识别其中的卡牌
 
         Args:
             threshold: 匹配置信度阈值
             scale: 模板缩放比例 (可选, 用于覆盖默认大小)
+            roi: 感兴趣区域 (x, y, w, h)，基于 1080x1920 基准坐标
 
         Returns:
-            识别到的卡牌列表
+            识别到的卡牌列表 (坐标已还原为全屏坐标)
         """
         # 1. 获取截图
         screenshot = self.adb.screenshot()
@@ -87,8 +100,43 @@ class CardRecognizer:
         start_time = time.time()
 
         # 3. 准备图像数据 (Pre-processing)
-        # 转换为 CV2 格式一次，供所有线程复用，避免重复转换
+        # 转换为 CV2 格式
         screen_cv = self._pil_to_cv2(screenshot)
+
+        # 处理 ROI 裁剪
+        crop_offset_x, crop_offset_y = 0, 0
+        if roi:
+            # ROI 是基于 1080x1920 的，需要根据实际分辨率缩放吗？
+            # 假设 adb.screenshot() 返回的是实际分辨率，且 ROI 是基于基准分辨率定义的
+            # 这里需要进行坐标转换
+            # 但目前架构似乎假设 screenshot 已经是标准化或者我们在 CV 处理时自适应
+            # 观察 adb.py，screenshot 返回原始分辨率。
+            # 这里的 ROI 是常量 (1080p)，所以需要缩放 ROI 到实际屏幕尺寸
+
+            # 获取当前屏幕尺寸
+            h, w = screen_cv.shape[:2]
+            base_w, base_h = 1080, 1920
+
+            scale_x = w / base_w
+            scale_y = h / base_h
+
+            rx, ry, rw, rh = roi
+
+            # 缩放 ROI
+            scaled_rx = int(rx * scale_x)
+            scaled_ry = int(ry * scale_y)
+            scaled_rw = int(rw * scale_x)
+            scaled_rh = int(rh * scale_y)
+
+            # 裁剪
+            screen_cv = screen_cv[scaled_ry:scaled_ry+scaled_rh, scaled_rx:scaled_rx+scaled_rw]
+            crop_offset_x = scaled_rx
+            crop_offset_y = scaled_ry
+
+            # 如果裁剪后区域过小，无法匹配
+            if screen_cv.shape[0] < 10 or screen_cv.shape[1] < 10:
+                logger.error("ROI 裁剪后区域过小")
+                return []
 
         # 准备缩略图用于快速筛选
         h, w = screen_cv.shape[:2]
@@ -114,6 +162,15 @@ class CardRecognizer:
             try:
                 result = future.result()
                 if result:
+                    # 如果使用了 ROI，需要将局部坐标还原为全局坐标
+                    if crop_offset_x > 0 or crop_offset_y > 0:
+                        x1, y1, x2, y2 = result.box
+                        result.box = (
+                            x1 + crop_offset_x,
+                            y1 + crop_offset_y,
+                            x2 + crop_offset_x,
+                            y2 + crop_offset_y
+                        )
                     matches.append(result)
             except Exception as e:
                 logger.error(f"模板匹配异常 {t_name}: {e}")
@@ -133,6 +190,11 @@ class CardRecognizer:
         )
 
         return final_cards
+
+    # 保留旧方法名以兼容（或直接废弃，但在本任务中我们只修改调用方）
+    # 为了安全起见，可以保留一个别名，但 logic 已经移到 _analyze_screen
+    def analyze_result_screen(self, threshold: float = DEFAULT_TEMPLATE_THRESHOLD, scale: Optional[float] = None) -> List[RecognizedCard]:
+        return self._analyze_screen(threshold, scale)
 
     def _match_single_template(
         self,

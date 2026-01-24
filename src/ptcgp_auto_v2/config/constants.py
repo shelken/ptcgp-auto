@@ -44,3 +44,14 @@ DEFAULT_DB_NAME = "ptcgp_v2.db"  # 默认数据库文件名
 SCALE_PACK_SERIES_SELECT = 0.23
 SCALE_PACK_LIST = 0.81
 SCALE_PACK_DETAIL = 1.0
+
+# 识别区域 (x, y, w, h) 基于 1080x1920
+# 开包结果识别区域 (避开顶部标题和底部按钮，专注于卡牌出现的核心区域)
+# 暂时设置为全屏或大范围，后续根据实际截图精确调整
+PACK_RESULT_ROI = (0, 300, 1080, 1320)  # y: 300~1620
+
+# 开包结果页卡牌缩放比例
+# 相对于标准模板 (250px宽) 的显示比例
+# 1.07: 结果页小卡
+# 2.85: 详情页大卡
+PACK_RESULT_SCALE = 1.07
