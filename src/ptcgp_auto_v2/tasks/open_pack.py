@@ -195,10 +195,17 @@ class OpenPackTask(Task):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
+        # 初始化卡牌识别器
+        from ptcgp_auto_v2.infra.card_recognizer import CardRecognizer
+        # recognizer 是 (ocr_engine, template_matcher) 元组
+        _, template_matcher = recognizer
+        self.card_recognizer = CardRecognizer(adb, template_matcher)
+
         # 核心状态机
         self._phase = OpenPackPhase.INIT
         self._home_check_count = 0  # 主页无免费包检查次数
         self._packs_opened_count = 0  # 本次任务已开包数量
+        self._result_recognized = False  # 本次开包是否已识别结果
         self._skip_reason: Optional[str] = None  # 跳过原因
 
         # 目标卡包配置
@@ -347,10 +354,9 @@ class OpenPackTask(Task):
             self._phase = OpenPackPhase.REGISTERING
             return self._handle_card_register(page_info)
 
-        # pack_opening_result：等待自动流转
+        # pack_opening_result：识别结果并点击继续
         if page_name == "pack_opening_result":
-            logger.debug("  -> 等待开包结果展示")
-            return ActionResult.ok(wait=1.5)
+            return self._handle_pack_opening_result(page_info)
 
         # pack_opening_select：点击选择要开的扩充包
         if page_name == "pack_opening_select":
@@ -634,6 +640,8 @@ class OpenPackTask(Task):
         logger.info("  -> 从左往右滑动开包")
         # 进入 滑动开包 说明开包成功，增加计数
         self._packs_opened_count += 1
+        # 重置识别标志位
+        self._result_recognized = False
         start, end = swipe_pack_coords(self.adb)
         return swipe(self.adb, start, end, duration=SWIPE_DURATION_OPEN)
 
@@ -681,9 +689,29 @@ class OpenPackTask(Task):
         booster_name = self.target_pack["booster_name"].replace(" ", "_")
         return f"packs/{self.target_pack['pack_code']}/{booster_name}"
 
-    def _get_target_series(self) -> Optional[str]:
-        """根据 pack_code 获取目标系列（A/B）"""
-        if not self.target_pack:
-            return None
-        pack_code = self.target_pack["pack_code"]
-        return pack_code[0].upper() if pack_code else None
+    def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
+        """
+        处理开包结果页（pack_opening_result）
+
+        1. 识别卡牌（如果尚未识别）
+        2. 点击屏幕中心继续
+        """
+        if not self._result_recognized:
+            try:
+                # 调用 Infra 层服务进行识别
+                cards = self.card_recognizer.analyze_result_screen()
+                if cards:
+                    card_names = [f"{c.name}({c.confidence:.2f})" for c in cards]
+                    logger.info(f"====== 识别到 {len(cards)} 张卡牌 ======")
+                    for c in cards:
+                        logger.info(f"  - {c.name} (Conf: {c.confidence:.2f})")
+                    logger.info("==================================")
+                else:
+                    logger.info("未识别到卡牌")
+            except Exception as e:
+                logger.error(f"识别卡牌失败: {e}")
+            finally:
+                self._result_recognized = True
+
+        logger.debug("  -> 点击屏幕中心继续")
+        return tap_center(self.adb, wait=1.5)
