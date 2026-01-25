@@ -1,0 +1,59 @@
+<div class="space-y-6">
+    <div class="flex justify-between items-center border-b-4 border-black pb-4">
+        <h3 class="text-2xl font-bold uppercase">Manage Plans for {{ account.nickname or account.game_id }}</h3>
+        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+    </div>
+
+    <form hx-post="/api/accounts/{{ account.id }}/plans?lang={{ current_lang }}"
+          hx-target="#tab-content-accounts"
+          hx-on::after-request="closeModal()"
+          class="space-y-6">
+
+        <!-- Primary Plan -->
+        <div class="space-y-2">
+            <label class="block font-bold uppercase tracking-widest text-sm opacity-60">{{ t.col_primary_plan or 'Primary Plan' }}</label>
+            <div class="relative">
+                <select name="primary_plan_id" class="w-full p-3 border-2 border-black bg-white appearance-none font-bold focus:outline-none focus:ring-4 focus:ring-black/20">
+                    <option value="">{{ t.label_none or '-- None --' }}</option>
+                    {% for plan in all_plans %}
+                    <option value="{{ plan.id }}" {% if plan.id == current_primary_id %}selected{% endif %}>
+                        {{ plan.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="absolute right-4 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
+            </div>
+            <p class="text-xs opacity-50">{{ t.desc_primary_plan or 'The base plan for this account.' }}</p>
+        </div>
+
+        <!-- Secondary Plans -->
+        <div class="space-y-2">
+            <label class="block font-bold uppercase tracking-widest text-sm opacity-60">{{ t.col_extra_plans or 'Additional Plans' }}</label>
+            <div class="border-2 border-black p-4 max-h-60 overflow-y-auto space-y-2">
+                {% for plan in all_plans %}
+                <div class="flex items-center gap-3 hover:bg-black/5 p-2 rounded transition-colors">
+                    <input type="checkbox"
+                           id="plan-{{ plan.id }}"
+                           name="secondary_plan_ids"
+                           value="{{ plan.id }}"
+                           class="w-5 h-5 border-2 border-black rounded-none focus:ring-2 focus:ring-black accent-black"
+                           {% if plan.id in current_secondary_ids %}checked{% endif %}>
+                    <label for="plan-{{ plan.id }}" class="flex-grow cursor-pointer select-none">
+                        <div class="font-bold">{{ plan.name }}</div>
+                        {% if plan.description %}
+                        <div class="text-xs opacity-60">{{ plan.description }}</div>
+                        {% endif %}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="text-xs opacity-50">{{ t.desc_extra_plans or 'These plans will overlay on top of the primary plan (e.g. for higher frequency).' }}</p>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-4 pt-4 border-t-2 border-black/10">
+            <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
+            <button type="submit" class="brutal-btn active">{{ t.label_save or 'Save Changes' }}</button>
+        </div>
+    </form>
+</div>
