@@ -59,135 +59,91 @@ class Database:
                 check_same_thread=False,
                 timeout=30.0,
             )
-            # 启用外键约束
-            self._local.connection.execute("PRAGMA foreign_keys = ON")
+            self._local.connection.execute("PRAGMA foreign_keys = OFF")
             # 使用 Row 对象方便按列名访问
             self._local.connection.row_factory = sqlite3.Row
 
         return self._local.connection
 
     def _init_schema(self):
-        """初始化数据库表结构"""
-        schema = """
-        -- 任务计划表
-        CREATE TABLE IF NOT EXISTS task_plans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            description TEXT,
-            task_types TEXT NOT NULL,  -- JSON 数组: ["open_pack", "send_gift"]
-            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
-        );
+        """初始化数据库表结构（自动同步模式）"""
+        from sqlmodel import SQLModel, create_engine, inspect, text
+        # 必须导入 models 确保它们注册到 metadata
+        from ptcgp_auto_v2.db import models
 
-        -- 账号表
-        CREATE TABLE IF NOT EXISTS accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            game_id TEXT UNIQUE NOT NULL,  -- deviceAccount 字段，唯一标识
-            friend_id TEXT,                -- 朋友 ID，格式 XXXX-XXXX-XXXX-XXXX
-            nintendo_id TEXT,              -- Nintendo 账号 ID（从 JWT 解析）
-            nickname TEXT,                 -- 用户昵称
-            country TEXT,                  -- 国家/地区代码
-            remark TEXT DEFAULT '',         -- 备注
-            xml_content BLOB,              -- XML 文件内容
-            task_plan_id INTEGER,
-            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (task_plan_id) REFERENCES task_plans(id) ON DELETE SET NULL
-        );
+        # 创建用于 Schema 管理的 Engine
+        engine = create_engine(f"sqlite:///{self.db_path}")
 
-        -- 任务实例表
-        CREATE TABLE IF NOT EXISTS task_instances (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            task_type TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'pending',  -- pending/running/completed/failed
-            reset_type TEXT NOT NULL DEFAULT 'daily',  -- daily/weekly/once
-            error_message TEXT,
-            last_completed_at TIMESTAMP,
-            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
-            UNIQUE(account_id, task_type)
-        );
+        # 1. 自动创建所有不存在的表
+        SQLModel.metadata.create_all(engine)
 
-        -- 开包记录表
-        CREATE TABLE IF NOT EXISTS pack_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            pack_type TEXT NOT NULL,
-            opened_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
-        );
+        # 2. 自动检查并添加缺失的列 (Auto-Migration)
+        self._auto_migrate_columns(engine)
 
-        -- 账号开包配置表
-        CREATE TABLE IF NOT EXISTS account_pack_config (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            account_id INTEGER NOT NULL,
-            type TEXT NOT NULL,
-            pack_code TEXT NOT NULL,
-            booster_name TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            updated_at TIMESTAMP DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
-            UNIQUE(account_id, type)
-        );
+        # 3. 初始化默认数据
+        self._init_default_data(engine)
 
-        -- 索引
-        CREATE INDEX IF NOT EXISTS idx_accounts_game_id ON accounts(game_id);
-        CREATE INDEX IF NOT EXISTS idx_accounts_friend_id ON accounts(friend_id);
-        CREATE INDEX IF NOT EXISTS idx_accounts_task_plan ON accounts(task_plan_id);
-        CREATE INDEX IF NOT EXISTS idx_task_instances_account ON task_instances(account_id);
-        CREATE INDEX IF NOT EXISTS idx_task_instances_status ON task_instances(status);
-        CREATE INDEX IF NOT EXISTS idx_pack_records_account_id ON pack_records(account_id);
-        CREATE INDEX IF NOT EXISTS idx_pack_records_opened_at ON pack_records(opened_at);
-        CREATE INDEX IF NOT EXISTS idx_pack_config_account ON account_pack_config(account_id);
-        CREATE INDEX IF NOT EXISTS idx_pack_config_type ON account_pack_config(type);
+    def _auto_migrate_columns(self, engine):
+        """对比 Model 定义与数据库现状，自动添加缺失列"""
+        from sqlmodel import SQLModel, inspect, text
 
-        -- 插入默认任务计划
-        INSERT OR IGNORE INTO task_plans (name, description, task_types)
-        VALUES ('daily', '每日任务计划', '["open_pack", "claim_gifts", "claim_rewards"]');
-        """
+        inspector = inspect(engine)
 
-        conn = sqlite3.connect(str(self.db_path))
-        try:
-            conn.executescript(schema)
-            # 执行迁移（添加新列到已存在的表）
-            self._migrate_accounts_table(conn)
+        with engine.connect() as conn:
+            # 遍历所有注册的 Model
+            for table_name, table in SQLModel.metadata.tables.items():
+                if not inspector.has_table(table_name):
+                    continue
+
+                # 获取数据库中现有的列名
+                existing_columns = {col['name'] for col in inspector.get_columns(table_name)}
+
+                # 遍历 Model 定义的列
+                for column in table.columns:
+                    if column.name not in existing_columns:
+                        # 生成 ALTER TABLE 语句
+                        # 注意：SQLite 对 ALTER TABLE 支持有限，仅支持添加特定类型的列
+                        col_type = column.type.compile(engine.dialect)
+                        default_val = ""
+
+                        # 处理默认值 (简单处理，非空字段必须有默认值)
+                        if column.server_default is not None:
+                            # 如果有 server_default，直接使用
+                            if hasattr(column.server_default, 'arg'):
+                                default_val = f" DEFAULT {column.server_default.arg}"
+                            else:
+                                default_val = f" DEFAULT {column.server_default}"
+                        elif not column.nullable:
+                            # 非空且无默认值时，提供安全默认值
+                            type_str = str(col_type).upper()
+                            if "INT" in type_str:
+                                default_val = " DEFAULT 0"
+                            elif "FLOAT" in type_str:
+                                default_val = " DEFAULT 0.0"
+                            else:
+                                default_val = " DEFAULT ''"
+
+                        sql = f'ALTER TABLE "{table_name}" ADD COLUMN "{column.name}" {col_type}{default_val}'
+                        try:
+                            conn.execute(text(sql))
+                            logger.info(f"自动迁移: 表 {table_name} 添加列 {column.name}")
+                        except Exception as e:
+                            logger.error(f"自动迁移失败 {table_name}.{column.name}: {e}")
             conn.commit()
-        finally:
-            conn.close()
 
-    def _migrate_accounts_table(self, conn: sqlite3.Connection):
-        """迁移 accounts 表，添加新列（如果不存在）"""
-        # 获取现有列
-        cursor = conn.execute("PRAGMA table_info(accounts)")
-        existing_columns = {row[1] for row in cursor.fetchall()}
+    def _init_default_data(self, engine):
+        """初始化默认数据"""
+        from sqlmodel import text
 
-        # 需要添加的新列
-        new_columns = [
-            ("friend_id", "TEXT"),
-            ("nintendo_id", "TEXT"),
-            ("country", "TEXT"),
-            ("remark", "TEXT DEFAULT ''"),
-            ("xml_content", "BLOB"),
-            ("session_token_iat", "INTEGER"),
-            ("level", "INTEGER"),
-        ]
-
-        for col_name, col_type in new_columns:
-            if col_name not in existing_columns:
-                try:
-                    conn.execute(
-                        f"ALTER TABLE accounts ADD COLUMN {col_name} {col_type}"
-                    )
-                    logger.info(f"添加列 accounts.{col_name}")
-                except sqlite3.OperationalError:
-                    pass  # 列已存在
-
-        # 移除旧索引（如果存在）
-        try:
-            conn.execute("DROP INDEX IF EXISTS idx_accounts_xml_hash")
-        except sqlite3.OperationalError:
-            pass
+        with engine.connect() as conn:
+            # 插入默认任务计划 (如果不存在)
+            # 使用原生 SQL 以避免 Model 依赖复杂性
+            sql = """
+            INSERT OR IGNORE INTO task_plans (name, description, task_types, created_at)
+            VALUES ('daily', '每日任务计划', '["open_pack", "claim_gifts", "claim_rewards"]', datetime('now', 'localtime'))
+            """
+            conn.execute(text(sql))
+            conn.commit()
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         """执行 SQL 语句"""
