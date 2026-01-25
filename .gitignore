@@ -14,3 +14,4 @@ build/
 _out
 data/*.db
 templates/cards/
+.alma-snapshots
