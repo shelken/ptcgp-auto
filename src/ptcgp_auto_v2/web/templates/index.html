@@ -46,7 +46,7 @@
             </div>
 
             <div class="flex gap-4">
-                <div class="brutal-tag text-sm border-2 border-black bg-white !color-black !text-black">
+                <div class="brutal-tag text-sm border-2 border-theme bg-surface text-theme">
                     {{ t.project_name }} V2.2
                 </div>
                 <div class="brutal-tag text-sm">
@@ -85,13 +85,13 @@
             <div class="flex flex-wrap justify-between lg:justify-end items-center gap-8 mb-4">
                  <!-- View Mode -->
                 <div class="flex items-center gap-2">
-                    <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.view_mode }}</span>
+                    <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.view_mode }}</span>
                     <button onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active">{{ t.view_list }}</button>
                     <button onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn">{{ t.view_grid }}</button>
                 </div>
 
                 <!-- Separator -->
-                <div class="hidden lg:block w-px h-6 bg-black/20"></div>
+                <div class="hidden lg:block w-px h-6 bg-separator"></div>
 
                 <!-- Clear Filters -->
                 <button onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase">
@@ -108,7 +108,7 @@
 
                 <!-- Rarity Filter -->
                 <div class="flex flex-col lg:items-end gap-2">
-                    <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_rarity }}</span>
+                    <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.filter_rarity }}</span>
                     <div class="flex flex-wrap gap-2 lg:justify-end">
                         {% for r in rarities %}
                         <div>
@@ -122,7 +122,7 @@
 
                 <!-- Card Type Filter -->
                 <div class="flex flex-col lg:items-end gap-2">
-                    <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_type }}</span>
+                    <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.filter_type }}</span>
                     <div class="flex flex-wrap gap-2 lg:justify-end">
                         {% for type in card_types %}
                         <div>
@@ -149,13 +149,13 @@
 
             <!-- Loading Spinner -->
             <div class="htmx-indicator w-full justify-center items-center py-12">
-                <div class="animate-spin w-12 h-12 border-4 border-black border-t-transparent rounded-full"></div>
+                <div class="animate-spin w-12 h-12 border-4 border-theme border-t-transparent rounded-full"></div>
                 <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
             </div>
 
             <!-- End of List -->
             <div id="end-of-records" class="hidden text-center py-20">
-                <div class="inline-block border-2 border-black px-8 py-4 font-bold text-xl bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div class="inline-block border-2 border-theme px-8 py-4 font-bold text-xl bg-surface shadow-[4px_4px_0px_0px_var(--shadow-color)]">
                     {{ t.end_of_records }}
                 </div>
             </div>
@@ -170,7 +170,7 @@
                         <ul class="space-y-2">
                             <li>
                                 <button
-                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover:border-black sidebar-btn"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/accounts?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
@@ -179,7 +179,7 @@
                             </li>
                             <li>
                                 <button
-                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover:border-black sidebar-btn"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/plans?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
@@ -192,7 +192,7 @@
 
                 <!-- Content Area -->
                 <div id="management-content" class="flex-grow">
-                    <div class="text-center py-12 opacity-50 font-mono">
+                    <div class="text-center py-12 text-muted font-mono">
                         {{ t.text_select_sidebar or 'Select an item from the sidebar' }}
                     </div>
                 </div>
@@ -202,9 +202,9 @@
 
     <!-- Modal Container -->
     <div id="modal-container" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+        <div class="absolute inset-0 bg-overlay backdrop-blur-sm"></div>
         <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl px-4">
-            <div id="modal-content" class="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div id="modal-content" class="bg-card border-4 border-theme shadow-[8px_8px_0px_0px_var(--shadow-color)] p-6 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
                 <!-- Content injected here -->
             </div>
         </div>
@@ -216,5 +216,10 @@
 
     <!-- Custom JS -->
     <script src="/static/js/main.js?v=2.2"></script>
+    <script>
+        document.body.addEventListener("closeModal", function(){
+            closeModal();
+        });
+    </script>
 </body>
 </html>

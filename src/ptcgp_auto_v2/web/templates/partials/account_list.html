@@ -3,7 +3,7 @@
         <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_accounts or 'ACCOUNTS' }}</h2>
         <button class="brutal-btn"
                 hx-get="/management/accounts?lang={{ current_lang }}"
-                hx-target="#tab-content-accounts">
+                hx-target="#management-content">
             {{ t.btn_refresh or 'Refresh' }}
         </button>
     </div>
@@ -38,14 +38,14 @@
                             </div>
                         </div>
                         {% else %}
-                        <span class="font-mono text-sm opacity-70" title="{{ account.game_id }}">{{ account.game_id[:8] }}...</span>
+                        <span class="font-mono text-sm text-muted" title="{{ account.game_id }}">{{ account.game_id[:8] }}...</span>
                         {% endif %}
                     </td>
                     <td class="p-3">
                         {% if account.task_plan %}
                         <span class="brutal-tag text-xs">{{ account.task_plan.name }}</span>
                         {% else %}
-                        <span class="opacity-50">-</span>
+                        <span class="text-muted">-</span>
                         {% endif %}
                     </td>
                     <td class="p-3">
@@ -64,10 +64,10 @@
                         {% if config %}
                         <div class="flex flex-col">
                             <span class="font-bold text-xs">{{ config.pack_code }}</span>
-                            <span class="text-xs opacity-70">{{ config.booster_name }}</span>
+                            <span class="text-xs text-muted">{{ config.booster_name }}</span>
                         </div>
                         {% else %}
-                        <span class="opacity-50">-</span>
+                        <span class="text-muted">-</span>
                         {% endif %}
                     </td>
                     <td class="p-3 text-right">

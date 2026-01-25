@@ -10,7 +10,7 @@
             </button>
             <button class="brutal-btn"
                     hx-get="/management/plans?lang={{ current_lang }}"
-                    hx-target="#tab-content-tasks">
+                    hx-target="#management-content">
                 {{ t.btn_refresh or 'Refresh' }}
             </button>
         </div>
@@ -19,7 +19,7 @@
     <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
             <thead>
-                <tr class="border-b-4 border-black">
+                <tr class="border-b-4 border-theme">
                     <th class="p-3 font-bold uppercase">{{ t.col_id or 'ID' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_name or 'Name' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_description or 'Description' }}</th>
@@ -29,10 +29,10 @@
             </thead>
             <tbody>
                 {% for plan in plans %}
-                <tr class="border-b border-black/20 hover:bg-black/5 transition-colors">
+                <tr class="border-b border-subtle hover-bg-subtle transition-colors">
                     <td class="p-3 font-mono font-bold">#{{ plan.id }}</td>
                     <td class="p-3 font-bold">{{ plan.name }}</td>
-                    <td class="p-3 opacity-70">{{ plan.description or '-' }}</td>
+                    <td class="p-3 text-muted">{{ plan.description or '-' }}</td>
                     <td class="p-3 font-mono text-xs">
                         <div class="truncate max-w-[200px]" title="{{ plan.configuration }}">
                             {{ plan.configuration }}
@@ -48,7 +48,7 @@
                         <button class="brutal-btn text-xs px-3 py-1 bg-red-500 text-white hover:bg-red-600 !border-red-500"
                                 hx-delete="/api/plans/{{ plan.id }}?lang={{ current_lang }}"
                                 hx-confirm="{{ t.confirm_delete_plan.format(name=plan.name) if t.confirm_delete_plan else 'Are you sure you want to delete plan?' }}"
-                                hx-target="#tab-content-tasks">
+                                hx-target="#management-content">
                             {{ t.btn_delete or 'Del' }}
                         </button>
                     </td>

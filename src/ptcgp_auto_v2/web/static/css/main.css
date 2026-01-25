@@ -13,6 +13,14 @@
     --radius: 0px;
     --btn-transform: translate(-1px, -1px);
     --card-bg: #ffffff;
+
+    /* NEW: Semantic Colors */
+    --bg-overlay: rgba(0, 0, 0, 0.5);
+    --bg-subtle: rgba(0, 0, 0, 0.05);
+    --bg-surface: #ffffff;
+    --border-subtle: rgba(0, 0, 0, 0.2);
+    --border-subtle-light: rgba(0, 0, 0, 0.1);
+    --text-muted: rgba(0, 0, 0, 0.6);
 }
 
 /* Theme: Retro-futuristic */
@@ -28,6 +36,13 @@
     --shadow-offset: 4px;
     --radius: 0px;
     --card-bg: #111111;
+
+    --bg-overlay: rgba(0, 20, 0, 0.85);
+    --bg-subtle: rgba(0, 255, 157, 0.1);
+    --bg-surface: #111111;
+    --border-subtle: rgba(255, 0, 255, 0.3);
+    --border-subtle-light: rgba(255, 0, 255, 0.15);
+    --text-muted: rgba(0, 255, 157, 0.6);
 }
 
 /* Theme: Organic/Natural */
@@ -43,6 +58,9 @@
     --shadow-offset: 8px;
     --radius: 12px;
     --card-bg: #ffffff;
+
+    --bg-subtle: rgba(93, 112, 82, 0.1);
+    --border-subtle: rgba(93, 112, 82, 0.3);
 }
 
 /* Theme: Luxury/Refined */
@@ -58,6 +76,13 @@
     --shadow-offset: 0px; /* Glow effect handled differently */
     --radius: 2px;
     --card-bg: #1a1a1a;
+
+    --bg-overlay: rgba(15, 15, 15, 0.8);
+    --bg-subtle: rgba(212, 175, 55, 0.05);
+    --bg-surface: #1a1a1a;
+    --border-subtle: rgba(212, 175, 55, 0.3);
+    --border-subtle-light: rgba(212, 175, 55, 0.15);
+    --text-muted: rgba(224, 224, 224, 0.6);
 }
 
 /* Theme: Playful/Toy-like */
@@ -103,6 +128,9 @@
     --shadow-offset: 5px;
     --radius: 0px;
     --card-bg: #333333;
+
+    --bg-subtle: rgba(197, 160, 89, 0.1);
+    --border-subtle: rgba(197, 160, 89, 0.3);
 }
 
 /* Theme: Soft/Pastel */
@@ -135,6 +163,29 @@ body {
 .bg-card { background-color: var(--card-bg) !important; }
 .text-theme { color: var(--text-color) !important; }
 
+/* NEW: Utility Classes */
+.bg-overlay { background-color: var(--bg-overlay) !important; }
+.bg-surface { background-color: var(--bg-surface) !important; }
+.bg-subtle  { background-color: var(--bg-subtle) !important; }
+.bg-separator { background-color: var(--border-subtle) !important; }
+
+.border-subtle { border-color: var(--border-subtle) !important; }
+.border-subtle-light { border-color: var(--border-subtle-light) !important; }
+
+.text-muted {
+    color: var(--text-color) !important;
+    opacity: 0.6 !important;
+}
+
+.hover-bg-subtle:hover {
+    background-color: var(--bg-subtle) !important;
+}
+
+.hover-border-theme:hover {
+    border-color: var(--border-color) !important;
+}
+
+/* Existing Utilities */
 .hover-row:hover {
     background-color: rgba(0,0,0,0.05);
 }
@@ -253,14 +304,7 @@ body {
 [data-theme="brutalist"] .brutal-btn.active { color: #fff; background-color: #000; }
 [data-theme="retro"] .brutal-btn.active { color: #000; background-color: var(--text-color); box-shadow: 0 0 10px var(--text-color); }
 
-.sidebar-btn.active {
-    background-color: var(--active-color);
-    color: var(--bg-color); /* Contrast */
-    border-color: var(--border-color);
-}
-[data-theme="brutalist"] .sidebar-btn.active { color: #fff; background-color: #000; }
-[data-theme="retro"] .sidebar-btn.active { color: #000; background-color: var(--text-color); }
-
+/* Sidebar Button Hover States */
 .sidebar-btn:hover {
     background-color: rgba(0,0,0,0.05);
 }
@@ -271,6 +315,15 @@ body {
     background-color: rgba(212, 175, 55, 0.1);
     color: var(--active-color);
 }
+
+/* Sidebar Button Active States (Must come after hover) */
+.sidebar-btn.active {
+    background-color: var(--active-color);
+    color: var(--bg-color); /* Contrast */
+    border-color: var(--border-color);
+}
+[data-theme="brutalist"] .sidebar-btn.active { color: #fff; background-color: #000; }
+[data-theme="retro"] .sidebar-btn.active { color: #000; background-color: var(--text-color); }
 
 .brutal-separator {
     border-bottom: var(--border-width) solid var(--border-color);
