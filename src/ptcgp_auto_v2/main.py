@@ -137,6 +137,24 @@ def parse_args(argv: list[str] | None = None):
         help="使用设备当前账号，不切换",
     )
 
+    parser.add_argument(
+        "--list-plans",
+        action="store_true",
+        help="列出所有任务计划",
+    )
+
+    parser.add_argument(
+        "--add-plan",
+        type=str,
+        help="为账号添加任务计划（需配合 --account 使用，可指定 ID 或名称）",
+    )
+
+    parser.add_argument(
+        "--remove-plan",
+        type=str,
+        help="为账号移除任务计划（需配合 --account 使用，可指定 ID 或名称）",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -150,6 +168,70 @@ def list_tasks():
             f"  - {task_type}: {task_class.__doc__.strip().split(chr(10))[0] if task_class.__doc__ else '无描述'}"
         )
     print()
+
+
+def list_plans():
+    """列出所有任务计划"""
+    from ptcgp_auto_v2.db.repositories import TaskPlanRepository
+
+    repo = TaskPlanRepository()
+    plans = repo.get_all()
+
+    print("\n任务计划列表:")
+    print("-" * 60)
+    print(f"{'ID':<5} {'名称':<20} {'描述':<30}")
+    print("-" * 60)
+    for plan in plans:
+        desc = plan.description or "-"
+        print(f"{plan.id:<5} {plan.name:<20} {desc:<30}")
+        # 显示配置详情
+        if plan.configuration and plan.configuration != "{}":
+            print(f"      配置: {plan.configuration}")
+        if plan.task_types:
+            print(f"      任务: {plan.task_types}")
+    print()
+
+
+def manage_account_plan(account_id: int, plan_identifier: str, action: str):
+    """
+    管理账号的任务计划
+
+    Args:
+        account_id: 账号 ID
+        plan_identifier: 计划 ID 或名称
+        action: "add" 或 "remove"
+    """
+    from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+
+    account_repo = AccountRepository()
+    plan_repo = TaskPlanRepository()
+
+    account = account_repo.get_by_id(account_id)
+    if not account:
+        print(f"错误: 账号 ID {account_id} 不存在")
+        return
+
+    # 解析 Plan
+    plan = None
+    if plan_identifier.isdigit():
+        plan = plan_repo.get_by_id(int(plan_identifier))
+    else:
+        plan = plan_repo.get_by_name(plan_identifier)
+
+    if not plan:
+        print(f"错误: 计划 '{plan_identifier}' 不存在")
+        return
+
+    if action == "add":
+        if account_repo.add_secondary_plan(account.id, plan.id):
+            print(f"成功: 已为账号 {account.nickname} 添加计划 '{plan.name}'")
+        else:
+            print(f"错误: 添加计划失败")
+    elif action == "remove":
+        if account_repo.remove_secondary_plan(account.id, plan.id):
+            print(f"成功: 已从账号 {account.nickname} 移除计划 '{plan.name}'")
+        else:
+            print(f"错误: 移除计划失败")
 
 
 def list_accounts():
@@ -398,6 +480,25 @@ def main():
     # 处理列表命令
     if args.list_tasks:
         list_tasks()
+        return 0
+
+    # 处理 Plan 管理命令
+    if args.list_plans:
+        list_plans()
+        return 0
+
+    if args.add_plan:
+        if not args.account:
+            print("错误: --add-plan 需要配合 --account 使用")
+            return 1
+        manage_account_plan(args.account, args.add_plan, "add")
+        return 0
+
+    if args.remove_plan:
+        if not args.account:
+            print("错误: --remove-plan 需要配合 --account 使用")
+            return 1
+        manage_account_plan(args.account, args.remove_plan, "remove")
         return 0
 
     if args.list_accounts:
