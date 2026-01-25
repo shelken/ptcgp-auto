@@ -120,9 +120,9 @@
 
     <main class="max-w-7xl mx-auto">
         <!-- Records Container -->
-        <div id="records-container" 
+        <div id="records-container"
              class="space-y-12"
-             hx-get="/api/records?page=0&lang={{ current_lang }}" 
+             data-url="/api/records?page=0&lang={{ current_lang }}"
              hx-swap="innerHTML">
         </div>
 
