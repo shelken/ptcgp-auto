@@ -26,6 +26,7 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 - **任务队列架构**：支持 `每日开包`、`领取奖励`、`领取礼物` 等原子任务
 - **智能调度**：根据任务优先级和设备空闲状态自动分配任务
 - **数据持久化**：使用 SQLite 记录账号信息、任务状态和开包历史
+- **Web 可视化界面**：内置现代化 Web UI，支持开包记录查看、高级筛选（稀有度/类型）、多视图切换及移动端适配
 - **断点续传**：任务执行失败自动重试，进程重启后自动恢复进度
 
 ## 🚀 快速开始
@@ -95,6 +96,7 @@ ptcgp-auto/
 │   │   ├── tasks/              # 任务实现 (OpenPack, ClaimRewards...)
 │   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
 │   │   ├── infra/              # 基础设施 (ADB, OCR, PageDetector)
+│   │   ├── web/                # Web UI (FastAPI/HTMX)
 │   │   ├── config/             # 配置文件
 │   │   └── utils/              # 工具函数
 │   └── ptcgp_auto/             # v1 旧版代码 (Legacy)
