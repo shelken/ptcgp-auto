@@ -8,8 +8,10 @@ PTCGP Auto v2 主入口
 import argparse
 import logging
 import sys
+import threading
 from pathlib import Path
 
+import uvicorn
 from ptcgp_auto_v2.config.settings import Settings, get_settings, set_settings
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
@@ -310,8 +312,30 @@ def run_single_task(
     return 0 if all_success else 1
 
 
+
+def run_web_server(host: str, port: int):
+    """Run the web server"""
+    try:
+        from ptcgp_auto_v2.web.app import app
+        # Disable Uvicorn's standard logging to prevent clutter, we have our own
+        config = uvicorn.Config(app, host=host, port=port, log_level="warning", loop="asyncio")
+        server = uvicorn.Server(config)
+        logger.info(f"Web server starting at http://{host}:{port}")
+        server.run()
+    except Exception as e:
+        logger.error(f"Failed to start web server: {e}")
+
 def run_daemon(settings: Settings):
     """守护模式运行"""
+    
+    # Start web server in a background thread
+    web_thread = threading.Thread(
+        target=run_web_server,
+        args=(settings.web_host, settings.web_port),
+        daemon=True
+    )
+    web_thread.start()
+
     logger.info("启动守护模式...")
 
     scheduler = Scheduler(
@@ -408,6 +432,14 @@ def main():
 
     # 处理单任务模式
     if args.task:
+        # Start web server even in single task mode if requested (optional, but good for monitoring)
+        # For now, let's keep it simple and only run in daemon mode or if explicitly requested?
+        # The user asked to integrate it so it runs in the background when the main app starts.
+        # But typically "main app starts" implies daemon mode for long-running processes.
+        # Let's add it to single task mode too if it doesn't exit immediately? 
+        # Actually single task mode exits after completion, so web server would die too.
+        # So it makes most sense in daemon mode.
+        
         # 原有错误处理保留
         if not args.account and not args.disable_switch:
             print("错误: --task 需要配合 --account 使用，或使用 --disable-switch")

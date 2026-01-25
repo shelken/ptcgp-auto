@@ -1,8 +1,10 @@
 {
     "app_title": "Pack Records | PTCGP Auto",
-    "header_title": "PACK<br>RECORDS",
-    "header_subtitle": "PTCGP AUTO ARCHIVE",
+    "header_title": "PACK RECORDS",
     "live_tag": "LIVE",
+    "view_mode": "VIEW:",
+    "view_list": "LIST",
+    "view_grid": "GRID",
     "filter_rarity": "Rarity:",
     "filter_type": "Type:",
     "loading_text": "LOADING PACKS...",
@@ -32,5 +34,6 @@
     "type_item": "Item",
     "type_supporter": "Supporter",
     "type_tool": "Tool",
-    "type_Fossil": "Fossil"
+    "type_Fossil": "Fossil",
+    "clear_filters": "CLEAR FILTERS"
 }
