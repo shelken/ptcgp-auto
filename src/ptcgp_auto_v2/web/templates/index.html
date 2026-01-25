@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ t.app_title }}</title>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    
+
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
@@ -28,7 +28,7 @@
                     <span class="mx-2">/</span>
                     <a href="javascript:void(0)" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}">中文</a>
                 </div>
-                
+
                 <!-- Theme Switcher -->
                 <div class="flex items-center gap-2">
                     <span class="opacity-60">{{ t.theme_label }}:</span>
@@ -56,95 +56,165 @@
         </div>
 
         <div class="flex flex-col lg:flex-row justify-between items-end brutal-separator pb-6 gap-8">
-            <!-- Title (Simplified) -->
+            <!-- Title -->
             <div class="w-full lg:w-auto whitespace-nowrap">
-                <h1 class="text-6xl md:text-8xl font-bold tracking-tighter leading-none mb-2">{{ t.header_title|safe }}</h1>
+                <h1 id="main-title" class="text-6xl md:text-8xl font-bold tracking-tighter leading-none mb-2">{{ t.header_title|safe }}</h1>
             </div>
 
-            <!-- Filters Section (Right Aligned) -->
-            <div class="w-full lg:w-auto lg:text-right">
-                
-                <!-- View Toggle & Clear Filters Row -->
-                <div class="flex flex-wrap justify-between lg:justify-end items-center gap-4 mb-4">
-                     <!-- View Mode -->
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.view_mode }}</span>
-                        <button onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active">{{ t.view_list }}</button>
-                        <button onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn">{{ t.view_grid }}</button>
-                    </div>
+            <!-- Tab Navigation (Right Aligned) -->
+            <div class="flex gap-4 overflow-x-auto p-2">
+                <button
+                    onclick="switchTab('records')"
+                    class="brutal-btn active text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
+                    id="tab-btn-records"
+                    data-title="{{ t.header_title }}">
+                    {{ t.tab_records or 'RECORDS' }}
+                </button>
+                <button
+                    onclick="switchTab('management')"
+                    class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
+                    id="tab-btn-management"
+                    data-title="{{ t.tab_management or 'MANAGEMENT' }}">
+                    {{ t.tab_management or 'MANAGEMENT' }}
+                </button>
+            </div>
+        </div>
 
-                    <!-- Clear Filters -->
-                    <button onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase">
-                        {{ t.clear_filters }} ✕
-                    </button>
+        <!-- Filters Section (Only visible in Records tab) -->
+        <div id="records-filters" class="w-full lg:w-auto lg:text-right mb-8 mt-6">
+            <div class="flex flex-wrap justify-between lg:justify-end items-center gap-8 mb-4">
+                 <!-- View Mode -->
+                <div class="flex items-center gap-2">
+                    <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.view_mode }}</span>
+                    <button onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active">{{ t.view_list }}</button>
+                    <button onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn">{{ t.view_grid }}</button>
                 </div>
 
-                <form id="filter-form" 
-                      hx-get="/api/records?page=0&lang={{ current_lang }}" 
-                      hx-target="#records-container" 
-                      hx-swap="innerHTML"
-                      class="space-y-4"
-                      onchange="saveFilters()">
-                    
-                    <!-- Rarity Filter -->
-                    <div class="flex flex-col lg:items-end gap-2">
-                        <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_rarity }}</span>
-                        <div class="flex flex-wrap gap-2 lg:justify-end">
-                            {% for r in rarities %}
-                            <div>
-                                <input type="checkbox" id="rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden filter-checkbox"
-                                       hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
-                                <label for="rarity-{{ r }}" class="filter-label">{{ t['rarity_' + r] or r }}</label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
+                <!-- Separator -->
+                <div class="hidden lg:block w-px h-6 bg-black/20"></div>
 
-                    <!-- Card Type Filter -->
-                    <div class="flex flex-col lg:items-end gap-2">
-                        <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_type }}</span>
-                        <div class="flex flex-wrap gap-2 lg:justify-end">
-                            {% for type in card_types %}
-                            <div>
-                                <input type="checkbox" id="type-{{ type }}" name="card_type" value="{{ type }}" class="hidden filter-checkbox"
-                                       hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
-                                <label for="type-{{ type }}" class="filter-label uppercase">{{ t['type_' + type] or type }}</label>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </form>
+                <!-- Clear Filters -->
+                <button onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase">
+                    {{ t.clear_filters }} ✕
+                </button>
             </div>
+
+            <form id="filter-form"
+                  hx-get="/api/records?page=0&lang={{ current_lang }}"
+                  hx-target="#records-container"
+                  hx-swap="innerHTML"
+                  class="space-y-4"
+                  onchange="saveFilters()">
+
+                <!-- Rarity Filter -->
+                <div class="flex flex-col lg:items-end gap-2">
+                    <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_rarity }}</span>
+                    <div class="flex flex-wrap gap-2 lg:justify-end">
+                        {% for r in rarities %}
+                        <div>
+                            <input type="checkbox" id="rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden filter-checkbox"
+                                   hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
+                            <label for="rarity-{{ r }}" class="filter-label">{{ t['rarity_' + r] or r }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Card Type Filter -->
+                <div class="flex flex-col lg:items-end gap-2">
+                    <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_type }}</span>
+                    <div class="flex flex-wrap gap-2 lg:justify-end">
+                        {% for type in card_types %}
+                        <div>
+                            <input type="checkbox" id="type-{{ type }}" name="card_type" value="{{ type }}" class="hidden filter-checkbox"
+                                   hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
+                            <label for="type-{{ type }}" class="filter-label uppercase">{{ t['type_' + type] or type }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </form>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto">
-        <!-- Records Container -->
-        <div id="records-container"
-             class="space-y-12"
-             data-url="/api/records?page=0&lang={{ current_lang }}"
-             hx-swap="innerHTML">
+    <main class="max-w-7xl mx-auto relative">
+        <!-- Records Tab Content -->
+        <div id="tab-content-records" class="tab-content block">
+            <!-- Records Container -->
+            <div id="records-container"
+                 class="space-y-12"
+                 data-url="/api/records?page=0&lang={{ current_lang }}"
+                 hx-swap="innerHTML">
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="htmx-indicator w-full justify-center items-center py-12">
+                <div class="animate-spin w-12 h-12 border-4 border-black border-t-transparent rounded-full"></div>
+                <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
+            </div>
+
+            <!-- End of List -->
+            <div id="end-of-records" class="hidden text-center py-20">
+                <div class="inline-block border-2 border-black px-8 py-4 font-bold text-xl bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    {{ t.end_of_records }}
+                </div>
+            </div>
         </div>
 
-        <!-- Loading Spinner -->
-        <div class="htmx-indicator w-full justify-center items-center py-12">
-            <div class="animate-spin w-12 h-12 border-4 border-black border-t-transparent rounded-full"></div>
-            <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
-        </div>
-        
-        <!-- End of List -->
-        <div id="end-of-records" class="hidden text-center py-20">
-            <div class="inline-block border-2 border-black px-8 py-4 font-bold text-xl bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                {{ t.end_of_records }}
+        <!-- Management Tab Content -->
+        <div id="tab-content-management" class="tab-content hidden">
+            <div class="flex flex-col md:flex-row gap-8">
+                <!-- Sidebar -->
+                <aside class="w-full md:w-64 flex-shrink-0">
+                    <nav class="brutal-card p-4 sticky top-4">
+                        <ul class="space-y-2">
+                            <li>
+                                <button
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover:border-black sidebar-btn"
+                                    hx-get="/management/accounts?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+                                    {{ t.menu_accounts or 'ACCOUNTS' }}
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover:border-black sidebar-btn"
+                                    hx-get="/management/plans?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+                                    {{ t.menu_plans or 'TASK PLANS' }}
+                                </button>
+                            </li>
+                        </ul>
+                    </nav>
+                </aside>
+
+                <!-- Content Area -->
+                <div id="management-content" class="flex-grow">
+                    <div class="text-center py-12 opacity-50 font-mono">
+                        {{ t.text_select_sidebar or 'Select an item from the sidebar' }}
+                    </div>
+                </div>
             </div>
         </div>
     </main>
 
+    <!-- Modal Container -->
+    <div id="modal-container" class="fixed inset-0 z-50 hidden" onclick="closeModal(event)">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl px-4">
+            <div id="modal-content" class="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+                <!-- Content injected here -->
+            </div>
+        </div>
+    </div>
+
     <footer class="max-w-7xl mx-auto mt-20 pt-8 border-t-4 border-black text-center font-bold uppercase tracking-widest text-sm">
         <p>{{ t.generated_by }}</p>
     </footer>
-    
+
     <!-- Custom JS -->
-    <script src="/static/js/main.js"></script>
+    <script src="/static/js/main.js?v=2.2"></script>
 </body>
 </html>
