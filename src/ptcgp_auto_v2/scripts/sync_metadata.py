@@ -21,7 +21,7 @@ ROOT_DIR = SRC_DIR.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from ptcgp_auto_v2.db.models import Card, CardSet
+from ptcgp_auto_v2.db.models import Card, CardSet, Pack
 from ptcgp_auto_v2.db.repositories import CardRepository
 
 logging.basicConfig(
@@ -68,18 +68,27 @@ def sync_metadata():
                 else str(name_val)
             )
 
+            # 序列化 name_val 到 label_data
+            label_data = "{}"
+            if isinstance(name_val, dict):
+                label_data = json.dumps(name_val, ensure_ascii=False)
+            elif isinstance(name_val, str):
+                 # 如果只是字符串，尝试构造简单的 JSON
+                label_data = json.dumps({"en": name_val}, ensure_ascii=False)
+
             card_set = CardSet(
                 code=code,
                 name=name,
                 release_date=s.get("releaseDate"),
                 total_cards=s.get("count", 0),
+                label_data=label_data,
             )
             repo.upsert_set(card_set)
             total_sets += 1
 
     logger.info(f"Synced {total_sets} sets.")
 
-    # 2. Sync Cards
+    # 2. Sync Cards & Collect Packs
     logger.info(f"Fetching cards from {CARDS_URL}...")
     logger.info(f"Fetching extra card data from {CARDS_EXTRA_URL}...")
 
@@ -110,6 +119,10 @@ def sync_metadata():
         sys.exit(1)
 
     total_cards = 0
+    # 收集所有的 packs: (set_code, pack_name) -> image_url (暂无)
+    # 我们用一个字典来存储发现的 packs
+    detected_packs = {} # key: pack_name, value: set_code
+
     for i, c in enumerate(cards_data):
         # c: {set, number, name, rarity, image, packs: [], ...}
         set_code = c.get("set")
@@ -163,12 +176,30 @@ def sync_metadata():
         packs = c.get("packs", [])
         for pack_name in packs:
             repo.add_card_pack(saved_card.id, pack_name)  # type: ignore
+            # Record pack for later sync
+            if pack_name not in detected_packs:
+                detected_packs[pack_name] = set_code # 假设第一个遇到的 set_code 是该 pack 的归属
 
         total_cards += 1
         if total_cards % 100 == 0:
             print(f"Processed {total_cards} cards...", end="\r")
 
     logger.info(f"\nSynced {total_cards} cards.")
+
+    # 3.5 Sync Packs Table
+    logger.info(f"Syncing {len(detected_packs)} packs metadata...")
+    for pack_name, set_code in detected_packs.items():
+        # 默认 label_data 包含英文名
+        default_label = json.dumps({"en": pack_name}, ensure_ascii=False)
+        pack = Pack(
+            name=pack_name,
+            set_code=set_code,
+            label_data=default_label
+        )
+        repo.upsert_pack_safe(pack)
+
+    # 4. Generate packs.json
+    generate_packs_json(repo)
 
     # 4. Generate packs.json
     generate_packs_json(repo)
