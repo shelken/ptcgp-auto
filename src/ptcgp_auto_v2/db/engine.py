@@ -8,6 +8,7 @@ SQLModel 数据库引擎
 from contextlib import contextmanager
 from typing import Generator
 
+from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
 
 from ptcgp_auto_v2.config.settings import get_settings
@@ -25,18 +26,36 @@ def get_engine():
     global _engine
     if _engine is None:
         settings = get_settings()
-        _engine = create_engine(f"sqlite:///{settings.db_path}", echo=False)
+        # Check if using SQLite
+        if "sqlite" in settings.db_path.scheme if hasattr(settings.db_path, "scheme") else "sqlite" in str(settings.db_path):
+             # For SQLite, use NullPool to avoid QueuePool limit errors in multithreaded envs
+             # and ensure connections are closed immediately.
+            _engine = create_engine(f"sqlite:///{settings.db_path}", echo=False, poolclass=NullPool)
+        else:
+            _engine = create_engine(f"sqlite:///{settings.db_path}", echo=False)
     return _engine
 
 
 def get_session() -> Session:
     """
-    获取数据库会话
+    获取数据库会话 (普通模式)
 
-    返回一个新的 Session 实例，调用者负责管理其生命周期。
-    推荐使用 with 语句或 session_scope() 上下文管理器。
+    返回一个新的 Session 实例，调用者负责管理其生命周期 (调用 .close())。
     """
     return Session(get_engine())
+
+
+def get_fastapi_session() -> Generator[Session, None, None]:
+    """
+    获取数据库会话 (FastAPI 依赖注入模式)
+
+    使用 yield 确保请求结束后自动关闭会话。
+    """
+    session = Session(get_engine())
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 @contextmanager

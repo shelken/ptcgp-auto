@@ -18,7 +18,7 @@ from datetime import datetime
 import os
 import math
 
-from ptcgp_auto_v2.db.engine import get_session
+from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.models.pack_record import PackRecord
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.pack_card import PackCard
@@ -66,7 +66,7 @@ templates.env.filters["datetime"] = format_datetime
 async def read_root(
     request: Request, 
     lang: str = Query(default="en"),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_fastapi_session)
 ):
     # Determine language (priority: query param > defaults to en)
     if lang not in translations:
@@ -102,7 +102,7 @@ async def get_records(
     rarity: List[str] = Query(default=[]),
     card_type: List[str] = Query(default=[]),
     lang: str = Query(default="en"),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_fastapi_session)
 ):
     """
     Fetch pack records with pagination for HTMX infinite scroll.
