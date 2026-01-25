@@ -1,0 +1,60 @@
+<div class="brutal-card p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_plans or 'TASK PLANS' }}</h2>
+        <div class="flex gap-2">
+            <button class="brutal-btn"
+                    hx-get="/management/plans/edit?lang={{ current_lang }}"
+                    hx-target="#modal-content"
+                    onclick="document.getElementById('modal-container').classList.remove('hidden')">
+                {{ t.btn_new_plan or '+ New Plan' }}
+            </button>
+            <button class="brutal-btn"
+                    hx-get="/management/plans?lang={{ current_lang }}"
+                    hx-target="#tab-content-tasks">
+                {{ t.btn_refresh or 'Refresh' }}
+            </button>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="border-b-4 border-black">
+                    <th class="p-3 font-bold uppercase">{{ t.col_id or 'ID' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_name or 'Name' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_description or 'Description' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_config or 'Config' }}</th>
+                    <th class="p-3 font-bold uppercase text-right">{{ t.col_actions or 'Actions' }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in plans %}
+                <tr class="border-b border-black/20 hover:bg-black/5 transition-colors">
+                    <td class="p-3 font-mono font-bold">#{{ plan.id }}</td>
+                    <td class="p-3 font-bold">{{ plan.name }}</td>
+                    <td class="p-3 opacity-70">{{ plan.description or '-' }}</td>
+                    <td class="p-3 font-mono text-xs">
+                        <div class="truncate max-w-[200px]" title="{{ plan.configuration }}">
+                            {{ plan.configuration }}
+                        </div>
+                    </td>
+                    <td class="p-3 text-right flex justify-end gap-2">
+                        <button class="brutal-btn text-xs px-3 py-1"
+                                hx-get="/management/plans/edit?plan_id={{ plan.id }}&lang={{ current_lang }}"
+                                hx-target="#modal-content"
+                                onclick="document.getElementById('modal-container').classList.remove('hidden')">
+                            {{ t.btn_edit or 'Edit' }}
+                        </button>
+                        <button class="brutal-btn text-xs px-3 py-1 bg-red-500 text-white hover:bg-red-600 !border-red-500"
+                                hx-delete="/api/plans/{{ plan.id }}?lang={{ current_lang }}"
+                                hx-confirm="{{ t.confirm_delete_plan.format(name=plan.name) if t.confirm_delete_plan else 'Are you sure you want to delete plan?' }}"
+                                hx-target="#tab-content-tasks">
+                            {{ t.btn_delete or 'Del' }}
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

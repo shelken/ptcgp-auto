@@ -1,0 +1,74 @@
+<div class="brutal-card p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_accounts or 'ACCOUNTS' }}</h2>
+        <button class="brutal-btn"
+                hx-get="/management/accounts?lang={{ current_lang }}"
+                hx-target="#tab-content-accounts">
+            {{ t.btn_refresh or 'Refresh' }}
+        </button>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="border-b-4 border-black">
+                    <th class="p-3 font-bold uppercase">{{ t.col_id or 'ID' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.label_nickname or 'Nickname' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_game_id or 'Game ID' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_primary_plan or 'Primary Plan' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_extra_plans or 'Extra Plans' }}</th>
+                    <th class="p-3 font-bold uppercase text-right">{{ t.col_actions or 'Actions' }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for account in accounts %}
+                <tr class="border-b border-black/20 hover:bg-black/5 transition-colors">
+                    <td class="p-3 font-mono font-bold">#{{ account.id }}</td>
+                    <td class="p-3 font-bold">{{ account.nickname or '-' }}</td>
+                    <td class="p-3">
+                        {% if account.friend_id %}
+                        <div class="group relative inline-block cursor-pointer" onclick="navigator.clipboard.writeText('{{ account.friend_id }}'); showToast('Copied!')">
+                            <span class="font-mono font-bold hover:text-black/60 transition-colors border-b border-dashed border-black/30">{{ account.friend_id }}</span>
+                            <!-- Tooltip for Game ID -->
+                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
+                                <div class="bg-black text-white text-xs p-2 rounded shadow-lg">
+                                    Game ID: {{ account.game_id }}
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="font-mono text-sm opacity-70" title="{{ account.game_id }}">{{ account.game_id[:8] }}...</span>
+                        {% endif %}
+                    </td>
+                    <td class="p-3">
+                        {% if account.task_plan %}
+                        <span class="brutal-tag text-xs">{{ account.task_plan.name }}</span>
+                        {% else %}
+                        <span class="opacity-50">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="p-3">
+                        <div class="flex flex-wrap gap-1">
+                            {% for assoc in account.task_plan_associations %}
+                                {% if assoc.is_active and assoc.task_plan %}
+                                <span class="brutal-tag text-xs bg-black text-white !border-black">
+                                    {{ assoc.task_plan.name }}
+                                </span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="p-3 text-right">
+                        <button class="brutal-btn text-xs px-3 py-1"
+                                hx-get="/management/accounts/{{ account.id }}/plans?lang={{ current_lang }}"
+                                hx-target="#modal-content"
+                                onclick="document.getElementById('modal-container').classList.remove('hidden')">
+                            {{ t.btn_edit_plans or 'Edit Plans' }}
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
