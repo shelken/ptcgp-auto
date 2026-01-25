@@ -318,6 +318,7 @@ async def update_account_plans(
     request: Request,
     account_id: int,
     lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
 ):
     """Handle Account Plans Update"""
     form = await request.form()
@@ -347,7 +348,9 @@ async def update_account_plans(
     # Return updated list or success message
     # For simplicity, we just trigger a reload of the accounts list
     # HTMX can target the table to refresh
-    return await get_management_accounts(request, lang=lang)
+    response = await get_management_accounts(request, lang=lang, session=session)
+    response.headers["HX-Trigger"] = "closeModal"
+    return response
 
 @app.post("/api/plans")
 async def save_plan(
@@ -386,6 +389,9 @@ async def save_plan(
             if task_config:
                 configuration[task_type] = task_config
 
+    # Debug log for configuration issues
+    print(f"DEBUG: Processed configuration: {configuration}")
+
     repo = TaskPlanRepository()
 
     if plan_id:
@@ -393,8 +399,12 @@ async def save_plan(
         plan.name = name
         plan.description = description
         plan.task_types = json.dumps(task_types)
+        # Ensure we are saving the dict as a JSON string
         plan.configuration = json.dumps(configuration)
-        repo.update(plan)
+
+        # Explicitly check if update returns True
+        if not repo.update(plan):
+            print(f"ERROR: Failed to update plan {plan_id}")
     else:
         plan = TaskPlan(
             name=name,
@@ -404,7 +414,9 @@ async def save_plan(
         )
         repo.create(plan)
 
-    return await get_management_plans(request, lang=lang)
+    response = await get_management_plans(request, lang=lang)
+    response.headers["HX-Trigger"] = "closeModal"
+    return response
 
 @app.delete("/api/plans/{plan_id}")
 async def delete_plan(
@@ -499,7 +511,8 @@ async def get_boosters_options(
 async def save_account_pack_config(
     request: Request,
     account_id: int,
-    lang: str = Query(default="en")
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
 ):
     """Save Account Pack Config"""
     form = await request.form()
@@ -519,7 +532,9 @@ async def save_account_pack_config(
     repo.upsert(config)
 
     # Return updated account list to refresh the view
-    return await get_management_accounts(request, lang=lang)
+    response = await get_management_accounts(request, lang=lang, session=session)
+    response.headers["HX-Trigger"] = "closeModal"
+    return response
 
 if __name__ == "__main__":
     import uvicorn

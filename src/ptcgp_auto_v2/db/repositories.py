@@ -249,6 +249,15 @@ class TaskPlanRepository:
                 db_plan.task_types = json.dumps(plan.task_types, ensure_ascii=False)
             else:
                 db_plan.task_types = plan.task_types
+
+            # 如果 configuration 是字典，转换为 JSON 字符串（修复 configuration 不更新的 bug）
+            if isinstance(plan.configuration, dict):
+                db_plan.configuration = json.dumps(
+                    plan.configuration, ensure_ascii=False
+                )
+            else:
+                db_plan.configuration = plan.configuration
+
             session.add(db_plan)
             session.commit()
             return True
