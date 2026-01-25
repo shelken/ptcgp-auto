@@ -63,6 +63,49 @@ class AdbController:
 
         self.wait_after_click = settings.wait_after_click
 
+        # Root 状态缓存
+        self._is_rooted: Optional[bool] = None
+
+    def is_rooted(self) -> bool:
+        """
+        检查设备是否已 Root（带缓存）
+
+        Returns:
+            True 表示已 Root
+        """
+        if self._is_rooted is not None:
+            return self._is_rooted
+
+        try:
+            result = self.shell("su -c 'id'")
+            self._is_rooted = result is not None and "uid=0" in result
+        except Exception:
+            self._is_rooted = False
+
+        # 记录日志但不频繁打印
+        if self._is_rooted:
+            logger.debug(f"设备 Root 状态: {self._is_rooted}")
+
+        return self._is_rooted
+
+    def run_as_root(self, command: str) -> Optional[str]:
+        """
+        以 Root 权限执行命令
+
+        Args:
+            command: 要执行的命令
+
+        Returns:
+            命令输出，失败返回 None
+        """
+        if not self.is_rooted():
+            logger.warning(f"设备未 Root，无法以 Root 权限执行: {command}")
+            return None
+
+        # 对命令中的单引号进行转义，防止破坏 su -c '...' 结构
+        safe_command = command.replace("'", "'\\''")
+        return self.shell(f"su -c '{safe_command}'")
+
     def connect(self) -> bool:
         """
         连接到 ADB 设备

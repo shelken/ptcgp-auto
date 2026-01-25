@@ -217,9 +217,12 @@ class BaseExecutor(ABC):
             task.save()
 
     def _sync_account_on_finish(self):
-        """任务结束时同步账号 XML"""
+        """任务结束时同步账号 XML 到数据库（但不清理设备文件，以便后续任务复用）"""
         if self._account_syncer:
             try:
+                # 仅同步账号信息（提取 XML -> DB）
+                # 注意：我们不再这里调用 clean_device_xml 或 reset_game_environment
+                # 这样如果下一个任务是同一个账号，就可以直接复用环境而不必重启
                 self._account_syncer.get_current_account()
                 logger.debug("已同步设备账号 XML")
             except Exception as e:
