@@ -1,0 +1,60 @@
+<div class="space-y-6">
+    <div class="flex justify-between items-center border-b-4 border-black pb-4">
+        <h3 class="text-2xl font-bold uppercase">{{ t.title_pack_config or 'Pack Configuration' }}</h3>
+        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+    </div>
+
+    <form hx-post="/api/accounts/{{ account_id }}/pack-config?lang={{ current_lang }}"
+          hx-target="#tab-content-accounts"
+          hx-on:htmx:after-request="if(event.detail.elt === this) closeModal()"
+          class="space-y-6">
+
+        <!-- Target Series (Pack Code) -->
+        <div class="space-y-2">
+            <label class="block font-bold uppercase tracking-widest text-sm opacity-60">{{ t.label_target_series or 'Target Series' }}</label>
+            <div class="relative">
+                <select name="pack_code"
+                        class="w-full p-3 border-2 border-black bg-white appearance-none font-bold focus:outline-none focus:ring-4 focus:ring-black/20"
+                        hx-get="/partials/boosters-options"
+                        hx-target="#booster-select"
+                        hx-trigger="change"
+                        hx-on:htmx:after-request="event.stopPropagation()">
+                    <option value="">{{ t.label_select_series or '-- Select Series --' }}</option>
+                    {% for set in card_sets %}
+                    <option value="{{ set.code }}" {% if config and config.pack_code == set.code %}selected{% endif %}>
+                        {{ set.name }} ({{ set.code }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="absolute right-4 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
+            </div>
+        </div>
+
+        <!-- Target Booster (Booster Name) -->
+        <div class="space-y-2">
+            <label class="block font-bold uppercase tracking-widest text-sm opacity-60">{{ t.label_target_booster or 'Target Booster' }}</label>
+            <div class="relative">
+                <select id="booster-select" name="booster_name"
+                        class="w-full p-3 border-2 border-black bg-white appearance-none font-bold focus:outline-none focus:ring-4 focus:ring-black/20">
+                    <option value="">{{ t.label_select_booster or '-- Select Booster --' }}</option>
+                    {% for booster in current_boosters %}
+                    <option value="{{ booster }}" {% if config and config.booster_name == booster %}selected{% endif %}>
+                        {{ booster }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="absolute right-4 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
+            </div>
+        </div>
+
+        <div class="text-xs opacity-50">
+            {{ t.desc_pack_config or 'Select the target card pack series and specific booster you want this account to prioritize opening.' }}
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-4 pt-4 border-t-2 border-black/10">
+            <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
+            <button type="submit" class="brutal-btn active">{{ t.label_save or 'Save Configuration' }}</button>
+        </div>
+    </form>
+</div>
