@@ -207,7 +207,7 @@ def manage_account_plan(account_id: int, plan_identifier: str, action: str):
     plan_repo = TaskPlanRepository()
 
     account = account_repo.get_by_id(account_id)
-    if not account:
+    if not account or account.id is None:
         print(f"错误: 账号 ID {account_id} 不存在")
         return
 
@@ -218,7 +218,7 @@ def manage_account_plan(account_id: int, plan_identifier: str, action: str):
     else:
         plan = plan_repo.get_by_name(plan_identifier)
 
-    if not plan:
+    if not plan or plan.id is None:
         print(f"错误: 计划 '{plan_identifier}' 不存在")
         return
 
@@ -476,6 +476,13 @@ def main():
 
     # 初始化数据库
     get_database()
+
+    # 执行数据迁移
+    from ptcgp_auto_v2.db.repositories import PackRecordRepository
+    try:
+        PackRecordRepository().migrate_legacy_data()
+    except Exception as e:
+        logger.warning(f"数据迁移失败: {e}")
 
     # 处理列表命令
     if args.list_tasks:

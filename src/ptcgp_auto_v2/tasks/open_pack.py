@@ -74,6 +74,8 @@ if TYPE_CHECKING:
         AccountPackConfigRepository,
         PackRecordRepository,
         TaskInstanceRepository,
+        CardRepository,
+        AccountPackPointRepository,
     )
 
 logger = logging.getLogger(__name__)
@@ -223,6 +225,7 @@ class OpenPackTask(Task):
         self._pack_record_repo: "PackRecordRepository | None" = None
         self._task_instance_repo: "TaskInstanceRepository | None" = None
         self._card_repo: "CardRepository | None" = None
+        self._pack_point_repo: "AccountPackPointRepository | None" = None
 
     def on_start(self):
         """
@@ -235,6 +238,7 @@ class OpenPackTask(Task):
             PackRecordRepository,
             TaskInstanceRepository,
             CardRepository,
+            AccountPackPointRepository,
         )
 
         # 初始化仓储
@@ -242,6 +246,7 @@ class OpenPackTask(Task):
         self._pack_record_repo = PackRecordRepository()
         self._task_instance_repo = TaskInstanceRepository()
         self._card_repo = CardRepository()
+        self._pack_point_repo = AccountPackPointRepository()
         self._current_pack_cards = []
 
         # 1. 检查账号 ID
@@ -527,6 +532,30 @@ class OpenPackTask(Task):
         """选择子包（pack_list 页面）"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
+        # 尝试提取开包点数 (xxpt)
+        if self.account.id and self.target_pack and getattr(self, "_pack_point_repo", None):
+            try:
+                import re
+                for item in ocr_results:
+                    # 匹配 "150pt" 或 "150 pt" (忽略大小写)
+                    text = item.get("text", "")
+                    match = re.search(r"(\d+)\s*pt", text, re.IGNORECASE)
+                    if match:
+                        points = int(match.group(1))
+                        # 使用 target_pack 中的 pack_code 作为 series (例如 "A1")
+                        series = self.target_pack.get("pack_code", "Unknown")
+
+                        if self._pack_point_repo:
+                            self._pack_point_repo.upsert_points(
+                                self.account.id,
+                                series,
+                                points
+                            )
+                        logger.debug(f"  -> 更新开包点数: {series} = {points}pt")
+                        break  # 找到一个即可
+            except Exception as e:
+                logger.warning(f"  -> 提取开包点数失败: {e}")
+
         if not screenshot:
             return ActionResult.fail("截图失败")
 
@@ -730,7 +759,9 @@ class OpenPackTask(Task):
                         logger.debug(f"====== 识别到 {len(cards)} 张卡牌 ======")
 
                         # 保存识别结果
-                        set_code = self.target_pack["pack_code"]
+                        set_code = "Unknown"
+                        if self.target_pack and self.target_pack.get("pack_code"):
+                             set_code = self.target_pack["pack_code"]
                         current_batch_cards = []  # 本次（单包）识别到的卡牌
 
                         for i, c in enumerate(cards):
@@ -756,13 +787,22 @@ class OpenPackTask(Task):
                         # 即时保存数据库
                         if self._pack_record_repo and self.account.id:
                             try:
-                                pack_type = f"{self.target_pack['pack_code']}/{self.target_pack['booster_name']}"
+                                pack_type = "daily_free"  # 来源类型
+                                if self.target_pack:
+                                    pack_code = self.target_pack['pack_code']
+                                    pack_name = self.target_pack['booster_name']
+                                else:
+                                    pack_code = None
+                                    pack_name = None
+
                                 self._pack_record_repo.create_for_account(
                                     self.account.id,
                                     pack_type=pack_type,
+                                    pack_code=pack_code,
+                                    pack_name=pack_name,
                                     cards=current_batch_cards
                                 )
-                                logger.info(f"已即时保存开包记录: {pack_type} ({len(current_batch_cards)} 张)")
+                                logger.info(f"已即时保存开包记录: {pack_code}/{pack_name} ({len(current_batch_cards)} 张)")
                             except Exception as e:
                                 logger.error(f"保存开包记录失败: {e}")
 

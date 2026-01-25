@@ -9,15 +9,16 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlmodel import Session, col, func, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, InstrumentedAttribute
 
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import (
     Account,
     AccountPackConfig,
+    AccountPackPoint,
     AccountTaskPlan,  # 新增
     PackRecord,
     TaskInstance,
@@ -163,7 +164,7 @@ class CardRepository:
             # JOIN: CardSet -> Card -> CardPack
             statement = (
                 select(CardPack.pack_name)
-                .join(Card, CardPack.card_id == Card.id)
+                .join(Card, col(CardPack.card_id) == col(Card.id))
                 .where(Card.set_code == set_code)
                 .distinct()
             )
@@ -189,7 +190,7 @@ class CardRepository:
             statement = (
                 select(Card)
                 .where(Card.set_code == set_code)
-                .options(selectinload(Card.packs))
+                .options(selectinload(cast(Any, Card.packs)))
             )
             return list(session.exec(statement).all())
 
@@ -198,9 +199,9 @@ class CardRepository:
         with Session(get_engine()) as session:
             statement = (
                 select(Card)
-                .join(CardPack, Card.id == CardPack.card_id)
+                .join(CardPack, col(Card.id) == col(CardPack.card_id))
                 .where(Card.set_code == set_code, CardPack.pack_name == pack_name)
-                .options(selectinload(Card.packs))
+                .options(selectinload(cast(Any, Card.packs)))
             )
             return list(session.exec(statement).all())
 
@@ -222,7 +223,7 @@ class TaskPlanRepository:
     def get_all(self) -> List[TaskPlan]:
         """获取所有任务计划"""
         with Session(get_engine()) as session:
-            statement = select(TaskPlan).order_by(TaskPlan.id)
+            statement = select(TaskPlan).order_by(col(TaskPlan.id))
             return list(session.exec(statement).all())
 
     def create(self, plan: TaskPlan) -> TaskPlan:
@@ -273,6 +274,36 @@ class TaskPlanRepository:
             return False
 
 
+class AccountPackPointRepository:
+    """开包点数数据访问层"""
+
+    def upsert_points(self, account_id: int, series: str, points: int) -> bool:
+        """更新或插入开包点数"""
+        with Session(get_engine()) as session:
+            statement = select(AccountPackPoint).where(
+                AccountPackPoint.account_id == account_id,
+                AccountPackPoint.series == series
+            )
+            record = session.exec(statement).first()
+
+            if record:
+                # 更新现有记录
+                record.points = points
+                record.updated_at = datetime.now()
+                session.add(record)
+            else:
+                # 创建新记录
+                record = AccountPackPoint(
+                    account_id=account_id,
+                    series=series,
+                    points=points
+                )
+                session.add(record)
+
+            session.commit()
+            return True
+
+
 class AccountRepository:
     """账号数据访问层"""
 
@@ -283,9 +314,9 @@ class AccountRepository:
                 select(Account)
                 .where(Account.id == account_id)
                 .options(
-                    selectinload(Account.task_plan),
-                    selectinload(Account.task_plan_associations).selectinload(
-                        AccountTaskPlan.task_plan
+                    selectinload(cast(Any, Account.task_plan)),
+                    selectinload(cast(Any, Account.task_plan_associations)).selectinload(
+                        cast(Any, AccountTaskPlan.task_plan)
                     ),
                 )
             )
@@ -309,12 +340,12 @@ class AccountRepository:
             statement = (
                 select(Account)
                 .options(
-                    selectinload(Account.task_plan),
-                    selectinload(Account.task_plan_associations).selectinload(
-                        AccountTaskPlan.task_plan
+                    selectinload(cast(Any, Account.task_plan)),
+                    selectinload(cast(Any, Account.task_plan_associations)).selectinload(
+                        cast(Any, AccountTaskPlan.task_plan)
                     ),
                 )
-                .order_by(Account.id)
+                .order_by(col(Account.id))
             )
             return list(session.exec(statement).all())
 
@@ -323,8 +354,8 @@ class AccountRepository:
         with Session(get_engine()) as session:
             statement = (
                 select(Account)
-                .where((Account.friend_id.is_(None)) | (Account.friend_id == ""))
-                .order_by(Account.id)
+                .where((col(Account.friend_id).is_(None)) | (Account.friend_id == ""))
+                .order_by(col(Account.id))
             )
             return list(session.exec(statement).all())
 
@@ -338,14 +369,14 @@ class AccountRepository:
             statement = (
                 select(Account)
                 .options(
-                    selectinload(Account.task_plan),
-                    selectinload(Account.task_plan_associations).selectinload(
-                        AccountTaskPlan.task_plan
+                    selectinload(cast(Any, Account.task_plan)),
+                    selectinload(cast(Any, Account.task_plan_associations)).selectinload(
+                        cast(Any, AccountTaskPlan.task_plan)
                     ),
                 )
                 # .where((Account.task_plan_id.isnot(None)) | (Account.task_plan_associations.any()))
                 # SQLModel 对 any() 的支持可能复杂，暂时获取所有，反正没计划的账号在 Scheduler 里会被过滤
-                .order_by(Account.id)
+                .order_by(col(Account.id))
             )
             accounts = list(session.exec(statement).all())
             return accounts
@@ -525,7 +556,7 @@ class TaskInstanceRepository:
             statement = (
                 select(TaskInstance)
                 .where(TaskInstance.status == "pending")
-                .order_by(TaskInstance.created_at)
+                .order_by(col(TaskInstance.created_at))
                 .limit(1)
             )
             instance = session.exec(statement).first()
@@ -550,7 +581,7 @@ class TaskInstanceRepository:
                 select(TaskInstance)
                 .where(TaskInstance.status == "pending")
                 .where(col(TaskInstance.account_id).notin_(busy_account_ids))
-                .order_by(TaskInstance.created_at)
+                .order_by(col(TaskInstance.created_at))
                 .limit(1)
             )
             instance = session.exec(statement).first()
@@ -568,7 +599,7 @@ class TaskInstanceRepository:
                     TaskInstance.account_id == account_id,
                     TaskInstance.status == "pending",
                 )
-                .order_by(TaskInstance.created_at)
+                .order_by(col(TaskInstance.created_at))
             )
             return list(session.exec(statement).all())
 
@@ -581,7 +612,7 @@ class TaskInstanceRepository:
                     TaskInstance.account_id == account_id,
                     TaskInstance.status == "blocked",
                 )
-                .order_by(TaskInstance.created_at)
+                .order_by(col(TaskInstance.created_at))
             )
             return list(session.exec(statement).all())
 
@@ -603,7 +634,7 @@ class TaskInstanceRepository:
                 select(TaskInstance.account_id)
                 .where(TaskInstance.status == "pending")
                 .distinct()
-                .order_by(TaskInstance.account_id)
+                .order_by(col(TaskInstance.account_id))
             )
             return list(session.exec(statement).all())
 
@@ -805,7 +836,7 @@ class PackRecordRepository:
             statement = (
                 select(PackRecord)
                 .where(PackRecord.account_id == account_id)
-                .order_by(PackRecord.opened_at.desc())
+                .order_by(col(PackRecord.opened_at).desc())
             )
             return list(session.exec(statement).all())
 
@@ -819,7 +850,7 @@ class PackRecordRepository:
                     PackRecord.account_id == account_id,
                     func.date(PackRecord.opened_at) == today,
                 )
-                .order_by(PackRecord.opened_at.desc())
+                .order_by(col(PackRecord.opened_at).desc())
                 .limit(1)
             )
             return session.exec(statement).first()
@@ -853,42 +884,84 @@ class PackRecordRepository:
             return record
 
     def create_for_account(
-        self, account_id: int, pack_type: str = "", cards: List[dict] = None
+        self,
+        account_id: int,
+        pack_type: str = "",
+        cards: List[dict] = None,  # type: ignore
+        pack_code: Optional[str] = None,
+        pack_name: Optional[str] = None,
     ) -> PackRecord:
         """
         为账号创建开包记录
 
         Args:
             account_id: 账号ID
-            pack_type: 卡包类型
-            cards: 包含卡牌信息的字典列表 [{"card_name":..., "rarity":..., "card_id":..., "is_new":..., "position":...}]
+            pack_type: 卡包类型（来源，如 daily_free）
+            cards: 包含卡牌信息的字典列表
+            pack_code: 系列代码 (A1)
+            pack_name: 卡包名称 (Charizard)
         """
         with Session(get_engine()) as session:
             # 1. 创建 PackRecord
-            record = PackRecord(account_id=account_id, pack_type=pack_type)
+            record = PackRecord(
+                account_id=account_id,
+                pack_type=pack_type,
+                pack_code=pack_code,
+                pack_name=pack_name,
+            )
             session.add(record)
             # 使用 flush 而不是 commit，确保在同一个事务中
             session.flush()
 
             # 2. 如果有卡牌明细，创建 PackCard
             if cards:
-                for card_data in cards:
-                    pack_card = PackCard(
-                        pack_record_id=record.id,
-                        card_id=card_data.get("card_id"),
-                        card_name=card_data.get("card_name", "Unknown"),
-                        rarity=card_data.get("rarity"),
-                        is_new=card_data.get("is_new", False),
-                        position=card_data.get("position", 0),
-                        confidence=card_data.get("confidence", 0.0)
-                    )
-                    session.add(pack_card)
+                if record.id is None:
+                     # 理论上 flush 后不应该为 None，但为了类型安全
+                    session.refresh(record)
+
+                if record.id:
+                    for card_data in cards:
+                        pack_card = PackCard(
+                            pack_record_id=record.id,
+                            card_id=card_data.get("card_id"),
+                            card_name=card_data.get("card_name", "Unknown"),
+                            rarity=card_data.get("rarity"),
+                            is_new=card_data.get("is_new", False),
+                            position=card_data.get("position", 0),
+                            confidence=card_data.get("confidence", 0.0),
+                        )
+                        session.add(pack_card)
 
             # 3. 统一提交
             session.commit()
             session.refresh(record)
 
             return record
+
+    def migrate_legacy_data(self):
+        """迁移旧数据：将 pack_type 拆分为 pack_code 和 pack_name，原 pack_type 设为 daily_free"""
+        with Session(get_engine()) as session:
+            # 查找所有 pack_code 为空的记录（且 pack_type 不为空）
+            statement = select(PackRecord).where(
+                (col(PackRecord.pack_code).is_(None)) & (PackRecord.pack_type != "")
+            )
+            records = session.exec(statement).all()
+            count = 0
+            for record in records:
+                # 旧格式假设为 "A1/Charizard"
+                if "/" in record.pack_type:
+                    try:
+                        parts = record.pack_type.split("/", 1)
+                        record.pack_code = parts[0]
+                        record.pack_name = parts[1]
+                        record.pack_type = "daily_free"
+                        session.add(record)
+                        count += 1
+                    except Exception as e:
+                        logger.warning(f"迁移记录 {record.id} 失败: {e}")
+            if count > 0:
+                session.commit()
+                logger.info(f"已迁移 {count} 条旧开包记录")
 
     def count_by_account(self, account_id: int) -> int:
         """统计账号的开包总数"""
