@@ -99,6 +99,15 @@ class CardRepository:
                 if card.local_image_path:
                     existing.local_image_path = card.local_image_path
                 existing.data = card.data
+
+                # 新增字段更新
+                existing.element = card.element
+                existing.type = card.type
+                existing.stage = card.stage
+                existing.health = card.health
+                existing.weakness = card.weakness
+                existing.retreat_cost = card.retreat_cost
+
                 existing.updated_at = datetime.now()
                 session.add(existing)
                 session.commit()

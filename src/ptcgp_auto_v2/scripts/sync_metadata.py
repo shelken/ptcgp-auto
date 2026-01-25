@@ -34,6 +34,7 @@ BASE_URL = (
 )
 SETS_URL = f"{BASE_URL}/sets.json"
 CARDS_URL = f"{BASE_URL}/cards.json"
+CARDS_EXTRA_URL = f"{BASE_URL}/cards.extra.json"
 PACKS_JSON_PATH = ROOT_DIR / "data" / "packs.json"
 
 
@@ -80,12 +81,32 @@ def sync_metadata():
 
     # 2. Sync Cards
     logger.info(f"Fetching cards from {CARDS_URL}...")
+    logger.info(f"Fetching extra card data from {CARDS_EXTRA_URL}...")
+
     try:
-        response = requests.get(CARDS_URL, timeout=60)
-        response.raise_for_status()
-        cards_data = response.json()
+        # 同时获取基础数据和额外数据
+        resp_cards = requests.get(CARDS_URL, timeout=60)
+        resp_cards.raise_for_status()
+        cards_data = resp_cards.json()
+
+        resp_extra = requests.get(CARDS_EXTRA_URL, timeout=60)
+        resp_extra.raise_for_status()
+        extra_data = resp_extra.json()
+
+        # 构建 extra 数据索引 (set_code + number -> data)
+        # 兼容处理：extra 中的 set 可能是 key "set"
+        extra_map = {}
+        for item in extra_data:
+            s = item.get("set")
+            n = item.get("number")
+            if s and n is not None:
+                key = f"{s}_{n}"
+                extra_map[key] = item
+
+        logger.info(f"Indexed {len(extra_map)} extra card details.")
+
     except Exception as e:
-        logger.error(f"Failed to fetch cards: {e}")
+        logger.error(f"Failed to fetch cards data: {e}")
         sys.exit(1)
 
     total_cards = 0
@@ -97,12 +118,39 @@ def sync_metadata():
         if not set_code or number is None:
             continue
 
+        # 查找额外数据
+        extra = extra_map.get(f"{set_code}_{number}", {})
+
+        # 提取新字段，带简单的类型转换
+        health = extra.get("health")
+        if health is not None:
+            try:
+                health = int(health)
+            except (ValueError, TypeError):
+                health = None
+
+        retreat_cost = extra.get("retreatCost")
+        if retreat_cost is not None:
+            try:
+                retreat_cost = int(retreat_cost)
+            except (ValueError, TypeError):
+                retreat_cost = None
+
         card = Card(
             set_code=set_code,
             number=number,
             name=c.get("name", ""),
             rarity=c.get("rarity", ""),
             image_url=c.get("image", ""),
+
+            # 新增字段 (优先从 extra 获取，若无则为 None)
+            element=str(extra.get("element")) if extra.get("element") else None,
+            type=str(extra.get("type")) if extra.get("type") else None,
+            stage=str(extra.get("stage")) if extra.get("stage") else None,
+            health=health,
+            weakness=str(extra.get("weakness")) if extra.get("weakness") else None,
+            retreat_cost=retreat_cost,
+
             data=json.dumps(c, ensure_ascii=False),  # Backup full data
         )
 
