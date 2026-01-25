@@ -85,24 +85,7 @@ class AccountSyncer:
         # 用 device_account 作为 game_id 查找
         account = self.account_repo.get_by_game_id(device_account_id)
         if account:
-            # 更新账号信息
-            updated = False
-            if account_info.nintendo_id and account.nintendo_id != account_info.nintendo_id:
-                account.nintendo_id = account_info.nintendo_id
-                updated = True
-            if account_info.country and account.country != account_info.country:
-                account.country = account_info.country
-                updated = True
-
-            # 比较 iat，决定是否更新 xml_content
-            if self._should_update_xml(account, account_info):
-                old_iat = account.session_token_iat
-                account.xml_content = account_info.xml_content
-                account.session_token_iat = account_info.session_token_iat
-                updated = True
-                logger.debug(f"Token 已更新: iat {old_iat} -> {account_info.session_token_iat}")
-
-            if updated:
+            if self._update_account_from_info(account, account_info):
                 self.account_repo.update(account)
                 logger.debug(f"已更新账号: {account.nickname or account.game_id}")
             logger.info(f"识别到账号: {account.nickname or account.game_id} (ID: {account.id})")
@@ -121,34 +104,37 @@ class AccountSyncer:
 
         return account
 
-    def sync_account(self, account: Account) -> bool:
+    def _update_account_from_info(
+        self, account: Account, info: DeviceAccountInfo
+    ) -> bool:
         """
-        同步账号的 XML 信息
+        根据设备信息更新账号对象
 
         Args:
-            account: 要同步的账号
+            account: 账号对象
+            info: 设备提取的账号信息
 
         Returns:
-            是否同步成功
+            bool: 是否有更新
         """
-        account_info = self._extract_account_info()
-        if not account_info:
-            return False
+        updated = False
 
-        # 更新账号信息
-        if account_info.nintendo_id:
-            account.nintendo_id = account_info.nintendo_id
-        if account_info.country:
-            account.country = account_info.country
+        if info.nintendo_id and account.nintendo_id != info.nintendo_id:
+            account.nintendo_id = info.nintendo_id
+            updated = True
+        if info.country and account.country != info.country:
+            account.country = info.country
+            updated = True
 
         # 比较 iat，决定是否更新 xml_content
-        if self._should_update_xml(account, account_info):
+        if self._should_update_xml(account, info):
             old_iat = account.session_token_iat
-            account.xml_content = account_info.xml_content
-            account.session_token_iat = account_info.session_token_iat
-            logger.debug(f"同步 Token: iat {old_iat} -> {account_info.session_token_iat}")
+            account.xml_content = info.xml_content
+            account.session_token_iat = info.session_token_iat
+            updated = True
+            logger.debug(f"Token 已更新: iat {old_iat} -> {info.session_token_iat}")
 
-        return self.account_repo.update(account)
+        return updated
 
     def _extract_account_info(self) -> Optional[DeviceAccountInfo]:
         """
@@ -159,13 +145,19 @@ class AccountSyncer:
         """
         try:
             # 检查是否有 Root 权限
-            if not self._is_rooted():
+            if not self.adb.is_rooted():
                 logger.warning("设备未 Root")
                 return None
 
+            # 检查源文件是否存在
+            check_result = self.adb.run_as_root(f"ls {self._settings.device_xml_path}")
+            if not check_result or "No such file" in check_result:
+                logger.debug("设备上未找到账号 XML 文件")
+                return None
+
             # 复制 XML 到 sdcard
-            self._run_su(f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}")
-            self._run_su(f"chmod 644 {DEVICE_TEMP_PATH}")
+            self.adb.run_as_root(f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}")
+            self.adb.run_as_root(f"chmod 644 {DEVICE_TEMP_PATH}")
 
             # 拉取到本地（使用随机文件名，避免多设备并发冲突）
             import uuid
@@ -181,7 +173,7 @@ class AccountSyncer:
 
             # 清理临时文件
             temp_path.unlink(missing_ok=True)
-            self._run_su(f"rm {DEVICE_TEMP_PATH}")
+            self.adb.run_as_root(f"rm {DEVICE_TEMP_PATH}")
 
             # 解析 XML
             return self._parse_xml(xml_content)
@@ -282,18 +274,6 @@ class AccountSyncer:
         except Exception as e:
             logger.debug(f"JWT 解码失败: {e}")
             return None
-
-    def _is_rooted(self) -> bool:
-        """检查设备是否已 Root"""
-        try:
-            result = self.adb.shell("su -c 'id'")
-            return result is not None and "uid=0" in result
-        except Exception:
-            return False
-
-    def _run_su(self, cmd: str) -> Optional[str]:
-        """执行 root 命令"""
-        return self.adb.shell(f"su -c '{cmd}'")
 
     def _should_update_xml(
         self, account: Account, account_info: DeviceAccountInfo

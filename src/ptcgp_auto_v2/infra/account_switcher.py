@@ -37,27 +37,7 @@ class AccountSwitcher:
             adb: ADB 控制器实例
         """
         self.adb = adb
-        self._is_rooted: Optional[bool] = None
         self._settings = get_settings()
-
-    def is_rooted(self) -> bool:
-        """
-        检查设备是否已 Root
-
-        Returns:
-            True 表示已 Root
-        """
-        if self._is_rooted is not None:
-            return self._is_rooted
-
-        try:
-            result = self.adb.shell("su -c 'id'")
-            self._is_rooted = result is not None and "uid=0" in result
-        except Exception:
-            self._is_rooted = False
-
-        logger.debug(f"设备 Root 状态: {self._is_rooted}")
-        return self._is_rooted
 
     def switch_to(self, account: "Account", restart_app: bool = False) -> bool:
         """
@@ -100,6 +80,20 @@ class AccountSwitcher:
             logger.error(f"写入临时 XML 失败: {e}")
             return None
 
+    def reset_game_environment(self):
+        """
+        重置游戏环境
+
+        执行以下操作：
+        1. 强制停止游戏应用
+        2. 清理设备上的账号 XML
+        3. 清理账号绑定相关文件
+        """
+        logger.debug("正在重置游戏环境...")
+        self.adb.force_stop(self._settings.app_package)
+        self.clean_device_xml()
+        self._clean_account_bound_files()
+
     def inject_xml(
         self,
         xml_path: Path,
@@ -122,20 +116,16 @@ class AccountSwitcher:
             logger.error(f"XML 文件不存在: {xml_path}")
             return False
 
-        if not self.is_rooted():
+        if not self.adb.is_rooted():
             logger.warning("设备未 Root，无法注入 XML")
             return False
 
         try:
-            # 1. 强制关闭游戏
-            logger.debug("关闭游戏...")
-            self.adb.force_stop(self._settings.app_package)
+            # 1. 重置游戏环境（关闭、清理）
+            self.reset_game_environment()
             time.sleep(wait_seconds)
 
-            # 2. 清理账号绑定相关文件（避免 102-243-017 错误）
-            self._clean_account_bound_files()
-
-            # 3. 推送 XML 到 sdcard
+            # 2. 推送 XML 到 sdcard
             logger.debug("推送 XML 到设备...")
             push_result = self.adb.push(str(xml_path), DEVICE_TEMP_PATH)
             if not push_result:
@@ -143,27 +133,27 @@ class AccountSwitcher:
                 return False
             time.sleep(wait_seconds * 0.5)
 
-            # 4. 确保 shared_prefs 目录存在
-            self._run_su_command(f"mkdir -p {self._settings.shared_prefs_dir}")
+            # 3. 确保 shared_prefs 目录存在
+            self.adb.run_as_root(f"mkdir -p {self._settings.shared_prefs_dir}")
 
-            # 5. 复制 XML 到 shared_prefs
+            # 4. 复制 XML 到 shared_prefs
             logger.debug("复制 XML 到 shared_prefs...")
-            result = self._run_su_command(f"cp {DEVICE_TEMP_PATH} {self._settings.device_xml_path}")
+            result = self.adb.run_as_root(f"cp {DEVICE_TEMP_PATH} {self._settings.device_xml_path}")
             if result is None:
                 logger.error("复制 XML 到 shared_prefs 失败")
                 return False
 
-            # 6. 设置正确的权限和所有者
-            self._run_su_command(f"chmod 660 {self._settings.device_xml_path}")
-            self._run_su_command(
+            # 5. 设置正确的权限和所有者
+            self.adb.run_as_root(f"chmod 660 {self._settings.device_xml_path}")
+            self.adb.run_as_root(
                 f"chown $(stat -c %u:%g {self._settings.shared_prefs_dir}) {self._settings.device_xml_path}"
             )
             time.sleep(wait_seconds * 0.5)
 
-            # 7. 清理临时文件
-            self._run_su_command(f"rm {DEVICE_TEMP_PATH}")
+            # 6. 清理临时文件
+            self.adb.run_as_root(f"rm {DEVICE_TEMP_PATH}")
 
-            # 8. 可选：重启游戏
+            # 7. 可选：重启游戏
             if restart_app:
                 logger.debug("启动游戏...")
                 self._start_app()
@@ -176,16 +166,6 @@ class AccountSwitcher:
             logger.error(f"注入账号 XML 时出错: {e}")
             return False
 
-    def _run_su_command(self, cmd: str) -> Optional[str]:
-        """执行需要 root 权限的命令"""
-        full_cmd = f"su -c '{cmd}'"
-        try:
-            result = self.adb.shell(full_cmd)
-            return result
-        except Exception as e:
-            logger.debug(f"执行 su 命令失败: {e}")
-            return None
-
     def _clean_account_bound_files(self):
         """
         清理账号绑定相关文件
@@ -195,62 +175,30 @@ class AccountSwitcher:
         """
         logger.debug("清理账号绑定相关文件...")
         for pattern in self._settings.files_to_clean_on_switch:
-            self._run_su_command(f"rm -f {pattern}")
+            self.adb.run_as_root(f"rm -f {pattern}")
         logger.debug("账号绑定文件清理完成")
 
     def _start_app(self):
         """启动游戏应用"""
         self.adb.shell(f"am start -n {self._settings.main_activity}")
 
-    def extract_current_account_xml(self, local_path: Path) -> bool:
+    def clean_device_xml(self) -> bool:
         """
-        提取当前设备上的账号 XML
+        清理设备上的账号 XML 文件
 
-        Args:
-            local_path: 本地保存路径
+        通常在账号同步完成后调用，防止被手动登录导致 Token 失效。
 
         Returns:
-            是否提取成功
+            bool: 是否清理成功
         """
-        if not self.is_rooted():
-            logger.warning("设备未 Root，无法提取 XML")
-            return False
-
         try:
-            # 复制到 sdcard
-            self._run_su_command(f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}")
-            time.sleep(0.5)
-
-            # 拉取到本地
-            result = self.adb.pull(DEVICE_TEMP_PATH, str(local_path))
-
-            # 清理临时文件
-            self._run_su_command(f"rm {DEVICE_TEMP_PATH}")
-
-            if result:
-                logger.info(f"已提取账号 XML: {local_path}")
-            return result
-
+            logger.debug("清理设备上的账号 XML...")
+            # 尝试直接删除（如果之前设置了权限可能不需要 root），或者尝试用 root 删除
+            # 优先使用 run_as_root 因为该文件通常在受保护目录
+            self.adb.run_as_root(f"rm {self._settings.device_xml_path}")
+            return True
         except Exception as e:
-            logger.error(f"提取账号 XML 时出错: {e}")
+            logger.error(f"清理账号 XML 失败: {e}")
             return False
 
-    def get_current_account_hash(self) -> Optional[str]:
-        """
-        获取当前账号 XML 的哈希值
 
-        Returns:
-            MD5 哈希值或 None
-        """
-        if not self.is_rooted():
-            return None
-
-        try:
-            result = self._run_su_command(f"md5sum {self._settings.device_xml_path}")
-            if result:
-                # 输出格式: "hash  /path/to/file"
-                return result.split()[0]
-        except Exception:
-            pass
-
-        return None
