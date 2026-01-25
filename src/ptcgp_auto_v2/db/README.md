@@ -18,11 +18,7 @@ db/
 │   ├── pack_record.py
 │   ├── task_instance.py
 │   └── task_plan.py
-├── alembic.ini          # Alembic 配置
-└── alembic/
-    ├── env.py           # Alembic 环境配置
-    ├── script.py.mako   # 迁移脚本模板
-    └── versions/        # 迁移版本文件
+
 ```
 
 ## 常用操作
