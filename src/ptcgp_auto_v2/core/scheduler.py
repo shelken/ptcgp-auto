@@ -131,6 +131,7 @@ class Scheduler:
         生成待执行任务
 
         检查每个账号的任务计划，根据重置规则生成新的任务实例。
+        支持多 Plan 聚合和自定义频率。
         """
         if not self._should_generate_tasks():
             return
@@ -139,34 +140,91 @@ class Scheduler:
         self._last_task_generation = datetime.now()
 
         try:
-            # 获取所有有任务计划的账号
-            accounts = self._account_repo.get_accounts_with_plans()
+            # 获取所有有任务计划的账号（旧关联或新关联）
+            # 注意：get_accounts_with_plans 可能只查了旧关联，需要确保能查到所有
+            # 暂时遍历所有账号可能更安全，或者依赖 Repository 的优化
+            accounts = self._account_repo.get_all()
 
             for account in accounts:
-                if not account.task_plan:
+                task_configs = self._aggregate_account_plans(account)
+                if not task_configs:
                     continue
 
-                for task_type in account.task_plan.task_types_list:
-                    self._ensure_task_instance(account, task_type)
+                for task_type, config in task_configs.items():
+                    self._ensure_task_instance(account, task_type, config)
 
         except Exception as e:
             logger.exception(f"生成任务失败: {e}")
 
-    def _ensure_task_instance(self, account, task_type: str):
+    def _aggregate_account_plans(self, account) -> dict[str, dict]:
+        """
+        聚合账号的所有任务计划配置
+
+        Returns:
+            Dict[task_type, config_dict]
+        """
+        aggregated = {}
+
+        # 1. 处理旧的单 Plan (兼容性)
+        if account.task_plan:
+            for task_type in account.task_plan.task_types_list:
+                # 获取 Plan 里的配置覆盖
+                plan_config = account.task_plan.config_dict.get(task_type, {})
+                aggregated[task_type] = plan_config
+
+        # 2. 处理新的多 Plan
+        # 按优先级排序 (priority 越高越后处理，覆盖前面的)
+        associations = sorted(account.task_plan_associations, key=lambda x: x.priority)
+        for assoc in associations:
+            if not assoc.is_active:
+                continue
+
+            # 通过关系直接访问 task_plan (前提是 ORM 加载了)
+            # 由于 SQLModel/SQLAlchemy 默认 lazy load，这里访问可能会触发查询或需要 eager load
+            # 为了稳健性，我们在 Repository 层应该尽量 eager load
+            plan = assoc.task_plan
+            if not plan:
+                continue
+
+            for task_type in plan.task_types_list:
+                plan_config = plan.config_dict.get(task_type, {})
+                # 合并或覆盖配置
+                if task_type in aggregated:
+                    # 如果已存在，合并字典（新 Plan 覆盖旧的）
+                    aggregated[task_type].update(plan_config)
+                else:
+                    aggregated[task_type] = plan_config.copy()
+
+        return aggregated
+
+    def _ensure_task_instance(self, account, task_type: str, config: dict = None):
         """
         确保账号的任务实例存在且状态正确
 
         Args:
             account: 账号
             task_type: 任务类型
+            config: 任务配置（覆盖默认配置）
         """
-        # 获取任务类以确定重置类型
+        if config is None:
+            config = {}
+
+        # 获取任务类以确定默认重置类型
         task_class = TaskRegistry.get_or_none(task_type)
         if not task_class:
             logger.warning(f"未知的任务类型: {task_type}")
             return
 
-        reset_type = task_class.reset_type
+        # 确定重置类型：配置覆盖 > 默认
+        reset_type_str = config.get("reset_type")
+        if reset_type_str:
+            try:
+                reset_type = ResetType(reset_type_str)
+            except ValueError:
+                logger.warning(f"无效的 reset_type: {reset_type_str}，使用默认值")
+                reset_type = task_class.reset_type
+        else:
+            reset_type = task_class.reset_type
 
         # 查找或创建任务实例
         instance = self._task_instance_repo.get_or_create(
@@ -176,24 +234,35 @@ class Scheduler:
         )
 
         # 检查是否需要重置
-        if self._should_reset_task(instance, reset_type):
+        if self._should_reset_task(instance, reset_type, config):
             logger.info(
-                f"重置任务: {task_type} (账号: {account.nickname})"
+                f"重置任务: {task_type} (账号: {account.nickname}, 规则: {reset_type.value})"
             )
             instance.status = TaskStatus.PENDING.value
+            # 如果 reset_type 变了，更新数据库
+            if instance.reset_type != reset_type.value:
+                instance.reset_type = reset_type.value
             instance.save()
 
-    def _should_reset_task(self, instance: "TaskInstance", reset_type: ResetType) -> bool:
+    def _should_reset_task(
+        self,
+        instance: "TaskInstance",
+        reset_type: ResetType,
+        config: dict = None,
+    ) -> bool:
         """
         检查任务是否应该重置
 
         Args:
             instance: 任务实例
             reset_type: 重置类型
+            config: 任务配置（可选，包含 interval_seconds 等）
 
         Returns:
             True 表示应该重置
         """
+        if config is None:
+            config = {}
         # 如果任务未完成，不需要重置
         if instance.status != TaskStatus.COMPLETED.value:
             return False
@@ -218,6 +287,11 @@ class Scheduler:
         elif reset_type == ResetType.ONCE:
             # 一次性任务不重置
             return False
+
+        elif reset_type == ResetType.INTERVAL:
+            # 按时间间隔重置
+            interval = config.get("interval_seconds", 3600)  # 默认 1 小时
+            return (now - last_completed).total_seconds() >= interval
 
         return False
 
