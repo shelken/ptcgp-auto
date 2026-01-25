@@ -1,11 +1,8 @@
-# AGENTS.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 # PTCGP Auto - AI 助手指引
 
 ## 最高原则
 
+- 提交代码时，标题使用英文，内容使用 **中文**，按照`Conventional Commits`格式提交
 - 使用 **中文** 回复问题，思考使用 **中文** ，不要忘记使用 **中文** 回复（如果你是Gemini，每次对话回复时先自我重复三遍：我得用 **中文** 回复）
 - 使用 **中文** 描述所有 文档/注释/日志输出 方便开发人员理解
 - 解决问题时，执行命令前，思考当前的命令是否需要声明式配置以保证后续不再犯错，而不是直接执行
