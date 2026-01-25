@@ -56,6 +56,34 @@
             letter-spacing: 0.05em;
             display: inline-block;
         }
+        
+        .brutal-btn {
+            background-color: #ffffff;
+            border: 2px solid var(--border-color);
+            padding: 4px 12px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        
+        .brutal-btn:hover {
+            background-color: #f0f0f0;
+            transform: translate(-1px, -1px);
+            box-shadow: 2px 2px 0px var(--shadow-color);
+        }
+        
+        .brutal-btn:active {
+            transform: translate(0, 0);
+            box-shadow: 0 0 0;
+        }
+        
+        .brutal-btn.active {
+            background-color: var(--border-color);
+            color: #ffffff;
+            box-shadow: inset 2px 2px 0px rgba(0,0,0,0.5);
+            transform: translate(1px, 1px);
+        }
 
         .brutal-separator {
             border-bottom: 3px solid var(--border-color);
@@ -89,50 +117,61 @@
         /* Pack Layouts */
         .pack-grid {
             display: grid;
-            gap: 1.5rem;
+            gap: 1rem;
             width: 100%;
             justify-content: center;
+            grid-template-columns: repeat(6, 1fr); /* Unified 6-column grid */
+        }
+        
+        /* Base card sizing: all cards span 2 columns (1/3 of width) */
+        .pack-grid > .card-item {
+            grid-column: span 2;
         }
 
         /* 6 cards: 3 top, 3 bottom */
+        /* Natural flow works: 2+2+2 = 6 cols */
         .layout-6 {
-            grid-template-columns: repeat(3, 1fr);
+            /* No special rules needed */
         }
 
         /* 5 cards: 3 top, 2 bottom (centered) */
-        .layout-5 {
-            grid-template-columns: repeat(6, 1fr);
+        .layout-5 > .card-item:nth-child(4) {
+            grid-column: 2 / span 2; /* Start at col 2 (center-left) */
         }
-        .layout-5 > :nth-child(1),
-        .layout-5 > :nth-child(2),
-        .layout-5 > :nth-child(3) {
-            grid-column: span 2;
-        }
-        .layout-5 > :nth-child(4) {
-            grid-column: 2 / span 2; /* Offset start */
-        }
-        .layout-5 > :nth-child(5) {
-            grid-column: 4 / span 2;
+        .layout-5 > .card-item:nth-child(5) {
+            grid-column: 4 / span 2; /* Start at col 4 (center-right) */
         }
 
-        /* 4 cards: 2 top, 2 bottom */
-        .layout-4 {
-            grid-template-columns: repeat(2, 1fr);
-            width: 66.666%; /* Constrain width to match 2/3 of layout-6 */
-            margin: 0 auto; /* Center the grid */
+        /* 4 cards: 2 top, 2 bottom (centered) */
+        .layout-4 > .card-item:nth-child(odd) {
+            grid-column: 2 / span 2; /* Left column */
+        }
+        .layout-4 > .card-item:nth-child(even) {
+            grid-column: 4 / span 2; /* Right column */
         }
         
         /* Mobile adjustments */
         @media (max-width: 768px) {
-            .layout-6, .layout-5 {
-                grid-template-columns: repeat(2, 1fr); /* Fallback to 2 columns on mobile */
+            .pack-grid {
+                gap: 0.5rem; /* Reduce gap on mobile */
             }
-            .layout-4 {
-                width: 100%; /* Full width on mobile */
-                grid-template-columns: repeat(2, 1fr);
-            }
-            .layout-5 > :nth-child(n) {
-                grid-column: auto; /* Reset spans */
+            /* Keep the 6-column grid logic even on mobile to ensure size consistency */
+            /* 4-cards will be centered (2 cols each, 1 col gap on sides) */
+            /* 5-cards will be 3 top, 2 bottom centered */
+        }
+        
+        /* Global Grid View Layout */
+        /* Applied to #records-container when in Grid Mode */
+        .view-grid-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+        
+        @media (max-width: 1024px) {
+            .view-grid-layout {
+                grid-template-columns: 1fr; /* Fallback to single column on smaller screens */
             }
         }
 
@@ -160,15 +199,15 @@
         }
     </style>
 </head>
-<body class="min-h-screen p-4 md:p-12">
+<body class="min-h-screen p-4 md:p-8">
 
-    <header class="max-w-7xl mx-auto mb-12">
+    <header class="max-w-7xl mx-auto mb-8">
         <!-- Top Bar: Language & Version -->
         <div class="flex justify-between items-center mb-6">
             <div class="text-sm font-bold tracking-widest">
-                <a href="/?lang=en" class="lang-link {% if current_lang == 'en' %}active{% endif %}">EN</a>
+                <a href="javascript:void(0)" onclick="setLang('en')" class="lang-link {% if current_lang == 'en' %}active{% endif %}">EN</a>
                 <span class="mx-2">/</span>
-                <a href="/?lang=zh_CN" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}">中文</a>
+                <a href="javascript:void(0)" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}">中文</a>
             </div>
             <div class="flex gap-4">
                 <div class="brutal-tag text-sm border-2 border-black bg-white !color-black !text-black">
@@ -181,22 +220,35 @@
         </div>
 
         <div class="flex flex-col lg:flex-row justify-between items-end brutal-separator pb-6 gap-8">
-            <!-- Title -->
+            <!-- Title (Simplified) -->
             <div class="w-full lg:w-auto whitespace-nowrap">
                 <h1 class="text-6xl md:text-8xl font-bold tracking-tighter leading-none mb-2">{{ t.header_title|safe }}</h1>
-                <p class="text-xl font-medium mt-4 flex items-center gap-2">
-                    <span class="w-3 h-3 bg-black rounded-full block"></span>
-                    {{ t.header_subtitle }}
-                </p>
             </div>
 
             <!-- Filters Section (Right Aligned) -->
             <div class="w-full lg:w-auto lg:text-right">
+                
+                <!-- View Toggle & Clear Filters Row -->
+                <div class="flex flex-wrap justify-between lg:justify-end items-center gap-4 mb-4">
+                     <!-- View Mode -->
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.view_mode }}</span>
+                        <button onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active">{{ t.view_list }}</button>
+                        <button onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn">{{ t.view_grid }}</button>
+                    </div>
+
+                    <!-- Clear Filters -->
+                    <button onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase">
+                        {{ t.clear_filters }} ✕
+                    </button>
+                </div>
+
                 <form id="filter-form" 
                       hx-get="/api/records?page=0&lang={{ current_lang }}" 
                       hx-target="#records-container" 
                       hx-swap="innerHTML"
-                      class="space-y-4">
+                      class="space-y-4"
+                      onchange="saveFilters()">
                     
                     <!-- Rarity Filter -->
                     <div class="flex flex-col lg:items-end gap-2">
@@ -233,9 +285,8 @@
     <main class="max-w-7xl mx-auto">
         <!-- Records Container -->
         <div id="records-container" 
-             class="space-y-16"
+             class="space-y-12"
              hx-get="/api/records?page=0&lang={{ current_lang }}" 
-             hx-trigger="load" 
              hx-swap="innerHTML">
         </div>
 
@@ -253,9 +304,129 @@
         </div>
     </main>
 
-    <footer class="max-w-7xl mx-auto mt-32 pt-12 border-t-4 border-black text-center font-bold uppercase tracking-widest text-sm">
+    <footer class="max-w-7xl mx-auto mt-20 pt-8 border-t-4 border-black text-center font-bold uppercase tracking-widest text-sm">
         <p>{{ t.generated_by }}</p>
     </footer>
+    
+    <!-- Persistence Logic -->
+    <script>
+        // --- Constants ---
+        const STORAGE_KEY_LANG = 'ptcgp_lang';
+        const STORAGE_KEY_FILTERS = 'ptcgp_filters';
+        const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 
+        // --- Persistence Functions ---
+        
+        // 1. Language Persistence
+        function setLang(lang) {
+            localStorage.setItem(STORAGE_KEY_LANG, lang);
+            const url = new URL(window.location);
+            url.searchParams.set('lang', lang);
+            window.location.href = url.toString();
+        }
+
+        (function initLang() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentLang = urlParams.get('lang');
+            const storedLang = localStorage.getItem(STORAGE_KEY_LANG);
+
+            if (!currentLang && storedLang) {
+                const url = new URL(window.location);
+                url.searchParams.set('lang', storedLang);
+                window.location.replace(url.toString());
+            } else if (currentLang && currentLang !== storedLang) {
+                localStorage.setItem(STORAGE_KEY_LANG, currentLang);
+            }
+        })();
+
+        // 2. Filter Persistence
+        function saveFilters() {
+            const formData = new FormData(document.getElementById('filter-form'));
+            const filters = {
+                rarity: formData.getAll('rarity'),
+                card_type: formData.getAll('card_type')
+            };
+            localStorage.setItem(STORAGE_KEY_FILTERS, JSON.stringify(filters));
+        }
+
+        function restoreFilters() {
+            const stored = localStorage.getItem(STORAGE_KEY_FILTERS);
+            let queryParts = [];
+
+            if (stored) {
+                try {
+                    const filters = JSON.parse(stored);
+                    if (filters.rarity) {
+                        filters.rarity.forEach(val => {
+                            const el = document.querySelector(`input[name="rarity"][value="${val}"]`);
+                            if (el) el.checked = true;
+                            queryParts.push(`rarity=${val}`);
+                        });
+                    }
+                    if (filters.card_type) {
+                        filters.card_type.forEach(val => {
+                            const el = document.querySelector(`input[name="card_type"][value="${val}"]`);
+                            if (el) el.checked = true;
+                            queryParts.push(`card_type=${val}`);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Failed to restore filters", e);
+                }
+            }
+
+            // Always trigger initial load via JS, incorporating any restored filters
+            const container = document.getElementById('records-container');
+            const baseAttr = container.getAttribute('hx-get');
+            let finalUrl = baseAttr;
+            
+            if (queryParts.length > 0) {
+                finalUrl = baseAttr + '&' + queryParts.join('&');
+                // Update attribute for infinite scroll to work correctly
+                container.setAttribute('hx-get', finalUrl);
+            }
+            
+            htmx.ajax('GET', finalUrl, {target: '#records-container', swap: 'innerHTML'});
+        }
+        
+        // 3. View Mode Logic
+        function setViewMode(mode) {
+            const container = document.getElementById('records-container');
+            const btnList = document.getElementById('btn-view-list');
+            const btnGrid = document.getElementById('btn-view-grid');
+
+            if (mode === 'grid') {
+                container.classList.add('view-grid-layout');
+                container.classList.remove('space-y-12'); // Remove vertical spacing in grid mode
+                
+                btnList.classList.remove('active');
+                btnGrid.classList.add('active');
+            } else {
+                container.classList.remove('view-grid-layout');
+                container.classList.add('space-y-12'); // Restore vertical spacing
+                
+                btnList.classList.add('active');
+                btnGrid.classList.remove('active');
+            }
+            
+            localStorage.setItem(STORAGE_KEY_VIEW_MODE, mode);
+        }
+
+        function restoreViewMode() {
+            const mode = localStorage.getItem(STORAGE_KEY_VIEW_MODE) || 'list';
+            setViewMode(mode);
+        }
+
+        function clearFilters() {
+            document.querySelectorAll('.filter-checkbox').forEach(el => el.checked = false);
+            localStorage.removeItem(STORAGE_KEY_FILTERS);
+            htmx.ajax('GET', '/api/records?page=0&lang={{ current_lang }}', {target: '#records-container', swap: 'innerHTML'});
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            restoreFilters();
+            restoreViewMode();
+        });
+    </script>
 </body>
 </html>
