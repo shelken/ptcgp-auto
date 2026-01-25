@@ -26,7 +26,13 @@ from ptcgp_auto_v2.db.models.pack_card import PackCard
 from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
-from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
+from ptcgp_auto_v2.db.repositories import (
+    AccountRepository,
+    TaskPlanRepository,
+    CardRepository,
+    AccountPackConfigRepository
+)
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
 
 app = FastAPI(title="PTCGP Auto Web")
@@ -191,19 +197,20 @@ async def get_management_accounts(
     """Render Accounts Management Table"""
     t = get_translations(lang)
     repo = AccountRepository()
-    # 使用 AccountRepository.get_all 已经包含 eager load
-    # 为了在 Web App 中使用，我们需要确保 session 正确。
-    # Repository 默认创建新 session，这里为了复用 FastAPI 依赖注入的 session
-    # 我们可能需要重构 Repository 或直接使用 session 查询。
-    # 鉴于 Repository 内部使用了 `with Session(get_engine())`，它是独立的。
-    # 这在并发低时没问题。
     accounts = repo.get_all()
+
+    # Fetch Pack Configs for display
+    # We query all 'daily' configs to map them to accounts
+    config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
+    all_configs = session.exec(config_stm).all()
+    pack_configs_map = {c.account_id: c for c in all_configs}
 
     return templates.TemplateResponse(
         "partials/account_list.html",
         {
             "request": request,
             "accounts": accounts,
+            "pack_configs": pack_configs_map,
             "t": t,
             "current_lang": lang
         }
@@ -408,6 +415,111 @@ async def delete_plan(
     repo = TaskPlanRepository()
     repo.delete(plan_id)
     return await get_management_plans(request, lang=lang)
+
+# --- Pack Config APIs ---
+
+@app.get("/api/card-sets")
+async def get_card_sets():
+    """Get all card sets"""
+    repo = CardRepository()
+    sets = repo.get_all_sets()
+    return [{"code": s.code, "name": s.name} for s in sets]
+
+@app.get("/api/card-sets/{set_code}/boosters")
+async def get_set_boosters(set_code: str):
+    """Get boosters for a specific card set"""
+    repo = CardRepository()
+    data = repo.get_packs_by_set(set_code)
+    if not data or set_code not in data:
+        return []
+    return data[set_code]["boosters"]
+
+@app.get("/management/accounts/{account_id}/pack-config", response_class=HTMLResponse)
+async def get_account_pack_config_modal(
+    request: Request,
+    account_id: int,
+    lang: str = Query(default="en")
+):
+    """Render Pack Config Modal"""
+    t = get_translations(lang)
+    config_repo = AccountPackConfigRepository()
+    card_repo = CardRepository()
+
+    # Get current config (default to 'daily' type)
+    config = config_repo.get_by_account_and_type(account_id, "daily")
+
+    # Get all Card Sets for dropdown
+    card_sets = card_repo.get_all_sets()
+
+    # Get current boosters if a set is selected
+    current_boosters = []
+    # If config exists, load its set's boosters
+    target_set = config.pack_code if config else (card_sets[0].code if card_sets else None)
+
+    if target_set:
+         data = card_repo.get_packs_by_set(target_set)
+         if data and target_set in data:
+             current_boosters = data[target_set]["boosters"]
+
+    return templates.TemplateResponse(
+        "partials/modals/edit_pack_config.html",
+        {
+            "request": request,
+            "account_id": account_id,
+            "config": config,
+            "card_sets": card_sets,
+            "current_boosters": current_boosters,
+            "t": t,
+            "current_lang": lang
+        }
+    )
+
+@app.get("/partials/boosters-options", response_class=HTMLResponse)
+async def get_boosters_options(
+    request: Request,
+    pack_code: str = Query(...)
+):
+    """HTMX Partial: Get booster options <option>...</option>"""
+    repo = CardRepository()
+    # pack_code IS the set_code in our context
+    data = repo.get_packs_by_set(pack_code)
+    boosters = []
+    if data and pack_code in data:
+        boosters = data[pack_code]["boosters"]
+
+    return templates.TemplateResponse(
+        "partials/options_boosters.html",
+        {
+            "request": request,
+            "boosters": boosters
+        }
+    )
+
+@app.post("/api/accounts/{account_id}/pack-config")
+async def save_account_pack_config(
+    request: Request,
+    account_id: int,
+    lang: str = Query(default="en")
+):
+    """Save Account Pack Config"""
+    form = await request.form()
+    pack_code = form.get("pack_code")
+    booster_name = form.get("booster_name")
+
+    repo = AccountPackConfigRepository()
+
+    # Create or Update logic
+    # We construct an object, but upsert handles ID mapping
+    config = AccountPackConfig(
+        account_id=account_id,
+        type="daily",
+        pack_code=pack_code,
+        booster_name=booster_name
+    )
+    repo.upsert(config)
+
+    # Return updated account list to refresh the view
+    return await get_management_accounts(request, lang=lang)
 
 if __name__ == "__main__":
     import uvicorn

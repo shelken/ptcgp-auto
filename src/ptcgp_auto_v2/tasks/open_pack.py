@@ -251,12 +251,12 @@ class OpenPackTask(Task):
             self._skip_reason = SKIP_REASON_NO_ACCOUNT_ID
             return
 
-        # 2. 检查 12 小时内是否已开包
-        if self._pack_record_repo.has_opened_within_hours(self.account.id, hours=12):
-            logger.info(f"账号 {self.account.display_name} 12 小时内已开包，任务跳过")
-            self._phase = OpenPackPhase.SKIPPED
-            self._skip_reason = SKIP_REASON_RECENTLY_OPENED
-            return
+        # 2. 检查 12 小时内是否已开包（不再检查这个限制）
+        # if self._pack_record_repo.has_opened_within_hours(self.account.id, hours=12):
+        #     logger.info(f"账号 {self.account.display_name} 12 小时内已开包，任务跳过")
+        #     self._phase = OpenPackPhase.SKIPPED
+        #     self._skip_reason = SKIP_REASON_RECENTLY_OPENED
+        #     return
 
         # 3. 加载开包配置
         config = self._pack_config_repo.get_by_account_and_type(
@@ -660,24 +660,21 @@ class OpenPackTask(Task):
         ocr_results = page_info.get("ocr_results", [])
         long_press_patterns = TEXT_PATTERNS.get("long_press", [])
 
+        # 等待 5s 让结果页动画稳定
+        wait = 3.0
         # 使用工具函数长按文字位置
-        result = long_press_text(self.adb, ocr_results, long_press_patterns)
+        result = long_press_text(self.adb, ocr_results, long_press_patterns, wait=wait)
         if result:
             logger.info("  -> 长按文字跳过卡牌展示")
-            # 强制等待 4 秒，确保转场动画结束且结果页标题已显示
-            # 防止过早识别成通用的 "点击继续" 按钮
-            result.wait = 4.0
             return result
-
-        # fallback 到屏幕中心
-        logger.warning("  -> 未找到長按文字，长按屏幕中心")
 
         # 开包流程即将结束，准备回到主页继续检测
         self._phase = OpenPackPhase.NAVIGATING_TO_HOME
         self._home_check_count = 0  # 重置主页检查计数
 
-        return long_press(self.adb, center_point(self.adb))
+        return ActionResult.ok(wait=wait)
 
+    # 在开封结果页面之后
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（pack_card_register 页面）仅在有新卡时出现"""
         logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
@@ -715,10 +712,6 @@ class OpenPackTask(Task):
         2. 点击继续按钮
         """
         if not self._result_recognized:
-            # 防止结果页动画未结束导致截图不全，先强制等待
-            logger.debug("  -> 等待 2s 让结果页动画稳定...")
-            time.sleep(2.0)
-
             # 内部循环重试识别，防止跳出后被误操作
             max_retries = 3
             for attempt in range(max_retries):

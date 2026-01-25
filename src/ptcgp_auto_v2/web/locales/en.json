@@ -65,6 +65,7 @@
     "col_game_id": "Game ID",
     "col_primary_plan": "Primary Plan",
     "col_extra_plans": "Extra Plans",
+    "col_target_pack": "Target Pack",
     "col_actions": "Actions",
     "col_name": "Name",
     "col_description": "Description",
@@ -89,5 +90,12 @@
     "task_open_pack": "Open Pack",
     "task_claim_rewards": "Claim Rewards",
     "task_fetch_account_info": "Sync Account Info",
-    "task_claim_gifts": "Claim Gifts"
+    "task_claim_gifts": "Claim Gifts",
+    "btn_pack_config_title": "Configure Target Pack",
+    "title_pack_config": "PACK CONFIGURATION",
+    "label_target_series": "TARGET SERIES",
+    "label_target_booster": "TARGET BOOSTER",
+    "label_select_series": "-- SELECT SERIES --",
+    "label_select_booster": "-- SELECT BOOSTER --",
+    "desc_pack_config": "Select the target card pack series and specific booster you want this account to prioritize opening."
 }
