@@ -1,4 +1,10 @@
-
 - 页面任何文本显示必须做本地化处理
 - 变更界面时需要更新 locales 的内容来适配
-- 需要适配多个主题，检查 theme-selector 的风格有哪些
+- 严格遵循多主题适配规范：
+  - **严禁** 使用硬编码的颜色类（如 `bg-white`, `bg-black`, `text-gray-500`, `border-black` 等）。
+  - **必须** 使用基于 CSS 变量的 Utility 类：
+    - 背景：`.bg-theme` (页面背景), `.bg-card` (卡片/输入框), `.bg-surface` (纯净表面), `.bg-overlay` (遮罩), `.bg-subtle` (细微背景), `.bg-separator` (分割线)
+    - 边框：`.border-theme` (主边框), `.border-subtle` (细微边框), `.border-subtle-light` (更浅边框)
+    - 文本：`.text-theme` (主文本), `.text-muted` (次要/说明文本)
+    - 交互：`.hover-bg-subtle`, `.hover-border-theme`, `.brutal-btn`, `.brutal-input`
+  - 新增 UI 组件时，请参考 `main.css` 中的变量定义，确保在所有主题（Retro, Luxury, Organic 等）下表现正常。
