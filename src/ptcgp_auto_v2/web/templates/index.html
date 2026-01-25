@@ -186,6 +186,15 @@
                                     {{ t.menu_plans or 'TASK PLANS' }}
                                 </button>
                             </li>
+                            <li>
+                                <button
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
+                                    hx-get="/management/metadata?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+                                    {{ t.menu_metadata or 'METADATA' }}
+                                </button>
+                            </li>
                         </ul>
                     </nav>
                 </aside>

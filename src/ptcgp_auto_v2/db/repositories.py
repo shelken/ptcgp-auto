@@ -26,6 +26,7 @@ from ptcgp_auto_v2.db.models import (
     Card,
     CardSet,
     CardPack,
+    Pack,
     PackCard,
 )
 from ptcgp_auto_v2.utils.card_naming import parse_card_number_from_filename
@@ -49,6 +50,8 @@ class CardRepository:
                 existing.name = card_set.name
                 existing.release_date = card_set.release_date
                 existing.total_cards = card_set.total_cards
+                # 更新 label_data
+                existing.label_data = card_set.label_data
                 existing.updated_at = datetime.now()
                 session.add(existing)
                 session.commit()
@@ -58,6 +61,64 @@ class CardRepository:
             session.commit()
             session.refresh(card_set)
             return card_set
+
+    def upsert_pack_safe(self, pack: Pack) -> Pack:
+        """
+        更新或创建卡包（安全模式）
+        - 如果不存在: 创建
+        - 如果存在: 仅更新 set_code 等基础字段，绝不覆盖人工维护的 label_data
+        """
+        with Session(get_engine()) as session:
+            existing = session.get(Pack, pack.name)
+            if existing:
+                # 仅更新系统字段，保留人工数据
+                existing.set_code = pack.set_code
+                existing.updated_at = datetime.now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+                return existing
+
+            # 首次创建
+            session.add(pack)
+            session.commit()
+            session.refresh(pack)
+            return pack
+
+    def get_all_packs(self) -> List[Pack]:
+        """获取所有卡包"""
+        with Session(get_engine()) as session:
+            statement = select(Pack).order_by(Pack.set_code, Pack.name)
+            return list(session.exec(statement).all())
+
+    def get_pack_by_name(self, name: str) -> Optional[Pack]:
+        """获取卡包详情"""
+        with Session(get_engine()) as session:
+             return session.get(Pack, name)
+
+    def update_pack_label(self, name: str, label_data: str) -> bool:
+        """更新卡包的多语言标签"""
+        with Session(get_engine()) as session:
+            pack = session.get(Pack, name)
+            if not pack:
+                return False
+            pack.label_data = label_data
+            pack.updated_at = datetime.now()
+            session.add(pack)
+            session.commit()
+            return True
+
+    def update_set_label(self, code: str, label_data: str) -> bool:
+        """更新系列的多语言标签"""
+        with Session(get_engine()) as session:
+            card_set = session.get(CardSet, code)
+            if not card_set:
+                return False
+            card_set.label_data = label_data
+            card_set.updated_at = datetime.now()
+            session.add(card_set)
+            session.commit()
+            return True
 
     def get_card_by_set_and_number(self, set_code: str, number: int) -> Optional[Card]:
         """根据系列和编号获取卡牌"""

@@ -97,5 +97,20 @@
     "label_target_booster": "目标子包 (Booster)",
     "label_select_series": "-- 选择系列 --",
     "label_select_booster": "-- 选择子包 --",
-    "desc_pack_config": "选择该账号优先开启的目标卡牌系列和具体子包。"
+    "desc_pack_config": "选择该账号优先开启的目标卡牌系列和具体子包。",
+    "col_remark": "备注",
+    "label_remark": "备注",
+    "modal_title_edit_account": "编辑账号详情",
+    "btn_edit_account_title": "编辑账号详情",
+    "title_metadata": "元数据管理",
+    "section_sets": "卡牌系列",
+    "section_packs": "卡包 (Booster)",
+    "col_code": "代码",
+    "col_original_name": "原名",
+    "col_zh_name": "中文名",
+    "col_pack_name": "卡包名",
+    "col_actions": "操作",
+    "col_status": "状态",
+    "placeholder_zh_name": "输入中文名称",
+    "btn_save": "保存"
 }
