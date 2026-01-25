@@ -27,9 +27,21 @@
 
         <div class="mt-8">
             <div class="brutal-tag text-xl mb-2">
-                {{ item.record.pack_type }}
+                {% if item.record.pack_code %}
+                    {{ item.record.pack_code }} / {{ item.record.pack_name }}
+                    <span class="text-sm font-normal">({{ item.record.pack_type }})</span>
+                {% else %}
+                    {{ item.record.pack_type }}
+                {% endif %}
             </div>
-            <div class="text-xs font-bold uppercase tracking-wider text-muted">
+
+            {% if item.current_points is not none %}
+            <div class="mt-2 text-sm font-bold p-2 brutal-border" style="background-color: var(--accent-color); color: var(--bg-color);">
+                PT: {{ item.current_points }} ({{ item.series }})
+            </div>
+            {% endif %}
+
+            <div class="text-xs font-bold uppercase tracking-wider text-muted mt-2">
                 {{ item.cards|length }} {{ t.cards_count_suffix }}
             </div>
         </div>

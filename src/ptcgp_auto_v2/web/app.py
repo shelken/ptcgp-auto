@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session, select, desc, col, distinct
 from sqlalchemy.orm import selectinload
-from typing import Annotated, List, Optional, Dict
+from typing import Annotated, List, Optional, Dict, cast, Any
 from datetime import datetime
 import os
 import math
@@ -27,6 +27,7 @@ from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
+from ptcgp_auto_v2.db.models.account_pack_point import AccountPackPoint
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     TaskPlanRepository,
@@ -121,48 +122,77 @@ async def get_records(
     """
     t = get_translations(lang)
     offset = page * page_size
-    
+
     # Base Query: Select PackRecords
     query = select(PackRecord).distinct().order_by(desc(PackRecord.opened_at))
-    
+
     # Join necessary tables if filtering
     if rarity or card_type:
-        query = query.join(PackRecord.cards).join(PackCard.card)
-        
+        query = query.join(cast(Any, PackRecord.cards)).join(cast(Any, PackCard.card))
+
         if rarity:
             query = query.where(col(Card.rarity).in_(rarity))
-        
+
         if card_type:
             query = query.where(col(Card.type).in_(card_type))
-            
+
     # Apply pagination
     query = query.offset(offset).limit(page_size)
-    
+
     results = session.exec(query).all()
-    
+
+    # 批量获取相关的 Pack Points (使用 account_id 和 pack_code 关联)
+    # 收集需要查询的组合 (account_id, series)
+    target_combinations = set()
+    for r in results:
+        if r.account_id and r.pack_code:
+            target_combinations.add((r.account_id, r.pack_code))
+
+    points_map = {}
+    if target_combinations:
+        # 这里为了简单，先查询出涉及账号的所有点数，或者如果SQLModel支持复杂IN查询更好
+        # 考虑到点数数据量不大，我们查询所有涉及账号的所有点数记录
+        account_ids = {c[0] for c in target_combinations}
+        points_stmt = select(AccountPackPoint).where(col(AccountPackPoint.account_id).in_(account_ids))
+        points_records = session.exec(points_stmt).all()
+        for p in points_records:
+            points_map[(p.account_id, p.series)] = p.points
+
     records_data = []
     for record in results:
         # Sort cards by position
         sorted_cards = sorted(record.cards, key=lambda c: c.position)
-        
+
         # Determine layout class based on card count
         card_count = len(sorted_cards)
         layout_type = "grid-cols-2" # Default fallback
-        
+
         if card_count == 6:
             layout_type = "layout-6" # 3 top, 3 bottom
         elif card_count == 5:
             layout_type = "layout-5" # 3 top, 2 bottom
         elif card_count == 4:
             layout_type = "layout-4" # 2 top, 2 bottom
-            
+
+        # 获取点数
+        current_points = None
+        if record.pack_code:
+             current_points = points_map.get((record.account_id, record.pack_code))
+        # 兼容旧数据：如果没有 pack_code 但 pack_type 有值且有点数记录
+        elif record.pack_type and "/" in record.pack_type:
+             series = record.pack_type.split("/")[0]
+             current_points = points_map.get((record.account_id, series))
+
         records_data.append({
             "record": record,
             "cards": sorted_cards,
             "layout": layout_type,
             "account_name": record.account.nickname if record.account else t.get("unknown_account", "Unknown"),
-            "opened_at": record.opened_at
+            "opened_at": record.opened_at,
+            "current_points": current_points,
+            "series": record.pack_code or (record.pack_type.split("/")[0] if "/" in record.pack_type else "")
         })
+
 
     if not records_data:
         return "" # Stop HTMX polling
@@ -251,13 +281,16 @@ async def get_account_plans_modal(
         select(Account)
         .where(Account.id == account_id)
         .options(
-            selectinload(Account.task_plan),
-            selectinload(Account.task_plan_associations).selectinload(
-                AccountTaskPlan.task_plan
+            selectinload(cast(Any, Account.task_plan)),
+            selectinload(cast(Any, Account.task_plan_associations)).selectinload(
+                cast(Any, AccountTaskPlan.task_plan)
             ),
         )
     )
     account = session.exec(statement).first()
+
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
 
     plan_repo = TaskPlanRepository()
     all_plans = plan_repo.get_all()
@@ -329,13 +362,26 @@ async def update_account_plans(
 
     # Update Primary
     if primary_plan_id:
-        repo.assign_task_plan(account_id, int(primary_plan_id))
+        val = primary_plan_id
+        if isinstance(val, str):
+            repo.assign_task_plan(account_id, int(val))
 
     # Update Secondary
     # First, fetch existing active secondaries to know what to remove
     account = repo.get_by_id(account_id)
-    existing_ids = {assoc.task_plan_id for assoc in account.task_plan_associations if assoc.is_active}
-    new_ids = {int(pid) for pid in secondary_plan_ids}
+    if not account:
+        # Should handle error, but for now just return
+        return await get_management_accounts(request, lang=lang, session=session)
+
+    if account.task_plan_associations:
+        existing_ids = {assoc.task_plan_id for assoc in account.task_plan_associations if assoc.is_active}
+    else:
+        existing_ids = set()
+
+    new_ids = set()
+    for pid in secondary_plan_ids:
+        if isinstance(pid, str) and pid.isdigit():
+            new_ids.add(int(pid))
 
     # Add new
     for pid in new_ids - existing_ids:
@@ -361,7 +407,11 @@ async def save_plan(
     form = await request.form()
     plan_id = form.get("plan_id")
     name = form.get("name")
+    if not isinstance(name, str):
+        name = ""
     description = form.get("description")
+    if not isinstance(description, str):
+        description = None
 
     # Construct task_types and configuration from dynamic form data
     # This part depends on how the frontend sends data.
@@ -394,18 +444,27 @@ async def save_plan(
 
     repo = TaskPlanRepository()
 
+    plan = None
     if plan_id:
-        plan = repo.get_by_id(int(plan_id))
-        plan.name = name
-        plan.description = description
-        plan.task_types = json.dumps(task_types)
-        # Ensure we are saving the dict as a JSON string
-        plan.configuration = json.dumps(configuration)
+        val = plan_id
+        if isinstance(val, str) and val.isdigit():
+            plan = repo.get_by_id(int(val))
+        if plan:
+            plan.name = name
+            plan.description = description
+            plan.task_types = json.dumps(task_types)
+            # Ensure we are saving the dict as a JSON string
+            plan.configuration = json.dumps(configuration)
 
-        # Explicitly check if update returns True
-        if not repo.update(plan):
-            print(f"ERROR: Failed to update plan {plan_id}")
-    else:
+            # Explicitly check if update returns True
+            if not repo.update(plan):
+                # 如果 plan_id 是 UploadFile，这里也不会触发，因为前面有 isinstance 检查
+                # 为了让 pyright 开心，我们可以将 plan_id 强制转换为 str 或者使用 val
+                pid_str = val if isinstance(val, str) else str(plan_id)
+                print(f"ERROR: Failed to update plan {pid_str}")
+
+    # Check if we need to create a new one (plan was None, meaning either no ID provided or ID invalid/not found)
+    if not plan:
         plan = TaskPlan(
             name=name,
             description=description,
@@ -517,7 +576,11 @@ async def save_account_pack_config(
     """Save Account Pack Config"""
     form = await request.form()
     pack_code = form.get("pack_code")
+    if not isinstance(pack_code, str):
+        pack_code = ""
     booster_name = form.get("booster_name")
+    if not isinstance(booster_name, str):
+        booster_name = ""
 
     repo = AccountPackConfigRepository()
 
