@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t.app_title }}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Google Fonts: Space Grotesk -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #FDFBF7; /* Warm Off-white */
+            --border-color: #000000;
+            --shadow-color: #000000;
+            --accent-color: #FF4D4D; /* Brutalist Red */
+            --active-color: #32CD32; /* Lime Green */
+        }
+
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: var(--bg-color);
+            color: #1a1a1a;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Soft Brutalism Component Styles */
+        .brutal-card {
+            background-color: #ffffff;
+            border: 3px solid var(--border-color);
+            box-shadow: 6px 6px 0px var(--shadow-color);
+            transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        
+        .brutal-card:hover {
+            transform: translate(-2px, -2px);
+            box-shadow: 8px 8px 0px var(--shadow-color);
+        }
+
+        .brutal-border {
+            border: 3px solid var(--border-color);
+        }
+
+        .brutal-tag {
+            background-color: var(--border-color);
+            color: #ffffff;
+            padding: 4px 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: inline-block;
+        }
+
+        .brutal-separator {
+            border-bottom: 3px solid var(--border-color);
+        }
+
+        /* Filter Checkbox Styling */
+        .filter-checkbox:checked + label {
+            background-color: var(--border-color);
+            color: white;
+            box-shadow: 4px 4px 0px var(--shadow-color);
+            transform: translate(-2px, -2px);
+        }
+        
+        .filter-label {
+            display: inline-block; /* Fix for rendering */
+            cursor: pointer;
+            border: 2px solid var(--border-color);
+            background-color: white;
+            padding: 4px 12px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: all 0.1s ease;
+            user-select: none;
+            margin-bottom: 0.5rem; /* Spacing */
+        }
+        
+        .filter-label:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* Pack Layouts */
+        .pack-grid {
+            display: grid;
+            gap: 1.5rem;
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* 6 cards: 3 top, 3 bottom */
+        .layout-6 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        /* 5 cards: 3 top, 2 bottom (centered) */
+        .layout-5 {
+            grid-template-columns: repeat(6, 1fr);
+        }
+        .layout-5 > :nth-child(1),
+        .layout-5 > :nth-child(2),
+        .layout-5 > :nth-child(3) {
+            grid-column: span 2;
+        }
+        .layout-5 > :nth-child(4) {
+            grid-column: 2 / span 2; /* Offset start */
+        }
+        .layout-5 > :nth-child(5) {
+            grid-column: 4 / span 2;
+        }
+
+        /* 4 cards: 2 top, 2 bottom */
+        .layout-4 {
+            grid-template-columns: repeat(2, 1fr);
+            width: 66.666%; /* Constrain width to match 2/3 of layout-6 */
+            margin: 0 auto; /* Center the grid */
+        }
+        
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            .layout-6, .layout-5 {
+                grid-template-columns: repeat(2, 1fr); /* Fallback to 2 columns on mobile */
+            }
+            .layout-4 {
+                width: 100%; /* Full width on mobile */
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .layout-5 > :nth-child(n) {
+                grid-column: auto; /* Reset spans */
+            }
+        }
+
+        /* HTMX Indicator */
+        .htmx-indicator {
+            display: none;
+            opacity: 0;
+            transition: opacity 200ms ease-in;
+        }
+        .htmx-request .htmx-indicator {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* Language Toggle */
+        .lang-link {
+            text-decoration: none;
+            font-weight: bold;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .lang-link.active {
+            opacity: 1;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-12">
+
+    <header class="max-w-7xl mx-auto mb-12">
+        <!-- Top Bar: Language & Version -->
+        <div class="flex justify-between items-center mb-6">
+            <div class="text-sm font-bold tracking-widest">
+                <a href="/?lang=en" class="lang-link {% if current_lang == 'en' %}active{% endif %}">EN</a>
+                <span class="mx-2">/</span>
+                <a href="/?lang=zh_CN" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}">中文</a>
+            </div>
+            <div class="flex gap-4">
+                <div class="brutal-tag text-sm border-2 border-black bg-white !color-black !text-black">
+                    V2.1.0
+                </div>
+                <div class="brutal-tag text-sm">
+                    {{ t.live_tag }}
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row justify-between items-end brutal-separator pb-6 gap-8">
+            <!-- Title -->
+            <div class="w-full lg:w-auto whitespace-nowrap">
+                <h1 class="text-6xl md:text-8xl font-bold tracking-tighter leading-none mb-2">{{ t.header_title|safe }}</h1>
+                <p class="text-xl font-medium mt-4 flex items-center gap-2">
+                    <span class="w-3 h-3 bg-black rounded-full block"></span>
+                    {{ t.header_subtitle }}
+                </p>
+            </div>
+
+            <!-- Filters Section (Right Aligned) -->
+            <div class="w-full lg:w-auto lg:text-right">
+                <form id="filter-form" 
+                      hx-get="/api/records?page=0&lang={{ current_lang }}" 
+                      hx-target="#records-container" 
+                      hx-swap="innerHTML"
+                      class="space-y-4">
+                    
+                    <!-- Rarity Filter -->
+                    <div class="flex flex-col lg:items-end gap-2">
+                        <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_rarity }}</span>
+                        <div class="flex flex-wrap gap-2 lg:justify-end">
+                            {% for r in rarities %}
+                            <div>
+                                <input type="checkbox" id="rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden filter-checkbox"
+                                       hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
+                                <label for="rarity-{{ r }}" class="filter-label">{{ t['rarity_' + r] or r }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Card Type Filter -->
+                    <div class="flex flex-col lg:items-end gap-2">
+                        <span class="font-bold uppercase tracking-widest text-sm opacity-60">{{ t.filter_type }}</span>
+                        <div class="flex flex-wrap gap-2 lg:justify-end">
+                            {% for type in card_types %}
+                            <div>
+                                <input type="checkbox" id="type-{{ type }}" name="card_type" value="{{ type }}" class="hidden filter-checkbox"
+                                       hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
+                                <label for="type-{{ type }}" class="filter-label uppercase">{{ t['type_' + type] or type }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto">
+        <!-- Records Container -->
+        <div id="records-container" 
+             class="space-y-16"
+             hx-get="/api/records?page=0&lang={{ current_lang }}" 
+             hx-trigger="load" 
+             hx-swap="innerHTML">
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="htmx-indicator w-full justify-center items-center py-12">
+            <div class="animate-spin w-12 h-12 border-4 border-black border-t-transparent rounded-full"></div>
+            <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
+        </div>
+        
+        <!-- End of List -->
+        <div id="end-of-records" class="hidden text-center py-20">
+            <div class="inline-block border-2 border-black px-8 py-4 font-bold text-xl bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                {{ t.end_of_records }}
+            </div>
+        </div>
+    </main>
+
+    <footer class="max-w-7xl mx-auto mt-32 pt-12 border-t-4 border-black text-center font-bold uppercase tracking-widest text-sm">
+        <p>{{ t.generated_by }}</p>
+    </footer>
+
+</body>
+</html>
