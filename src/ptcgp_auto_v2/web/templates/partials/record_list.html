@@ -1,35 +1,35 @@
 {% for item in records %}
 <div class="brutal-card p-8 flex flex-col md:flex-row gap-8">
     <!-- Left: Account & Pack Info -->
-    <div class="w-full md:w-1/4 flex flex-col justify-between md:border-r-4 border-dashed border-gray-300 md:border-solid md:border-black md:pr-8 pb-6 md:pb-0 border-b-4 md:border-b-0" 
+    <div class="w-full md:w-1/4 flex flex-col justify-between md:border-r-4 border-dashed border-subtle md:border-solid md:border-theme md:pr-8 pb-6 md:pb-0 border-b-4 md:border-b-0"
          style="border-color: var(--border-color);">
         <div>
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-4 h-4 rounded-full" style="background-color: var(--active-color); border: 2px solid var(--border-color); box-shadow: 2px 2px 0px var(--shadow-color);"></div>
                 <span class="font-bold text-xs tracking-[0.2em] uppercase">{{ t.account_id }} #{{ item.record.account_id }}</span>
             </div>
-            
+
             <h2 class="text-3xl font-bold break-words leading-tight" title="{{ item.account_name }}">
                 {{ item.account_name }}
             </h2>
-            
-            <div class="mt-6 font-mono text-sm brutal-border p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" style="background-color: var(--bg-color); box-shadow: 4px 4px 0px var(--shadow-color);">
+
+            <div class="mt-6 font-mono text-sm brutal-border p-3 shadow-[4px_4px_0px_0px_var(--shadow-color)]" style="background-color: var(--bg-color); box-shadow: 4px 4px 0px var(--shadow-color);">
                 <div class="flex justify-between border-b pb-1 mb-1" style="border-color: var(--border-color);">
-                    <span class="opacity-50">{{ t.date_label }}</span>
+                    <span class="text-muted">{{ t.date_label }}</span>
                     <span class="font-bold">{{ item.opened_at.strftime('%Y-%m-%d') }}</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="opacity-50">{{ t.time_label }}</span>
+                    <span class="text-muted">{{ t.time_label }}</span>
                     <span class="font-bold">{{ item.opened_at.strftime('%H:%M:%S') }}</span>
                 </div>
             </div>
         </div>
-        
+
         <div class="mt-8">
             <div class="brutal-tag text-xl mb-2">
                 {{ item.record.pack_type }}
             </div>
-            <div class="text-xs font-bold uppercase tracking-wider opacity-60">
+            <div class="text-xs font-bold uppercase tracking-wider text-muted">
                 {{ item.cards|length }} {{ t.cards_count_suffix }}
             </div>
         </div>
@@ -40,37 +40,37 @@
         <div class="pack-grid {{ item.layout }}">
             {% for card in item.cards %}
             <div class="card-item relative group aspect-[2/3] overflow-hidden transition-all duration-200 brutal-card">
-                
+
                 <!-- Card Image -->
                 {% if card.card and card.card.image_url %}
-                     <img src="https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards/{{ card.card.image_url }}&w=400&output=webp" 
-                         alt="{{ card.card_name }}" 
+                     <img src="https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards/{{ card.card.image_url }}&w=400&output=webp"
+                         alt="{{ card.card_name }}"
                          class="w-full h-full object-cover"
                          loading="lazy"
                          onerror="this.src='/static/card_back.png'">
                 {% else %}
-                    <div class="w-full h-full flex items-center justify-center font-bold rotate-45 border-dashed border-2 m-2" 
+                    <div class="w-full h-full flex items-center justify-center font-bold rotate-45 border-dashed border-2 m-2"
                          style="color: var(--text-color); border-color: var(--border-color);">
                         {{ t.no_image }}
                     </div>
                 {% endif %}
 
                 <!-- Rarity Badge -->
-                <div class="absolute top-0 right-0 text-[10px] px-2 py-1 font-bold z-10" 
+                <div class="absolute top-0 right-0 text-[10px] px-2 py-1 font-bold z-10"
                      style="background-color: var(--border-color); color: var(--bg-color); border-left: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
                     {{ card.rarity }}
                 </div>
 
                 <!-- New Badge -->
                 {% if card.is_new %}
-                <div class="absolute top-0 left-0 text-[10px] px-2 py-1 font-bold z-10" 
+                <div class="absolute top-0 left-0 text-[10px] px-2 py-1 font-bold z-10"
                      style="background-color: var(--accent-color); color: var(--bg-color); border-right: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color); box-shadow: 2px 2px 0px var(--shadow-color);">
                     {{ t.new_badge }}
                 </div>
                 {% endif %}
-                
+
                 <!-- Card Name Overlay -->
-                <div class="absolute bottom-0 left-0 right-0 text-xs py-2 px-1 text-center font-bold translate-y-full group-hover:translate-y-0 transition-transform duration-200" 
+                <div class="absolute bottom-0 left-0 right-0 text-xs py-2 px-1 text-center font-bold translate-y-full group-hover:translate-y-0 transition-transform duration-200"
                      style="background-color: var(--border-color); color: var(--bg-color); border-top: 2px solid var(--border-color);">
                     {{ card.card_name }}
                 </div>
