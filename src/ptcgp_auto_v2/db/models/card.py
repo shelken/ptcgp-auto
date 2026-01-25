@@ -65,10 +65,30 @@ class Card(SQLModel, TimestampMixin, table=True):
 
     # 来源: cards.json 中的 "image" 字段 (文件名, 例如 "cPK_10_000010_00_FUSHIGIDANE_C.webp")
     image_url: str = Field(description="远程图片URL")
+
+    # --- Extra Fields (from cards.extra.json) ---
+    # 来源: cards.extra.json 中的 "element" 字段 (e.g., "fire", "water", "grass")
+    element: Optional[str] = Field(default=None, description="属性 (Element)")
+
+    # 来源: cards.extra.json 中的 "type" 字段 (e.g., "pokemon", "trainer", "energy")
+    type: Optional[str] = Field(default=None, description="卡牌类型 (Type)")
+
+    # 来源: cards.extra.json 中的 "stage" 字段 (e.g., "basic", "stage1", "ex")
+    stage: Optional[str] = Field(default=None, description="进化阶段 (Stage)")
+
+    # 来源: cards.extra.json 中的 "health" 字段
+    health: Optional[int] = Field(default=None, description="生命值 (HP)")
+
+    # 来源: cards.extra.json 中的 "weakness" 字段 (e.g., "fire")
+    weakness: Optional[str] = Field(default=None, description="弱点属性 (Weakness)")
+
+    # 来源: cards.extra.json 中的 "retreatCost" 字段
+    retreat_cost: Optional[int] = Field(default=None, description="撤退费用 (Retreat Cost)")
+
     local_image_path: Optional[str] = Field(
         default=None, description="本地模板图片路径"
     )
-    data: Optional[str] = Field(default=None, description="JSON格式的其他属性")
+    data: Optional[str] = Field(default=None, description="JSON格式的其他属性 (保留字段)")
 
     # 关系
     card_set: Optional[CardSet] = Relationship(back_populates="cards")
