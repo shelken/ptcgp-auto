@@ -59,6 +59,7 @@ TEXT_PATTERNS = {
     "rewards_tab_collection": ["圖鑑"],
     "rewards_tab_deck": ["牌組"],
     "rewards_tab_drop": ["掉落"],
+    "rewards_tab_premium": ["特級"],
     # 可点击的领取按钮（按优先级排序：全部領取 > 領取 > 達成）
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     # 奖励详情页面（点击領取后展示卡牌的页面，有報酬和達成按钮）
