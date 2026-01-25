@@ -35,5 +35,17 @@
     "type_supporter": "支援者",
     "type_tool": "道具",
     "type_Fossil": "化石",
-    "clear_filters": "清空筛选"
+    "clear_filters": "清空筛选",
+    "project_name": "PTCGP 助手",
+    "theme_label": "主题",
+    "themes": {
+        "brutalist": "野兽派 (默认)",
+        "retro": "复古未来",
+        "organic": "有机自然",
+        "luxury": "奢华精致",
+        "playful": "俏皮可爱",
+        "editorial": "杂志排版",
+        "art_deco": "艺术装饰",
+        "pastel": "柔和粉彩"
+    }
 }
