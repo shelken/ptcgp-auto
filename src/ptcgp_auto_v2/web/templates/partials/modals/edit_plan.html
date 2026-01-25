@@ -1,0 +1,86 @@
+<div class="space-y-6">
+    <div class="flex justify-between items-center border-b-4 border-black pb-4">
+        <h3 class="text-2xl font-bold uppercase">
+            {% if plan %}Edit Plan: {{ plan.name }}{% else %}Create New Plan{% endif %}
+        </h3>
+        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+    </div>
+
+    <form hx-post="/api/plans?lang={{ current_lang }}"
+          hx-target="#tab-content-tasks"
+          hx-on::after-request="closeModal()"
+          class="space-y-6">
+
+        {% if plan %}
+        <input type="hidden" name="plan_id" value="{{ plan.id }}">
+        {% endif %}
+
+        <!-- Basic Info -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-2">
+                <label class="block font-bold uppercase tracking-widest text-sm opacity-60">Name</label>
+                <input type="text" name="name" value="{{ plan.name if plan else '' }}" required
+                       class="w-full p-3 border-2 border-black focus:outline-none focus:ring-4 focus:ring-black/20 font-bold">
+            </div>
+            <div class="space-y-2">
+                <label class="block font-bold uppercase tracking-widest text-sm opacity-60">Description</label>
+                <input type="text" name="description" value="{{ plan.description if plan else '' }}"
+                       class="w-full p-3 border-2 border-black focus:outline-none focus:ring-4 focus:ring-black/20">
+            </div>
+        </div>
+
+        <!-- Task Configuration -->
+        <div class="space-y-4">
+            <label class="block font-bold uppercase tracking-widest text-sm opacity-60">{{ t.label_task_config or 'Tasks Configuration' }}</label>
+            <div class="border-2 border-black p-4 space-y-4 max-h-[400px] overflow-y-auto">
+                {% for task_type in available_tasks %}
+                {% set task_config = plan.config_dict.get(task_type, {}) if plan else {} %}
+                {% set is_enabled = task_type in (plan.task_types_list if plan else []) %}
+
+                <div class="border border-black/20 p-4 rounded bg-gray-50" x-data="{ enabled: {{ 'true' if is_enabled else 'false' }}, resetType: '{{ task_config.get('reset_type', 'default') }}' }">
+                    <!-- Enable Checkbox -->
+                    <div class="flex items-center gap-3 mb-3">
+                        <input type="checkbox"
+                               id="task-{{ task_type }}"
+                               name="task_enabled_{{ task_type }}"
+                               class="w-5 h-5 border-2 border-black focus:ring-black accent-black"
+                               {% if is_enabled %}checked{% endif %}
+                               onchange="this.closest('div').parentElement.classList.toggle('opacity-50', !this.checked)">
+                        <label for="task-{{ task_type }}" class="font-bold flex-grow cursor-pointer uppercase select-none">{{ t['task_' + task_type] or task_type }}</label>
+                    </div>
+
+                    <!-- Config Fields (Inline JS to toggle visibility would be nice, but simple CSS toggle works too) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pl-8 transition-opacity duration-200 {% if not is_enabled %}opacity-50{% endif %}">
+                        <!-- Reset Type -->
+                        <div class="space-y-1">
+                            <label class="text-xs uppercase font-bold opacity-60">{{ t.label_frequency or 'Frequency' }}</label>
+                            <select name="task_reset_{{ task_type }}"
+                                    class="w-full p-2 border-2 border-black text-sm bg-white"
+                                    onchange="const intervalInput = document.getElementById('interval-{{ task_type }}'); if(this.value === 'interval') intervalInput.classList.remove('hidden'); else intervalInput.classList.add('hidden');">
+                                <option value="default" {% if not task_config.get('reset_type') %}selected{% endif %}>{{ t.label_default or 'Default' }}</option>
+                                {% for rt in reset_types %}
+                                <option value="{{ rt }}" {% if task_config.get('reset_type') == rt %}selected{% endif %}>{{ rt|title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Interval Seconds -->
+                        <div id="interval-{{ task_type }}" class="space-y-1 {% if task_config.get('reset_type') != 'interval' %}hidden{% endif %}">
+                            <label class="text-xs uppercase font-bold opacity-60">{{ t.label_interval or 'Interval (Seconds)' }}</label>
+                            <input type="number" name="task_interval_{{ task_type }}"
+                                   value="{{ task_config.get('interval_seconds', 3600) }}"
+                                   class="w-full p-2 border-2 border-black text-sm">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-4 pt-4 border-t-2 border-black/10">
+            <button type="button" onclick="closeModal()" class="brutal-btn">Cancel</button>
+            <button type="submit" class="brutal-btn active">Save Plan</button>
+        </div>
+    </form>
+</div>

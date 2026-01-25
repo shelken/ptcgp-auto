@@ -12,6 +12,7 @@
     --shadow-offset: 6px;
     --radius: 0px;
     --btn-transform: translate(-1px, -1px);
+    --card-bg: #ffffff;
 }
 
 /* Theme: Retro-futuristic */
@@ -26,6 +27,7 @@
     --border-width: 2px;
     --shadow-offset: 4px;
     --radius: 0px;
+    --card-bg: #111111;
 }
 
 /* Theme: Organic/Natural */
@@ -40,6 +42,7 @@
     --border-width: 1px;
     --shadow-offset: 8px;
     --radius: 12px;
+    --card-bg: #ffffff;
 }
 
 /* Theme: Luxury/Refined */
@@ -54,6 +57,7 @@
     --border-width: 1px;
     --shadow-offset: 0px; /* Glow effect handled differently */
     --radius: 2px;
+    --card-bg: #1a1a1a;
 }
 
 /* Theme: Playful/Toy-like */
@@ -68,6 +72,7 @@
     --border-width: 4px;
     --shadow-offset: 6px;
     --radius: 20px;
+    --card-bg: #ffffff;
 }
 
 /* Theme: Editorial/Magazine */
@@ -82,6 +87,7 @@
     --border-width: 1px;
     --shadow-offset: 0px;
     --radius: 0px;
+    --card-bg: #ffffff;
 }
 
 /* Theme: Art Deco/Geometric */
@@ -96,6 +102,7 @@
     --border-width: 2px;
     --shadow-offset: 5px;
     --radius: 0px;
+    --card-bg: #333333;
 }
 
 /* Theme: Soft/Pastel */
@@ -110,6 +117,7 @@
     --border-width: 2px;
     --shadow-offset: 4px;
     --radius: 16px;
+    --card-bg: #ffffff;
 }
 
 /* Base Styles */
@@ -121,9 +129,49 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
+/* Theme Utilities for Tailwind replacement */
+.border-theme { border-color: var(--border-color) !important; }
+.bg-theme { background-color: var(--bg-color) !important; }
+.bg-card { background-color: var(--card-bg) !important; }
+.text-theme { color: var(--text-color) !important; }
+
+.hover-row:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+[data-theme="retro"] .hover-row:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+[data-theme="luxury"] .hover-row:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+}
+
+/* Brutal Input */
+.brutal-input {
+    width: 100%;
+    padding: 0.75rem;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius);
+    outline: none;
+    font-family: var(--font-family);
+    font-weight: bold;
+    transition: all 0.2s;
+}
+.brutal-input:focus {
+    box-shadow: 0 0 0 4px rgba(0,0,0,0.1);
+}
+[data-theme="retro"] .brutal-input:focus {
+    box-shadow: 0 0 8px var(--border-color);
+}
+[data-theme="luxury"] .brutal-input:focus {
+    border-color: var(--active-color);
+    box-shadow: 0 0 10px var(--shadow-color);
+}
+
 /* Component Styles */
 .brutal-card {
-    background-color: var(--card-bg, #ffffff);
+    background-color: var(--card-bg);
     border: var(--border-width) solid var(--border-color);
     box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--shadow-color);
     border-radius: var(--radius);
@@ -131,10 +179,10 @@ body {
 }
 
 /* Theme-specific overrides for cards */
-[data-theme="retro"] .brutal-card { background-color: #111; }
-[data-theme="luxury"] .brutal-card { background-color: #1a1a1a; box-shadow: 0 4px 20px var(--shadow-color); }
-[data-theme="organic"] .brutal-card { background-color: #ffffff; border-style: solid; }
-[data-theme="art_deco"] .brutal-card { background-color: #333; border-style: double; border-width: 4px; }
+[data-theme="retro"] .brutal-card { background-color: var(--card-bg); }
+[data-theme="luxury"] .brutal-card { background-color: var(--card-bg); box-shadow: 0 4px 20px var(--shadow-color); }
+[data-theme="organic"] .brutal-card { background-color: var(--card-bg); border-style: solid; }
+[data-theme="art_deco"] .brutal-card { background-color: var(--card-bg); border-style: double; border-width: 4px; }
 
 .brutal-card:hover {
     transform: translate(-2px, -2px);
@@ -166,7 +214,7 @@ body {
 [data-theme="luxury"] .brutal-tag { color: #000; background-color: var(--border-color); }
 
 .brutal-btn {
-    background-color: var(--card-bg, #ffffff);
+    background-color: var(--card-bg);
     color: var(--text-color);
     border: var(--border-width) solid var(--border-color);
     padding: 4px 12px;
@@ -205,6 +253,25 @@ body {
 [data-theme="brutalist"] .brutal-btn.active { color: #fff; background-color: #000; }
 [data-theme="retro"] .brutal-btn.active { color: #000; background-color: var(--text-color); box-shadow: 0 0 10px var(--text-color); }
 
+.sidebar-btn.active {
+    background-color: var(--active-color);
+    color: var(--bg-color); /* Contrast */
+    border-color: var(--border-color);
+}
+[data-theme="brutalist"] .sidebar-btn.active { color: #fff; background-color: #000; }
+[data-theme="retro"] .sidebar-btn.active { color: #000; background-color: var(--text-color); }
+
+.sidebar-btn:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+[data-theme="retro"] .sidebar-btn:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+[data-theme="luxury"] .sidebar-btn:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+    color: var(--active-color);
+}
+
 .brutal-separator {
     border-bottom: var(--border-width) solid var(--border-color);
 }
@@ -227,7 +294,7 @@ body {
     display: inline-block;
     cursor: pointer;
     border: var(--border-width) solid var(--border-color);
-    background-color: var(--card-bg, #ffffff);
+    background-color: var(--card-bg);
     color: var(--text-color);
     padding: 4px 12px;
     font-weight: bold;
@@ -318,7 +385,7 @@ body {
 /* Dropdown/Select Styling for Theme Switcher */
 .theme-select {
     appearance: none;
-    background-color: var(--card-bg, #ffffff);
+    background-color: var(--card-bg);
     color: var(--text-color);
     border: var(--border-width) solid var(--border-color);
     padding: 4px 24px 4px 12px;

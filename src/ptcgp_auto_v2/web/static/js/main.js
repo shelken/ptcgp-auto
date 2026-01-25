@@ -3,6 +3,7 @@ const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_FILTERS = 'ptcgp_filters';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
+const STORAGE_KEY_TAB = 'ptcgp_active_tab';
 
 // --- Persistence Functions ---
 
@@ -141,10 +142,129 @@ function restoreTheme() {
     }
 }
 
+// 5. Tab Logic
+function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(el => {
+        el.classList.add('hidden');
+        el.classList.remove('block');
+    });
+
+    // Show selected
+    const selected = document.getElementById(`tab-content-${tabName}`);
+    if (selected) {
+        selected.classList.remove('hidden');
+        selected.classList.add('block');
+    }
+
+    // Update buttons
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+
+        // Update Main Title based on data-title attribute
+        const newTitle = activeBtn.getAttribute('data-title');
+        const titleEl = document.getElementById('main-title');
+        if (newTitle && titleEl) {
+            titleEl.textContent = newTitle;
+        }
+    }
+
+    // Toggle Filters visibility
+    const filters = document.getElementById('records-filters');
+    if (filters) {
+        filters.classList.toggle('hidden', tabName !== 'records');
+    }
+
+    localStorage.setItem(STORAGE_KEY_TAB, tabName);
+
+    // Auto-select first sidebar item if management tab is empty
+    if (tabName === 'management') {
+        const content = document.getElementById('management-content');
+        // Check if content is empty or has only whitespace/text (default message)
+        const hasContent = content.querySelector('table') || content.querySelector('form');
+
+        if (!hasContent) {
+            const firstBtn = document.querySelector('#tab-content-management .sidebar-btn');
+            if (firstBtn) firstBtn.click();
+        }
+    }
+}
+
+function restoreTab() {
+    const tab = localStorage.getItem(STORAGE_KEY_TAB);
+    if (tab) {
+        const btn = document.getElementById(`tab-btn-${tab}`);
+        if (btn) {
+            // Trigger click to ensure HTMX loading if needed
+            // But we need to be careful about infinite loops if onclick calls this
+            // Actually, switchTab is called by onclick.
+            // If we call switchTab directly, HTMX won't trigger if it relies on 'click' event
+            // But our buttons use hx-trigger="click once"
+
+            // If we just call switchTab, content hidden by hx-trigger won't load
+            // So we should click it.
+            btn.click();
+        }
+    }
+}
+
+// 6. Modal Logic
+function openModal(contentHtml) {
+    const container = document.getElementById('modal-container');
+    const content = document.getElementById('modal-content');
+    if (container && content) {
+        content.innerHTML = contentHtml;
+        container.classList.remove('hidden');
+        // Re-scan for HTMX content in modal
+        htmx.process(content);
+    }
+}
+
+function closeModal(event) {
+    // If event is provided, only close if clicked on backdrop (id=modal-container)
+    if (event && event.target.id !== 'modal-container') return;
+
+    const container = document.getElementById('modal-container');
+    if (container) {
+        container.classList.add('hidden');
+        // Clear content to stop any polling or video playing
+        document.getElementById('modal-content').innerHTML = '';
+    }
+}
+
+// Helper to close modal from inside (e.g. Cancel button)
+function forceCloseModal() {
+    const container = document.getElementById('modal-container');
+    if (container) {
+        container.classList.add('hidden');
+        document.getElementById('modal-content').innerHTML = '';
+    }
+}
+
+function showToast(message) {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = 'fixed bottom-4 right-4 bg-black text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300 z-50';
+    toast.textContent = message;
+
+    document.body.appendChild(toast);
+
+    // Fade out and remove
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 300);
+    }, 2000);
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', () => {
     initLang();
     restoreTheme(); // Restore theme first to avoid flash
+    restoreTab();
     restoreFilters(); // This triggers data load
     restoreViewMode();
 });
