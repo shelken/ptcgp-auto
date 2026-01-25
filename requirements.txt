@@ -6,3 +6,8 @@ numpy>=1.24.0
 loguru>=0.7.0  # 结构化日志
 questionary>=2.0.0  # 交互式 CLI 选择菜单
 sqlmodel>=0.0.16  # ORM with type hints
+
+fastapi
+uvicorn
+jinja2
+python-multipart

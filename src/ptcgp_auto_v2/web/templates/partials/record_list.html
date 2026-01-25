@@ -1,0 +1,95 @@
+{% for item in records %}
+<div class="brutal-card p-8 flex flex-col md:flex-row gap-8 bg-white">
+    <!-- Left: Account & Pack Info -->
+    <div class="w-full md:w-1/4 flex flex-col justify-between md:border-r-4 border-black md:pr-8 border-dashed md:border-solid pb-6 md:pb-0 border-b-4 md:border-b-0">
+        <div>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-4 h-4 bg-[#32CD32] border-2 border-black rounded-full shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"></div>
+                <span class="font-bold text-xs tracking-[0.2em] uppercase">{{ t.account_id }} #{{ item.record.account_id }}</span>
+            </div>
+            
+            <h2 class="text-3xl font-bold break-words leading-tight" title="{{ item.account_name }}">
+                {{ item.account_name }}
+            </h2>
+            
+            <div class="mt-6 font-mono text-sm border-2 border-black p-3 bg-gray-50 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div class="flex justify-between border-b border-black pb-1 mb-1">
+                    <span class="opacity-50">{{ t.date_label }}</span>
+                    <span class="font-bold">{{ item.opened_at.strftime('%Y-%m-%d') }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="opacity-50">{{ t.time_label }}</span>
+                    <span class="font-bold">{{ item.opened_at.strftime('%H:%M:%S') }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-8">
+            <div class="brutal-tag text-xl mb-2">
+                {{ item.record.pack_type }}
+            </div>
+            <div class="text-xs font-bold uppercase tracking-wider opacity-60">
+                {{ item.cards|length }} {{ t.cards_count_suffix }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Cards Grid -->
+    <div class="w-full md:w-3/4">
+        <div class="pack-grid {{ item.layout }}">
+            {% for card in item.cards %}
+            <div class="card-item relative group aspect-[2/3] bg-white border-2 border-black overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all duration-200">
+                
+                <!-- Card Image -->
+                {% if card.card and card.card.image_url %}
+                     <img src="https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards/{{ card.card.image_url }}&w=400&output=webp" 
+                         alt="{{ card.card_name }}" 
+                         class="w-full h-full object-cover"
+                         loading="lazy"
+                         onerror="this.src='/static/card_back.png'">
+                {% else %}
+                    <div class="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400 font-bold rotate-45 border-dashed border-2 border-gray-300 m-2">
+                        {{ t.no_image }}
+                    </div>
+                {% endif %}
+
+                <!-- Rarity Badge -->
+                <div class="absolute top-0 right-0 bg-black text-white text-[10px] px-2 py-1 font-bold border-l-2 border-b-2 border-black z-10">
+                    {{ card.rarity }}
+                </div>
+
+                <!-- New Badge -->
+                {% if card.is_new %}
+                <div class="absolute top-0 left-0 bg-[#FF4D4D] text-white text-[10px] px-2 py-1 font-bold border-r-2 border-b-2 border-black z-10 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    {{ t.new_badge }}
+                </div>
+                {% endif %}
+                
+                <!-- Card Name Overlay -->
+                <div class="absolute bottom-0 left-0 right-0 bg-black text-white text-xs py-2 px-1 text-center font-bold border-t-2 border-black translate-y-full group-hover:translate-y-0 transition-transform duration-200">
+                    {{ card.card_name }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- HTMX Infinite Scroll Trigger -->
+{% if records %}
+<div hx-get="{{ next_page_url }}"
+     hx-trigger="revealed"
+     hx-swap="outerHTML"
+     class="h-12 w-full flex justify-center items-center opacity-0">
+     <!-- Invisible trigger area -->
+</div>
+{% else %}
+<script>
+    document.getElementById('end-of-records').classList.remove('hidden');
+    // Hide global loader if exists
+    var loader = document.querySelector('.htmx-indicator');
+    if(loader) loader.classList.remove('flex'); 
+    if(loader) loader.classList.add('hidden');
+</script>
+{% endif %}
