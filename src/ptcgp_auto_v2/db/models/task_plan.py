@@ -28,10 +28,24 @@ class TaskPlan(SQLModel, table=True):
     name: str = Field(unique=True)
     description: Optional[str] = None
     task_types: str = Field(default="[]")  # JSON 数组: ["open_pack", "send_gift"]
+    configuration: str = Field(default="{}")  # JSON 对象: {"open_pack": {"reset_type": "interval", "interval": 3600}}
+    is_global: bool = Field(default=False, description="是否为全局默认计划")
     created_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    accounts: List["Account"] = Relationship(back_populates="task_plan")
+    accounts: List["Account"] = Relationship(back_populates="task_plan")  # 旧的一对多关系（兼容）
+    # 新的多对多关系（通过关联表）
+    # account_associations: List["AccountTaskPlan"] = Relationship()  # 暂时不在 SQLModel 中强类型定义反向关系以免循环依赖问题，主要在 Account 侧定义
+
+    @property
+    def config_dict(self) -> dict:
+        """将 configuration JSON 解析为字典"""
+        if not self.configuration:
+            return {}
+        try:
+            return json.loads(self.configuration)
+        except (json.JSONDecodeError, TypeError):
+            return {}
 
     @property
     def task_types_list(self) -> List[str]:
@@ -54,5 +68,7 @@ class TaskPlan(SQLModel, table=True):
             "name": self.name,
             "description": self.description,
             "task_types": self.task_types_list,
+            "configuration": self.config_dict,
+            "is_global": self.is_global,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

@@ -52,6 +52,10 @@ class Account(SQLModel, table=True):
 
     # 关系
     task_plan: Optional["TaskPlan"] = Relationship(back_populates="accounts")
+    # 新的多对多关系（通过关联表）
+    task_plan_associations: List["AccountTaskPlan"] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete"}
+    )
     task_instances: List["TaskInstance"] = Relationship(back_populates="account")
     pack_records: List["PackRecord"] = Relationship(back_populates="account")
 

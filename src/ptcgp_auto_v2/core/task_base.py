@@ -22,6 +22,7 @@ class ResetType(Enum):
     DAILY = "daily"  # 每日重置
     WEEKLY = "weekly"  # 每周重置
     ONCE = "once"  # 一次性任务
+    INTERVAL = "interval"  # 按时间间隔重置（需要配置 interval_seconds）
 
 
 class TaskStatus(Enum):
