@@ -46,7 +46,13 @@ HOME_CHECK_ROUNDS = 2
 HOME_CHECK_INTERVAL = 2.0
 
 # Tab 遍历顺序
-TAB_ORDER = ["daily", "collection", "deck", "drop"]
+# FIXED_TABS: 常驻 Tab，必须点击
+# DYNAMIC_TABS: 动态 Tab (如掉落)，可能不存在
+# WALL_TAB: 边界 Tab (特级)，用于判断是否到达最右侧，不点击
+FIXED_TABS = ["daily", "collection", "deck"]
+DYNAMIC_TABS = ["drop"]
+WALL_TAB = "premium"
+TAB_ORDER = FIXED_TABS + DYNAMIC_TABS + [WALL_TAB]
 
 
 class ClaimRewardsPhase(Enum):
@@ -318,21 +324,54 @@ class ClaimRewardsTask(Task):
 
         # 阶段2：往右走，从左往右依次点击未访问的 Tab
         if not self._going_left:
+            # 检查特级 (WALL_TAB) 是否可见，作为"是否到达最右侧"的标志
+            wall_visible = is_visible(WALL_TAB)
+
             for tab in TAB_ORDER:
+                # 1. 遇到 WALL_TAB (Premium)，意味着遍历结束
+                if tab == WALL_TAB:
+                    # 无论可见与否，WALL_TAB 本身不需要点击，且它是列表最后一个
+                    # 到了这里说明前面的 Tab 都处理完了（或被跳过了）
+                    # 停止遍历，进入下一步（主题收藏）
+                    break
+
                 if tab in self._visited_tabs:
                     continue
+
+                # 2. 如果当前 Tab 可见，点击它
                 if is_visible(tab):
                     result = tap_tab(tab)
                     if result:
                         logger.debug(f"  -> 点击 {tab} Tab")
                         self._visited_tabs.add(tab)
                         return result
+
+                # 3. 如果当前 Tab 不可见
                 else:
+                    # Case A: 已经看到了墙 (WALL_TAB)
+                    # 说明已经到了最右边，但还没看到目标 Tab -> 目标 Tab 不存在
+                    if wall_visible:
+                        logger.debug(f"  -> 已达最右 (看到 {WALL_TAB}) 但未见 {tab}，跳过")
+                        self._visited_tabs.add(tab)
+                        continue
+
+                    # Case B: 还没看到墙
+                    # 说明还需要向右滑动/寻找
+                    # 尝试点击屏幕上最右侧可见的 Tab（排除 WALL_TAB 本身，虽然它不可见）
+                    # 注意：我们这里从 TAB_ORDER 倒序找第一个可见的 Tab 点击
                     for right_tab in reversed(TAB_ORDER):
-                        result = tap_tab(right_tab)
-                        if result:
-                            logger.debug(f"  -> 往右走，点击 {right_tab} Tab")
-                            return result
+                        if right_tab == WALL_TAB:
+                            continue # 不点击墙
+
+                        if is_visible(right_tab):
+                            result = tap_tab(right_tab)
+                            if result:
+                                logger.debug(f"  -> 往右走，寻找 {tab}，点击 {right_tab} Tab")
+                                return result
+
+                    # Case C: 找不到任何可见 Tab（异常）
+                    logger.warning(f"  -> 无法找到任何 Tab 以导航至 {tab}，跳过")
+                    self._visited_tabs.add(tab)
 
         # 3. 所有 Tab 完成，进入主题收藏
         if not self._theme_collection_done:
