@@ -70,14 +70,14 @@ function restoreFilters() {
     // Always trigger initial load via JS
     const container = document.getElementById('records-container');
     if (container) {
-        const baseAttr = container.getAttribute('hx-get');
+        const baseAttr = container.getAttribute('data-url');
         let finalUrl = baseAttr;
-        
+
         if (queryParts.length > 0) {
             finalUrl = baseAttr + '&' + queryParts.join('&');
-            container.setAttribute('hx-get', finalUrl);
+            container.setAttribute('data-url', finalUrl);
         }
-        
+
         htmx.ajax('GET', finalUrl, {target: '#records-container', swap: 'innerHTML'});
     }
 }
