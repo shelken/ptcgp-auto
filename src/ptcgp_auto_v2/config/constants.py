@@ -40,6 +40,11 @@ DEFAULT_MAX_SCROLL_ATTEMPTS = 10  # 默认最大滚动尝试次数
 # 数据库配置
 DEFAULT_DB_NAME = "ptcgp_v2.db"  # 默认数据库文件名
 
+# Web配置
+DEFAULT_WEB_HOST = "127.0.0.1"
+DEFAULT_WEB_PORT = 8000
+
+
 # 模板缩放比例
 SCALE_PACK_SERIES_SELECT = 0.23
 SCALE_PACK_LIST = 0.81

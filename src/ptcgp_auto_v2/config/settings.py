@@ -27,6 +27,8 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_TASK_GENERATION_INTERVAL,
     DEFAULT_TEMPLATE_THRESHOLD,
     DEFAULT_WAIT_AFTER_CLICK,
+    DEFAULT_WEB_HOST,
+    DEFAULT_WEB_PORT,
     SCALE_PACK_DETAIL,
     SCALE_PACK_LIST,
     SCALE_PACK_SERIES_SELECT,
@@ -87,6 +89,10 @@ class Settings:
             f"{self.app_data_dir}/files/PersistedInstallation.*.json",
             f"{self.app_data_dir}/files/UserPreferences/v1/MissionUserPrefs",
         ]
+
+    # Web配置
+    web_host: str = DEFAULT_WEB_HOST
+    web_port: int = DEFAULT_WEB_PORT
 
     # 屏幕配置
     # 基准分辨率：用于坐标比例计算的参考值（模板图片基于此分辨率截取）
@@ -164,6 +170,12 @@ class Settings:
 
         if os.getenv("PTCGP_MAX_WORKERS"):
             settings.max_workers = int(os.getenv("PTCGP_MAX_WORKERS"))
+
+        if os.getenv("PTCGP_WEB_HOST"):
+            settings.web_host = os.getenv("PTCGP_WEB_HOST")
+
+        if os.getenv("PTCGP_WEB_PORT"):
+            settings.web_port = int(os.getenv("PTCGP_WEB_PORT"))
 
         return settings
 
