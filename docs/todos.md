@@ -22,9 +22,8 @@
   - running/blocked 超时 10 分钟自动重置
   - skipped 超时 1 小时自动重置
   - failed 每次检查都重置（依赖重试次数限制）
-- [x] 数据库层迁移到 SQLModel + Alembic
+- [x] 数据库层迁移到 SQLModel
   - 使用 SQLModel ORM 替代 dataclass + 原生 SQL
-  - 集成 Alembic 支持自动生成迁移脚本
   - 详见 `src/ptcgp_auto_v2/db/README.md`
 - [x] 加个手动指定adb切换账号功能（方便我手动检查账号的任务完成情况）
 - [x] 重构代码
@@ -43,12 +42,13 @@
 
 ## 进行中
 
-s
+- [ ] 拆分repository
+- [ ] 彻底废弃账号的task_plan_id，使用多关联
 
 ## 高优先级
 
-- [ ] `send_card` - 每日送卡任务
 - [ ] `wonder_pick` - 自动得卡挑战
+- [ ] `send_card` - 每日送卡任务
 
 ## 中优先级
 
