@@ -25,8 +25,33 @@ class CardSet(SQLModel, TimestampMixin, table=True):
     release_date: Optional[str] = Field(default=None, description="发布日期 YYYY-MM-DD")
     total_cards: int = Field(default=0, description="卡牌总数")
 
+    # 多语言显示名 (JSON)
+    label_data: str = Field(default="{}", description="多语言名称 JSON")
+
     # 关系
     cards: List["Card"] = Relationship(back_populates="card_set")
+
+
+class Pack(SQLModel, TimestampMixin, table=True):
+    """
+    卡包模型 (如 Mewtwo, Pikachu)
+    """
+
+    __tablename__ = "packs"
+
+    # Pack 的唯一标识，例如 "Mewtwo", "Pikachu", "Charizard"
+    name: str = Field(primary_key=True, description="卡包标识/英文名")
+
+    # 关联 CardSet
+    set_code: str = Field(foreign_key="card_sets.code", index=True)
+
+    # 多语言显示名 (JSON)
+    label_data: str = Field(default="{}", description="多语言名称 JSON")
+
+    image_url: Optional[str] = Field(default=None)
+
+    # 关系
+    card_set: Optional["CardSet"] = Relationship()
 
 
 class Card(SQLModel, TimestampMixin, table=True):

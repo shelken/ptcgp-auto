@@ -35,6 +35,7 @@ from ptcgp_auto_v2.db.repositories import (
     AccountPackConfigRepository
 )
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
+from ptcgp_auto_v2.db.models.card import Pack
 
 app = FastAPI(title="PTCGP Auto Web")
 
@@ -141,6 +142,26 @@ async def get_records(
 
     results = session.exec(query).all()
 
+    # Pre-fetch metadata for localization
+    card_repo = CardRepository()
+    all_sets = card_repo.get_all_sets()
+    all_packs = card_repo.get_all_packs()
+
+    # Build lookup maps: code/name -> label_dict
+    sets_map = {}
+    for s in all_sets:
+        try:
+            sets_map[s.code] = json.loads(s.label_data) if s.label_data else {}
+        except:
+            sets_map[s.code] = {}
+
+    packs_map = {}
+    for p in all_packs:
+        try:
+            packs_map[p.name] = json.loads(p.label_data) if p.label_data else {}
+        except:
+            packs_map[p.name] = {}
+
     # 批量获取相关的 Pack Points (使用 account_id 和 pack_code 关联)
     # 收集需要查询的组合 (account_id, series)
     target_combinations = set()
@@ -159,6 +180,9 @@ async def get_records(
             points_map[(p.account_id, p.series)] = p.points
 
     records_data = []
+    # Determine target language key (e.g., 'zh' for 'zh_CN', 'en' for 'en')
+    lang_key = "zh" if lang.startswith("zh") else "en"
+
     for record in results:
         # Sort cards by position
         sorted_cards = sorted(record.cards, key=lambda c: c.position)
@@ -176,12 +200,26 @@ async def get_records(
 
         # 获取点数
         current_points = None
+        series_code = ""
         if record.pack_code:
              current_points = points_map.get((record.account_id, record.pack_code))
+             series_code = record.pack_code
         # 兼容旧数据：如果没有 pack_code 但 pack_type 有值且有点数记录
         elif record.pack_type and "/" in record.pack_type:
              series = record.pack_type.split("/")[0]
              current_points = points_map.get((record.account_id, series))
+             series_code = series
+
+        # Localize Pack Info
+        # Set Name
+        set_name_display = series_code
+        if series_code in sets_map:
+            set_name_display = sets_map[series_code].get(lang_key) or sets_map[series_code].get("en") or series_code
+
+        # Pack Name
+        pack_name_display = record.pack_name or ""
+        if record.pack_name in packs_map:
+            pack_name_display = packs_map[record.pack_name].get(lang_key) or packs_map[record.pack_name].get("en") or record.pack_name
 
         records_data.append({
             "record": record,
@@ -190,7 +228,9 @@ async def get_records(
             "account_name": record.account.nickname if record.account else t.get("unknown_account", "Unknown"),
             "opened_at": record.opened_at,
             "current_points": current_points,
-            "series": record.pack_code or (record.pack_type.split("/")[0] if "/" in record.pack_type else "")
+            "series": series_code,
+            "set_name_display": set_name_display,
+            "pack_name_display": pack_name_display
         })
 
 
@@ -316,6 +356,31 @@ async def get_account_plans_modal(
         }
     )
 
+@app.get("/management/accounts/{account_id}/edit", response_class=HTMLResponse)
+async def get_account_edit_modal(
+    request: Request,
+    account_id: int,
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session)
+):
+    """Render Edit Account Details Modal"""
+    t = get_translations(lang)
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+
+    return templates.TemplateResponse(
+        "partials/modals/edit_account.html",
+        {
+            "request": request,
+            "account": account,
+            "t": t,
+            "current_lang": lang
+        }
+    )
+
 @app.get("/management/plans/edit", response_class=HTMLResponse)
 async def get_plan_edit_modal(
     request: Request,
@@ -394,6 +459,33 @@ async def update_account_plans(
     # Return updated list or success message
     # For simplicity, we just trigger a reload of the accounts list
     # HTMX can target the table to refresh
+    response = await get_management_accounts(request, lang=lang, session=session)
+    response.headers["HX-Trigger"] = "closeModal"
+    return response
+
+@app.post("/api/accounts/{account_id}/details")
+async def update_account_details(
+    request: Request,
+    account_id: int,
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
+):
+    """Handle Account Details Update (Nickname, Remark)"""
+    form = await request.form()
+    nickname = form.get("nickname")
+    remark = form.get("remark")
+
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+
+    if account:
+        if isinstance(nickname, str):
+            account.nickname = nickname
+        if isinstance(remark, str):
+            account.remark = remark
+
+        repo.update(account)
+
     response = await get_management_accounts(request, lang=lang, session=session)
     response.headers["HX-Trigger"] = "closeModal"
     return response
@@ -486,6 +578,110 @@ async def delete_plan(
     repo = TaskPlanRepository()
     repo.delete(plan_id)
     return await get_management_plans(request, lang=lang)
+
+# --- Metadata Management APIs ---
+
+@app.get("/management/metadata", response_class=HTMLResponse)
+async def get_management_metadata(
+    request: Request,
+    lang: str = Query(default="en"),
+):
+    """Render Metadata Management Page"""
+    t = get_translations(lang)
+    repo = CardRepository()
+    sets = repo.get_all_sets()
+    packs = repo.get_all_packs()
+
+    # 解析 label_data 并转换为字典供模板使用
+    sets_data = []
+    for s in sets:
+        data = s.model_dump()
+        try:
+            data["label_dict"] = json.loads(s.label_data) if s.label_data else {}
+        except:
+            data["label_dict"] = {}
+        sets_data.append(data)
+
+    packs_data = []
+    for p in packs:
+        data = p.model_dump()
+        try:
+            data["label_dict"] = json.loads(p.label_data) if p.label_data else {}
+        except:
+            data["label_dict"] = {}
+        packs_data.append(data)
+
+    # Group packs by set_code
+    packs_by_set = {}
+    for p in packs_data:
+        set_code = p["set_code"]
+        if set_code not in packs_by_set:
+            packs_by_set[set_code] = []
+        packs_by_set[set_code].append(p)
+
+    return templates.TemplateResponse(
+        "partials/metadata_list.html",
+        {
+            "request": request,
+            "sets": sets_data,
+            "packs_by_set": packs_by_set,
+            "t": t,
+            "current_lang": lang
+        }
+    )
+
+@app.post("/api/metadata/set/{code}/label")
+async def update_set_label(
+    request: Request,
+    code: str,
+    lang: str = Query(default="en"),
+):
+    """Update Card Set Label (zh)"""
+    form = await request.form()
+    label_zh = form.get("label_zh")
+
+    repo = CardRepository()
+    card_set = repo.get_set_by_code(code)
+
+    if card_set:
+        try:
+            labels = json.loads(card_set.label_data) if card_set.label_data else {}
+        except:
+            labels = {}
+
+        if isinstance(label_zh, str):
+            labels["zh"] = label_zh
+
+        repo.update_set_label(code, json.dumps(labels, ensure_ascii=False))
+
+    # Return refreshed view
+    return await get_management_metadata(request, lang=lang)
+
+@app.post("/api/metadata/pack/{name}/label")
+async def update_pack_label(
+    request: Request,
+    name: str,
+    lang: str = Query(default="en"),
+):
+    """Update Pack Label (zh)"""
+    form = await request.form()
+    label_zh = form.get("label_zh")
+
+    repo = CardRepository()
+    pack = repo.get_pack_by_name(name)
+
+    if pack:
+        try:
+            labels = json.loads(pack.label_data) if pack.label_data else {}
+        except:
+            labels = {}
+
+        if isinstance(label_zh, str):
+            labels["zh"] = label_zh
+
+        repo.update_pack_label(name, json.dumps(labels, ensure_ascii=False))
+
+    return await get_management_metadata(request, lang=lang)
 
 # --- Pack Config APIs ---
 

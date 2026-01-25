@@ -97,5 +97,20 @@
     "label_target_booster": "TARGET BOOSTER",
     "label_select_series": "-- SELECT SERIES --",
     "label_select_booster": "-- SELECT BOOSTER --",
-    "desc_pack_config": "Select the target card pack series and specific booster you want this account to prioritize opening."
+    "desc_pack_config": "Select the target card pack series and specific booster you want this account to prioritize opening.",
+    "col_remark": "Remark",
+    "label_remark": "REMARK",
+    "modal_title_edit_account": "Edit Account Details",
+    "btn_edit_account_title": "Edit Account Details",
+    "title_metadata": "Metadata Management",
+    "section_sets": "Card Sets",
+    "section_packs": "Packs (Boosters)",
+    "col_code": "Code",
+    "col_original_name": "Original Name",
+    "col_zh_name": "Zh Name",
+    "col_pack_name": "Pack Name",
+    "col_actions": "Actions",
+    "col_status": "Status",
+    "placeholder_zh_name": "Enter Zh Name",
+    "btn_save": "Save"
 }

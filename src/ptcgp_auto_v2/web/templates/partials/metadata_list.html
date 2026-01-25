@@ -1,0 +1,94 @@
+<div class="space-y-8" id="metadata-content">
+
+    <!-- Card Sets Section -->
+    <div class="brutal-card p-6">
+        <h2 class="text-3xl font-bold uppercase tracking-tight mb-6">{{ t.section_sets }}</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b-4 border-theme">
+                        <th class="p-3 font-bold uppercase">{{ t.col_code }}</th>
+                        <th class="p-3 font-bold uppercase">{{ t.col_original_name }}</th>
+                        <th class="p-3 font-bold uppercase">{{ t.col_zh_name }}</th>
+                        <th class="p-3 font-bold uppercase w-32 text-right">{{ t.col_status }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for set in sets %}
+                    <tr class="border-b border-theme hover-row transition-colors">
+                        <td class="p-3 font-mono font-bold text-muted">{{ set.code }}</td>
+                        <td class="p-3 font-bold">{{ set.name }}</td>
+                        <td class="p-3">
+                            <input type="text"
+                                   name="label_zh"
+                                   value="{{ set.label_dict.get('zh', '') }}"
+                                   class="brutal-input text-sm"
+                                   placeholder="{{ t.placeholder_zh_name }}"
+                                   hx-post="/api/metadata/set/{{ set.code }}/label?lang={{ current_lang }}"
+                                   hx-trigger="keyup changed delay:500ms"
+                                   hx-swap="none"
+                                   hx-indicator="#indicator-set-{{ set.code }}">
+                        </td>
+                        <td class="p-3 text-right">
+                            <span id="indicator-set-{{ set.code }}" class="htmx-indicator brutal-tag text-xs font-bold">
+                                SAVING...
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Packs Section -->
+    <div class="brutal-card p-6">
+        <h2 class="text-3xl font-bold uppercase tracking-tight mb-6">{{ t.section_packs }}</h2>
+
+        <div class="space-y-8">
+            {% for set_code, packs in packs_by_set.items() %}
+            <div>
+                <div class="flex items-center gap-2 mb-4 border-b-2 border-theme pb-2">
+                    <span class="font-bold text-lg uppercase brutal-tag">SET: {{ set_code }}</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b-2 border-theme">
+                                <th class="p-3 font-bold uppercase">{{ t.col_pack_name }}</th>
+                                <th class="p-3 font-bold uppercase">{{ t.col_zh_name }}</th>
+                                <th class="p-3 font-bold uppercase w-32 text-right">{{ t.col_status }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pack in packs %}
+                            <tr class="border-b border-subtle hover-row transition-colors">
+                                <td class="p-3 font-mono font-bold">{{ pack.name }}</td>
+                                <td class="p-3">
+                                    <input type="text"
+                                           name="label_zh"
+                                           value="{{ pack.label_dict.get('zh', '') }}"
+                                           class="brutal-input text-sm"
+                                           placeholder="{{ t.placeholder_zh_name }}"
+                                           hx-post="/api/metadata/pack/{{ pack.name }}/label?lang={{ current_lang }}"
+                                           hx-trigger="keyup changed delay:500ms"
+                                           hx-swap="none"
+                                           hx-indicator="#indicator-pack-{{ pack.name | replace(' ', '-') }}">
+                                </td>
+                                <td class="p-3 text-right">
+                                    <span id="indicator-pack-{{ pack.name | replace(' ', '-') }}" class="htmx-indicator brutal-tag text-xs font-bold">
+                                        SAVING...
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>

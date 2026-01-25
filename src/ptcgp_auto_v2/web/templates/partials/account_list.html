@@ -25,7 +25,12 @@
                 {% for account in accounts %}
                 <tr class="border-b border-theme hover-row transition-colors">
                     <td class="p-3 font-mono font-bold">#{{ account.id }}</td>
-                    <td class="p-3 font-bold">{{ account.nickname or '-' }}</td>
+                    <td class="p-3 font-bold">
+                        <div>{{ account.nickname or '-' }}</div>
+                        {% if account.remark %}
+                        <div class="text-xs text-muted mt-1">{{ account.remark }}</div>
+                        {% endif %}
+                    </td>
                     <td class="p-3">
                         {% if account.friend_id %}
                         <div class="group relative inline-block cursor-pointer" onclick="navigator.clipboard.writeText('{{ account.friend_id }}'); showToast('Copied!')">
@@ -72,6 +77,13 @@
                     </td>
                     <td class="p-3 text-right">
                         <div class="flex justify-end gap-2">
+                            <button class="brutal-btn text-xs px-3 py-1"
+                                    hx-get="/management/accounts/{{ account.id }}/edit?lang={{ current_lang }}"
+                                    hx-target="#modal-content"
+                                    onclick="document.getElementById('modal-container').classList.remove('hidden')"
+                                    title="{{ t.btn_edit_account_title or 'Edit Account' }}">
+                                ✏️
+                            </button>
                             <button class="brutal-btn text-xs px-3 py-1"
                                     hx-get="/management/accounts/{{ account.id }}/pack-config?lang={{ current_lang }}"
                                     hx-target="#modal-content"

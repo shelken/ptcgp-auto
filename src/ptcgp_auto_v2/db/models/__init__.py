@@ -14,7 +14,7 @@ from .pack_record import PackRecord
 from .pack_card import PackCard
 from .task_instance import TaskInstance
 from .task_plan import TaskPlan
-from .card import Card, CardSet, CardPack
+from .card import Card, CardSet, CardPack, Pack
 
 __all__ = [
     "TimestampMixin",
@@ -29,4 +29,5 @@ __all__ = [
     "Card",
     "CardSet",
     "CardPack",
+    "Pack",
 ]

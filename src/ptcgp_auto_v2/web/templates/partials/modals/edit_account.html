@@ -1,0 +1,54 @@
+<div class="space-y-6">
+    <div class="flex justify-between items-center border-b-4 border-theme pb-4">
+        <h3 class="text-2xl font-bold uppercase">{{ t.modal_title_edit_account or 'Edit Account Details' }}</h3>
+        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+    </div>
+
+    <form hx-post="/api/accounts/{{ account.id }}/details?lang={{ current_lang }}"
+          hx-target="#management-content"
+          hx-on:htmx:after-request="if(event.detail.successful) closeModal()"
+          class="space-y-6">
+
+        <!-- Info Section -->
+        <div class="bg-subtle p-4 border-2 border-subtle-light">
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="block text-muted font-bold uppercase text-xs">ID</span>
+                    <span class="font-mono font-bold">#{{ account.id }}</span>
+                </div>
+                <div>
+                    <span class="block text-muted font-bold uppercase text-xs">Game ID</span>
+                    <span class="font-mono font-bold text-xs truncate" title="{{ account.game_id }}">{{ account.game_id[:12] }}...</span>
+                </div>
+                {% if account.friend_id %}
+                <div class="col-span-2">
+                    <span class="block text-muted font-bold uppercase text-xs">Friend ID</span>
+                    <span class="font-mono font-bold">{{ account.friend_id }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Nickname Input -->
+        <div class="space-y-2">
+            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_nickname or 'Nickname' }}</label>
+            <input type="text" name="nickname" value="{{ account.nickname or '' }}"
+                   class="brutal-input"
+                   placeholder="{{ t.label_nickname or 'Nickname' }}">
+        </div>
+
+        <!-- Remark Input -->
+        <div class="space-y-2">
+            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_remark or 'Remark' }}</label>
+            <textarea name="remark" rows="3"
+                   class="brutal-input resize-none"
+                   placeholder="{{ t.label_remark or 'Remark' }}">{{ account.remark or '' }}</textarea>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-end gap-4 pt-4 border-t-2 border-subtle-light">
+            <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
+            <button type="submit" class="brutal-btn active">{{ t.label_save or 'Save' }}</button>
+        </div>
+    </form>
+</div>
