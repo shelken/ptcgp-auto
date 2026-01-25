@@ -65,6 +65,7 @@
     "col_game_id": "游戏 ID",
     "col_primary_plan": "主计划",
     "col_extra_plans": "附加计划",
+    "col_target_pack": "目标卡包",
     "col_actions": "操作",
     "col_name": "名称",
     "col_description": "描述",
@@ -89,5 +90,12 @@
     "task_open_pack": "自动开包",
     "task_claim_rewards": "领取奖励",
     "task_fetch_account_info": "同步账号信息",
-    "task_claim_gifts": "领取礼物"
+    "task_claim_gifts": "领取礼物",
+    "btn_pack_config_title": "配置目标卡包",
+    "title_pack_config": "卡包配置",
+    "label_target_series": "目标系列",
+    "label_target_booster": "目标子包 (Booster)",
+    "label_select_series": "-- 选择系列 --",
+    "label_select_booster": "-- 选择子包 --",
+    "desc_pack_config": "选择该账号优先开启的目标卡牌系列和具体子包。"
 }
