@@ -20,6 +20,7 @@ from ptcgp_auto_v2.core.task_base import TaskRegistry
 from ptcgp_auto_v2.db.connection import get_database
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskInstanceRepository
 from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
+from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
@@ -350,7 +351,9 @@ def run_switch_account(device: str, account_id: int) -> int:
     adb = AdbController(device)
     try:
         adb.connect()
+        syncer = AccountSyncer(adb)
         switcher = AccountSwitcher(adb)
+        syncer.get_current_account()
         success = switcher.switch_to(account, restart_app=True)
         if not success:
             logger.error("账号切换失败")
@@ -409,7 +412,7 @@ def run_web_server(host: str, port: int):
 
 def run_daemon(settings: Settings):
     """守护模式运行"""
-    
+
     # Start web server in a background thread
     web_thread = threading.Thread(
         target=run_web_server,
@@ -544,10 +547,10 @@ def main():
         # For now, let's keep it simple and only run in daemon mode or if explicitly requested?
         # The user asked to integrate it so it runs in the background when the main app starts.
         # But typically "main app starts" implies daemon mode for long-running processes.
-        # Let's add it to single task mode too if it doesn't exit immediately? 
+        # Let's add it to single task mode too if it doesn't exit immediately?
         # Actually single task mode exits after completion, so web server would die too.
         # So it makes most sense in daemon mode.
-        
+
         # 原有错误处理保留
         if not args.account and not args.disable_switch:
             print("错误: --task 需要配合 --account 使用，或使用 --disable-switch")
