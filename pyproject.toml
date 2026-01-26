@@ -1,0 +1,20 @@
+[project]
+name = "ptcgp-auto"
+version = "0.1.0"
+description = "自动连接 bluestack air虚拟机 自动对战/领取礼物、奖励/管理账号/自动开免费包"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "adbutils>=2.0.0",
+    "fastapi>=0.128.0",
+    "jinja2>=3.1.6",
+    "loguru>=0.7.0",
+    "numpy>=1.24.0",
+    "opencv-python>=4.8.0",
+    "pillow>=10.0.0",
+    "pyobjc-framework-vision>=10.0",
+    "python-multipart>=0.0.22",
+    "questionary>=2.0.0",
+    "sqlmodel>=0.0.16",
+    "uvicorn>=0.40.0",
+]
