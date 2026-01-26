@@ -11,6 +11,7 @@ def _get_patterns(text_patterns: dict, key: str) -> list[str]:
     return patterns if isinstance(patterns, list) else []
 
 
+# 下划线开头与游戏无关，系统相关
 COMMON_PAGES = [
     {
         "name": "popup_ok",
@@ -46,6 +47,19 @@ COMMON_PAGES = [
         "templates": ["btn_close"],
         "priority": 500,
     },
+    # TODO 执行重新认证（需要通知重新登录账号）
+    {
+        "name": "auth_again",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "auth_again"),
+        "priority": 500,
+    },
+    # 打开模拟器弹出页面
+    {
+        "name": "_to_home",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "_to_home"),
+        "match_all": True,
+        "priority": 900,
+    },
     {
         "name": "_close_app_popup",
         "identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
@@ -57,11 +71,6 @@ COMMON_PAGES = [
         "identifiers": _get_patterns(TEXT_PATTERNS, "main_page"),
         "match_all": True,
         "exclude_identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
-        "priority": 920,
-    },
-    {
-        "name": "_auth_again",
-        "identifiers": _get_patterns(TEXT_PATTERNS, "auth_again"),
         "priority": 920,
     },
 ]

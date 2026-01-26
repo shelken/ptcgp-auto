@@ -73,6 +73,11 @@ def build_common_handlers(
         #TODO 后续需要让所有陷入停滞的流程发出通知。
         return ActionResult.ok(wait=3)
 
+    def h_to_home(page_info: dict) -> ActionResult:
+        ocr = page_info.get("ocr_results", [])
+        patterns = get_text_patterns("text_home")
+        return tap_text(adb, ocr, patterns, wait=1.0)
+
     return {
         "popup_ok": h_popup_ok,
         "network_error_popup": h_network_error,
@@ -80,7 +85,8 @@ def build_common_handlers(
         "tap_to_continue": h_tap_to_continue,
         "game_open_page": h_game_open,
         "btn_close": h_btn_close,
+        "auth_again": h_wait,
         "_main_page": h_main,
         "_close_app_popup": h_close_app,
-        "_auth_again": h_wait,
+        "_to_home": h_to_home,
     }
