@@ -41,7 +41,9 @@ TEXT_PATTERNS = {
     "game_open_page": ["點擊畫面開始遊戲"],
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
+    "_to_home": ["重新加载", "首页"],
     "auth_again": ["再度執行認證"],
+    "text_home": ["首页"],
     # 通用按钮
     "confirm": ["確認", "确认", "OK"],
     "continue": ["繼續", "继续", "Continue"],
