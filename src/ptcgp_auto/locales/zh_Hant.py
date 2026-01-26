@@ -42,5 +42,5 @@ TEXT_PATTERNS = {
     "open_pack": ["開封"],
     "continue": ["繼續"],
     "close_button": ["×"],
-    "long_press": ["長按", "長按以跳過", "長按開封"],
+    "long_press": ["長按", "長按以跳過", "長按開封", "長投"], # 540p情况出现ocr结果开始有问题，长投
 }
