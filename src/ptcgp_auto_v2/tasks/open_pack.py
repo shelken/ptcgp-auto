@@ -537,11 +537,12 @@ class OpenPackTask(Task):
             try:
                 import re
                 for item in ocr_results:
-                    # 匹配 "150pt" 或 "150 pt" (忽略大小写)
+                    # 匹配 "150pt", "1,210pt" 或 "150 pt" (忽略大小写)
                     text = item.get("text", "")
-                    match = re.search(r"(\d+)\s*pt", text, re.IGNORECASE)
+                    match = re.search(r"([\d,]+)\s*pt", text, re.IGNORECASE)
                     if match:
-                        points = int(match.group(1))
+                        points_str = match.group(1).replace(",", "")
+                        points = int(points_str)
                         # 使用 target_pack 中的 pack_code 作为 series (例如 "A1")
                         series = self.target_pack.get("pack_code", "Unknown")
 
