@@ -78,6 +78,10 @@ def build_common_handlers(
         patterns = get_text_patterns("text_home")
         return tap_text(adb, ocr, patterns, wait=1.0)
 
+    # 只要是系统页面全部走重启app就行
+    def h_restart_app(page_info: dict) -> ActionResult:
+        return ActionResult.ok(wait=1)
+
     return {
         "popup_ok": h_popup_ok,
         "network_error_popup": h_network_error,

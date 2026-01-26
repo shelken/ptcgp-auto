@@ -90,9 +90,9 @@ logger = logging.getLogger(__name__)
 BASE_POPUP_CLOSE_TAP_Y = 1820
 
 # 开包滑动时长 (ms)
-SWIPE_DURATION_OPEN = 500
+SWIPE_DURATION_OPEN = 700
 # 登录图鉴滑动时长 (ms)
-SWIPE_DURATION_REGISTER = 300
+SWIPE_DURATION_REGISTER = 100
 
 
 def _get_patterns(text_patterns: dict, key: str) -> list[str]:
