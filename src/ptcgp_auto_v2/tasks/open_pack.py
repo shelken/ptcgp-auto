@@ -257,11 +257,11 @@ class OpenPackTask(Task):
             return
 
         # 2. 检查 12 小时内是否已开包
-        if self._pack_record_repo.has_opened_within_hours(self.account.id, hours=12):
-            logger.info(f"账号 {self.account.display_name} 12 小时内已开包，任务跳过")
-            self._phase = OpenPackPhase.SKIPPED
-            self._skip_reason = SKIP_REASON_RECENTLY_OPENED
-            return
+        # if self._pack_record_repo.has_opened_within_hours(self.account.id, hours=12):
+        #     logger.info(f"账号 {self.account.display_name} 12 小时内已开包，任务跳过")
+        #     self._phase = OpenPackPhase.SKIPPED
+        #     self._skip_reason = SKIP_REASON_RECENTLY_OPENED
+        #     return
 
         # 3. 加载开包配置
         config = self._pack_config_repo.get_by_account_and_type(
