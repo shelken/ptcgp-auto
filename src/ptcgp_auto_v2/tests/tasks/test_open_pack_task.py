@@ -7,7 +7,7 @@ src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.open_pack import OpenPackPhase, OpenPackTask
-from ptcgp_auto_v2.utils.gesture import cycle_until_template, scroll_until_template
+from ptcgp_auto_v2.utils.gesture import scroll_until_template
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 
 
@@ -164,49 +164,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual([], page_detector.adb.taps)
-
-    def test_cycle_until_template_hits_match(self):
-        match = SimpleNamespace(box=(10, 20, 30, 40))
-        capture_sequence = [
-            (object(), [{"text": "a"}]),
-            (object(), [{"text": "b"}]),
-        ]
-        page_detector = FakePageDetector(
-            capture_sequence=capture_sequence,
-            template_sequence=[match],
-        )
-        page_detector.get_last_page_context()
-        result = cycle_until_template(
-            page_detector,
-            template_name="target",
-            scale=1.0,
-            max_attempts=3,
-            wait=0.1,
-        )
-
-        self.assertIsNotNone(result)
-        self.assertEqual([match.box], page_detector.adb.taps)
-
-    def test_cycle_until_template_stops_on_first_signature(self):
-        capture_sequence = [
-            (object(), [{"text": "same"}]),
-        ]
-        page_detector = FakePageDetector(
-            capture_sequence=capture_sequence,
-            template_sequence=[None],
-        )
-        page_detector.get_last_page_context()
-        result = cycle_until_template(
-            page_detector,
-            template_name="target",
-            scale=1.0,
-            max_attempts=3,
-            wait=0.1,
-        )
-
-        self.assertIsNone(result)
-        self.assertEqual([], page_detector.adb.taps)
-
 
 if __name__ == "__main__":
     unittest.main()

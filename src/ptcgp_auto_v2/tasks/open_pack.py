@@ -66,7 +66,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_template_or_text,
     tap_template_with_scale,
     scroll_until_template,
-    cycle_until_template,
 )
 
 if TYPE_CHECKING:

@@ -260,41 +260,6 @@ def scroll_until_template(
         last_signature = current_signature
     return None
 
-
-def cycle_until_template(
-    page_detector,
-    template_name: str,
-    scale: float,
-    max_attempts: int,
-    wait: float,
-    threshold: Optional[float] = None,
-) -> Optional[ActionResult]:
-    """循环点击右侧切换直到命中模板或回到起点"""
-    screenshot, ocr_results = page_detector.get_last_page_context()
-    if not screenshot:
-        screenshot, ocr_results = page_detector.capture()
-        if not screenshot:
-            return None
-    first_signature = "|".join(sorted([item["text"] for item in ocr_results]))
-    for attempt in range(max_attempts):
-        logger.info(f"  -> 第 {attempt + 1} 次切换子包")
-        tap_right_side(page_detector.adb, wait=wait)
-        screenshot, ocr_results = page_detector.capture()
-        if not screenshot:
-            continue
-        match = page_detector.find_template_with_scale(
-            template_name, scale=scale, threshold=threshold, screenshot=screenshot
-        )
-        if match:
-            page_detector.adb.tap_center(match.box)
-            return ActionResult.ok(wait=1.0)
-        current_signature = "|".join(sorted([item["text"] for item in ocr_results]))
-        if current_signature == first_signature:
-            logger.warning("  -> 循环一圈，未找到目标模板")
-            break
-    return None
-
-
 def click_confirm(
     adb, page_detector, ocr_results: list[dict], patterns: list[str]
 ) -> ActionResult:
