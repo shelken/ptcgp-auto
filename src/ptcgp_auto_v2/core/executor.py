@@ -182,7 +182,7 @@ class BaseExecutor(ABC):
                 self.device.update_current_account(target_account.id)
                 self._restart_app()
             return success
-        except Exception as e:
+        except RuntimeError as e:
             logger.error(f"账号切换失败: {e}")
             return False
 
@@ -386,7 +386,7 @@ class TaskExecutor(BaseExecutor):
                             f"{result.error}"
                         )
 
-                except Exception as e:
+                except RuntimeError as e:
                     last_error = str(e)
                     logger.exception(
                         f"任务异常 (尝试 {attempt + 1}/{self.config.max_retries}): {e}"
@@ -516,7 +516,7 @@ class AccountBatchExecutor(BaseExecutor):
                     clear_error_on_success=False,
                 )
 
-        except Exception as e:
+        except RuntimeError as e:
             logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
             self._apply_task_status(
                 task_instance=task_instance,
@@ -580,7 +580,7 @@ class AccountBatchExecutor(BaseExecutor):
 
             logger.info(f"批量任务执行完成 (账号: {self.account.nickname})")
 
-        except Exception as e:
+        except RuntimeError as e:
             logger.exception(f"批量执行器异常: {e}")
             # 将所有仍为 running 状态的任务标记为失败
             for task_instance in self.task_instances:
