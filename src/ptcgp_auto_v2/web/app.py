@@ -19,6 +19,7 @@ from datetime import datetime
 import os
 import math
 
+# FastAPI app setup
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.models.pack_record import PackRecord
 from ptcgp_auto_v2.db.models.account import Account
@@ -35,12 +36,15 @@ from ptcgp_auto_v2.db.repositories import (
     AccountPackConfigRepository
 )
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
+
+# 导入任务模块以触发注册
+import ptcgp_auto_v2.tasks
+
 from ptcgp_auto_v2.db.models.card import Pack
 
 app = FastAPI(title="PTCGP Auto Web")
 
-# Mount static files (css, js, images)
-# Assumes src/ptcgp_auto_v2/web/static exists
+# Mount static files
 static_path = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
@@ -796,5 +800,15 @@ async def save_account_pack_config(
     return response
 
 if __name__ == "__main__":
+    # 初始化数据库
+    from ptcgp_auto_v2.db.connection import get_database
+    get_database()
+
+    # 初始化 Settings
+    from ptcgp_auto_v2.config.settings import Settings, set_settings
+    settings = Settings()
+    set_settings(settings)
+    settings.configure_logging()
+
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

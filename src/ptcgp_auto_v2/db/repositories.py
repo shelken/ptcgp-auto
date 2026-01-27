@@ -9,7 +9,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, Optional, cast
+from typing import Any, List, Optional, cast
 
 from sqlmodel import Session, col, func, select
 from sqlalchemy.orm import selectinload, InstrumentedAttribute
