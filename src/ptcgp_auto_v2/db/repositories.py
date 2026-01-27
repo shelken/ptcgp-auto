@@ -9,7 +9,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Any, List, Optional, cast
+from typing import Any, Optional, cast
 
 from sqlmodel import Session, col, func, select
 from sqlalchemy.orm import selectinload, InstrumentedAttribute
@@ -948,7 +948,7 @@ class PackRecordRepository:
         self,
         account_id: int,
         pack_type: str = "",
-        cards: List[dict] = None,  # type: ignore
+        cards: list[dict[str, Any]] | None = None,
         pack_code: Optional[str] = None,
         pack_name: Optional[str] = None,
     ) -> PackRecord:

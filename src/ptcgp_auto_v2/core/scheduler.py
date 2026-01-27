@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import Any, Callable, Optional, TYPE_CHECKING
 
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
@@ -153,7 +153,7 @@ class Scheduler:
                 for task_type, config in task_configs.items():
                     self._ensure_task_instance(account, task_type, config)
 
-        except Exception as e:
+        except RuntimeError as e:
             logger.exception(f"生成任务失败: {e}")
 
     def _aggregate_account_plans(self, account) -> dict[str, dict]:
@@ -197,7 +197,12 @@ class Scheduler:
 
         return aggregated
 
-    def _ensure_task_instance(self, account, task_type: str, config: dict = None):
+    def _ensure_task_instance(
+        self,
+        account: "Account",
+        task_type: str,
+        config: dict[str, Any] | None = None,
+    ) -> None:
         """
         确保账号的任务实例存在且状态正确
 
@@ -248,7 +253,7 @@ class Scheduler:
         self,
         instance: "TaskInstance",
         reset_type: ResetType,
-        config: dict = None,
+        config: dict[str, Any] | None = None,
     ) -> bool:
         """
         检查任务是否应该重置
@@ -600,7 +605,7 @@ class Scheduler:
                 # 批量分配任务
                 self._dispatch_account_batch(account, task_instances)
 
-            except Exception as e:
+            except RuntimeError as e:
                 logger.exception(f"调度器主循环异常: {e}")
                 time.sleep(self.config.poll_interval)
 
@@ -678,7 +683,7 @@ class Scheduler:
         finally:
             self.stop(wait=True)
 
-    def get_status(self) -> dict:
+    def get_status(self) -> dict[str, Any]:
         """
         获取调度器状态
 

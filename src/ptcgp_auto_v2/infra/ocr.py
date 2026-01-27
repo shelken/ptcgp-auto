@@ -98,7 +98,7 @@ class OcrEngine:
             image.save(buffer, format="PNG")
             png_data = buffer.getvalue()
             buffer.close()
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.error(f"OCR 图片转换 PNG 失败: {e}")
             return []
 
@@ -183,7 +183,7 @@ class OcrEngine:
                                 confidence=confidence,
                             ))
 
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             logger.error(f"OCR 引擎内部异常: {e}")
             return []
 
