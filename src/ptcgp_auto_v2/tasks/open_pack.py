@@ -528,34 +528,37 @@ class OpenPackTask(Task):
           self.adb, self.page_detector, ocr_results, get_text_patterns("back_button")
         )
 
+    def _extract_pack_points(self, ocr_results: list[dict]) -> None:
+        """从 OCR 结果中提取并保存开包点数"""
+        if not (self.account.id and self.target_pack and getattr(self, "_pack_point_repo", None)):
+            return
+
+        try:
+            import re
+            for item in ocr_results:
+                # 匹配 "150pt", "1,210pt" 或 "150 pt" (忽略大小写)
+                text = item.get("text", "")
+                match = re.search(r"([\d,]+)\s*pt", text, re.IGNORECASE)
+                if match:
+                    points_str = match.group(1).replace(",", "")
+                    points = int(points_str)
+                    # 使用 target_pack 中的 pack_code 作为 series (例如 "A1")
+                    series = self.target_pack.get("pack_code", "Unknown")
+
+                    if self._pack_point_repo:
+                        self._pack_point_repo.upsert_points(
+                            self.account.id,
+                            series,
+                            points
+                        )
+                    logger.debug(f"  -> 更新开包点数: {series} = {points}pt")
+                    break  # 找到一个即可
+        except Exception as e:
+            logger.warning(f"  -> 提取开包点数失败: {e}")
+
     def _handle_pack_list(self, page_info: dict) -> ActionResult:
         """选择子包（pack_list 页面）"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
-
-        # 尝试提取开包点数 (xxpt)
-        if self.account.id and self.target_pack and getattr(self, "_pack_point_repo", None):
-            try:
-                import re
-                for item in ocr_results:
-                    # 匹配 "150pt", "1,210pt" 或 "150 pt" (忽略大小写)
-                    text = item.get("text", "")
-                    match = re.search(r"([\d,]+)\s*pt", text, re.IGNORECASE)
-                    if match:
-                        points_str = match.group(1).replace(",", "")
-                        points = int(points_str)
-                        # 使用 target_pack 中的 pack_code 作为 series (例如 "A1")
-                        series = self.target_pack.get("pack_code", "Unknown")
-
-                        if self._pack_point_repo:
-                            self._pack_point_repo.upsert_points(
-                                self.account.id,
-                                series,
-                                points
-                            )
-                        logger.debug(f"  -> 更新开包点数: {series} = {points}pt")
-                        break  # 找到一个即可
-            except Exception as e:
-                logger.warning(f"  -> 提取开包点数失败: {e}")
 
         if not screenshot:
             return ActionResult.fail("截图失败")
@@ -565,33 +568,39 @@ class OpenPackTask(Task):
         if not template_name:
             return ActionResult.fail("未配置目标卡包模板")
 
-        # 1. 先检查当前是否是目标子包
-        result = tap_template_with_scale(
-            self.page_detector,
-            template_name,
-            scale=settings.scale_pack_list,
-            wait=1.0,
+        # 1. 直接判断当前是否匹配目标包模板
+        match = self.page_detector.find_template_with_scale(
+            template_name, scale=settings.scale_pack_list
         )
-        if result:
-            logger.debug("  -> 当前是目标子包，点击进入详情")
-            return result
 
-        # 2. 点击右侧切换子包，最多切换到子包数量
-        result = cycle_until_template(
-            self.page_detector,
-            template_name,
-            scale=settings.scale_pack_list,
-            max_attempts=len(self._boosters_list),
-            wait=1.0,
-        )
-        if result:
-            logger.debug("  -> 找到目标子包，点击进入详情")
-            return result
+        # 2. 如果不匹配，尝试切换子包
+        if not match:
+            from ptcgp_auto_v2.utils.gesture import tap_right_side
+            for attempt in range(len(self._boosters_list)):
+                logger.info(f"  -> 第 {attempt + 1} 次切换子包")
+                tap_right_side(self.page_detector.adb, wait=1.0)
+                screenshot, ocr_results = self.page_detector.capture()
+                if not screenshot:
+                    continue
+                match = self.page_detector.find_template_with_scale(
+                    template_name, scale=settings.scale_pack_list, screenshot=screenshot
+                )
+                if match:
+                    break
 
-        # 未找到，返回上一页
-        return navigate_back(
-            self.adb, self.page_detector, ocr_results, TEXT_PATTERNS["back_button"]
-        )
+            # 切换达到次数后仍未匹配，直接返回
+            if not match:
+                logger.warning("  -> 循环切换子包未找到目标，返回上一页")
+                return navigate_back(
+                    self.adb, self.page_detector, ocr_results, TEXT_PATTERNS["back_button"]
+                )
+
+        # 3. 匹配成功，提取点数
+        self._extract_pack_points(ocr_results)
+
+        # 4. 点击目标包进入
+        logger.debug("  -> 找到目标子包，点击进入详情")
+        return tap_box(self.page_detector.adb, match.box, wait=1.0)
 
     def _handle_pack_detail(self, page_info: dict) -> ActionResult:
         """
