@@ -24,15 +24,15 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div class="flex items-center gap-6 text-sm font-bold tracking-widest">
                 <div>
-                    <a href="javascript:void(0)" onclick="setLang('en')" class="lang-link {% if current_lang == 'en' %}active{% endif %}">EN</a>
-                    <span class="mx-2">/</span>
-                    <a href="javascript:void(0)" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}">中文</a>
+                    <a href="javascript:void(0)" onclick="setLang('en')" class="lang-link {% if current_lang == 'en' %}active{% endif %}" aria-label="Switch to English">EN</a>
+                    <span class="mx-2" aria-hidden="true">/</span>
+                    <a href="javascript:void(0)" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}" aria-label="切换到中文">中文</a>
                 </div>
 
                 <!-- Theme Switcher -->
                 <div class="flex items-center gap-2">
-                    <span class="opacity-60">{{ t.theme_label }}:</span>
-                    <select id="theme-selector" onchange="setTheme(this.value)" class="theme-select">
+                    <label for="theme-selector" class="opacity-60" aria-hidden="true">{{ t.theme_label }}:</label>
+                    <select id="theme-selector" onchange="setTheme(this.value)" class="theme-select" aria-label="{{ t.theme_label }}">
                         <option value="brutalist">{{ t.themes.brutalist }}</option>
                         <option value="retro">{{ t.themes.retro }}</option>
                         <option value="organic">{{ t.themes.organic }}</option>
@@ -64,17 +64,21 @@
             <!-- Tab Navigation (Right Aligned) -->
             <div class="flex gap-4 overflow-x-auto p-2">
                 <button
+                    type="button"
                     onclick="switchTab('records')"
                     class="brutal-btn active text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-records"
-                    data-title="{{ t.header_title }}">
+                    data-title="{{ t.header_title }}"
+                    aria-label="{{ t.tab_records or 'RECORDS' }}">
                     {{ t.tab_records or 'RECORDS' }}
                 </button>
                 <button
+                    type="button"
                     onclick="switchTab('management')"
                     class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-management"
-                    data-title="{{ t.tab_management or 'MANAGEMENT' }}">
+                    data-title="{{ t.tab_management or 'MANAGEMENT' }}"
+                    aria-label="{{ t.tab_management or 'MANAGEMENT' }}">
                     {{ t.tab_management or 'MANAGEMENT' }}
                 </button>
             </div>
@@ -85,16 +89,16 @@
             <div class="flex flex-wrap justify-between lg:justify-end items-center gap-8 mb-4">
                  <!-- View Mode -->
                 <div class="flex items-center gap-2">
-                    <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.view_mode }}</span>
-                    <button onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active">{{ t.view_list }}</button>
-                    <button onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn">{{ t.view_grid }}</button>
+                    <span class="font-bold uppercase tracking-widest text-sm text-muted" aria-hidden="true">{{ t.view_mode }}</span>
+                    <button type="button" onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active" aria-label="{{ t.view_mode }} {{ t.view_list }}">{{ t.view_list }}</button>
+                    <button type="button" onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn" aria-label="{{ t.view_mode }} {{ t.view_grid }}">{{ t.view_grid }}</button>
                 </div>
 
                 <!-- Separator -->
-                <div class="hidden lg:block w-px h-6 bg-separator"></div>
+                <div class="hidden lg:block w-px h-6 bg-separator" aria-hidden="true"></div>
 
                 <!-- Clear Filters -->
-                <button onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase">
+                <button type="button" onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
                     {{ t.clear_filters }} ✕
                 </button>
             </div>
@@ -170,28 +174,34 @@
                         <ul class="space-y-2">
                             <li>
                                 <button
+                                    type="button"
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/accounts?lang={{ current_lang }}"
                                     hx-target="#management-content"
-                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');"
+                                    aria-label="{{ t.menu_accounts or 'ACCOUNTS' }}">
                                     {{ t.menu_accounts or 'ACCOUNTS' }}
                                 </button>
                             </li>
                             <li>
                                 <button
+                                    type="button"
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/plans?lang={{ current_lang }}"
                                     hx-target="#management-content"
-                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');"
+                                    aria-label="{{ t.menu_plans or 'TASK PLANS' }}">
                                     {{ t.menu_plans or 'TASK PLANS' }}
                                 </button>
                             </li>
                             <li>
                                 <button
+                                    type="button"
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/metadata?lang={{ current_lang }}"
                                     hx-target="#management-content"
-                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');">
+                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');"
+                                    aria-label="{{ t.menu_metadata or 'METADATA' }}">
                                     {{ t.menu_metadata or 'METADATA' }}
                                 </button>
                             </li>

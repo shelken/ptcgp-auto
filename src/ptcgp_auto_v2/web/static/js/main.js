@@ -5,6 +5,52 @@ const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
 const STORAGE_KEY_TAB = 'ptcgp_active_tab';
 
+// --- Focus Management ---
+let previousActiveElement = null;
+
+function saveFocus() {
+    previousActiveElement = document.activeElement;
+}
+
+function restoreFocus() {
+    if (previousActiveElement && previousActiveElement.focus) {
+        previousActiveElement.focus();
+    }
+}
+
+// --- Toast with aria-live ---
+function showToast(message) {
+    // Create or get toast container
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-atomic', 'true');
+        container.className = 'fixed bottom-4 right-4 z-50 flex flex-col gap-2';
+        document.body.appendChild(container);
+    }
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = 'bg-black text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300';
+    toast.textContent = message;
+    toast.setAttribute('role', 'alert');
+
+    container.appendChild(toast);
+
+    // Fade out and remove
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            container.removeChild(toast);
+            if (container.children.length === 0) {
+                container.remove();
+            }
+        }, 300);
+    }, 2000);
+}
+
 // --- Persistence Functions ---
 
 // 1. Language Persistence
@@ -215,10 +261,19 @@ function openModal(contentHtml) {
     const container = document.getElementById('modal-container');
     const content = document.getElementById('modal-content');
     if (container && content) {
+        saveFocus();
         content.innerHTML = contentHtml;
         container.classList.remove('hidden');
         // Re-scan for HTMX content in modal
         htmx.process(content);
+        // Focus first focusable element in modal
+        const firstFocusable = content.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (firstFocusable) {
+            firstFocusable.focus();
+        }
+        // Trap focus in modal
+        container.setAttribute('aria-modal', 'true');
+        container.setAttribute('role', 'dialog');
     }
 }
 
@@ -229,8 +284,11 @@ function closeModal(event) {
     const container = document.getElementById('modal-container');
     if (container) {
         container.classList.add('hidden');
+        container.removeAttribute('aria-modal');
+        container.removeAttribute('role');
         // Clear content to stop any polling or video playing
         document.getElementById('modal-content').innerHTML = '';
+        restoreFocus();
     }
 }
 
@@ -239,25 +297,11 @@ function forceCloseModal() {
     const container = document.getElementById('modal-container');
     if (container) {
         container.classList.add('hidden');
+        container.removeAttribute('aria-modal');
+        container.removeAttribute('role');
         document.getElementById('modal-content').innerHTML = '';
+        restoreFocus();
     }
-}
-
-function showToast(message) {
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.className = 'fixed bottom-4 right-4 bg-black text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300 z-50';
-    toast.textContent = message;
-
-    document.body.appendChild(toast);
-
-    // Fade out and remove
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 300);
-    }, 2000);
 }
 
 // Init
@@ -267,4 +311,17 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreTab();
     restoreFilters(); // This triggers data load
     restoreViewMode();
+
+    // prefers-reduced-motion support
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (mediaQuery.matches) {
+        document.documentElement.classList.add('reduce-motion');
+    }
+    mediaQuery.addEventListener('change', () => {
+        if (mediaQuery.matches) {
+            document.documentElement.classList.add('reduce-motion');
+        } else {
+            document.documentElement.classList.remove('reduce-motion');
+        }
+    });
 });
