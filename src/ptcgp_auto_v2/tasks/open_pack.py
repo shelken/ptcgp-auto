@@ -20,15 +20,13 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
-from ptcgp_auto_v2.locales import get_text_patterns, get_config_value
-from ptcgp_auto_v2.locales.zh_Hant import TEXT_PATTERNS
+from ptcgp_auto_v2.locales import get_text_patterns, get_config_value, get_all_text_patterns
 
 
 class OpenPackPhase(Enum):
     """开包任务阶段"""
 
     INIT = auto()  # 初始化，尚未开始
-    NAVIGATING_TO_HOME = auto()  # 正在导航到主页
     CHECKING_HOME = auto()  # 在主页检查免费包
     ENTERING_PACK = auto()  # 进入开包流程
     SELECTING_SERIES = auto()  # 选择扩充包系列
@@ -192,7 +190,7 @@ class OpenPackTask(Task):
     reset_type = ResetType.DAILY
     max_iterations = 100
     max_unknown_pages = 15
-    pages = _build_pack_pages(TEXT_PATTERNS)
+    pages = _build_pack_pages(get_all_text_patterns())
 
     # 主页检查次数阈值
     HOME_CHECK_THRESHOLD = 3
@@ -301,9 +299,6 @@ class OpenPackTask(Task):
         # 5. 加载子包列表
         self._boosters_list = self._load_boosters_list(config.pack_code)
 
-        # 6. 进入导航阶段
-        self._phase = OpenPackPhase.NAVIGATING_TO_HOME
-        logger.info(f"开包任务开始，当前阶段: {self._phase.name}")
 
     def is_completed(self) -> bool:
         """
@@ -591,7 +586,7 @@ class OpenPackTask(Task):
             if not match:
                 logger.warning("  -> 循环切换子包未找到目标，返回上一页")
                 return navigate_back(
-                    self.adb, self.page_detector, ocr_results, TEXT_PATTERNS["back_button"]
+                    self.adb, self.page_detector, ocr_results, get_text_patterns("back_button")
                 )
 
         # 3. 匹配成功，提取点数
@@ -634,11 +629,11 @@ class OpenPackTask(Task):
                     self.adb,
                     self.page_detector,
                     ocr_results,
-                    TEXT_PATTERNS["back_button"],
+                    get_text_patterns("back_button"),
                 )
 
         # 2. 检查是否是付费包（需要消耗沙漏的包）
-        paid_patterns = TEXT_PATTERNS.get("open_pack_1", [])
+        paid_patterns = get_text_patterns("open_pack_1")
         if paid_patterns and any(
             pattern in item["text"] for pattern in paid_patterns for item in ocr_results
         ):
@@ -647,11 +642,11 @@ class OpenPackTask(Task):
                 self.adb,
                 self.page_detector,
                 ocr_results,
-                TEXT_PATTERNS["back_button"],
+                get_text_patterns("back_button"),
             )
 
         # 3. 点击"開封"按钮
-        open_pack_patterns = TEXT_PATTERNS.get("open_pack", [])
+        open_pack_patterns = get_text_patterns("open_pack")
         result = tap_template_or_text(
             self.adb,
             self.page_detector,
@@ -671,7 +666,7 @@ class OpenPackTask(Task):
     def _handle_hourglass_popup(self, page_info: dict) -> ActionResult:
         """处理沙漏弹窗（pack_hourglass_popup 页面）"""
         ocr_results = page_info.get("ocr_results", [])
-        close_patterns = TEXT_PATTERNS.get("close_button", [])
+        close_patterns = get_text_patterns("close_button")
 
         result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
         if result:
@@ -696,7 +691,7 @@ class OpenPackTask(Task):
         长按"長按"文字位置跳过卡牌展示（pack_opening_card 页面）
         """
         ocr_results = page_info.get("ocr_results", [])
-        long_press_patterns = TEXT_PATTERNS.get("long_press", [])
+        long_press_patterns = get_text_patterns("long_press")
 
         # 等待 5s 让结果页动画稳定
         wait = 3.0
@@ -707,7 +702,6 @@ class OpenPackTask(Task):
             return result
 
         # 开包流程即将结束，准备回到主页继续检测
-        self._phase = OpenPackPhase.NAVIGATING_TO_HOME
         self._home_check_count = 0  # 重置主页检查计数
 
         return ActionResult.ok(wait=wait)

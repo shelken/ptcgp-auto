@@ -46,6 +46,11 @@ def get_locale_module():
         raise
 
 
+def get_all_text_patterns() -> dict:
+    """获取完整的 TEXT_PATTERNS 字典"""
+    module = get_locale_module()
+    return getattr(module, "TEXT_PATTERNS", {})
+
 def get_text_patterns(key: str) -> List[str]:
     """
     获取指定 key 的文本模式列表
