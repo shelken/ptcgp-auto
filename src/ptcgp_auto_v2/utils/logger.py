@@ -132,7 +132,12 @@ def setup_logging(level: str = "INFO") -> None:
     logging.getLogger("adbutils").setLevel(logging.WARNING)
 
 
-def set_context(port: str = None, nickname: str = None, color: str = None, task: str = None):
+def set_context(
+    port: str | None = None,
+    nickname: str | None = None,
+    color: str | None = None,
+    task: str | None = None,
+) -> None:
     """
     设置当前线程的日志上下文
 

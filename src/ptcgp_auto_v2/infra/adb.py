@@ -79,7 +79,7 @@ class AdbController:
         try:
             result = self.shell("su -c 'id'")
             self._is_rooted = result is not None and "uid=0" in result
-        except Exception:
+        except (RuntimeError, OSError):
             self._is_rooted = False
 
         # 记录日志但不频繁打印
@@ -125,7 +125,7 @@ class AdbController:
 
             return True
 
-        except Exception as e:
+        except (RuntimeError, ConnectionError) as e:
             logger.error(f"ADB 连接失败: {e}")
             return False
 
@@ -135,7 +135,7 @@ class AdbController:
             try:
                 adb.disconnect(self.address)
                 logger.info("ADB 已断开")
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 logger.error(f"断开失败: {e}")
 
     def _update_screen_size(self):
@@ -165,7 +165,7 @@ class AdbController:
                 self.screen_height = height
                 logger.info(f"屏幕分辨率: {width}x{height}")
 
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             logger.warning(f"获取屏幕分辨率失败，使用基准值: {e}")
 
     @property
@@ -221,7 +221,7 @@ class AdbController:
             else:
                 return Image.open(io.BytesIO(bytes(result)))
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"截图失败: {e}")
             return None
 
@@ -241,7 +241,7 @@ class AdbController:
             logger.debug(f"点击: ({x}, {y})")
             time.sleep(self.wait_after_click)
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"点击失败: {e}")
 
     def tap_center(self, box: Tuple[int, int, int, int]):
@@ -272,7 +272,7 @@ class AdbController:
             logger.debug(f"长按: ({x}, {y}) 持续 {duration}ms")
             time.sleep(self.wait_after_click)
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"长按失败: {e}")
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: int = DEFAULT_SWIPE_DURATION):
@@ -293,7 +293,7 @@ class AdbController:
             logger.debug(f"滑动: ({x1}, {y1}) -> ({x2}, {y2})")
             time.sleep(self.wait_after_click)
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"滑动失败: {e}")
 
     def swipe_up(self, ratio: float = DEFAULT_SCROLL_RATIO, duration: int = DEFAULT_SCROLL_DURATION):
@@ -335,7 +335,7 @@ class AdbController:
             logger.debug("按下返回键")
             time.sleep(self.wait_after_click)
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"返回键失败: {e}")
 
     def shell(self, command: str) -> Optional[str]:
@@ -354,7 +354,7 @@ class AdbController:
 
         try:
             return self.device.shell(command)
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"执行 shell 失败: {e}")
             return None
 
@@ -377,7 +377,7 @@ class AdbController:
             self.device.push(local_path, remote_path)
             logger.debug(f"推送文件: {local_path} -> {remote_path}")
             return True
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"推送文件失败: {e}")
             return False
 
@@ -400,7 +400,7 @@ class AdbController:
             self.device.sync.pull(remote_path, local_path, exist_ok=True)
             logger.debug(f"拉取文件: {remote_path} -> {local_path}")
             return True
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"拉取文件失败: {e}")
             return False
 
@@ -418,7 +418,7 @@ class AdbController:
         try:
             self.device.shell(f"am force-stop {package_name}")
             logger.debug(f"已强制停止应用: {package_name}")
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"停止应用失败: {e}")
 
     def start_app(self, package_name: str, activity: str = None):
@@ -442,5 +442,5 @@ class AdbController:
                     f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
                 )
             logger.debug(f"已启动应用: {package_name}")
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(f"启动应用失败: {e}")

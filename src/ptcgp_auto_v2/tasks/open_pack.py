@@ -9,7 +9,7 @@ import logging
 import time
 from datetime import datetime
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
@@ -211,10 +211,10 @@ class OpenPackTask(Task):
         self._result_recognized = False  # 本次开包是否已识别结果
         self._recognition_retry_count = 0  # 结果页识别重试次数
         self._skip_reason: Optional[str] = None  # 跳过原因
-        self._current_pack_cards: list[dict] = []  # 本次开包识别到的卡牌数据
+        self._current_pack_cards: list[dict[str, Any]] = []  # 本次开包识别到的卡牌数据
 
         # 目标卡包配置
-        self.target_pack = None  # {"pack_code": "A1", "booster_name": "Charizard"}
+        self.target_pack: dict[str, str] | None = None  # {"pack_code": "A1", "booster_name": "Charizard"}
         self._boosters_list = []  # 子包列表
 
         # 数据仓储（延迟加载）
@@ -822,7 +822,7 @@ class OpenPackTask(Task):
                             logger.warning(f"卡牌识别连续失败 {max_retries} 次，跳过识别")
                             self._result_recognized = True
 
-                except Exception as e:
+                except RuntimeError as e:
                     logger.error(f"识别卡牌失败: {e}")
                     # 发生异常也算作一次失败，如果是最后一次则跳过
                     if attempt >= max_retries - 1:
