@@ -1,7 +1,7 @@
 <div class="space-y-6">
     <div class="flex justify-between items-center border-b-4 border-theme pb-4">
         <h3 class="text-2xl font-bold uppercase">{{ t.modal_title_edit_account or 'Edit Account Details' }}</h3>
-        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+        <button type="button" onclick="closeModal()" class="text-xl font-bold hover:opacity-50" aria-label="{{ t.label_cancel or 'Close' }}">✕</button>
     </div>
 
     <form hx-post="/api/accounts/{{ account.id }}/details?lang={{ current_lang }}"
@@ -31,16 +31,16 @@
 
         <!-- Nickname Input -->
         <div class="space-y-2">
-            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_nickname or 'Nickname' }}</label>
-            <input type="text" name="nickname" value="{{ account.nickname or '' }}"
+            <label for="nickname" class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_nickname or 'Nickname' }}</label>
+            <input type="text" id="nickname" name="nickname" value="{{ account.nickname or '' }}"
                    class="brutal-input"
                    placeholder="{{ t.label_nickname or 'Nickname' }}">
         </div>
 
         <!-- Remark Input -->
         <div class="space-y-2">
-            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_remark or 'Remark' }}</label>
-            <textarea name="remark" rows="3"
+            <label for="remark" class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_remark or 'Remark' }}</label>
+            <textarea id="remark" name="remark" rows="3"
                    class="brutal-input resize-none"
                    placeholder="{{ t.label_remark or 'Remark' }}">{{ account.remark or '' }}</textarea>
         </div>

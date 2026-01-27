@@ -59,6 +59,7 @@
                          alt="{{ card.card_name }}"
                          class="w-full h-full object-cover"
                          loading="lazy"
+                         decoding="async"
                          onerror="this.src='/static/card_back.png'">
                 {% else %}
                     <div class="w-full h-full flex items-center justify-center font-bold rotate-45 border-dashed border-2 m-2"
