@@ -28,12 +28,20 @@ class TaskPlan(SQLModel, table=True):
     name: str = Field(unique=True)
     description: Optional[str] = None
     task_types: str = Field(default="[]")  # JSON 数组: ["open_pack", "send_gift"]
-    configuration: str = Field(default="{}")  # JSON 对象: {"open_pack": {"reset_type": "interval", "interval": 3600}}
+    configuration: str = Field(
+        default="{}"
+    )  # JSON 对象: {"open_pack": {"reset_type": "interval", "interval": 3600}}
     is_global: bool = Field(default=False, description="是否为全局默认计划")
     created_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    accounts: List["Account"] = Relationship(back_populates="task_plan")  # 旧的一对多关系（兼容）
+    accounts: List["Account"] = Relationship(
+        back_populates="task_plan",
+        sa_relationship_kwargs={
+            "primaryjoin": "TaskPlan.id==Account.task_plan_id",
+            "foreign_keys": "[Account.task_plan_id]",
+        },
+    )  # 旧的一对多关系（兼容）
     # 新的多对多关系（通过关联表）
     # account_associations: List["AccountTaskPlan"] = Relationship()  # 暂时不在 SQLModel 中强类型定义反向关系以免循环依赖问题，主要在 Account 侧定义
 

@@ -29,7 +29,13 @@ class CardSet(SQLModel, TimestampMixin, table=True):
     label_data: str = Field(default="{}", description="多语言名称 JSON")
 
     # 关系
-    cards: List["Card"] = Relationship(back_populates="card_set")
+    cards: List["Card"] = Relationship(
+        back_populates="card_set",
+        sa_relationship_kwargs={
+            "primaryjoin": "CardSet.code==Card.set_code",
+            "foreign_keys": "[Card.set_code]",
+        },
+    )
 
 
 class Pack(SQLModel, TimestampMixin, table=True):
@@ -43,7 +49,7 @@ class Pack(SQLModel, TimestampMixin, table=True):
     name: str = Field(primary_key=True, description="卡包标识/英文名")
 
     # 关联 CardSet
-    set_code: str = Field(foreign_key="card_sets.code", index=True)
+    set_code: str = Field(index=True)
 
     # 多语言显示名 (JSON)
     label_data: str = Field(default="{}", description="多语言名称 JSON")
@@ -51,7 +57,12 @@ class Pack(SQLModel, TimestampMixin, table=True):
     image_url: Optional[str] = Field(default=None)
 
     # 关系
-    card_set: Optional["CardSet"] = Relationship()
+    card_set: Optional["CardSet"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "Pack.set_code==CardSet.code",
+            "foreign_keys": "[Pack.set_code]",
+        }
+    )
 
 
 class Card(SQLModel, TimestampMixin, table=True):
@@ -65,7 +76,7 @@ class Card(SQLModel, TimestampMixin, table=True):
 
     # 来源: cards.json 中的 "set" 字段 (例如 "A1")
     # 关联 sets.json 中的 "code"
-    set_code: str = Field(foreign_key="card_sets.code", index=True)
+    set_code: str = Field(index=True)
 
     # 来源: cards.json 中的 "number" 字段
     number: int = Field(description="卡牌在系列中的编号")
@@ -108,16 +119,32 @@ class Card(SQLModel, TimestampMixin, table=True):
     weakness: Optional[str] = Field(default=None, description="弱点属性 (Weakness)")
 
     # 来源: cards.extra.json 中的 "retreatCost" 字段
-    retreat_cost: Optional[int] = Field(default=None, description="撤退费用 (Retreat Cost)")
+    retreat_cost: Optional[int] = Field(
+        default=None, description="撤退费用 (Retreat Cost)"
+    )
 
     local_image_path: Optional[str] = Field(
         default=None, description="本地模板图片路径"
     )
-    data: Optional[str] = Field(default=None, description="JSON格式的其他属性 (保留字段)")
+    data: Optional[str] = Field(
+        default=None, description="JSON格式的其他属性 (保留字段)"
+    )
 
     # 关系
-    card_set: Optional[CardSet] = Relationship(back_populates="cards")
-    packs: List["CardPack"] = Relationship(back_populates="card")
+    card_set: Optional[CardSet] = Relationship(
+        back_populates="cards",
+        sa_relationship_kwargs={
+            "primaryjoin": "Card.set_code==CardSet.code",
+            "foreign_keys": "[Card.set_code]",
+        },
+    )
+    packs: List["CardPack"] = Relationship(
+        back_populates="card",
+        sa_relationship_kwargs={
+            "primaryjoin": "Card.id==CardPack.card_id",
+            "foreign_keys": "[CardPack.card_id]",
+        },
+    )
 
 
 class CardPack(SQLModel, TimestampMixin, table=True):
@@ -130,8 +157,14 @@ class CardPack(SQLModel, TimestampMixin, table=True):
     __tablename__ = "card_packs"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    card_id: int = Field(foreign_key="cards.id", index=True)
+    card_id: int = Field(index=True)
     pack_name: str = Field(description="子包名称，如 Mewtwo")
 
     # 关系
-    card: Optional[Card] = Relationship(back_populates="packs")
+    card: Optional[Card] = Relationship(
+        back_populates="packs",
+        sa_relationship_kwargs={
+            "primaryjoin": "CardPack.card_id==Card.id",
+            "foreign_keys": "[CardPack.card_id]",
+        },
+    )

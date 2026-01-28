@@ -47,18 +47,40 @@ class Account(SQLModel, table=True):
     xml_content: Optional[bytes] = Field(default=None, description="XML 文件内容")
     session_token_iat: Optional[int] = None
     remark: str = Field(default="")
-    task_plan_id: Optional[int] = Field(default=None, foreign_key="task_plans.id")
+    task_plan_id: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    task_plan: Optional["TaskPlan"] = Relationship(back_populates="accounts")
+    task_plan: Optional["TaskPlan"] = Relationship(
+        back_populates="accounts",
+        sa_relationship_kwargs={
+            "primaryjoin": "Account.task_plan_id==TaskPlan.id",
+            "foreign_keys": "[Account.task_plan_id]",
+        },
+    )
     # 新的多对多关系（通过关联表）
     task_plan_associations: List["AccountTaskPlan"] = Relationship(
-        sa_relationship_kwargs={"cascade": "all, delete"}
+        sa_relationship_kwargs={
+            "cascade": "all, delete",
+            "primaryjoin": "Account.id==AccountTaskPlan.account_id",
+            "foreign_keys": "[AccountTaskPlan.account_id]",
+        }
     )
-    task_instances: List["TaskInstance"] = Relationship(back_populates="account")
-    pack_records: List["PackRecord"] = Relationship(back_populates="account")
+    task_instances: List["TaskInstance"] = Relationship(
+        back_populates="account",
+        sa_relationship_kwargs={
+            "primaryjoin": "Account.id==TaskInstance.account_id",
+            "foreign_keys": "[TaskInstance.account_id]",
+        },
+    )
+    pack_records: List["PackRecord"] = Relationship(
+        back_populates="account",
+        sa_relationship_kwargs={
+            "primaryjoin": "Account.id==PackRecord.account_id",
+            "foreign_keys": "[PackRecord.account_id]",
+        },
+    )
 
     @property
     def display_name(self) -> str:
