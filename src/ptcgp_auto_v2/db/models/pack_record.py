@@ -25,7 +25,7 @@ class PackRecord(SQLModel, table=True):
     __tablename__ = "pack_records"  # type: ignore
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(foreign_key="accounts.id")
+    account_id: int = Field(index=True)
     pack_type: str = Field(default="")
 
     # 新增字段：将原 pack_type 拆分为 code 和 name
@@ -35,8 +35,21 @@ class PackRecord(SQLModel, table=True):
     opened_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    account: Optional["Account"] = Relationship(back_populates="pack_records")
-    cards: list["PackCard"] = Relationship(back_populates="pack_record", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    account: Optional["Account"] = Relationship(
+        back_populates="pack_records",
+        sa_relationship_kwargs={
+            "primaryjoin": "PackRecord.account_id==Account.id",
+            "foreign_keys": "[PackRecord.account_id]",
+        },
+    )
+    cards: list["PackCard"] = Relationship(
+        back_populates="pack_record",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+            "primaryjoin": "PackRecord.id==PackCard.pack_record_id",
+            "foreign_keys": "[PackCard.pack_record_id]",
+        },
+    )
 
     def to_dict(self) -> dict:
         """转换为字典"""
