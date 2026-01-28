@@ -18,3 +18,8 @@ dependencies = [
     "sqlmodel>=0.0.16",
     "uvicorn>=0.40.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

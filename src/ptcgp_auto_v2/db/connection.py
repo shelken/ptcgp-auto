@@ -140,7 +140,7 @@ class Database:
             # 使用原生 SQL 以避免 Model 依赖复杂性
             sql = """
             INSERT OR IGNORE INTO task_plans (name, description, task_types, created_at)
-            VALUES ('daily', '每日任务计划', '["open_pack", "claim_gifts", "claim_rewards"]', datetime('now', 'localtime'))
+            VALUES ('base', '基础任务计划', '[]', datetime('now', 'localtime'))
             """
             conn.execute(text(sql))
             conn.commit()

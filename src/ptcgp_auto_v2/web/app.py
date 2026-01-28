@@ -325,7 +325,6 @@ async def get_account_plans_modal(
         select(Account)
         .where(Account.id == account_id)
         .options(
-            selectinload(cast(Any, Account.task_plan)),
             selectinload(cast(Any, Account.task_plan_associations)).selectinload(
                 cast(Any, AccountTaskPlan.task_plan)
             ),
@@ -340,11 +339,17 @@ async def get_account_plans_modal(
     all_plans = plan_repo.get_all()
 
     # 确定当前关联
-    current_primary_id = account.task_plan_id
+    current_primary_id = None
+    active_assocs = [a for a in account.task_plan_associations if a.is_active]
+    if active_assocs:
+        # 优先级最高的为主计划
+        active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
+        current_primary_id = active_assocs[0].task_plan_id
+
     current_secondary_ids = [
         assoc.task_plan_id
-        for assoc in account.task_plan_associations
-        if assoc.is_active
+        for assoc in active_assocs
+        if assoc.task_plan_id != current_primary_id
     ]
 
     return templates.TemplateResponse(
@@ -429,36 +434,50 @@ async def update_account_plans(
 
     repo = AccountRepository()
 
-    # Update Primary
-    if primary_plan_id:
-        val = primary_plan_id
-        if isinstance(val, str):
-            repo.assign_task_plan(account_id, int(val))
+    # 1. 解析目标状态
+    desired_primary_id = None
+    if primary_plan_id and isinstance(primary_plan_id, str) and primary_plan_id.isdigit():
+        desired_primary_id = int(primary_plan_id)
 
-    # Update Secondary
-    # First, fetch existing active secondaries to know what to remove
-    account = repo.get_by_id(account_id)
-    if not account:
-        # Should handle error, but for now just return
-        return await get_management_accounts(request, lang=lang, session=session)
-
-    if account.task_plan_associations:
-        existing_ids = {assoc.task_plan_id for assoc in account.task_plan_associations if assoc.is_active}
-    else:
-        existing_ids = set()
-
-    new_ids = set()
+    desired_secondary_ids = set()
     for pid in secondary_plan_ids:
         if isinstance(pid, str) and pid.isdigit():
-            new_ids.add(int(pid))
+            desired_secondary_ids.add(int(pid))
 
-    # Add new
-    for pid in new_ids - existing_ids:
-        repo.add_secondary_plan(account_id, pid)
+    # 主计划不应出现在次要计划列表中
+    if desired_primary_id and desired_primary_id in desired_secondary_ids:
+        desired_secondary_ids.remove(desired_primary_id)
 
-    # Remove old
-    for pid in existing_ids - new_ids:
-        repo.remove_secondary_plan(account_id, pid)
+    # 2. 获取当前状态用于比对
+    account = repo.get_by_id(account_id)
+    if not account:
+        return await get_management_accounts(request, lang=lang, session=session)
+
+    current_active_map = {
+        assoc.task_plan_id: assoc
+        for assoc in account.task_plan_associations
+        if assoc.is_active
+    }
+    current_active_ids = set(current_active_map.keys())
+
+    # 3. 执行更新
+
+    # 更新主计划 (Priority=10)
+    if desired_primary_id:
+        repo.add_secondary_plan(account_id, desired_primary_id, priority=10)
+
+    # 更新次要计划 (Priority=0)
+    for pid in desired_secondary_ids:
+        repo.add_secondary_plan(account_id, pid, priority=0)
+
+    # 4. 移除不再需要的计划
+    all_desired = desired_secondary_ids.copy()
+    if desired_primary_id:
+        all_desired.add(desired_primary_id)
+
+    for pid in current_active_ids:
+        if pid not in all_desired:
+            repo.remove_secondary_plan(account_id, pid)
 
     # Return updated list or success message
     # For simplicity, we just trigger a reload of the accounts list

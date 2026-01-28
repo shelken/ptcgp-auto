@@ -19,7 +19,6 @@ class AccountRepository:
                 select(Account)
                 .where(Account.id == account_id)
                 .options(
-                    selectinload(cast(Any, Account.task_plan)),
                     selectinload(cast(Any, Account.task_plan_associations)).selectinload(
                         cast(Any, AccountTaskPlan.task_plan)
                     ),
@@ -45,7 +44,6 @@ class AccountRepository:
             statement = (
                 select(Account)
                 .options(
-                    selectinload(cast(Any, Account.task_plan)),
                     selectinload(cast(Any, Account.task_plan_associations)).selectinload(
                         cast(Any, AccountTaskPlan.task_plan)
                     ),
@@ -74,13 +72,10 @@ class AccountRepository:
             statement = (
                 select(Account)
                 .options(
-                    selectinload(cast(Any, Account.task_plan)),
                     selectinload(cast(Any, Account.task_plan_associations)).selectinload(
                         cast(Any, AccountTaskPlan.task_plan)
                     ),
                 )
-                # .where((Account.task_plan_id.isnot(None)) | (Account.task_plan_associations.any()))
-                # SQLModel 对 any() 的支持可能复杂，暂时获取所有，反正没计划的账号在 Scheduler 里会被过滤
                 .order_by(col(Account.id))
             )
             accounts = list(session.exec(statement).all())
@@ -89,15 +84,24 @@ class AccountRepository:
     def create(self, account: Account) -> Account:
         """创建账号"""
         with Session(get_engine()) as session:
-            # 如果没有指定 task_plan，自动关联 "daily"
-            if account.task_plan_id is None:
-                daily_plan = self.get_plan_by_name(session, "daily")
-                if daily_plan:
-                    account.task_plan_id = daily_plan.id
-
             session.add(account)
             session.commit()
             session.refresh(account)
+
+            # 如果没有指定计划，自动关联 "base"
+            if not account.task_plan_associations:
+                base_plan = self.get_plan_by_name(session, "base")
+                if base_plan:
+                    new_assoc = AccountTaskPlan(
+                        account_id=account.id,
+                        task_plan_id=base_plan.id,
+                        priority=0,
+                        is_active=True
+                    )
+                    session.add(new_assoc)
+                    session.commit()
+                    session.refresh(account)
+
             return account
 
     def get_plan_by_name(self, session: Session, name: str) -> Optional[TaskPlan]:
@@ -120,7 +124,6 @@ class AccountRepository:
             db_account.country = account.country
             db_account.xml_content = account.xml_content
             db_account.session_token_iat = account.session_token_iat
-            db_account.task_plan_id = account.task_plan_id
             db_account.remark = account.remark
             db_account.updated_at = datetime.now()
             session.add(db_account)
@@ -150,16 +153,9 @@ class AccountRepository:
             return False
 
     def assign_task_plan(self, account_id: int, plan_id: int) -> bool:
-        """为账号分配主任务计划（旧接口）"""
-        with Session(get_engine()) as session:
-            account = session.get(Account, account_id)
-            if not account:
-                return False
-            account.task_plan_id = plan_id
-            account.updated_at = datetime.now()
-            session.add(account)
-            session.commit()
-            return True
+        """为账号分配主任务计划（设置为最高优先级）"""
+        # 复用 add_secondary_plan，设置较高的优先级 (10)
+        return self.add_secondary_plan(account_id, plan_id, priority=10)
 
     def add_secondary_plan(self, account_id: int, plan_id: int, priority: int = 0) -> bool:
         """

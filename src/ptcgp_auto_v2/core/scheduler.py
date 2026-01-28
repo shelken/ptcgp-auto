@@ -165,23 +165,17 @@ class Scheduler:
         """
         aggregated = {}
 
-        # 1. 处理旧的单 Plan (兼容性)
-        if account.task_plan:
-            for task_type in account.task_plan.task_types_list:
-                # 获取 Plan 里的配置覆盖
-                plan_config = account.task_plan.config_dict.get(task_type, {})
-                aggregated[task_type] = plan_config
+        if not account.task_plan_associations:
+            return aggregated
 
-        # 2. 处理新的多 Plan
+        # 处理多 Plan
         # 按优先级排序 (priority 越高越后处理，覆盖前面的)
         associations = sorted(account.task_plan_associations, key=lambda x: x.priority)
         for assoc in associations:
             if not assoc.is_active:
                 continue
 
-            # 通过关系直接访问 task_plan (前提是 ORM 加载了)
-            # 由于 SQLModel/SQLAlchemy 默认 lazy load，这里访问可能会触发查询或需要 eager load
-            # 为了稳健性，我们在 Repository 层应该尽量 eager load
+            # 通过关系直接访问 task_plan
             plan = assoc.task_plan
             if not plan:
                 continue
@@ -374,23 +368,37 @@ class Scheduler:
         self, account: "Account", tasks: list["TaskInstance"]
     ) -> list["TaskInstance"]:
         """
-        按照账号的 task_plan 顺序排列任务
+        按照账号的主任务计划顺序排列任务
+
+        主计划定义为优先级最高且启用的计划。
 
         Args:
             account: 账号
             tasks: 待排序的任务列表
 
         Returns:
-            按 task_plan.task_types 顺序排列的任务列表
+            按主计划 task_types 顺序排列的任务列表
         """
-        if not account.task_plan or not account.task_plan.task_types_list:
+        if not account.task_plan_associations:
             # 没有任务计划，按创建时间排序
             return sorted(tasks, key=lambda x: x.created_at or datetime.min)
 
-        # 按照 task_plan.task_types_list 数组顺序排列
+        # 找到优先级最高且激活的计划
+        active_assocs = [a for a in account.task_plan_associations if a.is_active]
+        if not active_assocs:
+            return sorted(tasks, key=lambda x: x.created_at or datetime.min)
+
+        # 排序：优先级降序，ID 升序 (保证稳定性)
+        active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
+        primary_plan = active_assocs[0].task_plan
+
+        if not primary_plan or not primary_plan.task_types_list:
+            return sorted(tasks, key=lambda x: x.created_at or datetime.min)
+
+        # 按照 plan.task_types_list 数组顺序排列
         plan_order = {
             task_type: idx
-            for idx, task_type in enumerate(account.task_plan.task_types_list)
+            for idx, task_type in enumerate(primary_plan.task_types_list)
         }
         # 不在计划中的任务排在最后
         return sorted(tasks, key=lambda x: plan_order.get(x.task_type, 999))
