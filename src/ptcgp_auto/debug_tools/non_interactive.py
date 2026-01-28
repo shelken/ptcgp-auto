@@ -89,6 +89,53 @@ def _print_ocr_results(ocr_results: list[dict]):
     print(f"OCR({len(ocr_results)}): {', '.join(items)}")
 
 
+def _find_and_load_system_template(recognizer, name: str) -> Optional[str]:
+    """
+    在 templates 目录下查找指定名称的模板并加载（带缩放）
+    避免触发 Recognizer 的全量加载
+    """
+    # 规范化名称（去掉 .png）
+    clean_name = name[:-4] if name.lower().endswith(".png") else name
+
+    if clean_name in recognizer.templates:
+        return clean_name
+
+    root_dir = Path("templates")
+    target_path = None
+
+    # 1. 尝试直接拼接路径 (e.g. "icon_gray_yes" or "cards/A1/...")
+    p = root_dir / f"{clean_name}.png"
+    if p.exists():
+        target_path = p
+    else:
+        # 2. 尝试递归搜索文件名
+        # 注意：这里可能会比较慢如果 templates 很多，但比全量加载图片要快
+        candidates = list(root_dir.rglob(f"{clean_name}.png"))
+        if candidates:
+            target_path = candidates[0]
+
+    if not target_path:
+        return None
+
+    # 加载并缩放
+    img = cv2.imread(str(target_path))
+    if img is None:
+        print(f"ERROR: 无法读取模板: {target_path}")
+        return None
+
+    # 计算缩放
+    scale = config.SCREEN_WIDTH / config.TEMPLATE_BASE_WIDTH
+    if abs(scale - 1.0) > 0.01:
+        new_w = int(img.shape[1] * scale)
+        new_h = int(img.shape[0] * scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # 注册到 recognizer
+    recognizer.templates[clean_name] = img
+    print(f"LOADED: {clean_name} <- {target_path} ({img.shape[1]}x{img.shape[0]})")
+    return clean_name
+
+
 # -----------------------------------------------------------------------------
 # 资源准备与加载逻辑
 # -----------------------------------------------------------------------------
@@ -643,6 +690,18 @@ def run_non_interactive(args):
             template_name = _load_template_from_path(recognizer, args.template)
             if template_name is None:
                 return
+        else:
+            # 尝试按需加载系统模板
+            found_name = _find_and_load_system_template(recognizer, args.template)
+            if found_name:
+                template_name = found_name
+            else:
+                # Fallback: 如果找不到，可能依赖 recognizer 已经加载的（虽然按设计现在应该是空的）
+                # 或者用户输入了一个不存在的名字
+                print(
+                    f"WARNING: Template '{args.template}' not found in templates directory."
+                )
+                template_name = args.template
 
         if args.scale:
             box = recognizer.find_template_at_scale(img, template_name, args.scale)
