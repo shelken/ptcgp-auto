@@ -176,6 +176,30 @@ def tap_template_or_fallback(
     return fallback_action()
 
 
+def tap_matched_element(
+    adb, page_info: dict, wait: float = 1.0
+) -> Optional[ActionResult]:
+    """
+    点击匹配到的页面元素（模板或文字）
+
+    优先点击 page_info["matched_template"]
+    其次点击 page_info["matched_text"]
+    """
+    # 1. 尝试点击匹配到的模板
+    matched_template = page_info.get("matched_template")
+    if matched_template and matched_template.get("box"):
+        logger.debug(f"点击匹配模板: {matched_template['template']}")
+        return tap_box(adb, matched_template["box"], wait=wait)
+
+    # 2. 尝试点击匹配到的文字
+    matched_text = page_info.get("matched_text")
+    if matched_text and matched_text.get("box"):
+        logger.debug(f"点击匹配文字: {matched_text['matched_text']}")
+        return tap_box(adb, matched_text["box"], wait=wait)
+
+    return None
+
+
 def tap_template_with_scale(
     page_detector,
     template_name: str,

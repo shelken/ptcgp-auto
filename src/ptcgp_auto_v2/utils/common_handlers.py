@@ -11,6 +11,8 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_text,
     tap_template,
     press_back,
+    tap_box,
+    tap_matched_element,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,6 +72,13 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
         tpl = page_conf.get("template_name")
 
         def handler(page_info: dict) -> ActionResult:
+            # 优先使用页面检测阶段匹配到的具体模板信息
+            matched_template = page_info.get("matched_template")
+            if matched_template and matched_template.get("box"):
+                logger.debug(f"点击上下文匹配模板: {matched_template['template']}")
+                return tap_box(adb, matched_template["box"], wait=1.0)
+
+            # 回退到配置的静态模板名
             return tap_template(adb, page_detector, tpl, wait=1.0) or ActionResult.ok(
                 wait=1.0
             )
@@ -79,6 +88,19 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
     def action_tap_center(page_conf: dict) -> Handler:
         def handler(page_info: dict) -> ActionResult:
             return tap_center(adb, wait=1.0)
+
+        return handler
+
+    # 注意 match_all=True 请把 你想点的那个文字放在 `identifiers` 列表的第一
+    # 或者使用 tap_text 精确传参
+    def action_tap_matched(page_conf: dict) -> Handler:
+        def handler(page_info: dict) -> ActionResult:
+            result = tap_matched_element(adb, page_info, wait=1.0)
+            if result:
+                return result
+
+            logger.warning("配置了 tap_matched 但未找到匹配上下文")
+            return ActionResult.ok(wait=1.0)
 
         return handler
 
@@ -106,6 +128,7 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
         "tap_text_or_back": action_tap_text_or_back,
         "tap_template": action_tap_template,
         "tap_center": action_tap_center,
+        "tap_matched": action_tap_matched,
         "wait": action_wait,
         "restart_game": action_restart_game,
     }

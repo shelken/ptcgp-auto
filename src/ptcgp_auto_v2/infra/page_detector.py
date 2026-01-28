@@ -160,6 +160,7 @@ class PageDetector:
 
             if text_match:
                 # 如果有模板要求，也必须匹配模板
+                template_match = None
                 if templates:
                     template_match = self._check_templates(screenshot, templates)
                     if not template_match:
@@ -171,7 +172,14 @@ class PageDetector:
                 )
 
                 # 添加 OCR 结果到页面信息
-                page_info_with_ocr = {**page_info, "ocr_results": ocr_results}
+                page_info_with_ocr = {
+                    **page_info,
+                    "ocr_results": ocr_results,
+                    "matched_text": text_match,
+                }
+                if template_match:
+                    page_info_with_ocr["matched_template"] = template_match
+
                 return page_name, page_info_with_ocr
 
             # 检查纯模板匹配（没有 identifiers 的情况）
@@ -181,7 +189,11 @@ class PageDetector:
                     logger.debug(
                         f"[匹配] {page_name} <- 模板 {template_match['template']}"
                     )
-                    page_info_with_ocr = {**page_info, "ocr_results": ocr_results}
+                    page_info_with_ocr = {
+                        **page_info,
+                        "ocr_results": ocr_results,
+                        "matched_template": template_match,
+                    }
                     return page_name, page_info_with_ocr
 
         # 没有匹配到任何界面
