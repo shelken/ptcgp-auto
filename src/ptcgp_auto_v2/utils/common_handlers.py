@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from typing import Callable, Dict
-import time
+import logging
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.utils.gesture import (
     click_confirm,
     click_continue,
@@ -13,84 +14,132 @@ from ptcgp_auto_v2.utils.gesture import (
     press_back,
 )
 
+logger = logging.getLogger(__name__)
+
 Handler = Callable[[dict], ActionResult]
 
 
-def build_common_handlers(
-    adb, page_detector
-) -> Dict[str, Handler]:
-    def h_popup_ok(page_info: dict) -> ActionResult:
-        return click_confirm(
-            adb,
-            page_detector,
-            page_info.get("ocr_results", []),
-            get_text_patterns("popup_ok"),
-        )
+def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
+    """
+    基于 common.py 中的配置动态生成通用页面处理器
+    """
 
-    def h_network_error(page_info: dict) -> ActionResult:
-        return click_confirm(
-            adb,
-            page_detector,
-            page_info.get("ocr_results", []),
-            get_text_patterns("network_error_popup"),
-        )
+    # === 处理器工厂方法 ===
 
-    def h_continue(page_info: dict) -> ActionResult:
-        return click_continue(
-            adb,
-            page_detector,
-            page_info.get("ocr_results", []),
-            get_text_patterns("continue_button"),
-        )
+    def action_click_confirm(page_conf: dict) -> Handler:
+        key = page_conf.get("patterns_key")
 
-    def h_tap_to_continue(page_info: dict) -> ActionResult:
-        """处理"點擊來繼續"类型的页面，点击该文字位置"""
-        return tap_text(
-            adb,
-            page_info.get("ocr_results", []),
-            get_text_patterns("tap_to_continue"),
-            wait=1.0,
-        ) or tap_center(adb, wait=1.0)
+        def handler(page_info: dict) -> ActionResult:
+            return click_confirm(
+                adb,
+                page_detector,
+                page_info.get("ocr_results", []),
+                get_text_patterns(key) if key else [],
+            )
 
-    def h_game_open(page_info: dict) -> ActionResult:
-        return tap_center(adb, wait=1.0)
+        return handler
 
-    def h_main(page_info: dict) -> ActionResult:
-        ocr = page_info.get("ocr_results", [])
-        patterns = get_text_patterns("main_page")
-        return tap_text(adb, ocr, patterns, wait=1.0) or tap_center(adb, wait=1.0)
+    def action_click_continue(page_conf: dict) -> Handler:
+        key = page_conf.get("patterns_key")
 
-    def h_close_app(page_info: dict) -> ActionResult:
-        ocr = page_info.get("ocr_results", [])
-        patterns = get_text_patterns("close_app_popup")
-        return tap_text(adb, ocr, patterns, wait=1.0) or press_back(adb, wait=1.0)
+        def handler(page_info: dict) -> ActionResult:
+            return click_continue(
+                adb,
+                page_detector,
+                page_info.get("ocr_results", []),
+                get_text_patterns(key) if key else [],
+            )
 
-    def h_btn_close(page_info: dict) -> ActionResult:
-        """点击游戏内通用关闭按钮"""
-        return tap_template(adb, page_detector, "btn_close", wait=1.0) or ActionResult.ok(wait=1.0)
+        return handler
 
-    def h_wait(page_info: dict) -> ActionResult:
-        #TODO 后续需要让所有陷入停滞的流程发出通知。
-        return ActionResult.ok(wait=3)
+    def action_tap_text(page_conf: dict) -> Handler:
+        key = page_conf.get("patterns_key")
 
-    def h_to_home(page_info: dict) -> ActionResult:
-        ocr = page_info.get("ocr_results", [])
-        patterns = get_text_patterns("text_home")
-        return tap_text(adb, ocr, patterns, wait=1.0) or ActionResult.ok()
+        def handler(page_info: dict) -> ActionResult:
+            return tap_text(
+                adb,
+                page_info.get("ocr_results", []),
+                get_text_patterns(key) if key else [],
+                wait=1.0,
+            ) or ActionResult.ok()
 
-    # 只要是系统页面全部走重启app就行
-    def h_restart_app(page_info: dict) -> ActionResult:
-        return ActionResult.ok(wait=1)
+        return handler
 
-    return {
-        "popup_ok": h_popup_ok,
-        "network_error_popup": h_network_error,
-        "continue_button": h_continue,
-        "tap_to_continue": h_tap_to_continue,
-        "game_open_page": h_game_open,
-        "btn_close": h_btn_close,
-        "auth_again": h_wait,
-        "_main_page": h_main,
-        "_close_app_popup": h_close_app,
-        "_to_home": h_to_home,
+    def action_tap_text_or_center(page_conf: dict) -> Handler:
+        key = page_conf.get("patterns_key")
+
+        def handler(page_info: dict) -> ActionResult:
+            res = tap_text(
+                adb,
+                page_info.get("ocr_results", []),
+                get_text_patterns(key) if key else [],
+                wait=1.0,
+            )
+            return res if res else tap_center(adb, wait=1.0)
+
+        return handler
+
+    def action_tap_text_or_back(page_conf: dict) -> Handler:
+        key = page_conf.get("patterns_key")
+
+        def handler(page_info: dict) -> ActionResult:
+            res = tap_text(
+                adb,
+                page_info.get("ocr_results", []),
+                get_text_patterns(key) if key else [],
+                wait=1.0,
+            )
+            return res if res else press_back(adb, wait=1.0)
+
+        return handler
+
+    def action_tap_template(page_conf: dict) -> Handler:
+        tpl = page_conf.get("template_name")
+
+        def handler(page_info: dict) -> ActionResult:
+            return tap_template(adb, page_detector, tpl, wait=1.0) or ActionResult.ok(
+                wait=1.0
+            )
+
+        return handler
+
+    def action_tap_center(page_conf: dict) -> Handler:
+        def handler(page_info: dict) -> ActionResult:
+            return tap_center(adb, wait=1.0)
+
+        return handler
+
+    def action_wait(page_conf: dict) -> Handler:
+        def handler(page_info: dict) -> ActionResult:
+            # TODO 后续需要让所有陷入停滞的流程发出通知。
+            return ActionResult.ok(wait=3)
+
+        return handler
+
+    # 动作类型映射表
+    action_map = {
+        "click_confirm": action_click_confirm,
+        "click_continue": action_click_continue,
+        "tap_text": action_tap_text,
+        "tap_text_or_center": action_tap_text_or_center,
+        "tap_text_or_back": action_tap_text_or_back,
+        "tap_template": action_tap_template,
+        "tap_center": action_tap_center,
+        "wait": action_wait,
     }
+
+    handlers = {}
+
+    # 遍历配置动态生成 Handler
+    for page_conf in COMMON_PAGES:
+        name = page_conf["name"]
+        action_type = page_conf.get("action")
+
+        if action_type and action_type in action_map:
+            factory = action_map[action_type]
+            handlers[name] = factory(page_conf)
+        else:
+            if action_type:
+                logger.warning(f"页面 {name} 配置了未知的 action: {action_type}")
+
+    return handlers
