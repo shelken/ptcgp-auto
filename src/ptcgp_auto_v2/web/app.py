@@ -33,7 +33,7 @@ from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     TaskPlanRepository,
     CardRepository,
-    AccountPackConfigRepository
+    AccountPackConfigRepository,
 )
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
 
@@ -56,6 +56,7 @@ templates = Jinja2Templates(directory=templates_path)
 locales_dir = os.path.join(os.path.dirname(__file__), "locales")
 translations = {}
 
+
 def load_translations():
     global translations
     if not os.path.exists(locales_dir):
@@ -66,10 +67,16 @@ def load_translations():
             with open(os.path.join(locales_dir, filename), "r", encoding="utf-8") as f:
                 translations[lang] = json.load(f)
 
+
 load_translations()
 
+
 def get_translations(lang: str = "en") -> Dict:
+    # In development, it's helpful to reload translations if files changed
+    # For simplicity, we can reload on every request or rely on uvicorn reload
+    # We'll rely on uvicorn reload for now.
     return translations.get(lang, translations.get("en", {}))
+
 
 # Add custom filters to Jinja2
 def format_datetime(value: datetime):
@@ -77,39 +84,57 @@ def format_datetime(value: datetime):
         return ""
     return value.strftime("%Y-%m-%d %H:%M:%S")
 
+
 templates.env.filters["datetime"] = format_datetime
+
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(
-    request: Request, 
+    request: Request,
     lang: str = Query(default="en"),
-    session: Session = Depends(get_fastapi_session)
+    session: Session = Depends(get_fastapi_session),
 ):
     # Determine language (priority: query param > defaults to en)
     if lang not in translations:
         lang = "en"
-        
+
     t = get_translations(lang)
 
     # Fetch distinct rarities and types for filters
     rarities = session.exec(select(distinct(Card.rarity)).order_by(Card.rarity)).all()
     # Cleanup rarities: filter out None
     rarities = [r for r in rarities if r]
-    
+
     # Custom sort order for rarity if possible, otherwise alphabetical
-    rarity_order = {'C':1, 'U':2, 'R':3, 'RR':4, 'AR':5, 'SR':6, 'SAR':7, 'UR':8, 'IM':9, 'S':10, 'SSR':11}
+    rarity_order = {
+        "C": 1,
+        "U": 2,
+        "R": 3,
+        "RR": 4,
+        "AR": 5,
+        "SR": 6,
+        "SAR": 7,
+        "UR": 8,
+        "IM": 9,
+        "S": 10,
+        "SSR": 11,
+    }
     rarities.sort(key=lambda x: rarity_order.get(x, 99))
 
     card_types = session.exec(select(distinct(Card.type)).order_by(Card.type)).all()
     card_types = [t for t in card_types if t]
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "rarities": rarities,
-        "card_types": card_types,
-        "t": t,
-        "current_lang": lang
-    })
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "rarities": rarities,
+            "card_types": card_types,
+            "t": t,
+            "current_lang": lang,
+        },
+    )
+
 
 @app.get("/api/records", response_class=HTMLResponse)
 async def get_records(
@@ -119,7 +144,7 @@ async def get_records(
     rarity: List[str] = Query(default=[]),
     card_type: List[str] = Query(default=[]),
     lang: str = Query(default="en"),
-    session: Session = Depends(get_fastapi_session)
+    session: Session = Depends(get_fastapi_session),
 ):
     """
     Fetch pack records with pagination for HTMX infinite scroll.
@@ -178,7 +203,9 @@ async def get_records(
         # 这里为了简单，先查询出涉及账号的所有点数，或者如果SQLModel支持复杂IN查询更好
         # 考虑到点数数据量不大，我们查询所有涉及账号的所有点数记录
         account_ids = {c[0] for c in target_combinations}
-        points_stmt = select(AccountPackPoint).where(col(AccountPackPoint.account_id).in_(account_ids))
+        points_stmt = select(AccountPackPoint).where(
+            col(AccountPackPoint.account_id).in_(account_ids)
+        )
         points_records = session.exec(points_stmt).all()
         for p in points_records:
             points_map[(p.account_id, p.series)] = p.points
@@ -193,53 +220,64 @@ async def get_records(
 
         # Determine layout class based on card count
         card_count = len(sorted_cards)
-        layout_type = "grid-cols-2" # Default fallback
+        layout_type = "grid-cols-2"  # Default fallback
 
         if card_count == 6:
-            layout_type = "layout-6" # 3 top, 3 bottom
+            layout_type = "layout-6"  # 3 top, 3 bottom
         elif card_count == 5:
-            layout_type = "layout-5" # 3 top, 2 bottom
+            layout_type = "layout-5"  # 3 top, 2 bottom
         elif card_count == 4:
-            layout_type = "layout-4" # 2 top, 2 bottom
+            layout_type = "layout-4"  # 2 top, 2 bottom
 
         # 获取点数
         current_points = None
         series_code = ""
         if record.pack_code:
-             current_points = points_map.get((record.account_id, record.pack_code))
-             series_code = record.pack_code
+            current_points = points_map.get((record.account_id, record.pack_code))
+            series_code = record.pack_code
         # 兼容旧数据：如果没有 pack_code 但 pack_type 有值且有点数记录
         elif record.pack_type and "/" in record.pack_type:
-             series = record.pack_type.split("/")[0]
-             current_points = points_map.get((record.account_id, series))
-             series_code = series
+            series = record.pack_type.split("/")[0]
+            current_points = points_map.get((record.account_id, series))
+            series_code = series
 
         # Localize Pack Info
         # Set Name
         set_name_display = series_code
         if series_code in sets_map:
-            set_name_display = sets_map[series_code].get(lang_key) or sets_map[series_code].get("en") or series_code
+            set_name_display = (
+                sets_map[series_code].get(lang_key)
+                or sets_map[series_code].get("en")
+                or series_code
+            )
 
         # Pack Name
         pack_name_display = record.pack_name or ""
         if record.pack_name in packs_map:
-            pack_name_display = packs_map[record.pack_name].get(lang_key) or packs_map[record.pack_name].get("en") or record.pack_name
+            pack_name_display = (
+                packs_map[record.pack_name].get(lang_key)
+                or packs_map[record.pack_name].get("en")
+                or record.pack_name
+            )
 
-        records_data.append({
-            "record": record,
-            "cards": sorted_cards,
-            "layout": layout_type,
-            "account_name": record.account.nickname if record.account else t.get("unknown_account", "Unknown"),
-            "opened_at": record.opened_at,
-            "current_points": current_points,
-            "series": series_code,
-            "set_name_display": set_name_display,
-            "pack_name_display": pack_name_display
-        })
-
+        records_data.append(
+            {
+                "record": record,
+                "cards": sorted_cards,
+                "layout": layout_type,
+                "account_name": record.account.nickname
+                if record.account
+                else t.get("unknown_account", "Unknown"),
+                "opened_at": record.opened_at,
+                "current_points": current_points,
+                "series": series_code,
+                "set_name_display": set_name_display,
+                "pack_name_display": pack_name_display,
+            }
+        )
 
     if not records_data:
-        return "" # Stop HTMX polling
+        return ""  # Stop HTMX polling
 
     # Pass filters back to pagination URL
     # Build query string manually or via helper
@@ -256,17 +294,19 @@ async def get_records(
             "records": records_data,
             "next_page_url": next_page_url,
             "t": t,
-            "current_lang": lang
-        }
+            "current_lang": lang,
+        },
     )
 
+
 # --- Management APIs ---
+
 
 @app.get("/management/accounts", response_class=HTMLResponse)
 async def get_management_accounts(
     request: Request,
     lang: str = Query(default="en"),
-    session: Session = Depends(get_fastapi_session)
+    session: Session = Depends(get_fastapi_session),
 ):
     """Render Accounts Management Table"""
     t = get_translations(lang)
@@ -286,9 +326,10 @@ async def get_management_accounts(
             "accounts": accounts,
             "pack_configs": pack_configs_map,
             "t": t,
-            "current_lang": lang
-        }
+            "current_lang": lang,
+        },
     )
+
 
 @app.get("/management/plans", response_class=HTMLResponse)
 async def get_management_plans(
@@ -302,20 +343,68 @@ async def get_management_plans(
 
     return templates.TemplateResponse(
         "partials/plan_list.html",
+        {"request": request, "plans": plans, "t": t, "current_lang": lang},
+    )
+
+
+@app.get("/management/accounts/{account_id}/edit", response_class=HTMLResponse)
+async def get_account_edit_modal(
+    request: Request,
+    account_id: int,
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
+):
+    """Render Edit Account Details Modal"""
+    t = get_translations(lang)
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+
+    if not account:
+        return HTMLResponse("Account not found", status_code=404)
+
+    return templates.TemplateResponse(
+        "partials/modals/edit_account.html",
+        {"request": request, "account": account, "t": t, "current_lang": lang},
+    )
+
+
+@app.get("/management/plans/edit", response_class=HTMLResponse)
+async def get_plan_edit_modal(
+    request: Request,
+    plan_id: Optional[int] = Query(None),
+    lang: str = Query(default="en"),
+):
+    """Render Create/Edit Plan Modal"""
+    t = get_translations(lang)
+    repo = TaskPlanRepository()  # Use repo for consistency if no relationships needed, or switch to session if needed
+
+    plan = None
+    if plan_id:
+        plan = repo.get_by_id(plan_id)
+
+    # 获取所有可用任务类型
+    available_tasks = TaskRegistry.all_types()
+    reset_types = [rt.value for rt in ResetType]
+
+    return templates.TemplateResponse(
+        "partials/modals/edit_plan.html",
         {
             "request": request,
-            "plans": plans,
+            "plan": plan,
+            "available_tasks": available_tasks,
+            "reset_types": reset_types,
             "t": t,
-            "current_lang": lang
-        }
+            "current_lang": lang,
+        },
     )
+
 
 @app.get("/management/accounts/{account_id}/plans", response_class=HTMLResponse)
 async def get_account_plans_modal(
     request: Request,
     account_id: int,
     lang: str = Query(default="en"),
-    session: Session = Depends(get_fastapi_session)
+    session: Session = Depends(get_fastapi_session),
 ):
     """Render Edit Plans Modal for an Account"""
     t = get_translations(lang)
@@ -338,153 +427,66 @@ async def get_account_plans_modal(
     plan_repo = TaskPlanRepository()
     all_plans = plan_repo.get_all()
 
-    # 确定当前关联
-    current_primary_id = None
-    active_assocs = [a for a in account.task_plan_associations if a.is_active]
-    if active_assocs:
-        # 优先级最高的为主计划
-        active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
-        current_primary_id = active_assocs[0].task_plan_id
+    # 整理当前关联的计划 (按优先级降序)
+    current_assocs = sorted(account.task_plan_associations, key=lambda x: -x.priority)
 
-    current_secondary_ids = [
-        assoc.task_plan_id
-        for assoc in active_assocs
-        if assoc.task_plan_id != current_primary_id
-    ]
+    # 获取已关联的 plan_id 集合
+    associated_plan_ids = {assoc.task_plan_id for assoc in current_assocs}
+
+    # 整理未关联的计划 (Available Plans)
+    available_plans = [p for p in all_plans if p.id not in associated_plan_ids]
 
     return templates.TemplateResponse(
         "partials/modals/edit_account_plans.html",
         {
             "request": request,
             "account": account,
-            "all_plans": all_plans,
-            "current_primary_id": current_primary_id,
-            "current_secondary_ids": current_secondary_ids,
+            "current_assocs": current_assocs,
+            "available_plans": available_plans,
             "t": t,
-            "current_lang": lang
-        }
+            "current_lang": lang,
+        },
     )
 
-@app.get("/management/accounts/{account_id}/edit", response_class=HTMLResponse)
-async def get_account_edit_modal(
-    request: Request,
-    account_id: int,
-    lang: str = Query(default="en"),
-    session: Session = Depends(get_fastapi_session)
-):
-    """Render Edit Account Details Modal"""
-    t = get_translations(lang)
-    repo = AccountRepository()
-    account = repo.get_by_id(account_id)
-
-    if not account:
-        return HTMLResponse("Account not found", status_code=404)
-
-    return templates.TemplateResponse(
-        "partials/modals/edit_account.html",
-        {
-            "request": request,
-            "account": account,
-            "t": t,
-            "current_lang": lang
-        }
-    )
-
-@app.get("/management/plans/edit", response_class=HTMLResponse)
-async def get_plan_edit_modal(
-    request: Request,
-    plan_id: Optional[int] = Query(None),
-    lang: str = Query(default="en"),
-):
-    """Render Create/Edit Plan Modal"""
-    t = get_translations(lang)
-    repo = TaskPlanRepository() # Use repo for consistency if no relationships needed, or switch to session if needed
-
-    plan = None
-    if plan_id:
-        plan = repo.get_by_id(plan_id)
-
-    # 获取所有可用任务类型
-    available_tasks = TaskRegistry.all_types()
-    reset_types = [rt.value for rt in ResetType]
-
-    return templates.TemplateResponse(
-        "partials/modals/edit_plan.html",
-        {
-            "request": request,
-            "plan": plan,
-            "available_tasks": available_tasks,
-            "reset_types": reset_types,
-            "t": t,
-            "current_lang": lang
-        }
-    )
 
 @app.post("/api/accounts/{account_id}/plans")
 async def update_account_plans(
     request: Request,
     account_id: int,
     lang: str = Query(default="en"),
-    session: Session = Depends(get_fastapi_session),
 ):
-    """Handle Account Plans Update"""
-    form = await request.form()
-    primary_plan_id = form.get("primary_plan_id")
-    secondary_plan_ids = form.getlist("secondary_plan_ids") # Checkbox list
+    """Handle Account Plans Update (JSON)"""
+    try:
+        data = await request.json()
+    except json.JSONDecodeError:
+        return HTMLResponse("Invalid JSON", status_code=400)
+
+    # Data format: [{ "plan_id": 1, "is_active": True }, ...] (Ordered list)
+    # Convert to format required by repository: [{ "plan_id": 1, "is_active": True, "priority": 100 }, ...]
 
     repo = AccountRepository()
+    plans_data = []
 
-    # 1. 解析目标状态
-    desired_primary_id = None
-    if primary_plan_id and isinstance(primary_plan_id, str) and primary_plan_id.isdigit():
-        desired_primary_id = int(primary_plan_id)
+    # 按照列表顺序分配优先级，第一个优先级最高 (例如 100, 90, 80...)
+    base_priority = 100
+    for i, item in enumerate(data):
+        plan_id = item.get("plan_id")
+        is_active = item.get("is_active", True)
 
-    desired_secondary_ids = set()
-    for pid in secondary_plan_ids:
-        if isinstance(pid, str) and pid.isdigit():
-            desired_secondary_ids.add(int(pid))
+        if plan_id:
+            priority = max(0, base_priority - (i * 10))
+            plans_data.append(
+                {"plan_id": int(plan_id), "is_active": is_active, "priority": priority}
+            )
 
-    # 主计划不应出现在次要计划列表中
-    if desired_primary_id and desired_primary_id in desired_secondary_ids:
-        desired_secondary_ids.remove(desired_primary_id)
+    repo.update_plan_associations(account_id, plans_data)
 
-    # 2. 获取当前状态用于比对
-    account = repo.get_by_id(account_id)
-    if not account:
-        return await get_management_accounts(request, lang=lang, session=session)
+    # Return success - usually to trigger a client-side reload or close modal
+    # Since we use fetch(), we return a JSON response or just 200 OK
+    # To keep HTMX happy if we were using it, we might return partials,
+    # but here we are called via fetch(). We can just return {"status": "ok"}
+    return {"status": "ok"}
 
-    current_active_map = {
-        assoc.task_plan_id: assoc
-        for assoc in account.task_plan_associations
-        if assoc.is_active
-    }
-    current_active_ids = set(current_active_map.keys())
-
-    # 3. 执行更新
-
-    # 更新主计划 (Priority=10)
-    if desired_primary_id:
-        repo.add_secondary_plan(account_id, desired_primary_id, priority=10)
-
-    # 更新次要计划 (Priority=0)
-    for pid in desired_secondary_ids:
-        repo.add_secondary_plan(account_id, pid, priority=0)
-
-    # 4. 移除不再需要的计划
-    all_desired = desired_secondary_ids.copy()
-    if desired_primary_id:
-        all_desired.add(desired_primary_id)
-
-    for pid in current_active_ids:
-        if pid not in all_desired:
-            repo.remove_secondary_plan(account_id, pid)
-
-    # Return updated list or success message
-    # For simplicity, we just trigger a reload of the accounts list
-    # HTMX can target the table to refresh
-    response = await get_management_accounts(request, lang=lang, session=session)
-    response.headers["HX-Trigger"] = "closeModal"
-    return response
 
 @app.post("/api/accounts/{account_id}/details")
 async def update_account_details(
@@ -512,6 +514,7 @@ async def update_account_details(
     response = await get_management_accounts(request, lang=lang, session=session)
     response.headers["HX-Trigger"] = "closeModal"
     return response
+
 
 @app.post("/api/plans")
 async def save_plan(
@@ -546,10 +549,15 @@ async def save_plan(
             interval = form.get(f"task_interval_{task_type}")
 
             task_config = {}
-            if r_type and r_type != "default": # Assume 'default' means use Task class default
+            if (
+                r_type and isinstance(r_type, str) and r_type != "default"
+            ):  # Assume 'default' means use Task class default
                 task_config["reset_type"] = r_type
-                if r_type == "interval" and interval:
-                    task_config["interval_seconds"] = int(interval)
+                if r_type == "interval" and interval and isinstance(interval, str):
+                    try:
+                        task_config["interval_seconds"] = int(interval)
+                    except ValueError:
+                        pass
 
             if task_config:
                 configuration[task_type] = task_config
@@ -584,13 +592,14 @@ async def save_plan(
             name=name,
             description=description,
             task_types=json.dumps(task_types),
-            configuration=json.dumps(configuration)
+            configuration=json.dumps(configuration),
         )
         repo.create(plan)
 
     response = await get_management_plans(request, lang=lang)
     response.headers["HX-Trigger"] = "closeModal"
     return response
+
 
 @app.delete("/api/plans/{plan_id}")
 async def delete_plan(
@@ -602,7 +611,9 @@ async def delete_plan(
     repo.delete(plan_id)
     return await get_management_plans(request, lang=lang)
 
+
 # --- Metadata Management APIs ---
+
 
 @app.get("/management/metadata", response_class=HTMLResponse)
 async def get_management_metadata(
@@ -649,9 +660,10 @@ async def get_management_metadata(
             "sets": sets_data,
             "packs_by_set": packs_by_set,
             "t": t,
-            "current_lang": lang
-        }
+            "current_lang": lang,
+        },
     )
+
 
 @app.post("/api/metadata/set/{code}/label")
 async def update_set_label(
@@ -680,6 +692,7 @@ async def update_set_label(
     # Return refreshed view
     return await get_management_metadata(request, lang=lang)
 
+
 @app.post("/api/metadata/pack/{name}/label")
 async def update_pack_label(
     request: Request,
@@ -706,7 +719,9 @@ async def update_pack_label(
 
     return await get_management_metadata(request, lang=lang)
 
+
 # --- Pack Config APIs ---
+
 
 @app.get("/api/card-sets")
 async def get_card_sets():
@@ -714,6 +729,7 @@ async def get_card_sets():
     repo = CardRepository()
     sets = repo.get_all_sets()
     return [{"code": s.code, "name": s.name} for s in sets]
+
 
 @app.get("/api/card-sets/{set_code}/boosters")
 async def get_set_boosters(set_code: str):
@@ -724,11 +740,10 @@ async def get_set_boosters(set_code: str):
         return []
     return data[set_code]["boosters"]
 
+
 @app.get("/management/accounts/{account_id}/pack-config", response_class=HTMLResponse)
 async def get_account_pack_config_modal(
-    request: Request,
-    account_id: int,
-    lang: str = Query(default="en")
+    request: Request, account_id: int, lang: str = Query(default="en")
 ):
     """Render Pack Config Modal"""
     t = get_translations(lang)
@@ -744,12 +759,14 @@ async def get_account_pack_config_modal(
     # Get current boosters if a set is selected
     current_boosters = []
     # If config exists, load its set's boosters
-    target_set = config.pack_code if config else (card_sets[0].code if card_sets else None)
+    target_set = (
+        config.pack_code if config else (card_sets[0].code if card_sets else None)
+    )
 
     if target_set:
-         data = card_repo.get_packs_by_set(target_set)
-         if data and target_set in data:
-             current_boosters = data[target_set]["boosters"]
+        data = card_repo.get_packs_by_set(target_set)
+        if data and target_set in data:
+            current_boosters = data[target_set]["boosters"]
 
     return templates.TemplateResponse(
         "partials/modals/edit_pack_config.html",
@@ -760,15 +777,13 @@ async def get_account_pack_config_modal(
             "card_sets": card_sets,
             "current_boosters": current_boosters,
             "t": t,
-            "current_lang": lang
-        }
+            "current_lang": lang,
+        },
     )
 
+
 @app.get("/partials/boosters-options", response_class=HTMLResponse)
-async def get_boosters_options(
-    request: Request,
-    pack_code: str = Query(...)
-):
+async def get_boosters_options(request: Request, pack_code: str = Query(...)):
     """HTMX Partial: Get booster options <option>...</option>"""
     repo = CardRepository()
     # pack_code IS the set_code in our context
@@ -778,12 +793,9 @@ async def get_boosters_options(
         boosters = data[pack_code]["boosters"]
 
     return templates.TemplateResponse(
-        "partials/options_boosters.html",
-        {
-            "request": request,
-            "boosters": boosters
-        }
+        "partials/options_boosters.html", {"request": request, "boosters": boosters}
     )
+
 
 @app.post("/api/accounts/{account_id}/pack-config")
 async def save_account_pack_config(
@@ -809,7 +821,7 @@ async def save_account_pack_config(
         account_id=account_id,
         type="daily",
         pack_code=pack_code,
-        booster_name=booster_name
+        booster_name=booster_name,
     )
     repo.upsert(config)
 
@@ -818,16 +830,20 @@ async def save_account_pack_config(
     response.headers["HX-Trigger"] = "closeModal"
     return response
 
+
 if __name__ == "__main__":
     # 初始化数据库
     from ptcgp_auto_v2.db.connection import get_database
+
     get_database()
 
     # 初始化 Settings
     from ptcgp_auto_v2.config.settings import Settings, set_settings
+
     settings = Settings()
     set_settings(settings)
     settings.configure_logging()
 
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

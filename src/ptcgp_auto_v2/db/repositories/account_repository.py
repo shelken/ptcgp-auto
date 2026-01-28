@@ -19,9 +19,9 @@ class AccountRepository:
                 select(Account)
                 .where(Account.id == account_id)
                 .options(
-                    selectinload(cast(Any, Account.task_plan_associations)).selectinload(
-                        cast(Any, AccountTaskPlan.task_plan)
-                    ),
+                    selectinload(
+                        cast(Any, Account.task_plan_associations)
+                    ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                 )
             )
             return session.exec(statement).first()
@@ -44,9 +44,9 @@ class AccountRepository:
             statement = (
                 select(Account)
                 .options(
-                    selectinload(cast(Any, Account.task_plan_associations)).selectinload(
-                        cast(Any, AccountTaskPlan.task_plan)
-                    ),
+                    selectinload(
+                        cast(Any, Account.task_plan_associations)
+                    ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                 )
                 .order_by(col(Account.id))
             )
@@ -72,9 +72,9 @@ class AccountRepository:
             statement = (
                 select(Account)
                 .options(
-                    selectinload(cast(Any, Account.task_plan_associations)).selectinload(
-                        cast(Any, AccountTaskPlan.task_plan)
-                    ),
+                    selectinload(
+                        cast(Any, Account.task_plan_associations)
+                    ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                 )
                 .order_by(col(Account.id))
             )
@@ -91,12 +91,12 @@ class AccountRepository:
             # 如果没有指定计划，自动关联 "base"
             if not account.task_plan_associations:
                 base_plan = self.get_plan_by_name(session, "base")
-                if base_plan:
+                if base_plan and account.id is not None and base_plan.id is not None:
                     new_assoc = AccountTaskPlan(
                         account_id=account.id,
                         task_plan_id=base_plan.id,
                         priority=0,
-                        is_active=True
+                        is_active=True,
                     )
                     session.add(new_assoc)
                     session.commit()
@@ -157,7 +157,9 @@ class AccountRepository:
         # 复用 add_secondary_plan，设置较高的优先级 (10)
         return self.add_secondary_plan(account_id, plan_id, priority=10)
 
-    def add_secondary_plan(self, account_id: int, plan_id: int, priority: int = 0) -> bool:
+    def add_secondary_plan(
+        self, account_id: int, plan_id: int, priority: int = 0
+    ) -> bool:
         """
         为账号添加额外的任务计划（新接口）
 
@@ -205,3 +207,54 @@ class AccountRepository:
                 session.commit()
                 return True
             return False
+
+    def update_plan_associations(self, account_id: int, plans_data: List[dict]) -> bool:
+        """
+        批量更新账号的任务计划关联
+
+        Args:
+            account_id: 账号 ID
+            plans_data: 计划数据列表，格式: [{"plan_id": int, "is_active": bool, "priority": int}]
+
+        Returns:
+            True 表示成功
+        """
+        with Session(get_engine()) as session:
+            # 1. 获取现有关联
+            stmt = select(AccountTaskPlan).where(
+                AccountTaskPlan.account_id == account_id
+            )
+            existing_assocs = session.exec(stmt).all()
+            existing_map = {assoc.task_plan_id: assoc for assoc in existing_assocs}
+
+            # 2. 处理更新和新增
+            target_plan_ids = set()
+
+            for item in plans_data:
+                plan_id = item["plan_id"]
+                target_plan_ids.add(plan_id)
+
+                if plan_id in existing_map:
+                    # 更新
+                    assoc = existing_map[plan_id]
+                    assoc.is_active = item["is_active"]
+                    assoc.priority = item["priority"]
+                    assoc.updated_at = datetime.now()
+                    session.add(assoc)
+                else:
+                    # 新增
+                    new_assoc = AccountTaskPlan(
+                        account_id=account_id,
+                        task_plan_id=plan_id,
+                        is_active=item["is_active"],
+                        priority=item["priority"],
+                    )
+                    session.add(new_assoc)
+
+            # 3. 处理删除 (在数据库中存在但不在目标列表中的)
+            for assoc in existing_assocs:
+                if assoc.task_plan_id not in target_plan_ids:
+                    session.delete(assoc)
+
+            session.commit()
+            return True
