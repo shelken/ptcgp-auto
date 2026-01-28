@@ -42,6 +42,7 @@ class Account(SQLModel, table=True):
     nintendo_id: Optional[str] = Field(default=None, description="Nintendo 账号 ID")
     nickname: Optional[str] = None
     level: Optional[int] = None
+    exchange_points: Optional[int] = None
     country: Optional[str] = Field(default=None, description="国家/地区代码")
     xml_content: Optional[bytes] = Field(default=None, description="XML 文件内容")
     session_token_iat: Optional[int] = None
@@ -73,6 +74,7 @@ class Account(SQLModel, table=True):
             "nintendo_id": self.nintendo_id,
             "nickname": self.nickname,
             "level": self.level,
+            "exchange_points": self.exchange_points,
             "country": self.country,
             "remark": self.remark,
             "xml_content": self.xml_content.hex() if self.xml_content else None,
