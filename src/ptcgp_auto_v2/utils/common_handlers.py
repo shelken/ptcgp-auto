@@ -76,7 +76,7 @@ def build_common_handlers(
     def h_to_home(page_info: dict) -> ActionResult:
         ocr = page_info.get("ocr_results", [])
         patterns = get_text_patterns("text_home")
-        return tap_text(adb, ocr, patterns, wait=1.0)
+        return tap_text(adb, ocr, patterns, wait=1.0) or ActionResult.ok()
 
     # 只要是系统页面全部走重启app就行
     def h_restart_app(page_info: dict) -> ActionResult:

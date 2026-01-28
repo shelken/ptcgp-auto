@@ -15,6 +15,7 @@
                     <th class="p-3 font-bold uppercase">{{ t.col_id or 'ID' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.label_nickname or 'Nickname' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_game_id or 'Game ID' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_exchange_points or 'Exchange Points' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_primary_plan or 'Primary Plan' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_extra_plans or 'Extra Plans' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_target_pack or 'Target Pack' }}</th>
@@ -44,6 +45,13 @@
                         </div>
                         {% else %}
                         <span class="font-mono text-sm text-muted" title="{{ account.game_id }}">{{ account.game_id[:8] }}...</span>
+                        {% endif %}
+                    </td>
+                    <td class="p-3">
+                        {% if account.exchange_points is not none %}
+                        <span class="font-mono font-bold">{{ "{:,}".format(account.exchange_points) }}</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
                         {% endif %}
                     </td>
                     <td class="p-3">
