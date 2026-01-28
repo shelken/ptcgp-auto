@@ -77,6 +77,18 @@ def _is_path(template_name: str) -> bool:
     return template_name.startswith("/") or template_name.startswith("~")
 
 
+def _print_ocr_results(ocr_results: list[dict]):
+    """打印 OCR 结果的详细信息"""
+    items = []
+    for item in ocr_results:
+        text = item["text"]
+        box = item["box"]
+        cx = (box[0] + box[2]) // 2
+        cy = (box[1] + box[3]) // 2
+        items.append(f'"{text}"@({cx},{cy})')
+    print(f"OCR({len(ocr_results)}): {', '.join(items)}")
+
+
 # -----------------------------------------------------------------------------
 # 资源准备与加载逻辑
 # -----------------------------------------------------------------------------
@@ -320,7 +332,7 @@ def _run_cards_match(adb, args):
 
     # OCR 辅助信息
     ocr_results = recognizer.ocr_full_screen(img)
-    print(f"OCR({len(ocr_results)}) items detected.")
+    _print_ocr_results(ocr_results)
 
     template_arg = args.cards
 
@@ -374,7 +386,6 @@ def _run_cards_match(adb, args):
 
     # 4. 执行匹配
     import time
-    import numpy as np
     from concurrent.futures import ThreadPoolExecutor
 
     start_time = time.time()
@@ -614,14 +625,7 @@ def run_non_interactive(args):
             return
 
         results = recognizer.ocr_full_screen(img)
-        items = []
-        for item in results:
-            text = item["text"]
-            box = item["box"]
-            cx = (box[0] + box[2]) // 2
-            cy = (box[1] + box[3]) // 2
-            items.append(f'"{text}"@({cx},{cy})')
-        print(f"OCR({len(results)}): {', '.join(items)}")
+        _print_ocr_results(results)
         return
 
     if args.template:
@@ -632,7 +636,7 @@ def run_non_interactive(args):
             return
 
         ocr_results = recognizer.ocr_full_screen(img)
-        print(f"OCR({len(ocr_results)}) items detected.")
+        _print_ocr_results(ocr_results)
 
         template_name = args.template
         if _is_path(args.template):
