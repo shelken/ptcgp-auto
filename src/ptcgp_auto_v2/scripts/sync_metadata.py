@@ -5,7 +5,6 @@
 
 1. 从 GitHub 获取 sets.json 和 cards.json
 2. 更新 card_sets, cards, card_packs 表
-3. 生成 data/packs.json 以兼容旧代码
 """
 
 import json
@@ -35,8 +34,6 @@ BASE_URL = (
 SETS_URL = f"{BASE_URL}/sets.json"
 CARDS_URL = f"{BASE_URL}/cards.json"
 CARDS_EXTRA_URL = f"{BASE_URL}/cards.extra.json"
-PACKS_JSON_PATH = ROOT_DIR / "data" / "packs.json"
-
 
 def sync_metadata():
     repo = CardRepository()
@@ -197,37 +194,6 @@ def sync_metadata():
             label_data=default_label
         )
         repo.upsert_pack_safe(pack)
-
-    # 4. Generate packs.json
-    generate_packs_json(repo)
-
-    # 4. Generate packs.json
-    generate_packs_json(repo)
-
-
-def generate_packs_json(repo: CardRepository):
-    logger.info("Generating data/packs.json...")
-
-    sets = repo.get_all_sets()
-    output = {}
-
-    for s in sets:
-        # Get packs for this set
-        pack_data = repo.get_packs_by_set(s.code)
-        if pack_data:
-            output.update(pack_data)
-
-    # Sort
-    output = dict(sorted(output.items()))
-
-    # Ensure parent dir exists
-    PACKS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(PACKS_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(output, f, indent=2, ensure_ascii=False)
-
-    logger.info(f"Saved {len(output)} sets to {PACKS_JSON_PATH}")
-
 
 if __name__ == "__main__":
     sync_metadata()

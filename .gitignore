@@ -12,6 +12,6 @@ build/
 .env
 .claude/settings.local.json
 _out
-data/*.db
+data**
 templates/cards/
 .alma-snapshots
