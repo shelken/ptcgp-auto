@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # 开包滑动坐标（从左到右）
 BASE_SWIPE_PACK_START_X = 54   # 1080 * 0.05
-BASE_SWIPE_PACK_END_X = 1026   # 1080 * 0.95
+BASE_SWIPE_PACK_END_X = 1080   # 1080 * 1
 
 # 卡牌上滑坐标（从下到上）
 BASE_SWIPE_CARD_START_Y = 1152  # 1920 * 0.6

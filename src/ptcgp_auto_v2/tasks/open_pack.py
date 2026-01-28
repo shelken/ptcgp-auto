@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 BASE_POPUP_CLOSE_TAP_Y = 1820
 
 # 开包滑动时长 (ms)
-SWIPE_DURATION_OPEN = 700
+SWIPE_DURATION_OPEN = 500
 # 登录图鉴滑动时长 (ms)
 SWIPE_DURATION_REGISTER = 100
 
