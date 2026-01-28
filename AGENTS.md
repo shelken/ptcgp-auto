@@ -119,5 +119,8 @@ python debug_tool.py
 ## 注意事项
 
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
-- **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)，修改模型后无需迁移（目前自动初始化，复杂变更需手动处理）
+- **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)
+  - **重要**: 为保持灵活性，**所有物理外键 (Foreign Key) 约束已被移除**。表之间的关系由 SQLAlchemy/SQLModel 的逻辑外键 (`Relationship` with `primaryjoin`) 维护。
+  - 修改模型后无需迁移（目前自动初始化，复杂变更需手动处理）
+  - 数据迁移：如需变更 Schema，请参考 `scripts/migration_v2_remove_fks.py` 编写类似的迁移脚本。目前不依赖 Alembic 进行自动迁移。
 - **时间处理**: 统一使用 `localtime`，禁止使用 UTC
