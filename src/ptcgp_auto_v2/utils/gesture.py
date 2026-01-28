@@ -269,7 +269,7 @@ def click_confirm(
         page_detector,
         ocr_results,
         patterns,
-        template_name="btn_continue.png",
+        template_name="btn_continue",
         wait=1.0,
     )
     if result:
@@ -286,7 +286,7 @@ def click_continue(
         page_detector,
         ocr_results,
         patterns,
-        template_name="btn_continue.png",
+        template_name="btn_continue",
         wait=1.0,
     )
     if result:
