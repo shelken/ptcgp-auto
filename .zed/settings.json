@@ -1,3 +1,11 @@
 {
   "format_on_save": "off",
+  "file_scan_exclusions": [
+    "**/__pycache__",
+    "**/.DS_Store",
+    "**/.git",
+    "**/.venv",
+    "**/.direnv",
+    "**/.alma-snapshots",
+  ]
 }
