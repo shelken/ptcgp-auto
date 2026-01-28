@@ -63,6 +63,7 @@
     "btn_new_plan": "+ 新建计划",
     "col_id": "ID",
     "col_game_id": "游戏 ID",
+    "col_exchange_points": "交换点数",
     "col_primary_plan": "主计划",
     "col_extra_plans": "附加计划",
     "col_target_pack": "目标卡包",

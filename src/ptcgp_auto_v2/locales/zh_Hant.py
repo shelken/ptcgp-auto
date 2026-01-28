@@ -12,7 +12,7 @@ TEXT_PATTERNS = {
         "B": ["B系列"],
     },
     # 页面识别文本
-    "game_home_main": ["商店/兌換處", "得卡挑戰"],
+    "game_home_main": ["商店", "得卡挑戰"],
     "pack_series_select": ["選擇擴充組"],
     "pack_list": ["提供比例", "其他擴充包"],
     "pack_list_exclude": ["開封", "開封10包"],
@@ -33,6 +33,14 @@ TEXT_PATTERNS = {
     # 个人资料页
     "profile_page": ["朋友ID"],
     "profile_exclude": ["朋友ID", "Lv.", "戰績", "勳章", "請多多指教", "編輯", "設定", "登出"],
+    # 社群页面
+    "community_page": ["社群", "他人的收藏"],
+    "community_exchange_btn": ["交換"],
+    # 交换页面
+    "exchange_page": ["交換卡牌", "設定", "紀錄"],
+    "exchange_point_title": ["交換"],
+    # 交换未解锁弹窗
+    "exchange_locked_popup": ["開放條件", "距離開放還剩"],
     # 通用页面
     "popup_ok": ["OK"],
     "network_error_popup": ["再試一次"],

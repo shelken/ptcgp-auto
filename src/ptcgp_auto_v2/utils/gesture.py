@@ -333,11 +333,16 @@ def tap_bottom_close(
 
 def tap_home_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
     """点击主页图标"""
-    result = tap_template(adb, page_detector, "icon_home", wait=wait)
+    return tap_bottom_icon(adb, page_detector, "icon_home", wait)
+
+def tap_community_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
+    return tap_bottom_icon(adb, page_detector, "icon_community", wait)
+
+def tap_bottom_icon(adb, page_detector, template_name, wait: float = 1.0) -> ActionResult:
+    result = tap_template(adb, page_detector, template_name=template_name, wait=wait)
     if result:
         return result
     return ActionResult.wait(wait)
-
 
 def navigate_back(
     adb,
