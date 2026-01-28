@@ -60,7 +60,7 @@ class FetchAccountInfoTask(Task):
     """账号信息获取任务"""
 
     task_type = "fetch_account_info"
-    reset_type = ResetType.ONCE
+    reset_type = ResetType.DAILY
     pages = FETCH_PAGES
 
     @staticmethod
