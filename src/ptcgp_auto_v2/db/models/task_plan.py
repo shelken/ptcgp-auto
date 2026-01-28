@@ -35,13 +35,7 @@ class TaskPlan(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    accounts: List["Account"] = Relationship(
-        back_populates="task_plan",
-        sa_relationship_kwargs={
-            "primaryjoin": "TaskPlan.id==Account.task_plan_id",
-            "foreign_keys": "[Account.task_plan_id]",
-        },
-    )  # 旧的一对多关系（兼容）
+    # 移除旧的 accounts 关系（因为 Account.task_plan_id 已移除）
     # 新的多对多关系（通过关联表）
     # account_associations: List["AccountTaskPlan"] = Relationship()  # 暂时不在 SQLModel 中强类型定义反向关系以免循环依赖问题，主要在 Account 侧定义
 

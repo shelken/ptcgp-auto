@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .pack_record import PackRecord
     from .task_instance import TaskInstance
     from .task_plan import TaskPlan
+    from .account_task_plan import AccountTaskPlan
 
 
 class Account(SQLModel, table=True):
@@ -47,18 +48,10 @@ class Account(SQLModel, table=True):
     xml_content: Optional[bytes] = Field(default=None, description="XML 文件内容")
     session_token_iat: Optional[int] = None
     remark: str = Field(default="")
-    task_plan_id: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    task_plan: Optional["TaskPlan"] = Relationship(
-        back_populates="accounts",
-        sa_relationship_kwargs={
-            "primaryjoin": "Account.task_plan_id==TaskPlan.id",
-            "foreign_keys": "[Account.task_plan_id]",
-        },
-    )
     # 新的多对多关系（通过关联表）
     task_plan_associations: List["AccountTaskPlan"] = Relationship(
         sa_relationship_kwargs={
@@ -101,7 +94,6 @@ class Account(SQLModel, table=True):
             "remark": self.remark,
             "xml_content": self.xml_content.hex() if self.xml_content else None,
             "session_token_iat": self.session_token_iat,
-            "task_plan_id": self.task_plan_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

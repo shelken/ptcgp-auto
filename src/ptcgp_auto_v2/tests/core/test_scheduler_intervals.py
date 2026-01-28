@@ -74,13 +74,14 @@ def test_aggregation_logic(mock_scheduler):
     )
 
     # 关联
-    # 模拟 account.task_plan (旧关联)
-    account.task_plan = plan1
-
     # 模拟 account.task_plan_associations (新关联)
-    assoc = AccountTaskPlan(account_id=1, task_plan_id=2, is_active=True, priority=10)
-    assoc.task_plan = plan2 # 手动注入关联对象
-    account.task_plan_associations = [assoc]
+    assoc1 = AccountTaskPlan(account_id=1, task_plan_id=1, is_active=True, priority=0)
+    assoc1.task_plan = plan1
+
+    assoc2 = AccountTaskPlan(account_id=1, task_plan_id=2, is_active=True, priority=10)
+    assoc2.task_plan = plan2
+
+    account.task_plan_associations = [assoc1, assoc2]
 
     # 执行聚合
     aggregated = mock_scheduler._aggregate_account_plans(account)
