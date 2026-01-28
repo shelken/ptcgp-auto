@@ -309,7 +309,7 @@ class AccountSyncer:
                     f"XML 无需更新: 数据库 iat ({old_iat}) > 设备 iat ({new_iat})"
                 )
             elif not new_iat:
-                logger.debug("XML 无需更新: 设备无 iat")
+                logger.debug("XML 无需更新: 账号无 iat")
 
         return should_update
 
