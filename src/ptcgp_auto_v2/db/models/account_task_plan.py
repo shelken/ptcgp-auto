@@ -24,13 +24,24 @@ class AccountTaskPlan(SQLModel, table=True):
     __tablename__ = "account_task_plans"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(foreign_key="accounts.id", index=True)
-    task_plan_id: int = Field(foreign_key="task_plans.id", index=True)
+    account_id: int = Field(index=True)
+    task_plan_id: int = Field(index=True)
     is_active: bool = Field(default=True, description="是否启用该计划")
     priority: int = Field(default=0, description="优先级（数字越大优先级越高）")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    task_plan: "TaskPlan" = Relationship()
-    account: "Account" = Relationship(back_populates="task_plan_associations")
+    task_plan: "TaskPlan" = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "AccountTaskPlan.task_plan_id==TaskPlan.id",
+            "foreign_keys": "[AccountTaskPlan.task_plan_id]",
+        }
+    )
+    account: "Account" = Relationship(
+        back_populates="task_plan_associations",
+        sa_relationship_kwargs={
+            "primaryjoin": "AccountTaskPlan.account_id==Account.id",
+            "foreign_keys": "[AccountTaskPlan.account_id]",
+        },
+    )

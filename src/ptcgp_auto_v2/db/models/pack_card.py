@@ -22,8 +22,8 @@ class PackCard(SQLModel, table=True):
     __tablename__ = "pack_cards"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    pack_record_id: int = Field(foreign_key="pack_records.id", index=True)
-    card_id: Optional[int] = Field(default=None, foreign_key="cards.id", description="关联的卡牌ID")
+    pack_record_id: int = Field(index=True)
+    card_id: Optional[int] = Field(default=None, description="关联的卡牌ID", index=True)
 
     # 冗余字段（方便快速查看，也为了应对无法匹配到 card_id 的情况）
     card_name: str = Field(description="识别到的卡牌名称")
@@ -33,8 +33,19 @@ class PackCard(SQLModel, table=True):
     confidence: float = Field(default=0.0, description="识别置信度")
 
     # 关系
-    pack_record: Optional["PackRecord"] = Relationship(back_populates="cards")
-    card: Optional["Card"] = Relationship()
+    pack_record: Optional["PackRecord"] = Relationship(
+        back_populates="cards",
+        sa_relationship_kwargs={
+            "primaryjoin": "PackCard.pack_record_id==PackRecord.id",
+            "foreign_keys": "[PackCard.pack_record_id]",
+        },
+    )
+    card: Optional["Card"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "PackCard.card_id==Card.id",
+            "foreign_keys": "[PackCard.card_id]",
+        },
+    )
 
     def to_dict(self) -> dict:
         return {

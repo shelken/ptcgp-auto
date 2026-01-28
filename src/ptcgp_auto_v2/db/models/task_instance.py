@@ -32,7 +32,7 @@ class TaskInstance(SQLModel, table=True):
     __tablename__ = "task_instances"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(foreign_key="accounts.id")
+    account_id: int = Field(index=True)
     task_type: str
     status: str = Field(
         default="pending",
@@ -45,7 +45,13 @@ class TaskInstance(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
-    account: Optional["Account"] = Relationship(back_populates="task_instances")
+    account: Optional["Account"] = Relationship(
+        back_populates="task_instances",
+        sa_relationship_kwargs={
+            "primaryjoin": "TaskInstance.account_id==Account.id",
+            "foreign_keys": "[TaskInstance.account_id]",
+        },
+    )
 
     def save(self):
         """保存到数据库（兼容旧接口）"""

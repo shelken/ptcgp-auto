@@ -26,7 +26,7 @@ class AccountPackConfig(SQLModel, table=True):
     __tablename__ = "account_pack_config"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(foreign_key="accounts.id")
+    account_id: int = Field(index=True)
     type: str
     pack_code: str
     booster_name: str
