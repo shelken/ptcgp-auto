@@ -42,15 +42,15 @@
 - [x] 迁移到uv管理，方便多工作区数据共享
 - [x] 获取当前账号交换点数，并在web端账号管理显示，在fetch_account_info的task中实现
 - [x] 出现各种手指的情况下，直接点击手指位置（兜底处理）
+- [x] 拆分repository
+- [x] 彻底废弃账号的task_plan_id，使用多关联
+- [x] 尝试删除shared_prefs看看什么效果(删掉后直接变成新账号流程，即使有xml也不行，还需要其他各种文件)
 
 ## 进行中
 
 
 ## 高优先级
 
-- [ ] 拆分repository
-- [ ] 彻底废弃账号的task_plan_id，使用多关联
-- [ ] 尝试删除shared_prefs看看什么效果
 - [ ] `wonder_pick` - 自动得卡挑战
 - [ ] `send_card` - 每日送卡任务
 
