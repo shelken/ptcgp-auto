@@ -1,26 +1,29 @@
+# -*- coding: utf-8 -*-
 """
 卡包常量定义
 
-从 data/packs.json 加载数据
-可通过 scripts/fetch_packs.py 更新数据
+从数据库加载数据 (CardRepository)
 """
 
-import json
-from pathlib import Path
-
+from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
-
-# 数据文件路径
-DATA_FILE = Path(__file__).resolve().parent.parent.parent.parent / "data" / "packs.json"
 
 
 def _load_packs() -> dict:
-    """从 JSON 文件加载卡包数据"""
-    if not DATA_FILE.exists():
+    """从数据库加载卡包数据"""
+    try:
+        repo = CardRepository()
+        sets = repo.get_all_sets()
+        
+        packs_data = {}
+        for card_set in sets:
+            set_packs = repo.get_packs_by_set(card_set.code)
+            packs_data.update(set_packs)
+            
+        return packs_data
+    except Exception:
+        # 数据库可能未初始化（如CI环境或首次安装），容错处理
         return {}
-
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
 
 # 加载卡包数据
