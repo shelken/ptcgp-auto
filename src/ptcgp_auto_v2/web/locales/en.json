@@ -63,6 +63,7 @@
     "btn_new_plan": "+ New Plan",
     "col_id": "ID",
     "col_game_id": "Game ID",
+    "col_exchange_points": "Exchange Points",
     "col_primary_plan": "Primary Plan",
     "col_extra_plans": "Extra Plans",
     "col_target_pack": "Target Pack",
