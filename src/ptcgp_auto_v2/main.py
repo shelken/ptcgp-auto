@@ -113,6 +113,12 @@ def parse_args(argv: list[str] | None = None):
     )
 
     parser.add_argument(
+        "--init-account",
+        action="store_true",
+        help="初始化设备账号环境（尝试备份当前账号 -> 重置游戏环境）",
+    )
+
+    parser.add_argument(
         "--reset-running",
         action="store_true",
         help="将所有运行中的任务重置为待执行",
@@ -350,6 +356,58 @@ def sync_account(device_address: str):
         return None
 
 
+def run_init_account(device_address: str) -> bool:
+    """
+    初始化设备账号环境：
+    1. 尝试同步(备份)当前账号到数据库
+    2. 无论备份是否成功，都重置游戏环境
+
+    Args:
+        device_address: ADB 设备地址
+
+    Returns:
+        bool: 是否成功（指重置操作是否完成）
+    """
+    from ptcgp_auto_v2.infra.adb import AdbController
+    from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
+    from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+
+    print(f"\n正在连接设备: {device_address}")
+    adb = AdbController(device_address)
+
+    try:
+        adb.connect()
+
+        # 1. 尝试同步/备份当前账号
+        print("步骤 1/2: 正在尝试备份当前账号信息...")
+        try:
+            syncer = AccountSyncer(adb)
+            account = syncer.get_current_account()
+            if account:
+                print(
+                    f"账号已备份: {account.nickname or account.game_id} (ID: {account.id})"
+                )
+            else:
+                print("未检测到有效账号或无法读取，跳过备份。")
+        except Exception as e:
+            logger.warning(f"备份账号时出错 (不影响重置): {e}")
+            print("备份账号失败，继续执行重置...")
+
+        # 2. 重置环境
+        print("步骤 2/2: 正在重置游戏环境...")
+        switcher = AccountSwitcher(adb)
+        switcher.reset_game_environment()
+
+        print("设备环境已初始化完成。")
+        return True
+
+    except Exception as e:
+        logger.error(f"初始化设备环境失败: {e}")
+        return False
+    finally:
+        adb.disconnect()
+
+
 def run_switch_account(device: str, account_id: int) -> int:
     """切换到指定账号"""
     get_database()
@@ -537,6 +595,14 @@ def main():
         success = True
         for device in device_addresses:
             if not sync_account(device):
+                success = False
+        return 0 if success else 1
+
+    if args.init_account:
+        # 对所有设备执行初始化
+        success = True
+        for device in device_addresses:
+            if not run_init_account(device):
                 success = False
         return 0 if success else 1
 
