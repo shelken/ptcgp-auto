@@ -12,46 +12,60 @@ def _get_patterns(text_patterns: dict, key: str) -> list[str]:
 
 
 # 下划线开头与游戏无关，系统相关
+# 新增 action 字段用于声明式生成 Handler
+# action 类型参考 common_handlers.py 中的工厂方法
 COMMON_PAGES = [
     {
         "name": "popup_ok",
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_ok"),
         "priority": 150,
         "exact_match": True,
+        "action": "tap_text",
+        "patterns_key": "popup_ok",
     },
     {
         "name": "network_error_popup",
         "identifiers": _get_patterns(TEXT_PATTERNS, "network_error_popup"),
         "priority": 150,
         "exact_match": True,
+        "action": "tap_text",
+        "patterns_key": "network_error_popup",
     },
     {
         "name": "continue_button",
         "identifiers": _get_patterns(TEXT_PATTERNS, "continue_button"),
         "priority": 150,
         "exact_match": True,
+        "action": "tap_text",
+        "patterns_key": "continue_button",
     },
     {
         "name": "tap_to_continue",
         "identifiers": _get_patterns(TEXT_PATTERNS, "tap_to_continue"),
         "priority": 150,
+        "action": "tap_text_or_center",
+        "patterns_key": "tap_to_continue",
     },
     {
         "name": "game_open_page",
         "identifiers": _get_patterns(TEXT_PATTERNS, "game_open_page"),
         "priority": 150,
+        "action": "tap_center",
     },
     {
         # 游戏内通用关闭按钮（模板匹配）
         "name": "btn_close",
         "templates": ["btn_close"],
         "priority": 500,
+        "action": "tap_template",
+        "template_name": "btn_close",
     },
     # TODO 执行重新认证（需要通知重新登录账号）
     {
         "name": "auth_again",
         "identifiers": _get_patterns(TEXT_PATTERNS, "auth_again"),
         "priority": 500,
+        "action": "wait",
     },
     # 打开模拟器弹出页面
     {
@@ -59,19 +73,25 @@ COMMON_PAGES = [
         "identifiers": _get_patterns(TEXT_PATTERNS, "_to_home"),
         "match_all": True,
         "priority": 900,
+        "action": "tap_text",
+        "patterns_key": "text_home",
     },
     {
         "name": "_close_app_popup",
         "identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
         "match_all": True,
         "priority": 900,
+        "action": "tap_text_or_back",
+        "patterns_key": "close_app_popup",
     },
     {
         "name": "_main_page",
         "identifiers": _get_patterns(TEXT_PATTERNS, "main_page"),
         "match_all": True,
         "exclude_identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
-        "priority": 920,
+        "priority": 900,
+        "action": "tap_text",
+        "patterns_key": "main_page",
     },
 ]
 
