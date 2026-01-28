@@ -190,9 +190,7 @@ class BaseExecutor(ABC):
         """重启游戏应用"""
         assert self._adb is not None
         logger.debug("重启游戏应用...")
-        self._adb.force_stop(self.config.app_package)
-        time.sleep(2)
-        self._adb.start_app(self.config.app_package)
+        self._adb.restart_app(self.config.app_package)
         time.sleep(self.config.recovery_delay)
 
     def _try_recover(self):

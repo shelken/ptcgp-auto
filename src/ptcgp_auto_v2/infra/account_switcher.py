@@ -155,9 +155,7 @@ class AccountSwitcher:
 
             # 7. 可选：重启游戏
             if restart_app:
-                logger.debug("启动游戏...")
-                self._start_app()
-                time.sleep(wait_seconds)
+                self.adb.restart_app(self._settings.app_package)
 
             logger.info(f"账号 XML 已注入: {xml_path.name}")
             return True
@@ -178,9 +176,7 @@ class AccountSwitcher:
             self.adb.run_as_root(f"rm -f {pattern}")
         logger.debug("账号绑定文件清理完成")
 
-    def _start_app(self):
-        """启动游戏应用"""
-        self.adb.shell(f"am start -n {self._settings.main_activity}")
+
 
     def clean_device_xml(self) -> bool:
         """

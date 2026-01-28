@@ -444,3 +444,16 @@ class AdbController:
             logger.debug(f"已启动应用: {package_name}")
         except (RuntimeError, OSError) as e:
             logger.error(f"启动应用失败: {e}")
+
+    def restart_app(self, package_name: str, activity: str = None, wait_time: float = 2.0):
+        """
+        重启应用
+
+        Args:
+            package_name: 应用包名
+            activity: Activity 名称（可选）
+            wait_time: 停止后等待时间（秒）
+        """
+        self.force_stop(package_name)
+        time.sleep(wait_time)
+        self.start_app(package_name, activity)

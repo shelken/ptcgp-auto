@@ -260,39 +260,6 @@ def scroll_until_template(
         last_signature = current_signature
     return None
 
-def click_confirm(
-    adb, page_detector, ocr_results: list[dict], patterns: list[str]
-) -> ActionResult:
-    """点击确认按钮（模板优先）"""
-    result = tap_by_priority(
-        adb,
-        page_detector,
-        ocr_results,
-        patterns,
-        template_name="btn_continue",
-        wait=1.0,
-    )
-    if result:
-        return result
-    return tap_center(adb, wait=1.0)
-
-
-def click_continue(
-    adb, page_detector, ocr_results: list[dict], patterns: list[str]
-) -> ActionResult:
-    """点击继续按钮（模板优先）"""
-    result = tap_by_priority(
-        adb,
-        page_detector,
-        ocr_results,
-        patterns,
-        template_name="btn_continue",
-        wait=1.0,
-    )
-    if result:
-        return result
-    return tap_center(adb, wait=1.0)
-
 # 点继续文字
 def tap_continue(
     adb, ocr_results: list[dict], patterns: Optional[list[str]] = None, wait: float = 1.0

@@ -5,9 +5,8 @@ import logging
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.utils.gesture import (
-    click_confirm,
-    click_continue,
     tap_center,
     tap_text,
     tap_template,
@@ -25,32 +24,6 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
     """
 
     # === 处理器工厂方法 ===
-
-    def action_click_confirm(page_conf: dict) -> Handler:
-        key = page_conf.get("patterns_key")
-
-        def handler(page_info: dict) -> ActionResult:
-            return click_confirm(
-                adb,
-                page_detector,
-                page_info.get("ocr_results", []),
-                get_text_patterns(key) if key else [],
-            )
-
-        return handler
-
-    def action_click_continue(page_conf: dict) -> Handler:
-        key = page_conf.get("patterns_key")
-
-        def handler(page_info: dict) -> ActionResult:
-            return click_continue(
-                adb,
-                page_detector,
-                page_info.get("ocr_results", []),
-                get_text_patterns(key) if key else [],
-            )
-
-        return handler
 
     def action_tap_text(page_conf: dict) -> Handler:
         key = page_conf.get("patterns_key")
@@ -116,16 +89,25 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
 
         return handler
 
+    def action_restart_game(page_conf: dict) -> Handler:
+        def handler(page_info: dict) -> ActionResult:
+            settings = get_settings()
+            logger.info("执行页面配置的重启操作")
+            adb.restart_app(settings.app_package)
+            return ActionResult.ok(wait=8.0)
+        return handler
+
+
+
     # 动作类型映射表
     action_map = {
-        "click_confirm": action_click_confirm,
-        "click_continue": action_click_continue,
         "tap_text": action_tap_text,
         "tap_text_or_center": action_tap_text_or_center,
         "tap_text_or_back": action_tap_text_or_back,
         "tap_template": action_tap_template,
         "tap_center": action_tap_center,
         "wait": action_wait,
+        "restart_game": action_restart_game,
     }
 
     handlers = {}

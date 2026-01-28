@@ -15,21 +15,32 @@ def _get_patterns(text_patterns: dict, key: str) -> list[str]:
 # 新增 action 字段用于声明式生成 Handler
 # action 类型参考 common_handlers.py 中的工厂方法
 COMMON_PAGES = [
+    # TODO `清除快取 重新下載`
+    #（这种情况一般游戏有问题，不要点ok，重启过，没用，一般应该需要重启整个模拟器）
+    {
+        "name": "popup_clean_and_download",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "popup_clean_and_download"),
+        "match_all": True,
+        "priority": 140,
+        "action": "tap_text",
+        "patterns_key": "text_cancel",
+    },
     {
         "name": "popup_ok",
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_ok"),
         "priority": 150,
         "exact_match": True,
         "action": "tap_text",
-        "patterns_key": "popup_ok",
+        "patterns_key": "text_ok",
     },
+    # 点再试一次
     {
-        "name": "network_error_popup",
-        "identifiers": _get_patterns(TEXT_PATTERNS, "network_error_popup"),
+        "name": "popup_network_error",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "popup_network_error"),
         "priority": 150,
         "exact_match": True,
         "action": "tap_text",
-        "patterns_key": "network_error_popup",
+        "patterns_key": "text_retry",
     },
     {
         "name": "continue_button",
@@ -62,10 +73,17 @@ COMMON_PAGES = [
     },
     # TODO 执行重新认证（需要通知重新登录账号）
     {
-        "name": "auth_again",
-        "identifiers": _get_patterns(TEXT_PATTERNS, "auth_again"),
+        "name": "popup_auth_again",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "popup_auth_again"),
         "priority": 500,
         "action": "wait",
+    },
+    # 游戏启动失败，尝试重启
+    {
+        "name": "pop_up_game_launch_fail",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "pop_up_game_launch_fail"),
+        "priority": 500,
+        "action": "restart_game",
     },
     # 打开模拟器弹出页面
     {
