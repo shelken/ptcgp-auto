@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 终端图片预览工具
 支持 Kitty 图形协议，在终端中直接显示图片。
@@ -14,6 +15,7 @@ from PIL import Image
 
 def _is_kitty() -> bool:
     """检测是否在 Kitty 终端中运行"""
+    # 只要环境变量符合就尝试运行，通过捕获 stderr 来处理不支持的情况
     return os.environ.get("TERM", "").startswith("xterm-kitty") or \
            os.environ.get("KITTY_WINDOW_ID") is not None
 
@@ -67,6 +69,9 @@ def preview_image(
 
     try:
         # 使用 kitten icat 显示图片
+        # 关键点：设置 stderr=subprocess.PIPE 以捕获错误信息
+        # 如果终端不支持协议（如 tmux/zellij），icat 会输出错误到 stderr 并返回非 0
+        # 我们捕获这个错误并静默处理，避免污染控制台输出
         subprocess.run(
             [
                 "kitten", "icat",
@@ -77,15 +82,16 @@ def preview_image(
             ],
             check=True,
             timeout=10,
+            stderr=subprocess.PIPE,  # 捕获 stderr，静默协议错误
         )
         # 换行，避免后续输出覆盖图片
         print()
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"(图片预览失败: {e})")
+    except subprocess.CalledProcessError:
+        # 执行失败（通常是 Protocol not supported），静默返回
         return False
     except subprocess.TimeoutExpired:
-        print("(图片预览超时)")
+        # 超时也不报错
         return False
     finally:
         # 清理临时文件
@@ -123,12 +129,17 @@ def preview_image_inline(
         image_path = str(image)
 
     try:
+        # 同上，捕获 stderr 以静默错误
         subprocess.run(
             ["kitten", "icat", "--align", "left", image_path],
             check=True,
             timeout=10,
+            stderr=subprocess.PIPE,
         )
         return True
+    except subprocess.CalledProcessError:
+        # 静默失败
+        return False
     except Exception:
         return False
     finally:
