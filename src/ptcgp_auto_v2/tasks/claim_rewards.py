@@ -306,7 +306,7 @@ class ClaimRewardsTask(Task):
             patterns = tab_patterns_map.get(tab, [])
             if not patterns:
                 return None
-            return tap_text(self.adb, ocr_results, patterns, wait=1.0)
+            return tap_text(self.adb, ocr_results, patterns, wait=1.0, exact=True)
 
         first_tab = TAB_ORDER[0]
         first_tab_visible = is_visible(first_tab)
