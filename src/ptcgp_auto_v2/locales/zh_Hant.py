@@ -46,6 +46,7 @@ TEXT_PATTERNS = {
     "text_cancel": ["取消"],
     "text_ok": ["OK"],
     "text_retry": ["再試一次"],
+    "text_x": ["x"],
     "continue_button": ["繼續"],
     "tap_to_continue": ["點擊來繼續"],
     "game_open_page": ["點擊畫面開始遊戲"],
