@@ -19,6 +19,9 @@ from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 logger = logging.getLogger(__name__)
 
+# 定义比 DEBUG(10) 更低的日志级别
+TRACE = 5
+
 
 @dataclass
 class TemplateMatch:
@@ -293,9 +296,11 @@ class TemplateMatcher:
                 confidence=max_val,
             )
 
-        logger.debug(
+        # 使用 TRACE 级别 (5) 记录未找到的日志，避免刷屏
+        logger.log(
+            TRACE,
             f"[模板] 未找到 {template_name}, 最高置信度={max_val:.2f} "
-            f"(阈值={threshold})"
+            f"(阈值={threshold})",
         )
         return None
 
