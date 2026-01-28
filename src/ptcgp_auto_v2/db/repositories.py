@@ -472,6 +472,7 @@ class AccountRepository:
             db_account.nintendo_id = account.nintendo_id
             db_account.nickname = account.nickname
             db_account.level = account.level
+            db_account.exchange_points = account.exchange_points
             db_account.country = account.country
             db_account.xml_content = account.xml_content
             db_account.session_token_iat = account.session_token_iat
