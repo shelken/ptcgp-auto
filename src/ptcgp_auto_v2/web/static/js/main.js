@@ -232,9 +232,29 @@ function switchTab(tabName) {
         const hasContent = content.querySelector('table') || content.querySelector('form');
 
         if (!hasContent) {
-            const firstBtn = document.querySelector('#tab-content-management .sidebar-btn');
-            if (firstBtn) firstBtn.click();
+            // Try to restore from hash first
+            const hash = window.location.hash.replace('#', '');
+            let targetBtn = null;
+            if (hash) {
+                targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
+            }
+            
+            // Fallback to first button
+            if (!targetBtn) {
+                targetBtn = document.querySelector('#tab-content-management .sidebar-btn');
+            }
+
+            if (targetBtn) targetBtn.click();
         }
+    }
+}
+
+function updateSidebarState(btn) {
+    document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active'));
+    btn.classList.add('active');
+    const hash = btn.getAttribute('data-hash');
+    if (hash) {
+        window.location.hash = hash;
     }
 }
 
@@ -311,6 +331,15 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreTab();
     restoreFilters(); // This triggers data load
     restoreViewMode();
+    initCustomSelects(document); // Initialize custom selects
+
+    // Handle initial hash for sidebar
+    const hash = window.location.hash.replace('#', '');
+    if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
+        // If hash points to management section, ensure we switch to management tab
+        // switchTab will handle clicking the button if content is empty
+        switchTab('management');
+    }
 
     // prefers-reduced-motion support
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -324,4 +353,159 @@ document.addEventListener('DOMContentLoaded', () => {
             document.documentElement.classList.remove('reduce-motion');
         }
     });
+
+    // Auto-init on HTMX load
+    document.body.addEventListener('htmx:load', function(evt) {
+        initCustomSelects(evt.detail.elt);
+    });
 });
+
+// --- Custom Select Logic ---
+function initCustomSelects(context = document) {
+    const selects = context.querySelectorAll('select.js-custom-select:not(.custom-select-initialized)');
+    
+    selects.forEach(select => {
+        // Prevent double init
+        select.classList.add('custom-select-initialized');
+        
+        // Create container
+        const container = document.createElement('div');
+        container.className = 'custom-select-container';
+        
+        // --- 1. Copy Sizing & Layout Classes from Original Select ---
+        // We want 'w-*' classes on the container, and 'text-*', 'p-*', 'font-*' on the trigger.
+        const originalClasses = Array.from(select.classList);
+        const containerClasses = [];
+        const triggerClasses = [];
+
+        originalClasses.forEach(cls => {
+            if (cls.startsWith('w-') || cls.startsWith('m-')) {
+                containerClasses.push(cls);
+            }
+            if (cls.startsWith('text-') || cls.startsWith('font-') || cls.startsWith('p-') || cls.startsWith('px-') || cls.startsWith('py-') || cls.startsWith('h-')) {
+                triggerClasses.push(cls);
+            }
+        });
+
+        // Add copied classes to container
+        if (containerClasses.length > 0) {
+            container.classList.add(...containerClasses);
+        }
+
+        select.parentNode.insertBefore(container, select);
+        container.appendChild(select); // Move select inside
+        
+        // Create Trigger
+        const trigger = document.createElement('div');
+        trigger.className = 'custom-select-trigger';
+        // Add copied classes to trigger
+        if (triggerClasses.length > 0) {
+            trigger.classList.add(...triggerClasses);
+        }
+        
+        // Get initial text
+        const selectedOption = select.options[select.selectedIndex];
+        const initialText = selectedOption ? selectedOption.text : 'Select...';
+        trigger.innerHTML = `<span>${initialText}</span><span class="custom-select-arrow">▼</span>`;
+        container.appendChild(trigger);
+        
+        // Create Options List
+        const optionsList = document.createElement('div');
+        optionsList.className = 'custom-select-options';
+        
+        Array.from(select.options).forEach(option => {
+            const optDiv = document.createElement('div');
+            optDiv.className = 'custom-select-option';
+            if (option.selected) optDiv.classList.add('selected');
+            optDiv.textContent = option.text;
+            optDiv.dataset.value = option.value;
+            
+            // Copy text size classes to options too if needed for consistency? 
+            // Usually options can stay default size, but let's see. 
+            // For now, keep standard size options unless requested.
+
+            optDiv.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // Update Select
+                select.value = option.value;
+                select.dispatchEvent(new Event('change')); // Notify listeners
+                
+                // Update UI
+                trigger.querySelector('span').textContent = option.text;
+                container.querySelectorAll('.custom-select-option').forEach(el => el.classList.remove('selected'));
+                optDiv.classList.add('selected');
+                
+                // Close
+                container.classList.remove('open');
+                container.classList.remove('open-up');
+            });
+            
+            optionsList.appendChild(optDiv);
+        });
+        
+        container.appendChild(optionsList);
+        
+        // Toggle Logic with Smart Positioning
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            
+            // Close others
+            document.querySelectorAll('.custom-select-container.open').forEach(el => {
+                if (el !== container) {
+                    el.classList.remove('open');
+                    el.classList.remove('open-up');
+                }
+            });
+
+            if (container.classList.contains('open')) {
+                container.classList.remove('open');
+                container.classList.remove('open-up');
+            } else {
+                // Smart Positioning Logic
+                const rect = container.getBoundingClientRect();
+                const viewportHeight = window.innerHeight;
+                // Estimate options height (max-height is 250px)
+                // We can use the actual height if rendered, but it's hidden. 
+                // Simple heuristic: if bottom space < 260px and top space > 260px, open up.
+                const spaceBelow = viewportHeight - rect.bottom;
+                const spaceAbove = rect.top;
+                
+                // Reset first
+                container.classList.remove('open-up');
+                
+                if (spaceBelow < 260 && spaceAbove > 260) {
+                    container.classList.add('open-up');
+                }
+                
+                container.classList.add('open');
+            }
+        });
+
+        // Listen for external updates to the original select (e.g. reset form)
+        select.addEventListener('change', () => {
+            const newOption = select.options[select.selectedIndex];
+            if (newOption) {
+                 trigger.querySelector('span').textContent = newOption.text;
+                 container.querySelectorAll('.custom-select-option').forEach(el => {
+                     if (el.dataset.value === newOption.value) {
+                         el.classList.add('selected');
+                     } else {
+                         el.classList.remove('selected');
+                     }
+                 });
+            }
+        });
+    });
+    
+    // Global click to close
+    if (!window.hasCustomSelectGlobalListener) {
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.custom-select-container.open').forEach(el => {
+                el.classList.remove('open');
+                el.classList.remove('open-up');
+            });
+        });
+        window.hasCustomSelectGlobalListener = true;
+    }
+}

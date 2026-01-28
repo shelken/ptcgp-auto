@@ -11,11 +11,14 @@
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
+    <!-- SortableJS -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/main.css?v=2.3">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -32,7 +35,7 @@
                 <!-- Theme Switcher -->
                 <div class="flex items-center gap-2">
                     <label for="theme-selector" class="opacity-60" aria-hidden="true">{{ t.theme_label }}:</label>
-                    <select id="theme-selector" onchange="setTheme(this.value)" class="theme-select" aria-label="{{ t.theme_label }}">
+                    <select id="theme-selector" onchange="setTheme(this.value)" class="theme-select js-custom-select w-48" aria-label="{{ t.theme_label }}">
                         <option value="brutalist">{{ t.themes.brutalist }}</option>
                         <option value="retro">{{ t.themes.retro }}</option>
                         <option value="organic">{{ t.themes.organic }}</option>
@@ -178,7 +181,8 @@
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/accounts?lang={{ current_lang }}"
                                     hx-target="#management-content"
-                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');"
+                                    data-hash="accounts"
+                                    onclick="updateSidebarState(this)"
                                     aria-label="{{ t.menu_accounts or 'ACCOUNTS' }}">
                                     {{ t.menu_accounts or 'ACCOUNTS' }}
                                 </button>
@@ -189,7 +193,8 @@
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/plans?lang={{ current_lang }}"
                                     hx-target="#management-content"
-                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');"
+                                    data-hash="plans"
+                                    onclick="updateSidebarState(this)"
                                     aria-label="{{ t.menu_plans or 'TASK PLANS' }}">
                                     {{ t.menu_plans or 'TASK PLANS' }}
                                 </button>
@@ -200,7 +205,8 @@
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/metadata?lang={{ current_lang }}"
                                     hx-target="#management-content"
-                                    onclick="document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active')); this.classList.add('active');"
+                                    data-hash="metadata"
+                                    onclick="updateSidebarState(this)"
                                     aria-label="{{ t.menu_metadata or 'METADATA' }}">
                                     {{ t.menu_metadata or 'METADATA' }}
                                 </button>
@@ -234,7 +240,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script src="/static/js/main.js?v=2.2"></script>
+    <script src="/static/js/main.js?v=2.3"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();
