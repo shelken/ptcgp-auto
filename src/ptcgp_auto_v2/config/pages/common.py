@@ -88,7 +88,8 @@ COMMON_PAGES = [
         "name": "pop_up_game_launch_fail",
         "identifiers": _get_patterns(TEXT_PATTERNS, "pop_up_game_launch_fail"),
         "priority": 500,
-        "action": "restart_game",
+        "action": "tap_text",
+        "patterns_key": "text_x",
     },
     # 打开模拟器弹出页面
     {
