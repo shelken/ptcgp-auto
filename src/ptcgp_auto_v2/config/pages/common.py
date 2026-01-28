@@ -16,7 +16,7 @@ def _get_patterns(text_patterns: dict, key: str) -> list[str]:
 # action 类型参考 common_handlers.py 中的工厂方法
 COMMON_PAGES = [
     # TODO `清除快取 重新下載`
-    #（这种情况一般游戏有问题，不要点ok，重启过，没用，一般应该需要重启整个模拟器）
+    # （这种情况一般游戏有问题，不要点ok，重启过，没用，一般应该需要重启整个模拟器）
     {
         "name": "popup_clean_and_download",
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_clean_and_download"),
@@ -30,8 +30,7 @@ COMMON_PAGES = [
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_ok"),
         "priority": 150,
         "exact_match": True,
-        "action": "tap_text",
-        "patterns_key": "text_ok",
+        "action": "tap_matched",
     },
     # 点再试一次
     {
@@ -39,37 +38,43 @@ COMMON_PAGES = [
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_network_error"),
         "priority": 150,
         "exact_match": True,
-        "action": "tap_text",
-        "patterns_key": "text_retry",
+        "action": "tap_matched",
     },
+    # 点继续
     {
         "name": "continue_button",
         "identifiers": _get_patterns(TEXT_PATTERNS, "continue_button"),
         "priority": 150,
         "exact_match": True,
-        "action": "tap_text",
-        "patterns_key": "continue_button",
+        "action": "tap_matched",
     },
+    # 点 点击来继续
     {
         "name": "tap_to_continue",
         "identifiers": _get_patterns(TEXT_PATTERNS, "tap_to_continue"),
         "priority": 150,
-        "action": "tap_text_or_center",
-        "patterns_key": "tap_to_continue",
+        "action": "tap_matched",
     },
+    # 点 點擊畫面開始遊戲
     {
         "name": "game_open_page",
         "identifiers": _get_patterns(TEXT_PATTERNS, "game_open_page"),
         "priority": 150,
-        "action": "tap_center",
+        "action": "tap_matched",
+    },
+    {
+        # 匹配各种手指图标并点击（模板匹配）
+        "name": "icon_hand_tap",
+        "templates": ["hand_up_left", "hand_up_right", "hand_up"],
+        "priority": 400,
+        "action": "tap_matched",
     },
     {
         # 游戏内通用关闭按钮（模板匹配）
         "name": "btn_close",
         "templates": ["btn_close"],
         "priority": 500,
-        "action": "tap_template",
-        "template_name": "btn_close",
+        "action": "tap_matched",
     },
     # TODO 执行重新认证（需要通知重新登录账号）
     {
@@ -108,8 +113,7 @@ COMMON_PAGES = [
         "match_all": True,
         "exclude_identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
         "priority": 900,
-        "action": "tap_text",
-        "patterns_key": "main_page",
+        "action": "tap_matched",
     },
 ]
 
