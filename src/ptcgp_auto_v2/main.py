@@ -246,6 +246,17 @@ def list_accounts():
     headers = ["ID", "游戏ID", "朋友ID", "昵称", "等级", "国家", "计划", "备注"]
     rows = []
     for account in accounts:
+        # 获取主计划名称
+        plan_name = "-"
+        if account.task_plan_associations:
+            active_assocs = [a for a in account.task_plan_associations if a.is_active]
+            if active_assocs:
+                # 按优先级降序排序
+                active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
+                primary_assoc = active_assocs[0]
+                if primary_assoc.task_plan:
+                    plan_name = primary_assoc.task_plan.name
+
         game_id = account.game_id[:16] if len(account.game_id) > 16 else account.game_id
         rows.append(
             [
@@ -255,7 +266,7 @@ def list_accounts():
                 account.nickname or "-",
                 account.level or "-",
                 account.country or "-",
-                account.task_plan.name if account.task_plan else "-",
+                plan_name,
                 account.remark or "-",
             ]
         )
@@ -397,27 +408,28 @@ def run_single_task(
     return 0 if all_success else 1
 
 
-
 def run_web_server(host: str, port: int):
     """Run the web server"""
     try:
         from ptcgp_auto_v2.web.app import app
+
         # Disable Uvicorn's standard logging to prevent clutter, we have our own
-        config = uvicorn.Config(app, host=host, port=port, log_level="warning", loop="asyncio")
+        config = uvicorn.Config(
+            app, host=host, port=port, log_level="warning", loop="asyncio"
+        )
         server = uvicorn.Server(config)
         logger.info(f"Web server starting at http://{host}:{port}")
         server.run()
     except Exception as e:
         logger.error(f"Failed to start web server: {e}")
 
+
 def run_daemon(settings: Settings):
     """守护模式运行"""
 
     # Start web server in a background thread
     web_thread = threading.Thread(
-        target=run_web_server,
-        args=(settings.web_host, settings.web_port),
-        daemon=True
+        target=run_web_server, args=(settings.web_host, settings.web_port), daemon=True
     )
     web_thread.start()
 
@@ -482,6 +494,7 @@ def main():
 
     # 执行数据迁移
     from ptcgp_auto_v2.db.repositories import PackRecordRepository
+
     try:
         PackRecordRepository().migrate_legacy_data()
     except Exception as e:
