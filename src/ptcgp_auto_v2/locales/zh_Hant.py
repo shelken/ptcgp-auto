@@ -43,14 +43,20 @@ TEXT_PATTERNS = {
     "exchange_locked_popup": ["開放條件", "距離開放還剩"],
     # 通用页面
     "popup_ok": ["OK"],
-    "network_error_popup": ["再試一次"],
+    "text_cancel": ["取消"],
+    "text_ok": ["OK"],
+    "text_retry": ["再試一次"],
     "continue_button": ["繼續"],
     "tap_to_continue": ["點擊來繼續"],
     "game_open_page": ["點擊畫面開始遊戲"],
+    "pop_up_game_launch_fail": ["啟動發生錯誤", "遊戲啟動失敗"],
+    "popup_auth_again": ["再度執行認證"],
+    "popup_network_error": ["再試一次"],
+    "popup_clean_and_download": ["清除快取", "重新下載"],
+    ## 游戏外
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
-    "_to_home": ["重新加载", "首页"],
-    "auth_again": ["再度執行認證"],
+    "_to_home": ["首页", "重新加载"],
     "text_home": ["首页"],
     # 通用按钮
     "confirm": ["確認", "确认", "OK"],
