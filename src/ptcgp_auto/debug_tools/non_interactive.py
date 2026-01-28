@@ -21,16 +21,20 @@ from ptcgp_auto.debug_tools.card_selector import CardSelector
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str, get_card_filename
 from ptcgp_auto_v2.utils.debug_visualizer import DebugVisualizer
 
+
 @dataclass
 class SimpleRecognizedCard:
     """用于 DebugVisualizer 的简单适配器"""
+
     name: str
     confidence: float
     box: tuple
 
+
 # -----------------------------------------------------------------------------
 # 辅助函数
 # -----------------------------------------------------------------------------
+
 
 def _parse_template_list(card_level_arg: str) -> list[str]:
     parts = [p.strip() for p in card_level_arg.split(",")]
@@ -77,8 +81,14 @@ def _is_path(template_name: str) -> bool:
 # 资源准备与加载逻辑
 # -----------------------------------------------------------------------------
 
+
 def _prepare_and_load_templates(
-    recognizer, template_args: List[str], rarity: Optional[str] = None, mgr=None, scale: float = None, select_mode: bool = False
+    recognizer,
+    template_args: List[str],
+    rarity: Optional[str] = None,
+    mgr=None,
+    scale: float = None,
+    select_mode: bool = False,
 ) -> List[str]:
     """
     准备资源并加载模板
@@ -132,7 +142,7 @@ def _prepare_and_load_templates(
         if len(parts) == 2:
             if not scale and not select_mode:
                 print(f"ERROR: 批量匹配子包 {t} 必须提供 --scale 参数")
-                continue # Skip this item but continue loop
+                continue  # Skip this item but continue loop
 
             if not mgr:
                 print(f"ERROR: 缺少 ImageResourceManager，无法处理 {t}")
@@ -141,7 +151,9 @@ def _prepare_and_load_templates(
             series_code = parts[0]
             pack_name = parts[1]
 
-            print(f"Auto-preparing resources for pack {series_code}/{pack_name} (rarity={rarity})...")
+            print(
+                f"Auto-preparing resources for pack {series_code}/{pack_name} (rarity={rarity})..."
+            )
             try:
                 # 传递 rarity 给 ensure_pack_ready
                 mgr.ensure_pack_ready(pack_name, series_code, rarity=rarity)
@@ -174,10 +186,14 @@ def _prepare_and_load_templates(
                                 )
                                 cards = session.exec(query).all()
                                 target_filenames = {
-                                    get_card_filename(c.number, c.name)[:-4]  # remove .png
+                                    get_card_filename(c.number, c.name)[
+                                        :-4
+                                    ]  # remove .png
                                     for c in cards
                                 }
-                                print(f"Found {len(target_filenames)} cards with rarity {rarity}")
+                                print(
+                                    f"Found {len(target_filenames)} cards with rarity {rarity}"
+                                )
                         except Exception as e:
                             print(f"WARNING: Failed to filter by rarity: {e}")
 
@@ -219,7 +235,9 @@ def _prepare_and_load_templates(
 
             series_code = parts[0]
 
-            print(f"Auto-preparing resources for series {series_code} (rarity={rarity})...")
+            print(
+                f"Auto-preparing resources for series {series_code} (rarity={rarity})..."
+            )
             try:
                 mgr.ensure_series_ready(series_code, rarity=rarity)
 
@@ -235,7 +253,9 @@ def _prepare_and_load_templates(
                             from sqlmodel import select, Session
                             from ptcgp_auto_v2.db.engine import get_engine
 
-                            from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
+                            from ptcgp_auto_v2.utils.image_manager import (
+                                ImageResourceManager,
+                            )
 
                             with Session(get_engine()) as session:
                                 query = (
@@ -248,7 +268,9 @@ def _prepare_and_load_templates(
                                     get_card_filename(c.number, c.name)[:-4]
                                     for c in cards
                                 }
-                                print(f"Found {len(target_filenames)} cards with rarity {rarity}")
+                                print(
+                                    f"Found {len(target_filenames)} cards with rarity {rarity}"
+                                )
                         except Exception as e:
                             print(f"WARNING: Failed to filter by rarity: {e}")
 
@@ -273,7 +295,9 @@ def _prepare_and_load_templates(
                     if t in recognizer.templates:
                         loaded_templates.append(t)
                     else:
-                        print(f"WARNING: Series directory not found and not a loaded template: {t}")
+                        print(
+                            f"WARNING: Series directory not found and not a loaded template: {t}"
+                        )
             except Exception as e:
                 print(f"WARNING: Resource preparation failed for {t}: {e}")
             continue
@@ -284,6 +308,7 @@ def _prepare_and_load_templates(
 # -----------------------------------------------------------------------------
 # 核心逻辑
 # -----------------------------------------------------------------------------
+
 
 def _run_cards_match(adb, args):
     """处理 --cards 参数：自动匹配卡牌模板（支持自动下载和缩放）"""
@@ -327,6 +352,7 @@ def _run_cards_match(adb, args):
     # 2. 初始化资源管理器
     try:
         from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
+
         mgr = ImageResourceManager()
     except ImportError:
         mgr = None
@@ -339,7 +365,7 @@ def _run_cards_match(adb, args):
         rarity=args.rarity,
         mgr=mgr,
         scale=args.scale,
-        select_mode=args.select
+        select_mode=args.select,
     )
 
     if not loaded_templates:
@@ -392,7 +418,9 @@ def _run_cards_match(adb, args):
         screen_cv = recognizer.pil_to_cv2(img)
         small_h = int(screen_cv.shape[0] * QUICK_MATCH_SCALE)
         small_w = int(screen_cv.shape[1] * QUICK_MATCH_SCALE)
-        screen_small = cv2.resize(screen_cv, (small_w, small_h), interpolation=cv2.INTER_AREA)
+        screen_small = cv2.resize(
+            screen_cv, (small_w, small_h), interpolation=cv2.INTER_AREA
+        )
         print(f"Enabled quick match optimization (Scale={QUICK_MATCH_SCALE})")
     # -------------------
 
@@ -403,7 +431,7 @@ def _run_cards_match(adb, args):
             "skip": False,
             "conf": 0.0,
             "box": None,
-            "scale": args.scale if args.scale else 1.0
+            "scale": args.scale if args.scale else 1.0,
         }
 
         if args.scale:
@@ -417,24 +445,37 @@ def _run_cards_match(adb, args):
                     small_t_w = int(tmpl.shape[1] * best_scale * QUICK_MATCH_SCALE)
                     small_t_h = int(tmpl.shape[0] * best_scale * QUICK_MATCH_SCALE)
                     if small_t_h > 0 and small_t_w > 0:
-                        tmpl_small = cv2.resize(tmpl, (small_t_w, small_t_h), interpolation=cv2.INTER_AREA)
-                        if tmpl_small.shape[0] <= screen_small.shape[0] and tmpl_small.shape[1] <= screen_small.shape[1]:
-                            match_res = cv2.matchTemplate(screen_small, tmpl_small, cv2.TM_CCOEFF_NORMED)
+                        tmpl_small = cv2.resize(
+                            tmpl, (small_t_w, small_t_h), interpolation=cv2.INTER_AREA
+                        )
+                        if (
+                            tmpl_small.shape[0] <= screen_small.shape[0]
+                            and tmpl_small.shape[1] <= screen_small.shape[1]
+                        ):
+                            match_res = cv2.matchTemplate(
+                                screen_small, tmpl_small, cv2.TM_CCOEFF_NORMED
+                            )
                             _, max_v, _, _ = cv2.minMaxLoc(match_res)
                             if max_v < (threshold - 0.25):
                                 res["skip"] = True
                                 return res
 
             # 原图精细匹配
-            res["conf"] = recognizer.get_template_confidence_at_scale(img, t_name, best_scale)
+            res["conf"] = recognizer.get_template_confidence_at_scale(
+                img, t_name, best_scale
+            )
             if res["conf"] >= threshold:
                 res["box"] = recognizer.find_template_at_scale(img, t_name, best_scale)
 
         else:
             # 自动缩放扫描 (不做快速筛选优化)
             best_scale, conf = scan_best_scale(
-                recognizer, img, t_name,
-                min_scale=args.scale_min, max_scale=args.scale_max, step=args.scale_step
+                recognizer,
+                img,
+                t_name,
+                min_scale=args.scale_min,
+                max_scale=args.scale_max,
+                step=args.scale_step,
             )
             res["scale"] = best_scale
             res["conf"] = conf
@@ -448,7 +489,9 @@ def _run_cards_match(adb, args):
     # 如果模板数很少，或者没有指定 scale（需要自动扫描），多线程收益可能受限，但统一逻辑也无妨
     # 自动扫描因为涉及多次 OpenCV 调用，多线程加速效果会非常明显
     with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(match_template_task, name) for name in loaded_templates]
+        futures = [
+            executor.submit(match_template_task, name) for name in loaded_templates
+        ]
         for f in futures:
             results.append(f.result())
 
@@ -461,8 +504,8 @@ def _run_cards_match(adb, args):
 
         if result["skip"]:
             quick_skips += 1
-            if len(loaded_templates) < 10: # 只在少量模板时打印 skip
-                 pass # print(f"  [Skip] {t_name}")
+            if len(loaded_templates) < 10:  # 只在少量模板时打印 skip
+                pass  # print(f"  [Skip] {t_name}")
         else:
             conf = result["conf"]
             best_scale = result["scale"]
@@ -481,11 +524,11 @@ def _run_cards_match(adb, args):
                     y2 += roi_offset[1]
 
                     # 添加到可视化列表
-                    recognized_cards.append(SimpleRecognizedCard(
-                        name=t_name,
-                        confidence=conf,
-                        box=(x1, y1, x2, y2)
-                    ))
+                    recognized_cards.append(
+                        SimpleRecognizedCard(
+                            name=t_name, confidence=conf, box=(x1, y1, x2, y2)
+                        )
+                    )
 
                     for offset in range(2):
                         draw.rectangle(
@@ -522,6 +565,7 @@ def _run_cards_match(adb, args):
     # 强制启用 debug 模式以确保生成图片 (因为 debug tool 本身就是调试用的)
     # 临时覆盖 settings.debug
     from ptcgp_auto_v2.config.settings import get_settings
+
     settings = get_settings()
     original_debug = settings.debug
     settings.debug = True
@@ -531,7 +575,7 @@ def _run_cards_match(adb, args):
             image=img_cv,
             roi=roi_tuple,
             cards=recognized_cards,
-            filename_prefix="debug_cards"
+            filename_prefix="debug_cards",
         )
     finally:
         settings.debug = original_debug
@@ -607,7 +651,7 @@ def run_non_interactive(args):
 
         template_key = _normalize_template_name(template_name)
         template = recognizer.templates.get(template_key)
-        if template:
+        if template is not None:
             w, h = template.shape[1], template.shape[0]
             scale_str = f"{args.scale}" if args.scale else "1.0"
             print(f"TEMPLATE_SCALE: {scale_str} {w}x{h}")
@@ -617,7 +661,9 @@ def run_non_interactive(args):
         if box:
             cx = (box[0] + box[2]) // 2
             cy = (box[1] + box[3]) // 2
-            print(f"TEMPLATE: {template_name} @ ({box[0]},{box[1]})-({box[2]},{box[3]}) center=({cx},{cy})")
+            print(
+                f"TEMPLATE: {template_name} @ ({box[0]},{box[1]})-({box[2]},{box[3]}) center=({cx},{cy})"
+            )
         else:
             print(f"TEMPLATE: {template_name} NOT_FOUND")
             if not args.scale:
@@ -625,7 +671,9 @@ def run_non_interactive(args):
                 best_scale, best_conf = scan_best_scale(recognizer, img, template_name)
                 print(f"BEST_SCALE: {best_scale} confidence={best_conf:.4f}")
                 if best_conf >= config.TEMPLATE_THRESHOLD:
-                     print(f"✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}")
+                    print(
+                        f"✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}"
+                    )
         return
 
     if args.all_templates:
@@ -637,10 +685,10 @@ def run_non_interactive(args):
 
         boxes = recognizer.find_all_templates(img, args.all_templates)
         if boxes:
-             print(f"TEMPLATES({len(boxes)}): {args.all_templates}")
-             # ... (simplified)
+            print(f"TEMPLATES({len(boxes)}): {args.all_templates}")
+            # ... (simplified)
         else:
-             print(f"TEMPLATES: {args.all_templates} NOT_FOUND")
+            print(f"TEMPLATES: {args.all_templates} NOT_FOUND")
         return
 
     if args.cards:
