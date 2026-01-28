@@ -20,12 +20,12 @@
             <div class="space-y-2">
                 <label class="block font-bold uppercase tracking-widest text-sm text-muted">Name</label>
                 <input type="text" name="name" value="{{ plan.name if plan else '' }}" required
-                       class="brutal-input focus:ring-4 focus:ring-black/20">
+                       class="brutal-input">
             </div>
             <div class="space-y-2">
                 <label class="block font-bold uppercase tracking-widest text-sm text-muted">Description</label>
                 <input type="text" name="description" value="{{ plan.description if plan else '' }}"
-                       class="brutal-input focus:ring-4 focus:ring-black/20">
+                       class="brutal-input">
             </div>
         </div>
 
@@ -43,7 +43,7 @@
                         <input type="checkbox"
                                id="task-{{ task_type }}"
                                name="task_enabled_{{ task_type }}"
-                               class="w-5 h-5 border-2 border-theme focus:ring-black accent-black"
+                               class="w-5 h-5 border-2 border-theme accent-theme"
                                {% if is_enabled %}checked{% endif %}
                                onchange="this.closest('div').parentElement.classList.toggle('opacity-50', !this.checked)">
                         <label for="task-{{ task_type }}" class="font-bold flex-grow cursor-pointer uppercase select-none">{{ t['task_' + task_type] or task_type }}</label>
@@ -55,7 +55,7 @@
                         <div class="space-y-1">
                             <label class="text-xs uppercase font-bold text-muted">{{ t.label_frequency or 'Frequency' }}</label>
                             <select name="task_reset_{{ task_type }}"
-                                    class="w-full p-2 border-2 border-theme text-sm bg-surface text-theme"
+                                    class="js-custom-select brutal-input w-full p-2 text-sm"
                                     onchange="const intervalInput = document.getElementById('interval-{{ task_type }}'); if(this.value === 'interval') intervalInput.classList.remove('hidden'); else intervalInput.classList.add('hidden');">
                                 <option value="default" {% if not task_config.get('reset_type') %}selected{% endif %}>{{ t.label_default or 'Default' }}</option>
                                 {% for rt in reset_types %}
@@ -69,7 +69,7 @@
                             <label class="text-xs uppercase font-bold text-muted">{{ t.label_interval or 'Interval (Seconds)' }}</label>
                             <input type="number" name="task_interval_{{ task_type }}"
                                    value="{{ task_config.get('interval_seconds', 3600) }}"
-                                   class="w-full p-2 border-2 border-theme text-sm bg-surface text-theme">
+                                   class="brutal-input w-full p-2 text-sm">
                         </div>
                     </div>
                 </div>

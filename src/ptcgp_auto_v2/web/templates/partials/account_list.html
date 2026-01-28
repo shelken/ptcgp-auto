@@ -16,8 +16,7 @@
                     <th class="p-3 font-bold uppercase">{{ t.label_nickname or 'Nickname' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_game_id or 'Game ID' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_exchange_points or 'Exchange Points' }}</th>
-                    <th class="p-3 font-bold uppercase">{{ t.col_primary_plan or 'Primary Plan' }}</th>
-                    <th class="p-3 font-bold uppercase">{{ t.col_extra_plans or 'Extra Plans' }}</th>
+                    <th class="p-3 font-bold uppercase">{{ t.col_plans or 'Plans' }}</th>
                     <th class="p-3 font-bold uppercase">{{ t.col_target_pack or 'Target Pack' }}</th>
                     <th class="p-3 font-bold uppercase text-right">{{ t.col_actions or 'Actions' }}</th>
                 </tr>
@@ -55,21 +54,20 @@
                         {% endif %}
                     </td>
                     <td class="p-3">
-                        {% if account.task_plan %}
-                        <span class="brutal-tag text-xs">{{ account.task_plan.name }}</span>
-                        {% else %}
-                        <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                    <td class="p-3">
                         <div class="flex flex-wrap gap-1">
-                            {% for assoc in account.task_plan_associations %}
+                            {% set ns = namespace(found=false) %}
+                            {% for assoc in account.task_plan_associations|sort(attribute='priority', reverse=True) %}
                                 {% if assoc.is_active and assoc.task_plan %}
-                                <span class="brutal-tag text-xs">
-                                    {{ assoc.task_plan.name }}
-                                </span>
+                                    {% set ns.found = true %}
+                                    <span class="brutal-tag text-xs cursor-help" title="Priority: {{ assoc.priority }}">
+                                        {{ assoc.task_plan.name }}
+                                    </span>
                                 {% endif %}
                             {% endfor %}
+                            
+                            {% if not ns.found %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
                         </div>
                     </td>
                     <td class="p-3">

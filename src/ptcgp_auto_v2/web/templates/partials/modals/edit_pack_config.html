@@ -8,13 +8,20 @@
           hx-target="#management-content"
           hx-on:htmx:after-request="if(event.detail.successful) closeModal()"
           class="space-y-6">
+          
+    <script>
+        // Init custom selects for this modal
+        if (typeof initCustomSelects === 'function') {
+            initCustomSelects(document.getElementById('modal-content'));
+        }
+    </script>
 
         <!-- Target Series (Pack Code) -->
         <div class="space-y-2">
             <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_target_series or 'Target Series' }}</label>
             <div class="relative">
                 <select name="pack_code"
-                        class="brutal-input appearance-none focus:ring-4 focus:ring-black/20"
+                        class="js-custom-select brutal-input w-full"
                         hx-get="/partials/boosters-options"
                         hx-target="#booster-select"
                         hx-trigger="change"
@@ -26,7 +33,6 @@
                     </option>
                     {% endfor %}
                 </select>
-                <div class="absolute right-4 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
             </div>
         </div>
 
@@ -35,7 +41,7 @@
             <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_target_booster or 'Target Booster' }}</label>
             <div class="relative">
                 <select id="booster-select" name="booster_name"
-                        class="brutal-input appearance-none focus:ring-4 focus:ring-black/20">
+                        class="js-custom-select brutal-input w-full">
                     <option value="">{{ t.label_select_booster or '-- Select Booster --' }}</option>
                     {% for booster in current_boosters %}
                     <option value="{{ booster }}" {% if config and config.booster_name == booster %}selected{% endif %}>
@@ -43,7 +49,6 @@
                     </option>
                     {% endfor %}
                 </select>
-                <div class="absolute right-4 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
             </div>
         </div>
 

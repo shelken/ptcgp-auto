@@ -1,59 +1,217 @@
 <div class="space-y-6">
     <div class="flex justify-between items-center border-b-4 border-theme pb-4">
-        <h3 class="text-2xl font-bold uppercase">Manage Plans for {{ account.nickname or account.game_id }}</h3>
-        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+        <h3 class="text-2xl font-bold uppercase text-theme">{{ t.title_manage_plans or 'Manage Plans' }}: {{ account.nickname or account.game_id }}</h3>
+        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50 text-theme">✕</button>
     </div>
 
-    <form hx-post="/api/accounts/{{ account.id }}/plans?lang={{ current_lang }}"
-          hx-target="#management-content"
-          hx-on:htmx:after-request="if(event.detail.successful) closeModal()"
-          class="space-y-6">
-
-        <!-- Primary Plan -->
-        <div class="space-y-2">
-            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.col_primary_plan or 'Primary Plan' }}</label>
-            <div class="relative">
-                <select name="primary_plan_id" class="brutal-input appearance-none focus:ring-4 focus:ring-black/20">
-                    <option value="">{{ t.label_none or '-- None --' }}</option>
-                    {% for plan in all_plans %}
-                    <option value="{{ plan.id }}" {% if plan.id == current_primary_id %}selected{% endif %}>
-                        {{ plan.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-                <div class="absolute right-4 top-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none font-bold">▼</div>
+    <div class="grid grid-cols-1 gap-6">
+        <!-- Main List Area -->
+        <div class="space-y-4">
+            <div class="flex justify-between items-end">
+                <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_active_plans or 'Active Plans (Drag to Reorder)' }}</label>
+                
+                <!-- Add New Plan Control -->
+                <div class="flex gap-2">
+                    <select id="add-plan-select" onchange="addPlan()" class="js-custom-select brutal-input text-sm py-1 px-2 w-64">
+                        <option value="">{{ t.option_select_plan or '➕ Add Plan...' }}</option>
+                        {% for plan in available_plans %}
+                        <option value="{{ plan.id }}" data-name="{{ plan.name }}">{{ plan.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
-            <p class="text-xs text-muted">{{ t.desc_primary_plan or 'The base plan for this account.' }}</p>
-        </div>
 
-        <!-- Secondary Plans -->
-        <div class="space-y-2">
-            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.col_extra_plans or 'Additional Plans' }}</label>
-            <div class="border-2 border-theme p-4 max-h-60 overflow-y-auto space-y-2">
-                {% for plan in all_plans %}
-                <div class="flex items-center gap-3 hover-bg-subtle p-2 rounded transition-colors">
-                    <input type="checkbox"
-                           id="plan-{{ plan.id }}"
-                           name="secondary_plan_ids"
-                           value="{{ plan.id }}"
-                           class="w-5 h-5 border-2 border-theme rounded-none focus:ring-2 focus:ring-black accent-black"
-                           {% if plan.id in current_secondary_ids %}checked{% endif %}>
-                    <label for="plan-{{ plan.id }}" class="flex-grow cursor-pointer select-none">
-                        <div class="font-bold">{{ plan.name }}</div>
-                        {% if plan.description %}
-                        <div class="text-xs text-muted">{{ plan.description }}</div>
-                        {% endif %}
+            <!-- Sortable List Container -->
+            <div id="plans-list" class="border-2 border-theme bg-surface min-h-[200px] p-2 space-y-2">
+                {% if not current_assocs %}
+                <div id="empty-message" class="text-center text-muted py-8 italic select-none">
+                    {{ t.msg_no_plans or 'No plans assigned. Add one above.' }}
+                </div>
+                {% endif %}
+
+                {% for assoc in current_assocs %}
+                <div class="plan-item flex items-center gap-3 p-3 border border-subtle bg-card shadow-sm group select-none cursor-move" 
+                     data-id="{{ assoc.task_plan_id }}">
+                    <!-- Handle -->
+                    <div class="cursor-move text-muted hover:text-theme p-1">
+                        ☰
+                    </div>
+                    
+                    <!-- Content -->
+                    <div class="flex-grow">
+                        <div class="font-bold text-lg text-theme">{{ assoc.task_plan.name }}</div>
+                        <div class="text-xs text-muted">ID: {{ assoc.task_plan_id }}</div>
+                    </div>
+
+                    <!-- Active Toggle -->
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <span class="text-xs font-bold uppercase text-theme">{{ t.label_active or 'ACTIVE' }}</span>
+                        <input type="checkbox" class="plan-active-checkbox w-5 h-5 accent-theme border-theme focus:ring-0" 
+                               {% if assoc.is_active %}checked{% endif %}>
                     </label>
+
+                    <!-- Remove Button -->
+                    <button type="button" onclick="removePlan(this)" class="text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors">
+                        ✕
+                    </button>
                 </div>
                 {% endfor %}
             </div>
-            <p class="text-xs text-muted">{{ t.desc_extra_plans or 'These plans will overlay on top of the primary plan (e.g. for higher frequency).' }}</p>
+            
+            <p class="text-xs text-muted">
+                {{ t.desc_priority_hint or 'Top items have higher priority. Drag items to reorder.' }}
+            </p>
         </div>
 
         <!-- Actions -->
         <div class="flex justify-end gap-4 pt-4 border-t-2 border-subtle-light">
             <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
-            <button type="submit" class="brutal-btn active">{{ t.label_save or 'Save Changes' }}</button>
+            <button type="button" onclick="savePlans()" class="brutal-btn active">{{ t.label_save_changes or 'Save Changes' }}</button>
         </div>
-    </form>
+    </div>
 </div>
+
+<script>
+    // Initialize Sortable
+    (function() {
+        const list = document.getElementById('plans-list');
+        new Sortable(list, {
+            animation: 150,
+            ghostClass: 'bg-subtle',
+            handle: '.cursor-move', // Restrict drag to handle or whole item
+            onEnd: function() {
+                // Update empty message visibility just in case
+                checkEmpty();
+            }
+        });
+        
+        // Re-init custom selects for injected content
+        if (typeof initCustomSelects === 'function') {
+            initCustomSelects(document.getElementById('modal-content'));
+        }
+    })();
+
+    function checkEmpty() {
+        const list = document.getElementById('plans-list');
+        const items = list.querySelectorAll('.plan-item');
+        let msg = document.getElementById('empty-message');
+        
+        if (items.length === 0) {
+            if (!msg) {
+                msg = document.createElement('div');
+                msg.id = 'empty-message';
+                msg.className = 'text-center text-muted py-8 italic select-none';
+                msg.textContent = "{{ t.msg_no_plans or 'No plans assigned. Add one above.' }}";
+                list.appendChild(msg);
+            }
+            msg.style.display = 'block';
+        } else if (msg) {
+            msg.style.display = 'none';
+        }
+    }
+
+    function addPlan() {
+        // Handle custom select value retrieval
+        const select = document.getElementById('add-plan-select');
+        const planId = select.value;
+        if (!planId) return;
+
+        const option = select.options[select.selectedIndex];
+        const planName = option.getAttribute('data-name');
+
+        // Check if already exists in list
+        const existing = document.querySelector(`.plan-item[data-id="${planId}"]`);
+        if (existing) {
+            alert("Plan already in list!");
+            return;
+        }
+
+        const template = `
+            <div class="plan-item flex items-center gap-3 p-3 border border-subtle bg-card shadow-sm group select-none cursor-move" 
+                 data-id="${planId}">
+                <div class="cursor-move text-muted hover:text-theme p-1">☰</div>
+                <div class="flex-grow">
+                    <div class="font-bold text-lg text-theme">${planName}</div>
+                    <div class="text-xs text-muted">ID: ${planId}</div>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <span class="text-xs font-bold uppercase text-theme">{{ t.label_active or 'ACTIVE' }}</span>
+                    <input type="checkbox" class="plan-active-checkbox w-5 h-5 accent-theme border-theme focus:ring-0" checked>
+                </label>
+                <button type="button" onclick="removePlan(this)" class="text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors">
+                    ✕
+                </button>
+            </div>
+        `;
+
+        // Insert at the end, but before empty message
+        const list = document.getElementById('plans-list');
+        const msg = document.getElementById('empty-message');
+        if (msg) msg.style.display = 'none'; // Hide explicitly
+
+        // Create element from HTML string
+        const div = document.createElement('div');
+        div.innerHTML = template.trim();
+        const newItem = div.firstChild;
+        
+        list.appendChild(newItem);
+
+        // Remove from select (optional, better UX)
+        // With custom select, we just rely on value reset
+        select.value = "";
+        select.dispatchEvent(new Event('change')); // Trigger UI update for custom select
+    }
+
+    function removePlan(btn) {
+        const item = btn.closest('.plan-item');
+        item.remove();
+        checkEmpty();
+    }
+
+    function savePlans() {
+        const list = document.getElementById('plans-list');
+        const items = list.querySelectorAll('.plan-item');
+        const data = [];
+
+        items.forEach((item, index) => {
+            const id = item.getAttribute('data-id');
+            const active = item.querySelector('.plan-active-checkbox').checked;
+            
+            data.push({
+                plan_id: parseInt(id),
+                is_active: active
+            });
+        });
+
+        // Send via Fetch
+        fetch('/api/accounts/{{ account.id }}/plans?lang={{ current_lang }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (response.ok) {
+                closeModal();
+                // Trigger HTMX refresh of the accounts table
+                const refreshBtn = document.querySelector('[hx-get*="/management/accounts"]');
+                if (refreshBtn) {
+                    htmx.trigger(refreshBtn, 'click');
+                } else {
+                    // Fallback: manually load
+                     htmx.ajax('GET', '/management/accounts?lang={{ current_lang }}', '#management-content');
+                }
+                showToast("{{ t.msg_plans_saved or 'Plans saved successfully!' }}");
+            } else {
+                alert("Error saving plans");
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert("Error saving plans");
+        });
+    }
+</script>
+
+
