@@ -25,7 +25,7 @@
                         hx-get="/partials/boosters-options"
                         hx-target="#booster-select"
                         hx-trigger="change"
-                        hx-on:htmx:after-request="event.stopPropagation()">
+                        hx-on:htmx:after-request="event.stopPropagation(); reinitCustomSelect(document.getElementById('booster-select'));">
                     <option value="">{{ t.label_select_series or '-- Select Series --' }}</option>
                     {% for set in card_sets %}
                     <option value="{{ set.code }}" {% if config and config.pack_code == set.code %}selected{% endif %}>
