@@ -71,6 +71,13 @@ COMMON_PAGES = [
         "action": "tap_matched",
     },
     {
+        # 返回按钮（模板匹配）
+        "name": "btn_back",
+        "templates": ["btn_back"],
+        "priority": 500,
+        "action": "tap_matched",
+    },
+    {
         # 游戏内通用关闭按钮（模板匹配）
         "name": "btn_close",
         "templates": ["btn_close"],
