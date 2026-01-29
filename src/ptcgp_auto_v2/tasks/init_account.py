@@ -271,7 +271,7 @@ class InitAccountTask(Task):
 
         点击屏幕中心兜底，然后等待重新识别
         """
-        logger.warning("未知页面，点击屏幕中心兜底")
+        logger.debug("未知页面，点击屏幕中心兜底")
         # 适配最后进入主页的任务点击（点击其他地方不行）
         tap_text_exact(self.adb, page_info.get("ocr_results", []), get_text_patterns("text_task"))
         return quick_tap(self.adb, wait=0.5)
