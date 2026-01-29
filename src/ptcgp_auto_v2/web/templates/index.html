@@ -71,6 +71,7 @@
                     onclick="switchTab('records')"
                     class="brutal-btn active text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-records"
+                    data-hash="records"
                     data-title="{{ t.header_title }}"
                     aria-label="{{ t.tab_records or 'RECORDS' }}">
                     {{ t.tab_records or 'RECORDS' }}
@@ -80,6 +81,7 @@
                     onclick="switchTab('management')"
                     class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-management"
+                    data-hash="management"
                     data-title="{{ t.tab_management or 'MANAGEMENT' }}"
                     aria-label="{{ t.tab_management or 'MANAGEMENT' }}">
                     {{ t.tab_management or 'MANAGEMENT' }}
