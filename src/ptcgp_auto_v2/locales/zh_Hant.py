@@ -32,7 +32,16 @@ TEXT_PATTERNS = {
     "pack_collection_exclude": ["開封結果", "點擊來繼續", "點擊以繼續"],
     # 个人资料页
     "profile_page": ["朋友ID"],
-    "profile_exclude": ["朋友ID", "Lv.", "戰績", "勳章", "請多多指教", "編輯", "設定", "登出"],
+    "profile_exclude": [
+        "朋友ID",
+        "Lv.",
+        "戰績",
+        "勳章",
+        "請多多指教",
+        "編輯",
+        "設定",
+        "登出",
+    ],
     # 社群页面
     "community_page": ["社群", "他人的收藏"],
     "community_exchange_btn": ["交換"],
@@ -98,4 +107,25 @@ TEXT_PATTERNS = {
     "gift_send_thanks": ["要送出「謝謝！」嗎"],
     # 谢谢按钮
     "gift_thanks_button": ["謝謝！"],
+    # ============================================================
+    # 新账号初始化流程
+    # ============================================================
+    "init_select_country": ["選擇國家/地區", "請選擇您居住的國家/地區"],
+    "init_terms_privacy": ["使用條款與隱私權策"],
+    "init_terms_btn": ["使用條款"],
+    "init_privacy_btn": ["隱私權政策"],
+    "init_create_save": ["建立儲存資料"],
+    "init_start_from_scratch": ["從頭開始"],
+    "init_account_link": ["帳號連結"],
+    "init_skip_link": ["現在不連結"],
+    "init_set_nickname": ["請設定頭像和玩家名稱"],
+    "init_nickname_title": ["玩家名稱"],
+    "init_confirm_settings": ["確定要使用此設定嗎"],
+    "init_select_pack": ["請選擇喜歡的擴充包"],
+    "init_decide": ["決定"],
+    "init_swipe_open": ["橫向滑動來開封"],
+    "init_next_step": ["下一步"],
+    "init_mission": ["任務"],
+    "init_open_pack": ["開封"],
+    "init_enjoy": ["請好好享受"],
 }
