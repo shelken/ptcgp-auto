@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # 开包滑动坐标（从左到右）
 BASE_SWIPE_PACK_START_X = 54   # 1080 * 0.05
 BASE_SWIPE_PACK_END_X = 1080   # 1080 * 1
+BASE_SWIPE_PACK_END_Y = 1190   # 1920 * 0.62
 
 # 卡牌上滑坐标（从下到上）
 BASE_SWIPE_CARD_START_Y = 1152  # 1920 * 0.6
@@ -431,7 +432,7 @@ def swipe_pack_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取开包滑动坐标（从左到右）"""
     start_x = adb.scaled_x(BASE_SWIPE_PACK_START_X)
     end_x = adb.scaled_x(BASE_SWIPE_PACK_END_X)
-    y = adb.screen_height // 2
+    y = adb.scaled_y(BASE_SWIPE_PACK_END_Y)
     return (start_x, y), (end_x, y)
 
 
