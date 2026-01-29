@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 import threading
 from typing import Any, Callable, Optional, TYPE_CHECKING
+from ptcgp_auto_v2.infra.page_detector import PageDetector
+from ptcgp_auto_v2.infra.adb import AdbController
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account
@@ -124,7 +126,7 @@ class Task(ABC):
     # 连续未知页面上限
     max_unknown_pages: int = MAX_UNKNOWN_PAGES
 
-    def __init__(self, adb, recognizer, page_detector):
+    def __init__(self, adb: AdbController, recognizer, page_detector: PageDetector):
         """
         初始化任务
 
@@ -208,6 +210,18 @@ class Task(ABC):
         """
         pass
 
+    def handle_unknown_page(self, page_info) -> ActionResult:
+        """
+        处理未知页面的钩子方法
+
+        当页面检测器无法识别当前页面时调用。
+        子类可覆盖此方法实现自定义兜底逻辑（如点击屏幕中心）。
+
+        Returns:
+            ActionResult 表示处理结果，默认等待 1 秒后重新识别
+        """
+        return ActionResult.wait(1.0)
+
     def execute(self) -> TaskResult:
         """
         执行任务的主循环
@@ -259,9 +273,16 @@ class Task(ABC):
                     )
                     self.on_complete(result)
                     return result
-                # 未知页面时等待，不按返回键（避免页面加载过程中误退出）
-                # self.adb.press_back()
-                time.sleep(1)
+                # 调用未知页面处理器（子类可覆盖）
+                action_result = self.handle_unknown_page(page_info)
+                if not action_result.success:
+                    result = TaskResult.fail(
+                        action_result.error or "未知页面处理失败",
+                        iterations=iteration,
+                    )
+                    self.on_complete(result)
+                    return result
+                time.sleep(action_result.should_wait)
                 continue
 
             # 重置未知计数

@@ -8,6 +8,7 @@ from typing import Callable, Optional, Tuple
 
 Box = tuple[int, int, int, int]
 
+from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
 
@@ -29,10 +30,10 @@ BASE_SWIPE_CARD_END_Y = 384     # 1920 * 0.2
 
 
 def tap_template(
-    adb, page_detector, template_name: str, wait: float = 1.0
+    adb, page_detector, template_name: str, threshold=DEFAULT_TEMPLATE_THRESHOLD, wait: float = 1.0
 ) -> Optional[ActionResult]:
     """点击指定模板位置"""
-    box = page_detector.find_template(template_name)
+    box = page_detector.find_template(template_name, threshold=threshold)
     if not box:
         return None
     adb.tap_center(box)
@@ -55,6 +56,33 @@ def tap_box(adb, box: Box, wait: float = 1.0) -> ActionResult:
 def tap_center(adb, wait: float = 1.0) -> ActionResult:
     """点击屏幕中心"""
     return tap(adb, adb.screen_width // 2, adb.screen_height // 2, wait=wait)
+
+
+def quick_tap(adb, x: int = None, y: int = None, times: int = 3, wait: float = 0.5) -> ActionResult:
+    """
+    快速点击指定位置多次
+
+    Args:
+        adb: ADB 控制器
+        x: 点击 X 坐标（默认屏幕中心）
+        y: 点击 Y 坐标（默认屏幕中心）
+        times: 点击次数（默认 3 次）
+        wait: 点击后等待时间（默认 0.5 秒）
+    """
+    if x is None:
+        x = adb.screen_width // 2
+    if y is None:
+        y = adb.screen_height // 2
+
+    for i in range(times):
+        adb.tap(x, y)
+        if i < times - 1:
+            # 快速点击之间短暂等待
+            import time
+            time.sleep(0.05)
+
+    logger.debug(f"快速点击 {times} 次: ({x}, {y})")
+    return ActionResult.ok(wait=wait)
 
 
 def tap_right_side(adb, ratio: float = 0.75, wait: float = 1.0) -> ActionResult:
@@ -116,12 +144,19 @@ def tap_text(
                 return ActionResult.ok(wait=wait)
     return None
 
+def tap_text_exact(
+    adb,
+    ocr_results: list[dict],
+    patterns: list[str],
+    wait: float = 1.0,
+) -> Optional[ActionResult]:
+    return tap_text(adb, ocr_results=ocr_results, patterns=patterns, wait=wait, exact=True)
 
 def tap_by_priority(
     adb,
     page_detector,
-    ocr_results: list[dict],
-    patterns: list[str],
+    ocr_results: Optional[list[dict]] = None,
+    patterns: Optional[list[str]] = None,
     template_name: Optional[str] = None,
     wait: float = 1.0,
 ) -> Optional[ActionResult]:
@@ -130,6 +165,9 @@ def tap_by_priority(
         result = tap_template(adb, page_detector, template_name, wait=wait)
         if result:
             return result
+
+    if not ocr_results or not patterns:
+        return None
 
     result = tap_text(adb, ocr_results, patterns, wait=wait)
     if result:
@@ -355,7 +393,6 @@ def navigate_back(
         return result
 
     return press_back(adb, wait=1.0)
-
 
 def swipe_up(adb, ratio: float = 0.26, wait: float = 1.0) -> ActionResult:
     """向上滑动"""

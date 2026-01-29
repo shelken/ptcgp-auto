@@ -23,7 +23,6 @@ TEXT_PATTERNS = {
         "縮短開封卡牌包的等待時間嗎",
         "使用道具立刻開封擴充包",
     ],
-    "pack_paid_detail": ["開封1包", "開封10包", "使用寶可金塊縮短時間"],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
@@ -56,6 +55,7 @@ TEXT_PATTERNS = {
     "text_ok": ["OK"],
     "text_retry": ["再試一次"],
     "text_x": ["x"],
+    "text_task": ["任務"],
     "continue_button": ["繼續"],
     "tap_to_continue": ["點擊來繼續"],
     "game_open_page": ["點擊畫面開始遊戲"],
@@ -110,10 +110,15 @@ TEXT_PATTERNS = {
     # ============================================================
     # 新账号初始化流程
     # ============================================================
-    "init_select_country": ["選擇國家/地區", "請選擇您居住的國家/地區"],
-    "init_terms_privacy": ["使用條款與隱私權策"],
+    "init_select_country": ["選擇國家", "請選擇您居住的國家"],
+    "init_country_btn": ["國家/地區"],  # 国家/地区选择按钮
+    "init_year_btn": ["年"],  # 年份选择按钮
+    "init_month_btn": ["月"],  # 月份选择按钮
+    "init_month_2": ["2"],  # 月份 2
+    "init_terms_privacy": ["使用條款", "隱私權政策"],
     "init_terms_btn": ["使用條款"],
     "init_privacy_btn": ["隱私權政策"],
+    "init_data_use": ["關於資料使用"],
     "init_create_save": ["建立儲存資料"],
     "init_start_from_scratch": ["從頭開始"],
     "init_account_link": ["帳號連結"],
@@ -128,4 +133,6 @@ TEXT_PATTERNS = {
     "init_mission": ["任務"],
     "init_open_pack": ["開封"],
     "init_enjoy": ["請好好享受"],
+    "init_tap_to_flip": ["點擊來翻開卡牌吧"],
+    "init_select_favorite_card": ["選1張喜歡的卡牌吧"],
 }

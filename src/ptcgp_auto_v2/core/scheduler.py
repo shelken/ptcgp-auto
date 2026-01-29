@@ -421,34 +421,13 @@ class Scheduler:
 
         self._submit_account_batch_executor(device, account, task_instances)
 
-    def _check_prerequisites(self, task_instance: "TaskInstance") -> Optional[str]:
-        """
-        检查任务是否有未满足的前置条件
-
-        Args:
-            task_instance: 待执行的任务实例
-
-        Returns:
-            需要执行的前置任务类型，或 None 表示无需前置任务
-        """
-        # 避免对 fetch_account_info 任务本身检查前置条件（防止循环）
-        if task_instance.task_type == "fetch_account_info":
-            return None
-
-        # 使用 FetchAccountInfoTask 的判断方法检查账号信息完整性
-        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
-        if FetchAccountInfoTask.needs_fetch(task_instance.account):
-            return "fetch_account_info"
-
-        return None
-
     def _ensure_fetch_account_info(
         self, account: "Account", tasks: list["TaskInstance"]
     ) -> list["TaskInstance"]:
         """确保任务列表包含 fetch_account_info 前置任务"""
         from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
 
-        if not FetchAccountInfoTask.needs_fetch(account):
+        if not FetchAccountInfoTask.needs_fetch(account, tasks):
             return tasks
 
         has_fetch_task = any(t.task_type == "fetch_account_info" for t in tasks)
@@ -565,28 +544,6 @@ class Scheduler:
             device_pool=self.device_pool,
             config=executor_config,
         )
-
-    def _dispatch_task(self, task_instance: "TaskInstance"):
-        """
-        分配任务到设备执行
-
-        Args:
-            task_instance: 任务实例
-        """
-        # 检查是否需要前置任务
-        prerequisite = self._check_prerequisites(task_instance)
-        if prerequisite:
-            # 插入前置任务并优先执行
-            self._insert_prerequisite_task(task_instance, prerequisite)
-            return
-
-        # 获取设备（优先获取已登录该账号的设备）
-        device = self.device_pool.acquire_for_account(task_instance.account_id)
-        if not device:
-            logger.debug("没有可用设备，等待...")
-            return
-
-        self._submit_task_executor(device, task_instance)
 
     def _main_loop(self):
         """调度器主循环（批量任务调度）"""
