@@ -387,6 +387,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Custom Select Logic ---
+
+// 重新初始化单个自定义选择器（用于 HTMX 更新后）
+function reinitCustomSelect(selectElement) {
+    if (!selectElement || !selectElement.classList.contains('js-custom-select')) return;
+    
+    // 保存原始的父容器引用，用于后续的初始化
+    const originalParent = selectElement.parentNode;
+    
+    // 找到并移除旧的 custom select UI
+    const container = selectElement.closest('.custom-select-container');
+    if (container) {
+        const parent = container.parentNode;
+        // 将 select 移回原来的位置
+        parent.insertBefore(selectElement, container);
+        // 删除旧的 custom select 容器
+        container.remove();
+    }
+    
+    // 移除初始化标记，以便可以重新初始化
+    selectElement.classList.remove('custom-select-initialized');
+    
+    // 使用原始父容器进行重新初始化（DOM 移动后 parentNode 可能已改变）
+    initCustomSelects(originalParent);
+}
+
 function initCustomSelects(context = document) {
     const selects = context.querySelectorAll('select.js-custom-select:not(.custom-select-initialized)');
     
