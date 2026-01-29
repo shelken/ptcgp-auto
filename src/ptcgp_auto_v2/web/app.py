@@ -220,7 +220,7 @@ async def get_records(
 
         # Determine layout class based on card count
         card_count = len(sorted_cards)
-        layout_type = "grid-cols-2"  # Default fallback
+        layout_type = "layout-3"  # Default fallback (3 cards in a row)
 
         if card_count == 6:
             layout_type = "layout-6"  # 3 top, 3 bottom
@@ -228,6 +228,8 @@ async def get_records(
             layout_type = "layout-5"  # 3 top, 2 bottom
         elif card_count == 4:
             layout_type = "layout-4"  # 2 top, 2 bottom
+        elif card_count == 3:
+            layout_type = "layout-3"  # 3 in a row
 
         # 获取点数
         current_points = None
@@ -389,9 +391,13 @@ async def get_plan_edit_modal(
     # 按 plan.task_types_list 顺序排序（已启用的任务在前）
     if plan and plan.task_types_list:
         # 已启用的任务按 plan.task_types_list 顺序
-        ordered_enabled_tasks = [t for t in plan.task_types_list if t in available_tasks]
+        ordered_enabled_tasks = [
+            t for t in plan.task_types_list if t in available_tasks
+        ]
         # 未启用的任务保持注册顺序
-        ordered_disabled_tasks = [t for t in available_tasks if t not in plan.task_types_list]
+        ordered_disabled_tasks = [
+            t for t in available_tasks if t not in plan.task_types_list
+        ]
         ordered_tasks = ordered_enabled_tasks + ordered_disabled_tasks
     else:
         # 新建 plan，保持注册顺序
