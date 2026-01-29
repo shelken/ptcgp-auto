@@ -88,7 +88,8 @@
     "desc_priority_hint": "列表顶部的计划优先级更高。拖拽可调整顺序。",
     "modal_title_edit_plan": "编辑计划",
     "modal_title_new_plan": "新建计划",
-    "label_task_config": "任务配置",
+    "label_task_config": "任务配置 (拖拽调整顺序)",
+    "desc_task_order_hint": "列表顶部的任务优先执行",
     "label_frequency": "频率",
     "label_interval": "间隔 (秒)",
     "label_default": "默认",
@@ -118,5 +119,16 @@
     "col_actions": "操作",
     "col_status": "状态",
     "placeholder_zh_name": "输入中文名称",
-    "btn_save": "保存"
+    "btn_save": "保存",
+    "title_edit_plan": "编辑计划",
+    "title_create_plan": "新建计划",
+    "label_name": "名称",
+    "label_description": "描述",
+    "label_close": "关闭",
+    "desc_drag_reorder": "拖拽调整顺序",
+    "label_save_plan": "保存计划",
+    "label_interval": "间隔 (秒)",
+    "reset_daily": "每日",
+    "reset_weekly": "每周",
+    "reset_interval": "间隔"
 }

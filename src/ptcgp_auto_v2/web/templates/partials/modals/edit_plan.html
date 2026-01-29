@@ -1,9 +1,9 @@
 <div class="space-y-6">
     <div class="flex justify-between items-center border-b-4 border-theme pb-4">
         <h3 class="text-2xl font-bold uppercase">
-            {% if plan %}Edit Plan: {{ plan.name }}{% else %}Create New Plan{% endif %}
+            {% if plan %}{{ t.title_edit_plan or 'Edit Plan' }}: {{ plan.name }}{% else %}{{ t.title_create_plan or 'Create New Plan' }}{% endif %}
         </h3>
-        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50">✕</button>
+        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50" aria-label="{{ t.label_close or 'Close' }}">✕</button>
     </div>
 
     <form hx-post="/api/plans?lang={{ current_lang }}"
@@ -18,58 +18,76 @@
         <!-- Basic Info -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="space-y-2">
-                <label class="block font-bold uppercase tracking-widest text-sm text-muted">Name</label>
+                <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_name or 'Name' }}</label>
                 <input type="text" name="name" value="{{ plan.name if plan else '' }}" required
                        class="brutal-input">
             </div>
             <div class="space-y-2">
-                <label class="block font-bold uppercase tracking-widest text-sm text-muted">Description</label>
+                <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_description or 'Description' }}</label>
                 <input type="text" name="description" value="{{ plan.description if plan else '' }}"
                        class="brutal-input">
             </div>
         </div>
 
+        <!-- Hidden field for task order (only in request, not stored in DB) -->
+        <input type="hidden" name="task_order" id="task_order" value="">
+
         <!-- Task Configuration -->
         <div class="space-y-4">
-            <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_task_config or 'Tasks Configuration' }}</label>
-            <div class="border-2 border-theme p-4 space-y-4 max-h-[400px] overflow-y-auto">
+            <div class="flex justify-between items-end">
+                <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_task_config or 'Tasks Configuration (Drag to Reorder)' }}</label>
+                <span class="text-xs text-muted">{{ t.desc_task_order_hint or 'Top tasks execute first' }}</span>
+            </div>
+            <div id="tasks-list" class="border-2 border-theme p-4 space-y-4 max-h-[400px] overflow-y-auto">
                 {% for task_type in available_tasks %}
                 {% set task_config = plan.config_dict.get(task_type, {}) if plan else {} %}
                 {% set is_enabled = task_type in (plan.task_types_list if plan else []) %}
 
-                <div class="border border-subtle p-4 rounded bg-subtle" x-data="{ enabled: {{ 'true' if is_enabled else 'false' }}, resetType: '{{ task_config.get('reset_type', 'default') }}' }">
-                    <!-- Enable Checkbox -->
-                    <div class="flex items-center gap-3 mb-3">
-                        <input type="checkbox"
-                               id="task-{{ task_type }}"
-                               name="task_enabled_{{ task_type }}"
-                               class="w-5 h-5 border-2 border-theme accent-theme"
-                               {% if is_enabled %}checked{% endif %}
-                               onchange="this.closest('div').parentElement.classList.toggle('opacity-50', !this.checked)">
-                        <label for="task-{{ task_type }}" class="font-bold flex-grow cursor-pointer uppercase select-none">{{ t['task_' + task_type] or task_type }}</label>
+                <div class="task-item flex items-start gap-3 p-4 border border-subtle bg-card select-none {% if not is_enabled %}opacity-50{% endif %}"
+                     data-task-type="{{ task_type }}"
+                     data-enabled="{{ 'true' if is_enabled else 'false' }}">
+                    <!-- Drag Handle -->
+                    <div class="cursor-move text-muted hover:text-theme pt-1"
+                         title="{{ t.desc_drag_reorder or 'Drag to reorder' }}"
+                         aria-hidden="true">
+                        ☰
                     </div>
 
-                    <!-- Config Fields (Inline JS to toggle visibility would be nice, but simple CSS toggle works too) -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pl-8 transition-opacity duration-200 {% if not is_enabled %}opacity-50{% endif %}">
-                        <!-- Reset Type -->
-                        <div class="space-y-1">
-                            <label class="text-xs uppercase font-bold text-muted">{{ t.label_frequency or 'Frequency' }}</label>
-                            <select name="task_reset_{{ task_type }}"
-                                    class="js-custom-select brutal-input w-full p-2 text-sm"
-                                    onchange="const intervalInput = document.getElementById('interval-{{ task_type }}'); if(this.value === 'interval') intervalInput.classList.remove('hidden'); else intervalInput.classList.add('hidden');">
-                                <option value="default" {% if not task_config.get('reset_type') %}selected{% endif %}>{{ t.label_default or 'Default' }}</option>
-                                {% for rt in reset_types %}
-                                <option value="{{ rt }}" {% if task_config.get('reset_type') == rt %}selected{% endif %}>{{ rt|title }}</option>
-                                {% endfor %}
-                            </select>
+                    <!-- Task Content -->
+                    <div class="flex-grow">
+                        <!-- Enable Checkbox -->
+                        <div class="flex items-center gap-3 mb-3">
+                            <input type="checkbox"
+                                   id="task-{{ task_type }}"
+                                   name="task_enabled_{{ task_type }}"
+                                   class="w-5 h-5 border-2 border-theme accent-theme"
+                                   {% if is_enabled %}checked{% endif %}
+                                   onchange="updateTaskItemState(this)">
+                            <label for="task-{{ task_type }}" class="font-bold flex-grow cursor-pointer uppercase select-none">{{ t['task_' + task_type] or task_type }}</label>
                         </div>
 
-                        <!-- Interval Seconds -->
-                        <div id="interval-{{ task_type }}" class="space-y-1 {% if task_config.get('reset_type') != 'interval' %}hidden{% endif %}">
-                            <label class="text-xs uppercase font-bold text-muted">{{ t.label_interval or 'Interval (Seconds)' }}</label>
-                            <input type="number" name="task_interval_{{ task_type }}"
-                                   value="{{ task_config.get('interval_seconds', 3600) }}"
-                                   class="brutal-input w-full p-2 text-sm">
+                        <!-- Config Fields -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pl-8 {% if not is_enabled %}opacity-50{% endif %}" data-config-container>
+                            <!-- Reset Type -->
+                            <div class="space-y-1">
+                                <label class="text-xs uppercase font-bold text-muted">{{ t.label_frequency or 'Frequency' }}</label>
+                                <select name="task_reset_{{ task_type }}"
+                                        class="js-custom-select brutal-input w-full p-2 text-sm"
+                                        onchange="const intervalInput = document.getElementById('interval-{{ task_type }}'); if(this.value === 'interval') intervalInput.classList.remove('hidden'); else intervalInput.classList.add('hidden');">
+                                    <option value="default" {% if not task_config.get('reset_type') %}selected{% endif %}>{{ t.label_default or 'Default' }}</option>
+                                    {% for rt in reset_types %}
+                                    <option value="{{ rt }}" {% if task_config.get('reset_type') == rt %}selected{% endif %}>{{ t['reset_' + rt] or rt|title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Interval Seconds -->
+                            <div id="interval-{{ task_type }}" class="space-y-1 {% if task_config.get('reset_type') != 'interval' %}hidden{% endif %}">
+                                <label class="text-xs uppercase font-bold text-muted">{{ t.label_interval or 'Interval (Seconds)' }}</label>
+                                <input type="number" name="task_interval_{{ task_type }}"
+                                       value="{{ task_config.get('interval_seconds', 3600) }}"
+                                       class="brutal-input w-full p-2 text-sm">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -79,8 +97,72 @@
 
         <!-- Actions -->
         <div class="flex justify-end gap-4 pt-4 border-t-2 border-subtle-light">
-            <button type="button" onclick="closeModal()" class="brutal-btn">Cancel</button>
-            <button type="submit" class="brutal-btn active">Save Plan</button>
+            <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
+            <button type="submit" class="brutal-btn active" onclick="updateTaskOrder()">{{ t.label_save_plan or 'Save Plan' }}</button>
         </div>
     </form>
 </div>
+
+<script>
+    // Initialize Sortable for tasks
+    (function() {
+        const list = document.getElementById('tasks-list');
+        if (list) {
+            new Sortable(list, {
+                animation: 150,
+                ghostClass: 'bg-subtle',
+                handle: '.cursor-move',
+                onEnd: function() {
+                    // Update order after drag
+                    updateTaskOrder();
+                }
+            });
+        }
+
+        // Initialize custom selects
+        if (typeof initCustomSelects === 'function') {
+            initCustomSelects(document.getElementById('modal-content'));
+        }
+    })();
+
+    function updateTaskItemState(checkbox) {
+        const taskItem = checkbox.closest('.task-item');
+        const configContainer = taskItem.querySelector('[data-config-container]');
+
+        if (checkbox.checked) {
+            taskItem.classList.remove('opacity-50');
+            if (configContainer) {
+                configContainer.classList.remove('opacity-50');
+            }
+            taskItem.setAttribute('data-enabled', 'true');
+        } else {
+            taskItem.classList.add('opacity-50');
+            if (configContainer) {
+                configContainer.classList.add('opacity-50');
+            }
+            taskItem.setAttribute('data-enabled', 'false');
+        }
+    }
+
+    function updateTaskOrder() {
+        const list = document.getElementById('tasks-list');
+        const items = list.querySelectorAll('.task-item');
+        const orderedTaskTypes = [];
+
+        items.forEach((item) => {
+            const taskType = item.getAttribute('data-task-type');
+            const isEnabled = item.getAttribute('data-enabled') === 'true';
+            if (isEnabled) {
+                orderedTaskTypes.push(taskType);
+            }
+        });
+
+        // Update hidden field with JSON array
+        document.getElementById('task_order').value = JSON.stringify(orderedTaskTypes);
+    }
+
+    // Initialize task order on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        updateTaskOrder();
+    });
+</script>
