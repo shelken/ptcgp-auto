@@ -245,6 +245,7 @@ class OpenPackTask(Task):
         self._card_repo = CardRepository()
         self._pack_point_repo = AccountPackPointRepository()
         self._current_pack_cards = []
+        self._series_clicked  = {}
 
         # 1. 检查账号 ID
         if self.account.id is None:
@@ -424,6 +425,7 @@ class OpenPackTask(Task):
         3. 有免费包 → 进入开包流程
         4. 无免费包 → 累计计数，达到阈值则设置 NO_FREE_PACK
         """
+        self._series_clicked.clear()
         self._phase = OpenPackPhase.CHECKING_HOME
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
@@ -487,8 +489,11 @@ class OpenPackTask(Task):
             return result
 
         # 2. 尝试切换到目标系列
+        # FIXME 完全不能遍历所有系列
         target_series = self._get_target_series()
-        if target_series:
+        series_clicked_x = self._series_clicked.get(f'{target_series}')
+        logger.debug(f"{target_series}, {series_clicked_x}")
+        if target_series and not series_clicked_x:
             series_patterns = get_config_value("series")
             if isinstance(series_patterns, dict) and target_series in series_patterns:
                 patterns = series_patterns[target_series]
@@ -501,6 +506,7 @@ class OpenPackTask(Task):
                     wait=1.0,
                 )
                 if result:
+                    self._series_clicked[f'{target_series}'] = True
                     logger.debug(f"  -> 点击切换到 {target_series} 系列")
                     return result
 
