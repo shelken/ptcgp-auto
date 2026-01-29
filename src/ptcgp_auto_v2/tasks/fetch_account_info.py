@@ -64,7 +64,10 @@ class FetchAccountInfoTask(Task):
     pages = FETCH_PAGES
 
     @staticmethod
-    def needs_fetch(account) -> bool:
+    def needs_fetch(account, tasks) -> bool:
+        # 排除账号注册任务
+        if any(t.task_type == "init_account" for t in tasks):
+            return False
         return not account.friend_id or not account.nickname or account.exchange_points is None
 
     def __init__(self, *args, **kwargs):

@@ -386,3 +386,29 @@ class PageDetector:
         self._last_screenshot = screenshot
 
         return self.template_matcher.find_box(screenshot, template_name, threshold)
+
+    def find_all_templates(
+        self,
+        template_name: str,
+        screenshot: Optional[Image.Image] = None,
+        threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
+        scale: float = 1.0
+    ) -> List[TemplateMatch]:
+        f"""
+        在屏幕上查找所有匹配的模板的位置
+
+        Args:
+            template_name: 模板名称
+            screenshot: 截图（可选）
+            threshold: 匹配阈值（可选 默认 {DEFAULT_TEMPLATE_THRESHOLD}）
+            scale: 默认不缩放 1.0
+        Returns:
+            返回置信度 和 位置
+        """
+        if screenshot is None:
+            screenshot = self._last_screenshot or self.adb.screenshot()
+            if screenshot is None:
+                return []
+        self._last_screenshot = screenshot
+
+        return self.template_matcher.find_all(screenshot, template_name, threshold, scale=scale)

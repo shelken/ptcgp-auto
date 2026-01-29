@@ -358,6 +358,7 @@ class TemplateMatcher:
         screenshot: Image.Image,
         template_name: str,
         threshold: Optional[float] = None,
+        scale: float = 1.0
     ) -> List[TemplateMatch]:
         """
         在截图中查找所有匹配的模板
@@ -380,6 +381,15 @@ class TemplateMatcher:
         threshold = threshold or self.threshold
         template = self.templates[template_name]
         screen = self._pil_to_cv2(screenshot)
+
+        # 缩放模板
+        if abs(scale - 1.0) > 0.01:
+            new_w = int(template.shape[1] * scale)
+            new_h = int(template.shape[0] * scale)
+            logger.debug(f"模板缩放后: {new_w} x {new_h}")
+            template = cv2.resize(
+                template, (new_w, new_h), interpolation=cv2.INTER_AREA
+            )
 
         result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
         locations = np.where(result >= threshold)
