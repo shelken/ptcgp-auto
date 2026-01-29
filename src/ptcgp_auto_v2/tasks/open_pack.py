@@ -45,25 +45,22 @@ SKIP_REASON_NO_PACK_CONFIG = "未配置开包目标"
 
 
 from ptcgp_auto_v2.utils.gesture import (
-    tap_template,
-    tap_text,
     tap_center,
-    press_back,
     navigate_back,
     swipe,
-    long_press,
     long_press_text,
     tap_home_icon,
     click_close,
     tap_bottom_close,
     tap_box,
     tap_continue,
-    center_point,
     swipe_pack_coords,
     swipe_card_coords,
     tap_template_or_text,
     tap_template_with_scale,
     scroll_until_template,
+    tap_text_exact,
+    quick_tap,
 )
 
 if TYPE_CHECKING:
@@ -387,6 +384,15 @@ class OpenPackTask(Task):
         )
         return ActionResult.fail(f"未处理的页面: {page_name}")
 
+    def handle_unknown_page(self, page_info) -> ActionResult:
+        """
+        处理未知页面
+
+        点击屏幕中心兜底，然后等待重新识别
+        """
+        logger.warning("未知页面，点击屏幕中心兜底")
+        return quick_tap(self.adb, wait=0.5)
+
     def on_complete(self, result: TaskResult):
         """
         任务完成后的处理
@@ -705,7 +711,7 @@ class OpenPackTask(Task):
         ocr_results = page_info.get("ocr_results", [])
         long_press_patterns = get_text_patterns("long_press")
 
-        # 等待 5s 让结果页动画稳定
+        # 等待 3s 让结果页动画稳定
         wait = 3.0
         # 使用工具函数长按文字位置
         result = long_press_text(self.adb, ocr_results, long_press_patterns, wait=wait)

@@ -99,127 +99,26 @@ def _is_text_visible(ocr_results: list[dict], text: str) -> bool:
 def _build_init_pages() -> list[dict]:
     """构建新账号初始化任务页面规则"""
     return [
-        # 选择国家/地区页面
-        {
-            "name": "init_select_country",
-            "identifiers": _get_patterns("init_select_country"),
-            "priority": 99,
-        },
-        # 条款与隐私页面
-        {
-            "name": "init_terms_privacy",
-            "identifiers": _get_patterns("init_terms_privacy"),
-            "priority": 99,
-        },
-        # 關於資料使用
-        {
-            "name": "init_data_use",
-            "identifiers": _get_patterns("init_data_use"),
-            "priority": 98,
-        },
-        # 创建存档页面
-        {
-            "name": "init_create_save",
-            "identifiers": _get_patterns("init_create_save"),
-            "priority": 99,
-        },
-        # 账号链接页面
-        {
-            "name": "init_account_link",
-            "identifiers": _get_patterns("init_account_link"),
-            "priority": 99,
-        },
-        # 设置昵称页面
-        {
-            "name": "init_set_nickname",
-            "identifiers": _get_patterns("init_set_nickname"),
-            "priority": 99,
-        },
-        # 昵称输入页面
-        {
-            "name": "init_nickname_input",
-            "identifiers": _get_patterns("init_nickname_title"),
-            "exact_match": True,
-            "priority": 99,
-        },
-        # 确认设置页面
-        {
-            "name": "init_confirm_settings",
-            "identifiers": _get_patterns("init_confirm_settings"),
-            "priority": 99,
-        },
-        # 选择卡包页面
-        {
-            "name": "init_select_pack",
-            "identifiers": _get_patterns("init_select_pack"),
-            "priority": 99,
-        },
-        # 决定按钮页面
-        {
-            "name": "init_decide",
-            "identifiers": _get_patterns("init_decide"),
-            "priority": 99,
-            "exact_match": True,
-        },
-        # 滑动开包引导页面
-        {
-            "name": "init_swipe_open",
-            "identifiers": _get_patterns("init_swipe_open"),
-            "priority": 99,
-        },
-        # 下一步按钮页面
-        {
-            "name": "init_next_step",
-            "identifiers": _get_patterns("init_next_step"),
-            "priority": 99,
-            "exact_match": True,
-        },
-        # 开封按钮页面
-        {
-            "name": "init_open_pack",
-            "identifiers": _get_patterns("init_open_pack"),
-            "priority": 99,
-            "exact_match": True,
-        },
-        # 完成页面
-        {
-            "name": "init_enjoy",
-            "identifiers": _get_patterns("init_enjoy"),
-            "priority": 99,
-        },
-        # 翻开卡牌页面
-        {
-            "name": "init_tap_to_flip",
-            "identifiers": _get_patterns("init_tap_to_flip"),
-            "priority": 99,
-        },
-        # 选择喜欢的卡牌页面
-        {
-            "name": "init_select_favorite_card",
-            "identifiers": _get_patterns("init_select_favorite_card"),
-            "priority": 99,
-        },
-        # 复用开包任务的相关页面
-        {
-            "name": "pack_opening_result",
-            "identifiers": _get_patterns("pack_opening_result"),
-            "priority": 99,
-        },
-        {
-            "name": "pack_card_register",
-            "identifiers": _get_patterns("pack_card_register"),
-            "priority": 99,
-        },
-        {
-            "name": "pack_opening_card",
-            "identifiers": _get_patterns("long_press"),
-            "priority": 99,
-        },
-        {
-            "name": "speed_up_button",
-            "templates": ["btn_speed_up"],
-            "priority": 99,
-        },
+        {"name": "init_select_country", "identifiers": _get_patterns("init_select_country"), "priority": 99},
+        {"name": "init_terms_privacy", "identifiers": _get_patterns("init_terms_privacy"), "priority": 99},
+        {"name": "init_data_use", "identifiers": _get_patterns("init_data_use"), "priority": 98},
+        {"name": "init_create_save", "identifiers": _get_patterns("init_create_save"), "priority": 99},
+        {"name": "init_account_link", "identifiers": _get_patterns("init_account_link"), "priority": 99},
+        {"name": "init_set_nickname", "identifiers": _get_patterns("init_set_nickname"), "priority": 99},
+        {"name": "init_nickname_input", "identifiers": _get_patterns("init_nickname_title"), "exact_match": True, "priority": 99},
+        {"name": "init_confirm_settings", "identifiers": _get_patterns("init_confirm_settings"), "priority": 99},
+        {"name": "init_select_pack", "identifiers": _get_patterns("init_select_pack"), "priority": 99},
+        {"name": "init_decide", "identifiers": _get_patterns("init_decide"), "exact_match": True, "priority": 99},
+        {"name": "init_swipe_open", "identifiers": _get_patterns("init_swipe_open"), "priority": 99},
+        {"name": "init_next_step", "identifiers": _get_patterns("init_next_step"), "exact_match": True, "priority": 99},
+        {"name": "init_open_pack", "identifiers": _get_patterns("init_open_pack"), "exact_match": True, "priority": 99},
+        {"name": "init_enjoy", "identifiers": _get_patterns("init_enjoy"), "priority": 99},
+        {"name": "init_tap_to_flip", "identifiers": _get_patterns("init_tap_to_flip"), "priority": 99},
+        {"name": "init_select_favorite_card", "identifiers": _get_patterns("init_select_favorite_card"), "priority": 99},
+        {"name": "pack_opening_result", "identifiers": _get_patterns("pack_opening_result"), "priority": 99},
+        {"name": "pack_card_register", "identifiers": _get_patterns("pack_card_register"), "priority": 99},
+        {"name": "pack_opening_card", "identifiers": _get_patterns("long_press"), "priority": 99},
+        {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
     ]
 
 
@@ -263,10 +162,6 @@ class InitAccountTask(Task):
     def _mark_action_done(self, key: str):
         """标记操作已完成"""
         self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        """重置操作缓存"""
-        self._action_cache.clear()
 
     def on_start(self):
         """任务开始前的初始化"""
@@ -391,6 +286,11 @@ class InitAccountTask(Task):
     # ============================================================
     # 页面处理方法
     # ============================================================
+
+    def _tap_text_or_wait(self, ocr_results: list, pattern_key: str, exact: bool = False, wait: float = 1.0) -> ActionResult:
+        """尝试点击文本，失败则返回 wait 结果"""
+        result = tap_text(self.adb, ocr_results, _get_patterns(pattern_key), exact=exact, wait=wait)
+        return result if result else ActionResult.ok(wait=wait)
 
     def _handle_select_country(self, page_info: dict) -> ActionResult:
         """
@@ -557,14 +457,10 @@ class InitAccountTask(Task):
         点击「從頭開始」按钮
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        start_patterns = _get_patterns("init_start_from_scratch")
-        result = tap_text(self.adb, ocr_results, start_patterns, exact=True, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("init_start_from_scratch"), exact=True, wait=1.0)
         if result:
             logger.info("  -> 点击「從頭開始」")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_account_link(self, page_info: dict) -> ActionResult:
         """
@@ -573,14 +469,10 @@ class InitAccountTask(Task):
         点击「現在不連結」跳过账号链接
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        skip_patterns = _get_patterns("init_skip_link")
-        result = tap_text(self.adb, ocr_results, skip_patterns, exact=True, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("init_skip_link"), exact=True, wait=1.0)
         if result:
             logger.info("  -> 点击「現在不連結」跳过账号链接")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_set_nickname(self, page_info: dict) -> ActionResult:
         """
@@ -633,14 +525,10 @@ class InitAccountTask(Task):
         点击 OK 确认设置
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        ok_patterns = _get_patterns("popup_ok")
-        result = tap_text(self.adb, ocr_results, ok_patterns, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("popup_ok"), wait=1.0)
         if result:
             logger.info("  -> 确认设置")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_select_pack(self, page_info: dict) -> ActionResult:
         """
@@ -658,14 +546,10 @@ class InitAccountTask(Task):
         点击「決定」按钮
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        decide_patterns = _get_patterns("init_decide")
-        result = tap_text(self.adb, ocr_results, decide_patterns, exact=True, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("init_decide"), exact=True, wait=1.0)
         if result:
             logger.info("  -> 点击「決定」")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_swipe_open(self, page_info: dict) -> ActionResult:
         """
@@ -684,14 +568,10 @@ class InitAccountTask(Task):
         点击「下一步」
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        next_patterns = _get_patterns("init_next_step")
-        result = tap_text(self.adb, ocr_results, next_patterns, exact=True, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("init_next_step"), exact=True, wait=1.0)
         if result:
             logger.info("  -> 点击「下一步」")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_mission(self, page_info: dict) -> ActionResult:
         """
@@ -700,14 +580,10 @@ class InitAccountTask(Task):
         点击「任務」按钮
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        mission_patterns = _get_patterns("init_mission")
-        result = tap_text(self.adb, ocr_results, mission_patterns, exact=True, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("init_mission"), exact=True, wait=1.0)
         if result:
             logger.info("  -> 点击「任務」")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_open_pack(self, page_info: dict) -> ActionResult:
         """
@@ -716,14 +592,10 @@ class InitAccountTask(Task):
         点击「開封」按钮
         """
         ocr_results = page_info.get("ocr_results", [])
-
-        open_patterns = _get_patterns("init_open_pack")
-        result = tap_text(self.adb, ocr_results, open_patterns, exact=True, wait=1.0)
+        result = tap_text(self.adb, ocr_results, _get_patterns("init_open_pack"), exact=True, wait=1.0)
         if result:
             logger.info("  -> 点击「開封」")
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return result or ActionResult.ok(wait=1.0)
 
     def _handle_tap_to_flip(self, page_info: dict) -> ActionResult:
         """
