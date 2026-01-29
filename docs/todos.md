@@ -45,8 +45,11 @@
 - [x] 拆分repository
 - [x] 彻底废弃账号的task_plan_id，使用多关联
 - [x] 尝试删除shared_prefs看看什么效果(删掉后直接变成新账号流程，即使有xml也不行，还需要其他各种文件)
+- [x] 网页端能够Edit Plan的时候进行排序任务
+- [x] `init-account` [自动完成新账号流程](needs/01-自动完成新账号流程.md)
 
 ## 进行中
+
 
 
 ## 高优先级
