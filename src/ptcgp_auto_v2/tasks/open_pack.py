@@ -390,7 +390,7 @@ class OpenPackTask(Task):
 
         点击屏幕中心兜底，然后等待重新识别
         """
-        logger.warning("未知页面，点击屏幕中心兜底")
+        logger.debug("未知页面，点击屏幕中心兜底")
         return quick_tap(self.adb, wait=0.5)
 
     def on_complete(self, result: TaskResult):
@@ -688,15 +688,15 @@ class OpenPackTask(Task):
 
         result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
         if result:
-            logger.info("  -> 点击关闭弹窗")
+            logger.debug("  -> 点击关闭弹窗")
             return result
 
-        logger.info("  -> 点击屏幕底部关闭弹窗")
+        logger.debug("  -> 点击屏幕底部关闭弹窗")
         return tap_bottom_close(self.adb, BASE_POPUP_CLOSE_TAP_Y, wait=1.0)
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
         """滑动开包（pack_opening_swipe 页面）"""
-        logger.info("  -> 从左往右滑动开包")
+        logger.debug("  -> 从左往右滑动开包")
         # 进入 滑动开包 说明开包成功，增加计数
         self._packs_opened_count += 1
         # 重置识别标志位
@@ -716,7 +716,7 @@ class OpenPackTask(Task):
         # 使用工具函数长按文字位置
         result = long_press_text(self.adb, ocr_results, long_press_patterns, wait=wait)
         if result:
-            logger.info("  -> 长按文字跳过卡牌展示")
+            logger.debug("  -> 长按文字跳过卡牌展示")
             return result
 
         # 开包流程即将结束，准备回到主页继续检测
@@ -823,7 +823,8 @@ class OpenPackTask(Task):
                                     pack_name=pack_name,
                                     cards=current_batch_cards
                                 )
-                                logger.info(f"已即时保存开包记录: {pack_code}/{pack_name} ({len(current_batch_cards)} 张)")
+                                card_names = [f"{c['card_name']}({c['rarity']})" for c in current_batch_cards]
+                                logger.info(f"已即时保存开包记录: {pack_code}/{pack_name} ({len(current_batch_cards)} 张): {', '.join(card_names)}")
                             except Exception as e:
                                 logger.error(f"保存开包记录失败: {e}")
 
