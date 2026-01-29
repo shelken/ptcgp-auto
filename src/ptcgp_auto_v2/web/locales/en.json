@@ -88,7 +88,8 @@
     "desc_priority_hint": "Top items have higher priority. Drag items to reorder.",
     "modal_title_edit_plan": "Edit Plan",
     "modal_title_new_plan": "New Plan",
-    "label_task_config": "Task Configuration",
+    "label_task_config": "Task Configuration (Drag to Reorder)",
+    "desc_task_order_hint": "Top items execute first",
     "label_frequency": "Frequency",
     "label_interval": "Interval (Seconds)",
     "label_default": "Default",
@@ -118,5 +119,16 @@
     "col_actions": "Actions",
     "col_status": "Status",
     "placeholder_zh_name": "Enter Zh Name",
-    "btn_save": "Save"
+    "btn_save": "Save",
+    "title_edit_plan": "Edit Plan",
+    "title_create_plan": "Create New Plan",
+    "label_name": "Name",
+    "label_description": "Description",
+    "label_close": "Close",
+    "desc_drag_reorder": "Drag to reorder",
+    "label_save_plan": "Save Plan",
+    "label_interval": "Interval (Seconds)",
+    "reset_daily": "Daily",
+    "reset_weekly": "Weekly",
+    "reset_interval": "Interval"
 }

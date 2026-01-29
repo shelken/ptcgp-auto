@@ -72,9 +72,9 @@ load_translations()
 
 
 def get_translations(lang: str = "en") -> Dict:
-    # In development, it's helpful to reload translations if files changed
-    # For simplicity, we can reload on every request or rely on uvicorn reload
-    # We'll rely on uvicorn reload for now.
+    # Reload translations on every request for development
+    # This allows i18n changes to take effect without server restart
+    load_translations()
     return translations.get(lang, translations.get("en", {}))
 
 
@@ -376,7 +376,7 @@ async def get_plan_edit_modal(
 ):
     """Render Create/Edit Plan Modal"""
     t = get_translations(lang)
-    repo = TaskPlanRepository()  # Use repo for consistency if no relationships needed, or switch to session if needed
+    repo = TaskPlanRepository()
 
     plan = None
     if plan_id:
@@ -386,12 +386,23 @@ async def get_plan_edit_modal(
     available_tasks = TaskRegistry.all_types()
     reset_types = [rt.value for rt in ResetType]
 
+    # 按 plan.task_types_list 顺序排序（已启用的任务在前）
+    if plan and plan.task_types_list:
+        # 已启用的任务按 plan.task_types_list 顺序
+        ordered_enabled_tasks = [t for t in plan.task_types_list if t in available_tasks]
+        # 未启用的任务保持注册顺序
+        ordered_disabled_tasks = [t for t in available_tasks if t not in plan.task_types_list]
+        ordered_tasks = ordered_enabled_tasks + ordered_disabled_tasks
+    else:
+        # 新建 plan，保持注册顺序
+        ordered_tasks = available_tasks
+
     return templates.TemplateResponse(
         "partials/modals/edit_plan.html",
         {
             "request": request,
             "plan": plan,
-            "available_tasks": available_tasks,
+            "available_tasks": ordered_tasks,  # 使用排序后的任务列表
             "reset_types": reset_types,
             "t": t,
             "current_lang": lang,
@@ -536,13 +547,23 @@ async def save_plan(
     # For MVP, let's assume simple logic:
     # Form fields: tasks[open_pack][enabled], tasks[open_pack][reset_type], tasks[open_pack][interval]
 
-    task_types = []
-    configuration = {}
+    # Check for task_order field (JSON array with sorted task types)
+    task_order_str = form.get("task_order")
+    task_order = []
+    if task_order_str:
+        try:
+            task_order = json.loads(task_order_str)
+        except (json.JSONDecodeError, TypeError):
+            task_order = []
 
+    configuration = {}
+    enabled_task_types = set()
+
+    # First pass: collect enabled tasks and their configurations
     for key in form:
         if key.startswith("task_enabled_"):
             task_type = key.replace("task_enabled_", "")
-            task_types.append(task_type)
+            enabled_task_types.add(task_type)
 
             # Check config
             r_type = form.get(f"task_reset_{task_type}")
@@ -561,6 +582,18 @@ async def save_plan(
 
             if task_config:
                 configuration[task_type] = task_config
+
+    # Build task_types list: use task_order if available, otherwise fallback to form order
+    if task_order:
+        # Filter to only include enabled tasks, preserving the order from task_order
+        task_types = [t for t in task_order if t in enabled_task_types]
+    else:
+        # Fallback: iterate form in order (may not preserve DOM order)
+        task_types = []
+        for key in form:
+            if key.startswith("task_enabled_"):
+                task_type = key.replace("task_enabled_", "")
+                task_types.append(task_type)
 
     # Debug log for configuration issues
     print(f"DEBUG: Processed configuration: {configuration}")
