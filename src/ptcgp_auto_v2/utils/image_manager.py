@@ -29,7 +29,7 @@ TARGET_WIDTH = 250
 # 保留卡牌上半部分的插画，去除顶部边框和下半部分文字
 CROP_BOX_RATIO = (0.05, 0.10, 0.95, 0.55)
 
-IMAGE_BASE_URL = "https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards"
+IMAGE_BASE_URL = "https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images"
 
 
 class ImageResourceManager:
@@ -156,7 +156,7 @@ class ImageResourceManager:
 
     def _process_single_card(self, card: Card) -> bool:
         """处理单张卡牌：下载 -> 裁剪 -> 保存 -> 更新DB"""
-        if not card.image_url:
+        if not card.number:
             return False
 
         try:
@@ -173,10 +173,16 @@ class ImageResourceManager:
             if not pack_names:
                 pack_names = ["_Misc"]
 
+            set_code = card.set_code
+            if not set_code:
+                logger.error("card no set_code")
+                return False
+
             # 构造完整 URL
             image_url = card.image_url
+            number = card.number
             if not image_url.startswith("http"):
-                image_url = f"{IMAGE_BASE_URL}/{image_url}"
+                image_url = f"{IMAGE_BASE_URL}/cards-by-set/{set_code}/{number}.webp"
 
             # 下载图片
             img_data = self._download_image(image_url)
