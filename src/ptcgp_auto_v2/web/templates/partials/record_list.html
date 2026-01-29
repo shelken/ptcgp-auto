@@ -55,7 +55,7 @@
 
                 <!-- Card Image -->
                 {% if card.card and card.card.image_url %}
-                     <img src="https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards/{{ card.card.image_url }}&w=400&output=webp"
+                     <img src="https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards-by-set/{{ card.card.set_code }}/{{ card.card.number }}.webp&w=400&output=webp"
                          alt="{{ card.card_name }}"
                          class="w-full h-full object-cover"
                          loading="lazy"
@@ -107,7 +107,7 @@
     document.getElementById('end-of-records').classList.remove('hidden');
     // Hide global loader if exists
     var loader = document.querySelector('.htmx-indicator');
-    if(loader) loader.classList.remove('flex'); 
+    if(loader) loader.classList.remove('flex');
     if(loader) loader.classList.add('hidden');
 </script>
 {% endif %}
