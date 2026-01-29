@@ -186,6 +186,14 @@ class AdbController:
         """根据屏幕高度缩放 Y 坐标（基于基准高度）"""
         return int(y * self.scale_y)
 
+    def center_x(self) -> int:
+        """返回当前屏幕中心x位置"""
+        return self.screen_width // 2
+
+    def center_y(self) -> int:
+        """返回当前屏幕中心y位置"""
+        return self.screen_height // 2
+
     def scaled_point(self, x: int, y: int) -> tuple[int, int]:
         """缩放坐标点"""
         return self.scaled_x(x), self.scaled_y(y)

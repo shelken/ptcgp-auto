@@ -224,6 +224,45 @@ class CardRepository:
             statement = select(CardSet).order_by(CardSet.code)
             return list(session.exec(statement).all())
 
+    def get_latest_set_with_pack(self) -> Optional[tuple[CardSet, Pack]]:
+        """
+        获取最新发布的系列及其一个随机子包
+
+        Returns:
+            (CardSet, Pack) 元组，如果没有则返回 None
+            排除 promo/PROMO 开头的系列（不区分大小写）
+        """
+        import random
+        from sqlalchemy import func
+
+        with Session(get_engine()) as session:
+            # 1. 获取最新发布的系列（排除 promo 开头的，不区分大小写）
+            statement = (
+                select(CardSet)
+                .where(func.upper(col(CardSet.code)).not_like("PROMO%"))
+                .order_by(CardSet.release_date.desc())
+            )
+            latest_set = session.exec(statement).first()
+
+            if not latest_set:
+                logger.warning("未找到非 promo 的系列")
+                return None
+
+            # 2. 获取该系列下的所有子包
+            statement = (
+                select(Pack)
+                .where(Pack.set_code == latest_set.code)
+            )
+            packs = list(session.exec(statement).all())
+
+            if not packs:
+                logger.warning(f"系列 {latest_set.code} 没有关联的子包")
+                return None
+
+            # 3. 随机选择一个子包
+            selected_pack = random.choice(packs)
+            return latest_set, selected_pack
+
     def get_cards_by_set(self, set_code: str) -> List[Card]:
         """获取系列下的所有卡牌"""
         with Session(get_engine()) as session:

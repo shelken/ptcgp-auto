@@ -158,11 +158,6 @@ def _build_pack_pages(text_patterns: dict) -> list[dict]:
             "priority": 99,
         },
         {
-            "name": "pack_paid_detail",
-            "identifiers": _get_patterns(text_patterns, "pack_paid_detail"),
-            "priority": 99,
-        },
-        {
             "name": "game_home_main",
             "match_all": True,
             "identifiers": _get_patterns(text_patterns, "game_home_main"),
@@ -265,25 +260,36 @@ class OpenPackTask(Task):
         config = self._pack_config_repo.get_by_account_and_type(
             self.account.id, "daily"
         )
-        if not config:
-            logger.info(f"账号 {self.account.display_name} 未配置开包目标，任务跳过")
-            self._phase = OpenPackPhase.SKIPPED
-            self._skip_reason = SKIP_REASON_NO_PACK_CONFIG
-            return
 
-        self.target_pack = {
-            "pack_code": config.pack_code,
-            "booster_name": config.booster_name,
-        }
-        logger.info(f"目标卡包: {config.pack_code}/{config.booster_name}")
+        if not config:
+            # 未配置时，自动选择最新发布的系列
+            logger.info(f"账号 {self.account.display_name} 未配置开包目标，尝试选择最新系列")
+
+            card_set, pack = self._card_repo.get_latest_set_with_pack()
+            if card_set and pack:
+                self.target_pack = {
+                    "pack_code": card_set.code,
+                    "booster_name": pack.name,
+                }
+                logger.info(f"自动选择最新卡包: {card_set.code}/{pack.name}")
+            else:
+                logger.info(f"账号 {self.account.display_name} 无法找到可用的开包目标，任务跳过")
+                self._phase = OpenPackPhase.SKIPPED
+                self._skip_reason = SKIP_REASON_NO_PACK_CONFIG
+                return
+        else:
+            self.target_pack = {
+                "pack_code": config.pack_code,
+                "booster_name": config.booster_name,
+            }
+            logger.info(f"目标卡包: {config.pack_code}/{config.booster_name}")
 
         # 4. 准备图片资源 (按需加载)
+        pack_code = self.target_pack["pack_code"]
         try:
             from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
 
             manager = ImageResourceManager()
-            pack_code = config.pack_code
-            # booster_name = config.booster_name
 
             # 1. 下载/处理图片
             manager.ensure_series_ready(pack_code)
@@ -298,7 +304,7 @@ class OpenPackTask(Task):
             logger.error(f"准备图片资源失败: {e}")
 
         # 5. 加载子包列表
-        self._boosters_list = self._load_boosters_list(config.pack_code)
+        self._boosters_list = self._load_boosters_list(pack_code)
 
 
     def is_completed(self) -> bool:
