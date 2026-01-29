@@ -215,6 +215,12 @@ function switchTab(tabName) {
         if (newTitle && titleEl) {
             titleEl.textContent = newTitle;
         }
+
+        // 更新 URL hash 以便刷新后恢复当前 Tab
+        const hash = activeBtn.getAttribute('data-hash');
+        if (hash) {
+            window.location.hash = hash;
+        }
     }
 
     // Toggle Filters visibility
@@ -235,10 +241,11 @@ function switchTab(tabName) {
             // Try to restore from hash first
             const hash = window.location.hash.replace('#', '');
             let targetBtn = null;
-            if (hash) {
+            // 检查 hash 是否为 management 子项
+            if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
                 targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
             }
-            
+
             // Fallback to first button
             if (!targetBtn) {
                 targetBtn = document.querySelector('#tab-content-management .sidebar-btn');
@@ -259,19 +266,34 @@ function updateSidebarState(btn) {
 }
 
 function restoreTab() {
-    const tab = localStorage.getItem(STORAGE_KEY_TAB);
-    if (tab) {
-        const btn = document.getElementById(`tab-btn-${tab}`);
-        if (btn) {
-            // Trigger click to ensure HTMX loading if needed
-            // But we need to be careful about infinite loops if onclick calls this
-            // Actually, switchTab is called by onclick.
-            // If we call switchTab directly, HTMX won't trigger if it relies on 'click' event
-            // But our buttons use hx-trigger="click once"
+    // 优先从 URL hash 恢复，其次从 localStorage
+    const hash = window.location.hash.replace('#', '');
+    let tabName = null;
 
-            // If we just call switchTab, content hidden by hx-trigger won't load
-            // So we should click it.
-            btn.click();
+    if (hash === 'records' || hash === 'management') {
+        // Hash 直接指向 Tab
+        tabName = hash;
+    } else if (['accounts', 'plans', 'metadata'].includes(hash)) {
+        // Hash 指向 management 子项
+        tabName = 'management';
+    } else {
+        // 没有 hash，从 localStorage 恢复
+        tabName = localStorage.getItem(STORAGE_KEY_TAB);
+    }
+
+    if (tabName) {
+        const btn = document.getElementById(`tab-btn-${tabName}`);
+        if (btn) {
+            // 如果 hash 匹配当前 Tab，不需要重复点击
+            // 但需要处理 management 子项的情况
+            if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
+                // 切换到 management tab，然后让 DOMContentLoaded 处理子项
+                btn.click();
+            } else if (!hash || hash !== tabName) {
+                // 没有 hash 或 hash 与恢复的 tab 不一致，需要点击
+                btn.click();
+            }
+            // 如果 hash === tabName，页面已经正确显示，不需要点击
         }
     }
 }
@@ -333,12 +355,16 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreViewMode();
     initCustomSelects(document); // Initialize custom selects
 
-    // Handle initial hash for sidebar
+    // 处理 management 子项的选择（restoreTab 已处理 Tab 级别）
     const hash = window.location.hash.replace('#', '');
     if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
-        // If hash points to management section, ensure we switch to management tab
-        // switchTab will handle clicking the button if content is empty
-        switchTab('management');
+        // 等待 restoreTab 完成后再选择子项
+        setTimeout(() => {
+            const targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
+            if (targetBtn) {
+                targetBtn.click();
+            }
+        }, 0);
     }
 
     // prefers-reduced-motion support
