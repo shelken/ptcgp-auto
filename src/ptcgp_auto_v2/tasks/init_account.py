@@ -304,11 +304,11 @@ class InitAccountTask(Task):
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
-        logger.debug("未知页面，点击屏幕上方兜底")
+        logger.debug("未知页面，点击屏幕中心兜底")
         tap_text_exact(
             self.adb, page_info.get("ocr_results", []), get_text_patterns("text_task")
         )
-        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.5)
+        return quick_tap(self.adb, wait=0.5)
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
