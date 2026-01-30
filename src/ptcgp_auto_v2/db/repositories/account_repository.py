@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, List, Optional, cast
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskPlan
@@ -51,6 +51,13 @@ class AccountRepository:
                 .order_by(col(Account.id))
             )
             return list(session.exec(statement).all())
+
+    def count_all(self) -> int:
+        """统计所有账号数量"""
+        with Session(get_engine()) as session:
+            statement = select(func.count()).select_from(Account)
+            result = session.exec(statement).one()
+            return result or 0
 
     def get_accounts_without_friend_id(self) -> List[Account]:
         """获取所有没有 friend_id 的账号（用于补全任务）"""
