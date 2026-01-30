@@ -88,7 +88,9 @@ class AccountSyncer:
             if self._update_account_from_info(account, account_info):
                 self.account_repo.update(account)
                 logger.debug(f"已更新账号: {account.nickname or account.game_id}")
-            logger.info(f"识别到账号: {account.nickname or account.game_id} (ID: {account.id})")
+            logger.info(
+                f"识别到账号: {account.nickname or account.game_id} (ID: {account.id})"
+            )
             return account
 
         # 创建新账号
@@ -99,10 +101,40 @@ class AccountSyncer:
             xml_content=account_info.xml_content,
             session_token_iat=account_info.session_token_iat,
         )
-        account = self.account_repo.create(account)
-        logger.info(f"创建新账号: {device_account_id} (ID: {account.id})")
+        account = self.account_repo.create(account, auto_assign_plan=False)
+        logger.info(
+            f"创建新账号: {device_account_id} (ID: {account.id}) [未分配计划，等待初始化]"
+        )
+
+        # 为新账号生成 init_account 任务
+        self._create_init_task(account)
 
         return account
+
+    def _create_init_task(self, account: Account):
+        """为新账号创建初始化任务"""
+        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
+        from ptcgp_auto_v2.db.models import TaskInstance
+
+        try:
+            task_repo = TaskInstanceRepository()
+            # 检查是否已存在 init_account 任务
+            existing = task_repo.get_by_account_and_type(account.id, "init_account")
+            if existing:
+                logger.debug(f"账号 {account.id} 已存在 init_account 任务")
+                return
+
+            # 创建 init_account 任务
+            init_task = TaskInstance(
+                account_id=account.id,
+                task_type="init_account",
+                status="pending",
+                reset_type="once",
+            )
+            task_repo.create(init_task)
+            logger.info(f"为账号 {account.id} 创建 init_account 任务")
+        except Exception as e:
+            logger.warning(f"创建 init_account 任务失败: {e}")
 
     def _update_account_from_info(
         self, account: Account, info: DeviceAccountInfo
@@ -156,11 +188,14 @@ class AccountSyncer:
                 return None
 
             # 复制 XML 到 sdcard
-            self.adb.run_as_root(f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}")
+            self.adb.run_as_root(
+                f"cp {self._settings.device_xml_path} {DEVICE_TEMP_PATH}"
+            )
             self.adb.run_as_root(f"chmod 644 {DEVICE_TEMP_PATH}")
 
             # 拉取到本地（使用随机文件名，避免多设备并发冲突）
             import uuid
+
             temp_path = self.storage_dir / f"temp_{uuid.uuid4().hex[:8]}.xml"
             if not self.adb.pull(DEVICE_TEMP_PATH, str(temp_path)):
                 return None
