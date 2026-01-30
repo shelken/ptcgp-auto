@@ -136,7 +136,7 @@ TEXT_PATTERNS = {
     "init_next_step": ["下一步"],
     "init_mission": ["任務"],
     "init_open_pack": ["開封"],
-    "init_enjoy": ["請好好享受"],
+    "init_enjoy": ["請好好享受", "隨意遊玩"],
     "init_tap_to_flip": ["點擊來翻開卡牌吧"],
     "init_select_favorite_card": ["選1張喜歡的卡牌吧"],
 }
