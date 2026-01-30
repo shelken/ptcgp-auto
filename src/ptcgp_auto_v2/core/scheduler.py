@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import TaskInstance, Account
     from ptcgp_auto_v2.db.repositories import TaskInstanceRepository, AccountRepository
 
+from ptcgp_auto_v2.core.account_creation import check_and_trigger_account_creation
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +49,9 @@ class SchedulerConfig:
     skipped_reset_timeout: float = DEFAULT_SKIPPED_RESET_TIMEOUT
     stale_task_check_interval: float = DEFAULT_STALE_CHECK_INTERVAL
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
+    # 自动创建账号配置
+    auto_create_accounts: bool = False  # 是否启用自动创建账号
+    max_accounts: int = 100  # 最大账号数量上限
 
 
 class Scheduler:
@@ -64,6 +69,8 @@ class Scheduler:
         self,
         device_addresses: list[str],
         config: Optional[SchedulerConfig] = None,
+        auto_create_accounts: bool = False,
+        max_accounts: int = 100,
     ):
         """
         初始化调度器
@@ -71,8 +78,16 @@ class Scheduler:
         Args:
             device_addresses: ADB 设备地址列表
             config: 调度器配置
+            auto_create_accounts: 是否启用自动创建账号
+            max_accounts: 最大账号数量上限
         """
         self.config = config or SchedulerConfig()
+        # 如果传入了自动创建参数，覆盖配置中的默认值
+        if auto_create_accounts:
+            self.config.auto_create_accounts = auto_create_accounts
+        if max_accounts != 100:  # 只有当不是默认值时才覆盖
+            self.config.max_accounts = max_accounts
+
         self.device_pool = DevicePool(device_addresses)
         self._running = False
         self._stop_event = threading.Event()  # 停止事件，用于通知执行器
@@ -114,6 +129,25 @@ class Scheduler:
         """检查是否应该检查异常任务"""
         elapsed = (datetime.now() - self._last_stale_check).total_seconds()
         return elapsed >= self.config.stale_task_check_interval
+
+    def _has_creating_account(self) -> bool:
+        """检查是否已有账号正在创建中（存在 pending init_account 任务）"""
+        if not self._task_instance_repo:
+            return False
+
+        # 查找所有 init_account 类型的任务实例
+        from ptcgp_auto_v2.db.models import TaskInstance
+        from sqlmodel import select
+        from ptcgp_auto_v2.db.engine import get_engine
+        from sqlmodel import Session
+
+        with Session(get_engine()) as session:
+            statement = select(TaskInstance).where(
+                TaskInstance.task_type == "init_account",
+                TaskInstance.status.in_(["pending", "running"]),
+            )
+            result = session.exec(statement).first()
+            return result is not None
 
     def _check_and_reset_stale_tasks(self):
         """检查并重置超时的异常任务"""
@@ -360,6 +394,12 @@ class Scheduler:
             if not pending_tasks:
                 continue
 
+            # 检查未完成的新号初始化任务（断点恢复支持）
+            init_task = self._get_incomplete_init_task(pending_tasks)
+            if init_task:
+                # 仅执行 init_account 任务，跳过其他任务
+                pending_tasks = [init_task]
+
             # 检查是否需要前置任务（如 fetch_account_info）
             pending_tasks = self._ensure_prerequisites_in_batch(account, pending_tasks)
 
@@ -523,6 +563,29 @@ class Scheduler:
             f"(账号: {original_task.account.nickname})"
         )
 
+    def _get_incomplete_init_task(
+        self, tasks: list["TaskInstance"]
+    ) -> "TaskInstance | None":
+        """
+        查找未完成的新号初始化任务
+
+        检查任务列表中是否存在状态非 completed/skipped 的 init_account 任务。
+        用于断点恢复：确保新号在初始化完成前只执行 init_account 任务。
+
+        Args:
+            tasks: 待检查的任务列表
+
+        Returns:
+            未完成的 init_account 任务，若不存在则返回 None
+        """
+        for task in tasks:
+            if task.task_type == "init_account" and task.status not in (
+                TaskStatus.COMPLETED.value,
+                TaskStatus.SKIPPED.value,
+            ):
+                return task
+        return None
+
     def _build_executor_config(self) -> ExecutorConfig:
         """构建带停止事件的执行器配置"""
         return ExecutorConfig(
@@ -592,6 +655,13 @@ class Scheduler:
 
                 # 检查并重置超时的异常任务
                 self._check_and_reset_stale_tasks()
+
+                # 检查并触发账号创建（如果没有正在创建的账号且配置启用）
+                if (
+                    self.config.auto_create_accounts
+                    and not self._has_creating_account()
+                ):
+                    check_and_trigger_account_creation(self)
 
                 # 检查是否有空闲设备
                 if self.device_pool.available_count == 0:
