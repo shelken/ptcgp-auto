@@ -130,5 +130,7 @@
     "label_interval": "Interval (Seconds)",
     "reset_daily": "Daily",
     "reset_weekly": "Weekly",
-    "reset_interval": "Interval"
+    "reset_interval": "Interval",
+    "card_preview_hint": "Drag to rotate",
+    "card_preview_close_hint": "Click outside or press ESC to close"
 }

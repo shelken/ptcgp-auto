@@ -130,5 +130,7 @@
     "label_interval": "间隔 (秒)",
     "reset_daily": "每日",
     "reset_weekly": "每周",
-    "reset_interval": "间隔"
+    "reset_interval": "间隔",
+    "card_preview_hint": "拖动旋转查看",
+    "card_preview_close_hint": "点击空白处或按 ESC 关闭"
 }

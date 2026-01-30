@@ -5,6 +5,19 @@ const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
 const STORAGE_KEY_TAB = 'ptcgp_active_tab';
 
+// --- Card Preview State ---
+let cardPreviewState = {
+    isOpen: false,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    rotateX: 0,
+    rotateY: 0,
+    targetElement: null
+};
+
 // --- Focus Management ---
 let previousActiveElement = null;
 
@@ -49,6 +62,171 @@ function showToast(message) {
             }
         }, 300);
     }, 2000);
+}
+
+// --- Card Preview Functions ---
+
+function openCardPreview(cardElement) {
+    // 防止重复打开
+    if (cardPreviewState.isOpen) return;
+
+    // 获取卡牌数据
+    const cardName = cardElement.dataset.cardName || 'Unknown';
+    const cardRarity = cardElement.dataset.cardRarity || '';
+    const cardSet = cardElement.dataset.cardSet || '';
+    const cardNumber = cardElement.dataset.cardNumber || '';
+    const cardImage = cardElement.dataset.cardImage || '/static/card_back.png';
+
+    // 创建预览模态框 HTML
+    const previewHTML = `
+        <div id="card-preview-overlay" class="card-preview-overlay" onclick="closeCardPreview(event)">
+            <div id="card-preview-container" class="card-preview-container">
+                <div id="card-preview-card" class="card-preview-card">
+                    <div class="card-preview-front">
+                        <img src="${cardImage}" alt="${cardName}" class="card-preview-image" onerror="this.src='/static/card_back.png'">
+                    </div>
+                    <div class="card-preview-back">
+                        <img src="/static/card_back.png" alt="Card Back" class="card-preview-image">
+                    </div>
+                </div>
+                <div class="card-preview-info">
+                    <div class="card-preview-name">${cardName}</div>
+                    <div class="card-preview-meta">
+                        ${cardRarity ? `<span class="card-preview-rarity">${cardRarity}</span>` : ''}
+                        ${cardSet ? `<span class="card-preview-set">${cardSet}</span>` : ''}
+                        ${cardNumber ? `<span class="card-preview-number">#${cardNumber}</span>` : ''}
+                    </div>
+                </div>
+                <div class="card-preview-hint">拖动旋转查看 / Drag to rotate</div>
+            </div>
+        </div>
+    `;
+
+    // 插入到 body
+    document.body.insertAdjacentHTML('beforeend', previewHTML);
+
+    // 更新状态
+    cardPreviewState.isOpen = true;
+    cardPreviewState.rotateX = 0;
+    cardPreviewState.rotateY = 0;
+    cardPreviewState.targetElement = document.getElementById('card-preview-card');
+
+    // 绑定拖拽事件
+    bindCardPreviewEvents();
+
+    // 禁止背景滚动
+    document.body.style.overflow = 'hidden';
+
+    // 添加显示动画
+    requestAnimationFrame(() => {
+        const overlay = document.getElementById('card-preview-overlay');
+        if (overlay) overlay.classList.add('active');
+    });
+}
+
+function closeCardPreview(event) {
+    // 如果点击的是容器内部（卡牌本身），不关闭
+    if (event && event.target.id !== 'card-preview-overlay') return;
+
+    const overlay = document.getElementById('card-preview-overlay');
+    if (!overlay) return;
+
+    // 移除显示动画
+    overlay.classList.remove('active');
+
+    // 延迟后移除 DOM
+    setTimeout(() => {
+        overlay.remove();
+        cardPreviewState.isOpen = false;
+        cardPreviewState.targetElement = null;
+        document.body.style.overflow = '';
+    }, 300);
+}
+
+function bindCardPreviewEvents() {
+    const container = document.getElementById('card-preview-container');
+    if (!container) return;
+
+    // 鼠标事件
+    container.addEventListener('mousedown', handleDragStart);
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+
+    // 触摸事件
+    container.addEventListener('touchstart', handleDragStart, { passive: false });
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('touchend', handleDragEnd);
+}
+
+function handleDragStart(e) {
+    if (!cardPreviewState.isOpen) return;
+
+    cardPreviewState.isDragging = true;
+
+    // 获取起始位置
+    if (e.type === 'touchstart') {
+        cardPreviewState.startX = e.touches[0].clientX;
+        cardPreviewState.startY = e.touches[0].clientY;
+    } else {
+        cardPreviewState.startX = e.clientX;
+        cardPreviewState.startY = e.clientY;
+    }
+
+    // 添加拖拽中样式
+    const card = document.getElementById('card-preview-card');
+    if (card) card.classList.add('dragging');
+}
+
+function handleDragMove(e) {
+    if (!cardPreviewState.isDragging || !cardPreviewState.isOpen) return;
+
+    e.preventDefault();
+
+    // 获取当前位置
+    let clientX, clientY;
+    if (e.type === 'touchmove') {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+
+    // 计算移动差值
+    const deltaX = clientX - cardPreviewState.startX;
+    const deltaY = clientY - cardPreviewState.startY;
+
+    // 更新旋转角度（灵敏度：每像素 0.5 度）
+    cardPreviewState.rotateY += deltaX * 0.5;
+    cardPreviewState.rotateX -= deltaY * 0.5;
+
+    // 限制 X 轴旋转范围 (-60 到 60 度)
+    cardPreviewState.rotateX = Math.max(-60, Math.min(60, cardPreviewState.rotateX));
+
+    // 应用旋转
+    updateCardRotation();
+
+    // 更新起始位置
+    cardPreviewState.startX = clientX;
+    cardPreviewState.startY = clientY;
+}
+
+function handleDragEnd() {
+    if (!cardPreviewState.isDragging) return;
+
+    cardPreviewState.isDragging = false;
+
+    // 移除拖拽中样式
+    const card = document.getElementById('card-preview-card');
+    if (card) card.classList.remove('dragging');
+}
+
+function updateCardRotation() {
+    const card = cardPreviewState.targetElement;
+    if (!card) return;
+
+    // 应用 3D 旋转
+    card.style.transform = `rotateX(${cardPreviewState.rotateX}deg) rotateY(${cardPreviewState.rotateY}deg)`;
 }
 
 // --- Persistence Functions ---
@@ -377,6 +555,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.documentElement.classList.add('reduce-motion');
         } else {
             document.documentElement.classList.remove('reduce-motion');
+        }
+    });
+
+    // Card preview ESC key support
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && cardPreviewState.isOpen) {
+            closeCardPreview();
         }
     });
 
