@@ -10,7 +10,11 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
-from ptcgp_auto_v2.config.constants import PACK_TEMPLATE_THRESHOLD
+from ptcgp_auto_v2.config.constants import (
+    PACK_TEMPLATE_THRESHOLD,
+    SWIPE_DURATION_OPEN,
+    SWIPE_DURATION_REGISTER,
+)
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
@@ -19,32 +23,33 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.locales import get_text_patterns, get_config_value
+from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
-    tap_center,
-    navigate_back,
-    swipe,
-    long_press_text,
-    tap_home_icon,
     click_close,
+    long_press_text,
+    navigate_back,
+    quick_tap,
+    scroll_until_template,
+    swipe,
+    swipe_card_coords,
+    swipe_pack_coords,
     tap_bottom_close,
     tap_box,
+    tap_center,
     tap_continue,
-    swipe_pack_coords,
-    swipe_card_coords,
+    tap_home_icon,
+    tap_matched_element,
     tap_template_or_text,
     tap_template_with_scale,
-    scroll_until_template,
-    quick_tap,
 )
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (
         AccountPackConfigRepository,
-        PackRecordRepository,
-        CardRepository,
         AccountPackPointRepository,
+        CardRepository,
+        PackRecordRepository,
     )
 
 logger = logging.getLogger(__name__)
@@ -60,10 +65,6 @@ _open_pack_task = None
 # 沙漏弹窗关闭点击位置（屏幕底部区域）
 BASE_POPUP_CLOSE_TAP_Y = 1820  # 1920 * 0.95
 
-# 开包滑动时长 (ms)
-SWIPE_DURATION_OPEN = 500
-# 登录图鉴滑动时长 (ms)
-SWIPE_DURATION_REGISTER = 100
 
 # 主页无免费包检查次数阈值
 HOME_CHECK_THRESHOLD = 3
@@ -142,6 +143,7 @@ def _build_pack_pages() -> list[dict]:
             "templates": ["icon_home"],
             "priority": 99,
         },
+        {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
     ]
 
 
@@ -205,9 +207,9 @@ class OpenPackTask(Task):
         """任务开始前的初始化"""
         from ptcgp_auto_v2.db.repositories import (
             AccountPackConfigRepository,
-            PackRecordRepository,
-            CardRepository,
             AccountPackPointRepository,
+            CardRepository,
+            PackRecordRepository,
         )
 
         self._pack_config_repo = AccountPackConfigRepository()
@@ -282,14 +284,20 @@ class OpenPackTask(Task):
             manager = PackImageManager()
             # 确保目标卡包图片已就绪
             if manager.ensure_pack_ready(booster_name):
-                # 加载该卡包模板
-                pack_path = manager.get_pack_path(booster_name)
                 if self.recognizer:
                     _, template_matcher = self.recognizer
-                    # 使用模板相对路径（packs_auto/xxx）
-                    template_name = manager.get_template_name(booster_name)
-                    template_matcher.load_additional_templates(f"packs_auto")
-                    logger.debug(f"已加载卡包模板: {template_name}")
+                    # 1. 加载卡包封面（packs_auto/{booster_name}.png）
+                    safe_booster_name = booster_name.replace(" ", "_")
+                    template_matcher.load_template(
+                        f"packs_auto/{safe_booster_name}.png", is_pack_template=False
+                    )
+
+                    # 2. 加载该系列所有卡牌图片（cards/{pack_code}）
+                    template_matcher.load_pack_templates(pack_code)
+
+                    logger.debug(
+                        f"已加载卡包封面: {safe_booster_name}.png, 卡牌系列: {pack_code}"
+                    )
             else:
                 logger.error(f"准备卡包图片资源失败: {booster_name}")
         except Exception as e:
@@ -320,6 +328,7 @@ class OpenPackTask(Task):
             "pack_card_register": self._handle_card_register,
             "pack_opening_result": self._handle_pack_opening_result,
             "pack_opening_select": self._handle_pack_opening_select,
+            "speed_up_button": self._handle_speed_up,
         }
 
         handler = handlers.get(page_name)
@@ -331,8 +340,12 @@ class OpenPackTask(Task):
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
-        logger.debug("未知页面，点击屏幕中心兜底")
-        return quick_tap(self.adb, wait=0.5)
+        logger.debug("未知页面，点击屏幕上方兜底")
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.5)
+
+    def _handle_speed_up(self, page_info: dict) -> ActionResult:
+        """处理快进按钮"""
+        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok()
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
