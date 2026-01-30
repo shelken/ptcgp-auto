@@ -27,20 +27,20 @@ from ptcgp_auto_v2.core.task_base import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
-    is_text_visible,
-    tap_text,
-    tap_text_exact,
-    tap_center,
-    tap_box,
-    tap_template,
-    swipe_up,
-    swipe,
+    clear_text,
     click_close,
-    tap,
+    is_text_visible,
     quick_tap,
+    swipe,
+    swipe_up,
+    tap,
+    tap_box,
+    tap_center,
     tap_matched_element,
     tap_ok,
-    clear_text,
+    tap_template,
+    tap_text,
+    tap_text_exact,
 )
 
 if TYPE_CHECKING:
@@ -288,7 +288,7 @@ class InitAccountTask(Task):
 
     def _handle_speed_up(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
-        return tap_matched_element(self.adb, page_info, 0.1) or ActionResult.ok()
+        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok()
 
     def _tap_text_exact(
         self, page_info: dict, pattern_key: str, log_msg: str
@@ -304,11 +304,11 @@ class InitAccountTask(Task):
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
-        logger.debug("未知页面，点击屏幕中心兜底")
+        logger.debug("未知页面，点击屏幕上方兜底")
         tap_text_exact(
             self.adb, page_info.get("ocr_results", []), get_text_patterns("text_task")
         )
-        return quick_tap(self.adb, wait=0.5)
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.5)
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
@@ -323,7 +323,7 @@ class InitAccountTask(Task):
 
     def _assign_base_plan(self):
         """为完成的账号分配 base 计划"""
-        from ptcgp_auto_v2.db.repositories import TaskPlanRepository, AccountRepository
+        from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
 
         try:
             plan_repo = TaskPlanRepository()

@@ -21,11 +21,11 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
-    tap_home_icon,
-    tap_community_icon,
     tap_above_point,
-    tap_top_center,
+    tap_community_icon,
+    tap_home_icon,
     tap_text,
+    tap_top_center,
 )
 
 logger = logging.getLogger(__name__)
@@ -238,17 +238,18 @@ class FetchAccountInfoTask(Task):
 
     def _handle_community(self, page_info: dict) -> ActionResult:
         """社群页面：点击交换按钮或返回主页"""
+        wait = 3.0
         if self._is_action_done("exchange_fetched"):
-            return tap_home_icon(self.adb, self.page_detector, wait=1.5)
+            return tap_home_icon(self.adb, self.page_detector, wait=wait)
 
         ocr = page_info.get("ocr_results", [])
         result = tap_text(
-            self.adb, ocr, get_text_patterns("community_exchange_btn"), wait=2.0
+            self.adb, ocr, get_text_patterns("community_exchange_btn"), wait=wait
         )
         if result:
             logger.debug("  -> 点击交換按钮")
             return result
-        return ActionResult.ok(wait=1.0)
+        return ActionResult.ok(wait=wait)
 
     def _handle_exchange(self, page_info: dict) -> ActionResult:
         """交换页面：提取点数后标记完成"""
