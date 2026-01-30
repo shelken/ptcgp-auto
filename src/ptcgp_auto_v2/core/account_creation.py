@@ -6,6 +6,7 @@
 """
 
 import logging
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -43,8 +44,6 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         return False
 
     # 2. 检查冷却时间（避免频繁重置）
-    import time
-
     current_time = time.time()
     elapsed = current_time - _last_creation_time
     if elapsed < ACCOUNT_CREATION_COOLDOWN:
@@ -85,6 +84,10 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         # 初始化 ADB 并重置环境
         from ptcgp_auto_v2.infra.adb import AdbController
         from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
+        from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+        from ptcgp_auto_v2.config.settings import get_settings
+
+        settings = get_settings()
 
         adb = AdbController(device.address)
         if not adb.connect():
@@ -96,15 +99,83 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
             switcher.reset_game_environment()
 
             # 重启游戏，进入新账号创建流程
-            from ptcgp_auto_v2.config.settings import get_settings
-
-            settings = get_settings()
             adb.restart_app(settings.app_package)
             logger.info(f"设备 {device.address} 已重置并重启游戏，等待新账号创建")
-            return True
 
-        finally:
+            # 断开ADB连接，让游戏完全重启
             adb.disconnect()
+            logger.debug("断开ADB连接，等待游戏重启完成")
+
+        except Exception as e:
+            logger.exception(f"重置设备环境失败: {e}")
+            return False
+
+        # 重启后等待8秒让游戏启动
+        logger.debug("等待8秒让游戏完成初始启动...")
+        time.sleep(8)
+
+        # 循环尝试提取新账号信息（总共30秒，每5秒尝试一次）
+        new_account = None
+        for attempt in range(6):
+            logger.debug(f"第 {attempt + 1}/6 次尝试提取账号信息...")
+
+            # 每次重新连接ADB
+            fresh_adb = AdbController(device.address)
+            if not fresh_adb.connect():
+                logger.warning(f"第 {attempt + 1} 次尝试：无法连接设备，5秒后重试")
+                time.sleep(5)
+                continue
+
+            try:
+                # 创建syncer并获取当前账号（会提取并自动创建新账号）
+                syncer = AccountSyncer(fresh_adb)
+                account = syncer.get_current_account()
+
+                if account and account.id:
+                    logger.info(f"获取到账号: {account.game_id}")
+
+                    # 检查是否为新创建的账号（通过init_account任务判断）
+                    from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
+
+                    task_repo = TaskInstanceRepository()
+                    init_task = task_repo.get_by_account_and_type(
+                        account.id, "init_account"
+                    )
+
+                    if init_task:
+                        # 有init_task，说明是新创建的账号
+                        logger.info(
+                            f"发现新账号！Player ID: {account.game_id}, "
+                            f"已创建init_account任务 (任务ID: {init_task.id})"
+                        )
+                        new_account = account
+                        break
+                    else:
+                        # 没有init_task，说明是已存在的账号
+                        logger.debug(
+                            f"账号 {account.game_id} 已存在于数据库且无init_task，继续等待..."
+                        )
+                else:
+                    logger.debug(
+                        f"第 {attempt + 1} 次尝试：未获取到账号信息，5秒后重试"
+                    )
+
+            except Exception as e:
+                logger.warning(f"第 {attempt + 1} 次尝试提取账号失败: {e}")
+            finally:
+                fresh_adb.disconnect()
+
+            # 等待5秒后下次尝试
+            if attempt < 5:  # 最后一次不需要等待
+                time.sleep(5)
+
+        if new_account:
+            _last_creation_time = time.time()  # 更新冷却时间戳
+            logger.info(f"新账号创建流程完成，账号ID: {new_account.game_id}")
+            return True
+        else:
+            logger.warning("30秒内未能成功提取新账号信息，将在下次调度时重试")
+            return False
 
     except Exception as e:
         logger.exception(f"触发新账号创建失败: {e}")
