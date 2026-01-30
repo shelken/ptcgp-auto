@@ -83,7 +83,8 @@ function openCardPreview(cardElement) {
             <div id="card-preview-container" class="card-preview-container">
                 <div id="card-preview-card" class="card-preview-card">
                     <div class="card-preview-front">
-                        <img src="${cardImage}" alt="${cardName}" class="card-preview-image" onerror="this.src='/static/card_back.png'">
+                        <img src="${cardImage}" alt="${cardName}" class="card-preview-image" draggable="false" onerror="this.src='/static/card_back.png'">
+                        <div id="card-preview-shine" class="card-preview-shine"></div>
                     </div>
                 </div>
                 <div class="card-preview-info">
@@ -157,6 +158,9 @@ function bindCardPreviewEvents() {
 
 function handleDragStart(e) {
     if (!cardPreviewState.isOpen) return;
+    
+    // 阻止默认拖拽行为（防止图片被拖动）
+    e.preventDefault();
 
     cardPreviewState.isDragging = true;
 
@@ -217,14 +221,72 @@ function handleDragEnd() {
     // 移除拖拽中样式
     const card = document.getElementById('card-preview-card');
     if (card) card.classList.remove('dragging');
+    
+    // 自动回正 - 平滑转回正面
+    animateResetToFront();
 }
 
 function updateCardRotation() {
     const card = cardPreviewState.targetElement;
     if (!card) return;
 
-    // 应用 3D 旋转
-    card.style.transform = `rotateX(${cardPreviewState.rotateX}deg) rotateY(${cardPreviewState.rotateY}deg)`;
+    // 应用 3D 旋转 - 使用更自然的旋转顺序
+    card.style.transform = `rotateY(${cardPreviewState.rotateY}deg) rotateX(${cardPreviewState.rotateX}deg)`;
+    
+    // 更新光影效果 - 根据旋转角度调整光泽位置
+    updateShineEffect();
+}
+
+function updateShineEffect() {
+    const shine = document.getElementById('card-preview-shine');
+    if (!shine) return;
+    
+    // 计算光泽偏移 - 旋转越大，光泽移动越多
+    const shineX = -cardPreviewState.rotateY * 2; // 水平旋转影响光泽左右移动
+    const shineY = cardPreviewState.rotateX * 2;  // 垂直旋转影响光泽上下移动
+    
+    // 动态调整光泽角度和透明度
+    const angle = 115 + (cardPreviewState.rotateY * 0.3);
+    const opacity = 0.4 + (Math.abs(cardPreviewState.rotateY) / 90) * 0.3;
+    
+    shine.style.background = `linear-gradient(
+        ${angle}deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0) 35%,
+        rgba(255, 255, 255, ${opacity}) 50%,
+        rgba(255, 255, 255, 0) 65%,
+        rgba(255, 255, 255, 0) 100%
+    )`;
+    shine.style.transform = `translateZ(2px) translateX(${shineX}px) translateY(${shineY}px)`;
+}
+
+function animateResetToFront() {
+    if (!cardPreviewState.isOpen) return;
+    
+    const card = document.getElementById('card-preview-card');
+    if (!card) return;
+    
+    // 保存起始角度
+    const startX = cardPreviewState.rotateX;
+    const startY = cardPreviewState.rotateY;
+    
+    // 如果已经在正面，无需动画
+    if (Math.abs(startX) < 0.1 && Math.abs(startY) < 0.1) return;
+    
+    // 添加过渡动画
+    card.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    
+    // 重置角度
+    cardPreviewState.rotateX = 0;
+    cardPreviewState.rotateY = 0;
+    
+    // 应用最终状态
+    updateCardRotation();
+    
+    // 动画完成后恢复快速响应的过渡
+    setTimeout(() => {
+        if (card) card.style.transition = 'transform 0.15s ease-out';
+    }, 600);
 }
 
 // --- Persistence Functions ---
