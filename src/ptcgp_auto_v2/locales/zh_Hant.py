@@ -50,9 +50,9 @@ TEXT_PATTERNS = {
     # 交换未解锁弹窗
     "exchange_locked_popup": ["開放條件", "距離開放還剩"],
     # 通用页面
-    "popup_ok": ["OK"],
+    "popup_ok": ["OK", "ОК"],  # 支持英文OK和俄文ОК（西里尔字母）
     "text_cancel": ["取消"],
-    "text_ok": ["OK"],
+    "text_ok": ["OK", "ОК"],  # 支持英文OK和俄文ОК（西里尔字母）
     "text_retry": ["再試一次"],
     "text_x": ["x"],
     "text_task": ["任務"],
@@ -87,6 +87,8 @@ TEXT_PATTERNS = {
     "rewards_tab_drop": ["掉落"],
     "rewards_tab_account_link": ["帳號連結"],
     "rewards_tab_premium": ["特級"],
+    "rewards_tab_elite_deck": ["精英牌組"],
+    "rewards_tab_convenient_cards": ["便利卡牌"],
     # 可点击的领取按钮（按优先级排序：全部領取 > 領取 > 達成）
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     # 奖励详情页面（点击領取后展示卡牌的页面，有報酬和達成按钮）
