@@ -16,3 +16,4 @@ data**
 templates/cards/
 templates/packs_auto/
 .alma-snapshots
+runs/**
