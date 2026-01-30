@@ -81,15 +81,21 @@ class AccountRepository:
             accounts = list(session.exec(statement).all())
             return accounts
 
-    def create(self, account: Account) -> Account:
-        """创建账号"""
+    def create(self, account: Account, auto_assign_plan: bool = True) -> Account:
+        """创建账号
+
+        Args:
+            account: 账号对象
+            auto_assign_plan: 是否自动分配 base 计划（默认 True）。
+                              在新账号初始化流程中应设为 False，待 init_account 完成后再分配。
+        """
         with Session(get_engine()) as session:
             session.add(account)
             session.commit()
             session.refresh(account)
 
-            # 如果没有指定计划，自动关联 "base"
-            if not account.task_plan_associations:
+            # 如果没有指定计划且允许自动分配，关联 "base"
+            if auto_assign_plan and not account.task_plan_associations:
                 base_plan = self.get_plan_by_name(session, "base")
                 if base_plan and account.id is not None and base_plan.id is not None:
                     new_assoc = AccountTaskPlan(
