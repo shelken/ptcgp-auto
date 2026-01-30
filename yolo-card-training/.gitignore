@@ -1,0 +1,30 @@
+# YOLO 训练项目忽略规则
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境（在当前目录创建）
+.venv/
+venv/
+env/
+
+# 数据和模型（大文件）
+data/
+output/
+models/
+
+# 训练中间文件
+*.pt
+*.pth
+*.onnx
+*.mlpackage
+runs/
+dataset/
+
+# 日志
+*.log
+wandb/
