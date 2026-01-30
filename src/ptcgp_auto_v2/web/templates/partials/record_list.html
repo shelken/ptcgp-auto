@@ -51,7 +51,13 @@
     <div class="w-full md:w-3/4">
         <div class="pack-grid {{ item.layout }}">
             {% for card in item.cards %}
-            <div class="card-item relative group aspect-[2/3] overflow-hidden transition-all duration-200 brutal-card">
+            <div class="card-item relative group aspect-[2/3] overflow-hidden transition-all duration-200 brutal-card cursor-pointer"
+                     onclick="openCardPreview(this)"
+                     data-card-name="{{ card.card_name }}"
+                     data-card-rarity="{{ card.rarity }}"
+                     data-card-set="{{ card.card.set_code if card.card else '' }}"
+                     data-card-number="{{ card.card.number if card.card else '' }}"
+                     data-card-image="{% if card.card and card.card.image_url %}https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards-by-set/{{ card.card.set_code }}/{{ card.card.number }}.webp&w=800&output=webp{% else %}/static/card_back.png{% endif %}">
 
                 <!-- Card Image -->
                 {% if card.card and card.card.image_url %}
