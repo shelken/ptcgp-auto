@@ -94,15 +94,14 @@ class TaskInstanceRepository:
             return instance
 
     def get_pending_by_account(self, account_id: int) -> List[TaskInstance]:
-        """获取账号的所有待执行任务"""
+        """获取账号的所有待执行任务（不排序，由调度器决定顺序）"""
         with Session(get_engine()) as session:
             statement = (
-                select(TaskInstance)
-                .where(
+                select(TaskInstance).where(
                     TaskInstance.account_id == account_id,
                     TaskInstance.status == "pending",
                 )
-                .order_by(col(TaskInstance.created_at))
+                # 不排序，由调度器根据 task_plan 的 task_types 顺序重新排序
             )
             return list(session.exec(statement).all())
 
