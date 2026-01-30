@@ -125,6 +125,7 @@ TEXT_PATTERNS = {
     "init_skip_link": ["現在不連結"],
     "init_set_nickname": ["請設定頭像和玩家名稱"],
     "init_nickname_title": ["玩家名稱"],
+    "init_nickname_warning": ["請勿使用本名"],  # 昵称异常提示
     "init_confirm_settings": ["確定要使用此設定嗎"],
     "init_select_pack": ["請選擇喜歡的擴充包"],
     "init_decide": ["決定"],

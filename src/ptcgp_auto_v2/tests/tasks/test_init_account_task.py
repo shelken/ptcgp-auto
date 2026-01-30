@@ -13,8 +13,27 @@ from types import SimpleNamespace
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
-from ptcgp_auto_v2.tasks.init_account import InitAccountPhase, InitAccountTask, _build_init_pages
+from ptcgp_auto_v2.tasks.init_account import (
+    InitAccountPhase,
+    InitAccountTask,
+    _build_init_pages,
+)
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
+
+
+class FakeDevice:
+    """模拟 ADB 设备，支持 keyevent 和 send_keys"""
+
+    def __init__(self, adb):
+        self._adb = adb
+
+    def keyevent(self, keycode: int):
+        """模拟按键"""
+        self._adb.keyevents.append(keycode)
+
+    def send_keys(self, text: str):
+        """模拟输入文本"""
+        self._adb.inputs.append(text)
 
 
 class FakeAdb:
@@ -25,8 +44,15 @@ class FakeAdb:
         self.tap_points = []
         self.swipes = []
         self.inputs = []
+        self.keyevents = []
         self._screen_width = 1080
         self._screen_height = 1920
+        self._device = FakeDevice(self)
+
+    @property
+    def device(self):
+        """返回模拟设备对象"""
+        return self._device
 
     @property
     def screen_width(self):
@@ -51,8 +77,16 @@ class FakeAdb:
             y = (box[1] + box[3]) // 2
         else:
             # 尝试从命名空间获取属性
-            x = (box.x1 + box.x2) // 2 if hasattr(box, 'x1') else (box[0][0] + box[0][2]) // 2
-            y = (box.y1 + box.y2) // 2 if hasattr(box, 'y1') else (box[0][1] + box[0][3]) // 2
+            x = (
+                (box.x1 + box.x2) // 2
+                if hasattr(box, "x1")
+                else (box[0][0] + box[0][2]) // 2
+            )
+            y = (
+                (box.y1 + box.y2) // 2
+                if hasattr(box, "y1")
+                else (box[0][1] + box[0][3]) // 2
+            )
         self.tap_points.append((x, y))
 
     def long_press(self, x, y, duration=1000):
@@ -119,7 +153,9 @@ class FakePageDetector:
     def capture(self, screenshot=None):
         return self._last_screenshot, self._last_ocr_results
 
-    def find_template_with_scale(self, template_name, scale=1.0, threshold=0.8, screenshot=None):
+    def find_template_with_scale(
+        self, template_name, scale=1.0, threshold=0.8, screenshot=None
+    ):
         count = self._template_call_count.get(template_name, 0)
         self._template_call_count[template_name] = count + 1
 
@@ -134,7 +170,9 @@ class FakePageDetector:
 
     def find_template(self, template_name, threshold=0.8, screenshot=None):
         """查找模板（不带scale）"""
-        return self.find_template_with_scale(template_name, scale=1.0, threshold=threshold, screenshot=screenshot)
+        return self.find_template_with_scale(
+            template_name, scale=1.0, threshold=threshold, screenshot=screenshot
+        )
 
 
 class TestInitAccountRegistration(unittest.TestCase):
@@ -239,6 +277,17 @@ class TestInitAccountTaskInit(unittest.TestCase):
 class TestInitAccountConstants(unittest.TestCase):
     """测试任务常量"""
 
+    def test_allowed_countries_is_list(self):
+        """测试允许国家列表为列表类型"""
+        self.assertIsInstance(InitAccountTask.ALLOWED_COUNTRIES, list)
+        self.assertGreater(len(InitAccountTask.ALLOWED_COUNTRIES), 0)
+
+    def test_allowed_countries_contains_expected(self):
+        """测试允许国家列表包含预期国家"""
+        expected_countries = ["香港", "台湾", "日本", "新加坡"]
+        for country in expected_countries:
+            self.assertIn(country, InitAccountTask.ALLOWED_COUNTRIES)
+
     def test_target_country_is_configurable(self):
         """测试目标国家可配置"""
         # 目标国家可以通过修改类属性来配置
@@ -286,7 +335,9 @@ class TestHandleSelectCountry(unittest.TestCase):
     def test_clicks_country_button_to_open_list(self):
         """测试点击国家/地区按钮打开列表"""
         adb = FakeAdb()
-        ocr_results = [{"text": "國家/地區", "box": {"x1": 100, "y1": 200, "x2": 300, "y2": 300}}]
+        ocr_results = [
+            {"text": "國家/地區", "box": {"x1": 100, "y1": 200, "x2": 300, "y2": 300}}
+        ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
 
@@ -301,7 +352,12 @@ class TestHandleSelectCountry(unittest.TestCase):
         adb = FakeAdb()
         # 使用实际的目标国家进行测试
         target_country = InitAccountTask.TARGET_COUNTRY
-        ocr_results = [{"text": target_country, "box": {"x1": 100, "y1": 200, "x2": 200, "y2": 300}}]
+        ocr_results = [
+            {
+                "text": target_country,
+                "box": {"x1": 100, "y1": 200, "x2": 200, "y2": 300},
+            }
+        ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
 
@@ -318,7 +374,9 @@ class TestHandleTermsPrivacy(unittest.TestCase):
     def test_marks_terms_action_done(self):
         """测试标记条款按钮已点击"""
         adb = FakeAdb()
-        ocr_results = [{"text": "使用條款", "box": {"x1": 100, "y1": 500, "x2": 300, "y2": 600}}]
+        ocr_results = [
+            {"text": "使用條款", "box": {"x1": 100, "y1": 500, "x2": 300, "y2": 600}}
+        ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
         task._phase = InitAccountPhase.TERMS_PRIVACY
@@ -333,10 +391,10 @@ class TestHandleTermsPrivacy(unittest.TestCase):
         """测试点击灰色勾选图标"""
         adb = FakeAdb()
         ocr_results = []
-        gray_yes_match = SimpleNamespace(box=(100, 800, 150, 850))
+        # 使用元组格式，与实际代码中的 box 格式一致
+        gray_yes_match = (100, 800, 150, 850)
         page_detector = FakePageDetector(
-            ocr_results=ocr_results,
-            template_matches={"icon_gray_yes": gray_yes_match}
+            ocr_results=ocr_results, template_matches={"icon_gray_yes": gray_yes_match}
         )
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
         # 标记条款和隐私已点击，让流程走到点击灰色图标
@@ -357,8 +415,7 @@ class TestHandleSetNickname(unittest.TestCase):
         ocr_results = []
         pencil_match = SimpleNamespace(box=(500, 600, 560, 660))
         page_detector = FakePageDetector(
-            ocr_results=ocr_results,
-            template_matches={"icon_pencil": pencil_match}
+            ocr_results=ocr_results, template_matches={"icon_pencil": pencil_match}
         )
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
 
@@ -369,7 +426,10 @@ class TestHandleSetNickname(unittest.TestCase):
     def test_skips_when_nickname_visible(self):
         """测试检测到昵称已设置时跳过输入"""
         adb = FakeAdb()
-        ocr_results = [{"text": "skn", "box": {"x1": 800, "y1": 1500, "x2": 900, "y2": 1600}}]
+        # 注意：现在使用精确匹配，所以必须是完整的 "skn"
+        ocr_results = [
+            {"text": "skn", "box": {"x1": 800, "y1": 1500, "x2": 900, "y2": 1600}}
+        ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
 
@@ -377,6 +437,27 @@ class TestHandleSetNickname(unittest.TestCase):
 
         self.assertTrue(result.success)
         # 检测到昵称后直接点击 OK，不需要再点击铅笔
+
+    def test_handles_nickname_warning(self):
+        """测试检测到昵称异常提示时清空重输"""
+        adb = FakeAdb()
+        # 模拟异常提示 "請勿使用本名"
+        ocr_results = [
+            {
+                "text": "請勿使用本名",
+                "box": {"x1": 500, "y1": 1000, "x2": 700, "y2": 1100},
+            }
+        ]
+        page_detector = FakePageDetector(ocr_results=ocr_results)
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+
+        result = task._handle_set_nickname({"ocr_results": ocr_results})
+
+        self.assertTrue(result.success)
+        # 验证发送了退格键（通过 clear_text 函数）
+        self.assertGreater(len(adb.keyevents), 0, "应该发送了退格键")
+        # 验证输入了正确的昵称
+        self.assertIn("skn", adb.inputs, "应该输入了目标昵称")
 
 
 class TestHandleSwipeOpen(unittest.TestCase):
