@@ -9,6 +9,7 @@
 import logging
 import time
 
+from ptcgp_auto_v2.config.constants import SWIPE_DURATION_REGISTER
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -38,9 +39,6 @@ Y_THRESHOLD = 50
 
 # 等待礼物盒加载时间 (s)
 WAIT_GIFT_BOX_LOAD = 4.0
-
-# 卡牌登录图鉴滑动时长 (ms)
-SWIPE_DURATION_REGISTER = 300
 
 # 连续多少次无可领取则判断为完成
 MAX_EMPTY_CHECK_ATTEMPTS = 2
