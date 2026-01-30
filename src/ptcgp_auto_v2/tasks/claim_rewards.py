@@ -79,9 +79,10 @@ def _build_claim_rewards_pages() -> list[dict]:
             "priority": 16,
         },
         {
-            # 主题收藏页面
+            # 主题收藏页面：有"主題收藏"标题，且没有 Tab 栏（排除每日/圖鑑/牌組等）
             "name": "theme_collection_page",
             "identifiers": get_text_patterns("theme_collection"),
+            "exclude_identifiers": get_text_patterns("rewards_page_tabs"),
             "priority": 20,
         },
         {
