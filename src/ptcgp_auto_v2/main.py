@@ -69,6 +69,12 @@ def parse_args(argv: list[str] | None = None):
     )
 
     parser.add_argument(
+        "--web",
+        action="store_true",
+        help="启动 Web 服务（配合 --daemon 在守护模式下启用，单独使用则仅启动 Web）",
+    )
+
+    parser.add_argument(
         "--single",
         action="store_true",
         help="单次运行模式，执行一轮任务后退出",
@@ -499,11 +505,14 @@ def run_web_server(host: str, port: int):
 def run_daemon(settings: Settings, args: argparse.Namespace):
     """守护模式运行"""
 
-    # Start web server in a background thread
-    web_thread = threading.Thread(
-        target=run_web_server, args=(settings.web_host, settings.web_port), daemon=True
-    )
-    web_thread.start()
+    # 只在明确指定 --web 时才启动 Web 服务
+    if args.web:
+        web_thread = threading.Thread(
+            target=run_web_server,
+            args=(settings.web_host, settings.web_port),
+            daemon=True,
+        )
+        web_thread.start()
 
     logger.info("启动守护模式...")
 
@@ -569,6 +578,12 @@ def main():
     settings.configure_logging()
     if discovered_devices and device_addresses:
         logger.info(f"自动发现设备: {', '.join(device_addresses)}")
+
+    # 处理仅启动 Web 服务（非 daemon 模式）
+    if args.web and not args.daemon:
+        logger.info(f"启动 Web 服务: http://{settings.web_host}:{settings.web_port}")
+        run_web_server(settings.web_host, settings.web_port)
+        return 0
 
     # 初始化数据库
     get_database()
@@ -677,6 +692,8 @@ def main():
     print()
     print("使用方式:")
     print("  python main_v2.py --daemon                    # 守护模式")
+    print("  python main_v2.py --daemon --web              # 守护模式 + Web 服务")
+    print("  python main_v2.py --web                       # 仅启动 Web 服务")
     print("  python main_v2.py --list-tasks                # 列出任务")
     print("  python main_v2.py --list-accounts             # 列出账号")
     print("  python main_v2.py --switch-account 4 -d 5715  # 切换账号")
