@@ -193,12 +193,13 @@ class TemplateMatcher:
         self._loaded_pack_templates.clear()
         logger.debug(f"已卸载 {count} 个卡包模板")
 
-    def load_additional_templates(self, sub_dir: str):
+    def load_additional_templates(self, sub_dir: str, is_pack_template: bool = False):
         """
         加载指定子目录的模板（增量加载）
 
         Args:
             sub_dir: 相对于 templates 的子目录，如 "cards/A1/Charizard"
+            is_pack_template: 是否标记为 pack template（用于卡牌识别）
         """
         target_dir = self.templates_dir / sub_dir
         if not target_dir.exists():
@@ -207,15 +208,34 @@ class TemplateMatcher:
 
         count = 0
         for file in target_dir.glob("**/*.png"):
-            if self._load_template_file(file):
+            if self._load_template_file(file, is_pack_template=is_pack_template):
                 count += 1
 
-        logger.debug(f"加载附加模板 {sub_dir}: {count} 个")
+        logger.debug(
+            f"加载附加模板 {sub_dir} (pack_template={is_pack_template}): {count} 个"
+        )
+
+    def load_template(self, template_path: str, is_pack_template: bool = False) -> bool:
+        """
+        加载单个模板文件
+
+        Args:
+            template_path: 模板文件路径（相对于 templates 目录），如 "packs_auto/Gardevoir.png"
+            is_pack_template: 是否标记为 pack template（用于卡牌识别）
+
+        Returns:
+            True 表示成功
+        """
+        file_path = self.templates_dir / template_path
+        if not file_path.exists():
+            logger.warning(f"模板文件不存在: {file_path}")
+            return False
+        return self._load_template_file(file_path, is_pack_template=is_pack_template)
 
     def _load_template_file(
         self, file_path: Path, is_pack_template: bool = False
     ) -> bool:
-        """加载单个模板文件"""
+        """加载单个模板文件（内部方法）"""
         try:
             # 使用相对路径作为模板名（支持子目录）
             rel_path = file_path.relative_to(self.templates_dir)
