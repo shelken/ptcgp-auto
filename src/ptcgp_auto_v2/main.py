@@ -162,6 +162,20 @@ def parse_args(argv: list[str] | None = None):
         help="为账号移除任务计划（需配合 --account 使用，可指定 ID 或名称）",
     )
 
+    # 自动创建账号相关参数
+    parser.add_argument(
+        "--auto-create-accounts",
+        action="store_true",
+        help="启用自动创建小号功能（默认关闭）",
+    )
+
+    parser.add_argument(
+        "--max-accounts",
+        type=int,
+        default=100,
+        help="自动创建账号的最大数量上限（默认：100）",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -482,7 +496,7 @@ def run_web_server(host: str, port: int):
         logger.error(f"Failed to start web server: {e}")
 
 
-def run_daemon(settings: Settings):
+def run_daemon(settings: Settings, args: argparse.Namespace):
     """守护模式运行"""
 
     # Start web server in a background thread
@@ -492,6 +506,13 @@ def run_daemon(settings: Settings):
     web_thread.start()
 
     logger.info("启动守护模式...")
+
+    # 配置自动创建账号参数
+    auto_create = getattr(args, "auto_create_accounts", False)
+    max_accounts = getattr(args, "max_accounts", 100)
+
+    if auto_create:
+        logger.info(f"已启用自动账号创建，最大数量: {max_accounts}")
 
     scheduler = Scheduler(
         device_addresses=settings.device_addresses,
@@ -505,6 +526,8 @@ def run_daemon(settings: Settings):
                 app_package=settings.app_package,
             ),
         ),
+        auto_create_accounts=auto_create,
+        max_accounts=max_accounts,
     )
 
     try:
@@ -647,7 +670,7 @@ def main():
 
     # 守护模式
     if args.daemon:
-        return run_daemon(settings)
+        return run_daemon(settings, args)
 
     # 默认：显示帮助
     print("PTCGP Auto v2 - 任务队列架构自动化框架")
