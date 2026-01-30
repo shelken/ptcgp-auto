@@ -290,10 +290,19 @@ class ClaimRewardsTask(Task):
                         continue
 
                     # 尝试点击最右侧可见 Tab 以继续往右
+                    found_nav_tab = False
                     for right_tab in reversed(TAB_ORDER):
                         if right_tab == WALL_TAB:
                             continue
                         if is_visible(right_tab):
+                            # 如果最右侧可见 Tab 已经访问过，说明已到达最右
+                            if right_tab in self._visited_tabs:
+                                logger.debug(
+                                    f"  -> 已到达最右 (已访问 {right_tab}) 但未见 {tab}，跳过"
+                                )
+                                self._visited_tabs.add(tab)
+                                found_nav_tab = True
+                                break
                             result = tap_tab(right_tab)
                             if result:
                                 logger.debug(
@@ -301,8 +310,9 @@ class ClaimRewardsTask(Task):
                                 )
                                 return result
 
-                    logger.warning(f"  -> 无法找到任何 Tab 以导航至 {tab}，跳过")
-                    self._visited_tabs.add(tab)
+                    if not found_nav_tab:
+                        logger.warning(f"  -> 无法找到任何 Tab 以导航至 {tab}，跳过")
+                        self._visited_tabs.add(tab)
 
         # 3. 所有 Tab 完成，进入主题收藏
         if not self._theme_collection_done:
