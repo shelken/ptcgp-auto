@@ -14,7 +14,10 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD, TEMPLATE_BASE_WIDTH
+from ptcgp_auto_v2.config.constants import (
+    DEFAULT_TEMPLATE_THRESHOLD,
+    TEMPLATE_BASE_WIDTH,
+)
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 logger = logging.getLogger(__name__)
@@ -84,8 +87,7 @@ class TemplateMatcher:
         self._screen_width = width
         self._current_scale = width / self.base_width
         logger.debug(
-            f"设置模板缩放比例: {self._current_scale:.2f} "
-            f"({width}/{self.base_width})"
+            f"设置模板缩放比例: {self._current_scale:.2f} ({width}/{self.base_width})"
         )
 
         # 如果比例发生变化且已加载了模板，可能需要清空或重新缩放
@@ -111,9 +113,10 @@ class TemplateMatcher:
 
     def load_core_templates(self, screen_width: Optional[int] = None):
         """
-        加载核心模板图片（不包含 cards/ 目录下的卡牌图片）
+        加载核心模板图片（仅加载一级目录，不包含子目录）
 
-        不清除现有模板（如卡包模板），只增量加载核心模板。
+        不清除现有模板，只增量加载核心模板。
+        排除 cards/, packs/, packs_auto/ 等子目录。
 
         Args:
             screen_width: 当前屏幕宽度（可选，若提供则更新缩放比例）
@@ -129,12 +132,8 @@ class TemplateMatcher:
             return
 
         count = 0
-        for file in self.templates_dir.glob("**/*.png"):
-            # 使用相对路径判断是否在 cards 目录下
-            rel_path = file.relative_to(self.templates_dir)
-            if str(rel_path).startswith("cards"):
-                continue
-
+        # 仅加载一级目录下的 png 文件
+        for file in self.templates_dir.glob("*.png"):
             if self._load_template_file(file):
                 count += 1
 
@@ -145,7 +144,9 @@ class TemplateMatcher:
     def load_templates(self, screen_width: int = TEMPLATE_BASE_WIDTH):
         self.load_core_templates(screen_width)
 
-    def load_pack_templates(self, pack_code: str, booster_name: Optional[str] = None) -> int:
+    def load_pack_templates(
+        self, pack_code: str, booster_name: Optional[str] = None
+    ) -> int:
         """
         加载指定卡包的模板（卡牌图片）
 
@@ -211,7 +212,9 @@ class TemplateMatcher:
 
         logger.debug(f"加载附加模板 {sub_dir}: {count} 个")
 
-    def _load_template_file(self, file_path: Path, is_pack_template: bool = False) -> bool:
+    def _load_template_file(
+        self, file_path: Path, is_pack_template: bool = False
+    ) -> bool:
         """加载单个模板文件"""
         try:
             # 使用相对路径作为模板名（支持子目录）
@@ -358,7 +361,7 @@ class TemplateMatcher:
         screenshot: Image.Image,
         template_name: str,
         threshold: Optional[float] = None,
-        scale: float = 1.0
+        scale: float = 1.0,
     ) -> List[TemplateMatch]:
         """
         在截图中查找所有匹配的模板
