@@ -317,6 +317,30 @@ class InitAccountTask(Task):
             f"结果: {'成功' if result.success else '失败'}"
         )
 
+        # 成功后自动分配 base 计划
+        if result.success and self.account:
+            self._assign_base_plan()
+
+    def _assign_base_plan(self):
+        """为完成的账号分配 base 计划"""
+        from ptcgp_auto_v2.db.repositories import TaskPlanRepository, AccountRepository
+
+        try:
+            plan_repo = TaskPlanRepository()
+            account_repo = AccountRepository()
+
+            base_plan = plan_repo.get_by_name("base")
+            if base_plan and self.account.id:
+                # 使用 add_secondary_plan 或 update_plan_associations 添加计划
+                account_repo.add_secondary_plan(
+                    account_id=self.account.id, plan_id=base_plan.id, priority=0
+                )
+                logger.info(
+                    f"账号 {self.account.nickname or self.account.game_id} 已自动分配 base 计划"
+                )
+        except Exception as e:
+            logger.warning(f"分配 base 计划失败: {e}")
+
     # ============================================================
     # 页面处理方法
     # ============================================================
