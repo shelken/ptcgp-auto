@@ -678,25 +678,14 @@ body {
     }
 }
 
-/* 卡牌正反面 */
-.card-preview-front,
-.card-preview-back {
+/* 卡牌正面 */
+.card-preview-front {
     position: absolute;
     width: 100%;
     height: 100%;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
     border-radius: 16px;
     overflow: hidden;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-}
-
-.card-preview-front {
-    transform: rotateY(0deg);
-}
-
-.card-preview-back {
-    transform: rotateY(180deg);
 }
 
 /* 卡牌图片 */
@@ -770,7 +759,6 @@ body {
     border-color: var(--border-color);
 }
 
-[data-theme="luxury"] .card-preview-front,
-[data-theme="luxury"] .card-preview-back {
+[data-theme="luxury"] .card-preview-front {
     box-shadow: 0 20px 60px rgba(212, 175, 55, 0.3);
 }

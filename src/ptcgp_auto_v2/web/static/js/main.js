@@ -85,9 +85,6 @@ function openCardPreview(cardElement) {
                     <div class="card-preview-front">
                         <img src="${cardImage}" alt="${cardName}" class="card-preview-image" onerror="this.src='/static/card_back.png'">
                     </div>
-                    <div class="card-preview-back">
-                        <img src="/static/card_back.png" alt="Card Back" class="card-preview-image">
-                    </div>
                 </div>
                 <div class="card-preview-info">
                     <div class="card-preview-name">${cardName}</div>
@@ -195,13 +192,14 @@ function handleDragMove(e) {
     // 计算移动差值
     const deltaX = clientX - cardPreviewState.startX;
     const deltaY = clientY - cardPreviewState.startY;
-
+    
     // 更新旋转角度（灵敏度：每像素 0.5 度）
     cardPreviewState.rotateY += deltaX * 0.5;
     cardPreviewState.rotateX -= deltaY * 0.5;
-
-    // 限制 X 轴旋转范围 (-60 到 60 度)
-    cardPreviewState.rotateX = Math.max(-60, Math.min(60, cardPreviewState.rotateX));
+    
+    // 限制旋转范围 (-45 到 45 度)
+    cardPreviewState.rotateX = Math.max(-45, Math.min(45, cardPreviewState.rotateX));
+    cardPreviewState.rotateY = Math.max(-45, Math.min(45, cardPreviewState.rotateY));
 
     // 应用旋转
     updateCardRotation();
