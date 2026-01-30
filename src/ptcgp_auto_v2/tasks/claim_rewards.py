@@ -9,6 +9,7 @@
 import logging
 import time
 
+from ptcgp_auto_v2.config.constants import SWIPE_DURATION_REGISTER
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -22,6 +23,9 @@ from ptcgp_auto_v2.utils.gesture import (
     click_close,
     is_text_visible,
     navigate_back,
+    quick_tap,
+    swipe,
+    swipe_card_coords,
     tap_box,
     tap_home_icon,
     tap_text,
@@ -44,7 +48,7 @@ HOME_CHECK_INTERVAL = 2.0
 
 # Tab 遍历顺序
 FIXED_TABS = ["daily", "collection", "deck"]
-DYNAMIC_TABS = ["drop", "account_link"]
+DYNAMIC_TABS = ["drop", "account_link", "elite_deck", "convenient_cards"]
 WALL_TAB = "premium"
 TAB_ORDER = FIXED_TABS + DYNAMIC_TABS + [WALL_TAB]
 
@@ -52,6 +56,22 @@ TAB_ORDER = FIXED_TABS + DYNAMIC_TABS + [WALL_TAB]
 # ============================================================
 # 页面识别规则
 # ============================================================
+
+
+def _build_rewards_page_tabs_patterns() -> list[str]:
+    """动态构建 rewards_page 的 Tab 栏识别文本
+
+    包含所有 FIXED_TABS 和 DYNAMIC_TABS 的文本模式，
+    确保所有任务页面（包括新增的活动页面）都能被正确识别。
+    """
+    patterns = []
+    # Fixed tabs: daily, collection, deck
+    for tab in FIXED_TABS:
+        patterns.extend(get_text_patterns(f"rewards_tab_{tab}"))
+    # Dynamic tabs: drop, account_link, elite_deck, convenient_cards, etc.
+    for tab in DYNAMIC_TABS:
+        patterns.extend(get_text_patterns(f"rewards_tab_{tab}"))
+    return patterns
 
 
 def _build_claim_rewards_pages() -> list[dict]:
@@ -65,9 +85,9 @@ def _build_claim_rewards_pages() -> list[dict]:
             "priority": 10,
         },
         {
-            # 任务奖励页面：底部有 Tab 栏
+            # 任务奖励页面：底部有 Tab 栏（包含所有 fixed 和 dynamic tabs）
             "name": "rewards_page",
-            "identifiers": get_text_patterns("rewards_page_tabs"),
+            "identifiers": _build_rewards_page_tabs_patterns(),
             "exact_match": True,
             "priority": 15,
         },
@@ -79,11 +99,17 @@ def _build_claim_rewards_pages() -> list[dict]:
             "priority": 16,
         },
         {
-            # 主题收藏页面：有"主題收藏"标题，且没有 Tab 栏（排除每日/圖鑑/牌組等）
+            # 主题收藏页面：有"主題收藏"标题，且没有 Tab 栏（排除所有任务 Tab）
             "name": "theme_collection_page",
             "identifiers": get_text_patterns("theme_collection"),
-            "exclude_identifiers": get_text_patterns("rewards_page_tabs"),
+            "exclude_identifiers": _build_rewards_page_tabs_patterns(),
             "priority": 20,
+        },
+        {
+            # 卡牌登录图鉴页面（精英牌组奖励领取后）
+            "name": "pack_card_register",
+            "identifiers": get_text_patterns("pack_card_register"),
+            "priority": 25,
         },
         {
             # 通用 home_icon
@@ -165,6 +191,7 @@ class ClaimRewardsTask(Task):
             "rewards_page": self._handle_rewards_page,
             "reward_detail_page": self._handle_reward_detail,
             "theme_collection_page": self._handle_theme_collection,
+            "pack_card_register": self._handle_card_register,
             "home_icon": self._handle_home_icon,
         }
 
@@ -174,6 +201,11 @@ class ClaimRewardsTask(Task):
 
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
+
+    def handle_unknown_page(self, page_info) -> ActionResult:
+        """处理未知页面"""
+        logger.debug("未知页面，点击屏幕上方兜底")
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.5)
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
@@ -265,14 +297,12 @@ class ClaimRewardsTask(Task):
                         logger.debug(f"  -> 往左走，点击 {tab} Tab")
                         return result
 
-        # 阶段2：往右走，从左往右依次点击未访问的 Tab
+        # 阶段2：往右走，处理 FIXED_TABS（必须存在，需要导航）
         if not self._going_left:
             wall_visible = is_visible(WALL_TAB)
 
-            for tab in TAB_ORDER:
-                if tab == WALL_TAB:
-                    break
-
+            # 先处理 FIXED_TABS：这些 tab 必须存在，如果不可见需要导航
+            for tab in FIXED_TABS:
                 if tab in self._visited_tabs:
                     continue
 
@@ -290,13 +320,10 @@ class ClaimRewardsTask(Task):
                         self._visited_tabs.add(tab)
                         continue
 
-                    # 尝试点击最右侧可见 Tab 以继续往右
+                    # FIXED tab 不可见，需要导航：点击最右侧可见的 tab
                     found_nav_tab = False
-                    for right_tab in reversed(TAB_ORDER):
-                        if right_tab == WALL_TAB:
-                            continue
+                    for right_tab in reversed(FIXED_TABS):
                         if is_visible(right_tab):
-                            # 如果最右侧可见 Tab 已经访问过，说明已到达最右
                             if right_tab in self._visited_tabs:
                                 logger.debug(
                                     f"  -> 已到达最右 (已访问 {right_tab}) 但未见 {tab}，跳过"
@@ -315,7 +342,34 @@ class ClaimRewardsTask(Task):
                         logger.warning(f"  -> 无法找到任何 Tab 以导航至 {tab}，跳过")
                         self._visited_tabs.add(tab)
 
-        # 3. 所有 Tab 完成，进入主题收藏
+            # 再处理 DYNAMIC_TABS：这些是可选的，看到了就点，看不到就跳过
+            for tab in DYNAMIC_TABS:
+                if tab in self._visited_tabs:
+                    continue
+
+                if is_visible(tab):
+                    result = tap_tab(tab)
+                    if result:
+                        logger.debug(f"  -> 点击 dynamic tab: {tab}")
+                        self._visited_tabs.add(tab)
+                        return result
+                else:
+                    # dynamic tab 不可见直接跳过，不需要导航寻找
+                    logger.debug(f"  -> dynamic tab {tab} 不可见，跳过")
+                    self._visited_tabs.add(tab)
+
+        # 3. 检查是否在 dynamic tab 页面（精英牌組/便利卡牌等），尝试领取奖励
+        # 这些页面不在 rewards_page_tabs 中，但可能有可领取的奖励
+        for dynamic_tab in DYNAMIC_TABS:
+            if is_visible(dynamic_tab) and dynamic_tab in self._visited_tabs:
+                # 在已访问的 dynamic tab 页面上，尝试领取
+                result = self._try_claim_buttons(ocr_results, screenshot)
+                if result:
+                    return result
+                # 这个 tab 已处理完，标记为完成并继续下一个
+                break
+
+        # 4. 所有 Tab 完成，进入主题收藏
         if not self._theme_collection_done:
             theme_patterns = get_text_patterns("theme_collection")
             result = tap_text(self.adb, ocr_results, theme_patterns, wait=1.0)
@@ -349,7 +403,7 @@ class ClaimRewardsTask(Task):
                 if "".join(pattern.lower().split()) == text:
                     box = item["box"]
                     if screenshot and is_button_clickable(
-                        screenshot, box, threshold=0.4
+                        screenshot, box, threshold=0.3
                     ):
                         logger.debug(f"  -> 点击领取按钮: {pattern}")
                         return tap_box(self.adb, box, wait=1.0)
@@ -370,6 +424,12 @@ class ClaimRewardsTask(Task):
         logger.debug("  -> 主题收藏领取完成，返回")
         back_patterns = get_text_patterns("back_button")
         return navigate_back(self.adb, self.page_detector, ocr_results, back_patterns)
+
+    def _handle_card_register(self, page_info: dict) -> ActionResult:
+        """向上滑动卡牌登录图鉴（精英牌组奖励）"""
+        logger.debug("  -> 向上滑动卡牌登录图鉴")
+        start, end = swipe_card_coords(self.adb)
+        return swipe(self.adb, start, end, duration=SWIPE_DURATION_REGISTER)
 
     def _handle_reward_detail(self, page_info: dict) -> ActionResult:
         """处理奖励详情页面：点击達成按钮"""
