@@ -1,5 +1,6 @@
 - 页面任何文本显示必须做本地化处理
 - 变更界面时需要更新 locales 的内容来适配
+- **静态文件缓存**: 修改 `static/css/main.css` 或 `static/js/main.js` 后，必须同步更新 `templates/index.html` 中的版本号参数（如 `?v=2.3` → `?v=2.4`），强制浏览器加载最新文件而非缓存版本
 - 严格遵循多主题适配规范：
   - **严禁** 使用硬编码的颜色类（如 `bg-white`, `bg-black`, `text-gray-500`, `border-black` 等）。
   - **必须** 使用基于 CSS 变量的 Utility 类：
