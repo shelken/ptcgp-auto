@@ -372,6 +372,7 @@ class Scheduler:
         获取下一个有待执行任务的账号及其所有待执行任务
 
         按账号级别批量调度，避免频繁切换账号。
+        优先返回有待执行 init_account 任务的账号，确保新账号优先初始化。
 
         Returns:
             (Account, task_instances_list) 或 None
@@ -379,7 +380,25 @@ class Scheduler:
         # 获取所有有待执行任务的账号
         account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
 
+        # 分离有 init_account 任务的账号和其他账号
+        init_account_ids = []
+        other_account_ids = []
         for account_id in account_ids:
+            pending_tasks = self._task_instance_repo.get_pending_by_account(account_id)
+            has_init = any(
+                task.task_type == "init_account"
+                and task.status == TaskStatus.PENDING.value
+                for task in pending_tasks
+            )
+            if has_init:
+                init_account_ids.append(account_id)
+            else:
+                other_account_ids.append(account_id)
+
+        # 优先处理有 init_account 的账号
+        ordered_account_ids = init_account_ids + other_account_ids
+
+        for account_id in ordered_account_ids:
             # 检查该账号是否已经有正在执行的任务
             if self._task_instance_repo.has_running_tasks(account_id):
                 continue
@@ -656,13 +675,6 @@ class Scheduler:
                 # 检查并重置超时的异常任务
                 self._check_and_reset_stale_tasks()
 
-                # 检查并触发账号创建（如果没有正在创建的账号且配置启用）
-                if (
-                    self.config.auto_create_accounts
-                    and not self._has_creating_account()
-                ):
-                    check_and_trigger_account_creation(self)
-
                 # 检查是否有空闲设备
                 if self.device_pool.available_count == 0:
                     time.sleep(self.config.poll_interval)
@@ -670,13 +682,17 @@ class Scheduler:
 
                 # 获取下一个账号的批量任务
                 batch = self._get_next_account_batch()
-                if not batch:
+                if batch:
+                    # 有待执行任务，优先执行
+                    account, task_instances = batch
+                    self._dispatch_account_batch(account, task_instances)
+                elif (
+                    self.config.auto_create_accounts
+                    and not self._has_creating_account()
+                ):
+                    # 没有待执行任务且配置启用，尝试创建新账号
+                    check_and_trigger_account_creation(self)
                     time.sleep(self.config.poll_interval)
-                    continue
-
-                account, task_instances = batch
-                # 批量分配任务
-                self._dispatch_account_batch(account, task_instances)
 
             except RuntimeError as e:
                 logger.exception(f"调度器主循环异常: {e}")
