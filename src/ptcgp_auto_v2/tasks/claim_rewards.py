@@ -44,7 +44,7 @@ HOME_CHECK_INTERVAL = 2.0
 
 # Tab 遍历顺序
 FIXED_TABS = ["daily", "collection", "deck"]
-DYNAMIC_TABS = ["drop"]
+DYNAMIC_TABS = ["drop", "account_link"]
 WALL_TAB = "premium"
 TAB_ORDER = FIXED_TABS + DYNAMIC_TABS + [WALL_TAB]
 
