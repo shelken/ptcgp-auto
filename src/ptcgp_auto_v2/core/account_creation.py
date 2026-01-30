@@ -13,6 +13,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# 账号创建冷却时间（秒）
+ACCOUNT_CREATION_COOLDOWN = 60.0
+
+# 上次触发创建的时间戳（全局变量，跨调用保持）
+_last_creation_time: float = 0.0
+
 
 def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
     """
@@ -30,8 +36,21 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
     Returns:
         True 如果触发了创建，False 否则
     """
+    global _last_creation_time
+
     # 1. 检查是否启用自动创建
     if not scheduler.config.auto_create_accounts:
+        return False
+
+    # 2. 检查冷却时间（避免频繁重置）
+    import time
+
+    current_time = time.time()
+    elapsed = current_time - _last_creation_time
+    if elapsed < ACCOUNT_CREATION_COOLDOWN:
+        logger.debug(
+            f"距离上次创建触发仅 {elapsed:.1f} 秒，冷却中 ({ACCOUNT_CREATION_COOLDOWN} 秒)"
+        )
         return False
 
     # 2. 检查账号数是否达上限
