@@ -4,6 +4,7 @@
 """
 
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
+PACK_TEMPLATE_THRESHOLD = 0.75  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
 
 # ADB 配置
 DEFAULT_ADB_PORT = 5555  # 默认 ADB 端口
@@ -46,9 +47,11 @@ DEFAULT_WEB_PORT = 8000
 
 
 # 模板缩放比例
-SCALE_PACK_SERIES_SELECT = 0.23
-SCALE_PACK_LIST = 0.81
-SCALE_PACK_DETAIL = 1.0
+# 注: 模板现在只裁剪不缩放(103x95)，比原来(513x473)小5倍
+# 因此比例要放大5倍来补偿
+SCALE_PACK_SERIES_SELECT = 1.15  # 旧值: 0.23
+SCALE_PACK_LIST = 4.05  # 旧值: 0.81
+SCALE_PACK_DETAIL = 5.05  # 旧值: 1.0
 
 # 识别区域 (x, y, w, h) 基于 1080x1920
 # 开包结果识别区域 (避开顶部标题和底部按钮，专注于卡牌出现的核心区域)

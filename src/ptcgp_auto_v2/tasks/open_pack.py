@@ -10,6 +10,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
+from ptcgp_auto_v2.config.constants import PACK_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
@@ -269,20 +270,30 @@ class OpenPackTask(Task):
     def _prepare_image_resources(self):
         """准备图片资源（按需加载）"""
         pack_code = self.target_pack.get("pack_code") if self.target_pack else None
-        if not pack_code:
+        booster_name = (
+            self.target_pack.get("booster_name") if self.target_pack else None
+        )
+        if not pack_code or not booster_name:
             return
 
         try:
-            from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
+            from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
-            manager = ImageResourceManager()
-            manager.ensure_series_ready(pack_code)
-
-            if self.recognizer:
-                _, template_matcher = self.recognizer
-                template_matcher.load_pack_templates(pack_code)
+            manager = PackImageManager()
+            # 确保目标卡包图片已就绪
+            if manager.ensure_pack_ready(booster_name):
+                # 加载该卡包模板
+                pack_path = manager.get_pack_path(booster_name)
+                if self.recognizer:
+                    _, template_matcher = self.recognizer
+                    # 使用模板相对路径（packs_auto/xxx）
+                    template_name = manager.get_template_name(booster_name)
+                    template_matcher.load_additional_templates(f"packs_auto")
+                    logger.debug(f"已加载卡包模板: {template_name}")
+            else:
+                logger.error(f"准备卡包图片资源失败: {booster_name}")
         except Exception as e:
-            logger.error(f"准备图片资源失败: {e}")
+            logger.error(f"准备卡包图片资源失败: {e}")
 
     def is_completed(self) -> bool:
         """判断任务是否已完成"""
@@ -435,7 +446,7 @@ class OpenPackTask(Task):
             template_name,
             scale=settings.scale_pack_series_select,
             max_attempts=max_attempts,
-            swipe_ratio=0.21,
+            swipe_ratio=0.23,  # 旧值: 0.21
             wait=1.2,
         )
         if result:
@@ -460,7 +471,9 @@ class OpenPackTask(Task):
 
         # 直接判断当前是否匹配目标包模板
         match = self.page_detector.find_template_with_scale(
-            template_name, scale=settings.scale_pack_list
+            template_name,
+            scale=settings.scale_pack_list,
+            threshold=PACK_TEMPLATE_THRESHOLD,
         )
 
         # 如果不匹配，尝试切换子包
@@ -474,7 +487,10 @@ class OpenPackTask(Task):
                 if not screenshot:
                     continue
                 match = self.page_detector.find_template_with_scale(
-                    template_name, scale=settings.scale_pack_list, screenshot=screenshot
+                    template_name,
+                    scale=settings.scale_pack_list,
+                    screenshot=screenshot,
+                    threshold=PACK_TEMPLATE_THRESHOLD,
                 )
                 if match:
                     break
@@ -532,7 +548,10 @@ class OpenPackTask(Task):
                 return ActionResult.fail("未配置目标卡包模板")
 
             match = self.page_detector.find_template_with_scale(
-                template_name, scale=settings.scale_pack_detail, screenshot=screenshot
+                template_name,
+                scale=settings.scale_pack_detail,
+                screenshot=screenshot,
+                threshold=PACK_TEMPLATE_THRESHOLD,
             )
             if not match:
                 logger.info(f"  -> 当前卡包不是目标卡包 ({template_name})，返回")
@@ -735,4 +754,4 @@ class OpenPackTask(Task):
         if not self.target_pack:
             return None
         booster_name = normalize_name_str(self.target_pack["booster_name"])
-        return f"packs/{self.target_pack['pack_code']}/{booster_name}"
+        return f"packs_auto/{booster_name}"
