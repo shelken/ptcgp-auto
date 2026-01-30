@@ -28,7 +28,7 @@ def check_color_ratio(
     screenshot: Image.Image,
     region: Tuple[int, int, int, int],
     color_name: str,
-    threshold: float = 0.1,
+    threshold: float = 0.3,
 ) -> bool:
     """
     检测区域内指定颜色占比是否超过阈值
