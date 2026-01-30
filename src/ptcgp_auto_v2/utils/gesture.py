@@ -4,6 +4,7 @@
 """
 
 import logging
+import time
 from typing import Callable, Optional, Tuple
 
 Box = tuple[int, int, int, int]
@@ -20,17 +21,21 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 # 开包滑动坐标（从左到右）
-BASE_SWIPE_PACK_START_X = 54   # 1080 * 0.05
-BASE_SWIPE_PACK_END_X = 1080   # 1080 * 1
-BASE_SWIPE_PACK_END_Y = 1190   # 1920 * 0.62
+BASE_SWIPE_PACK_START_X = 54  # 1080 * 0.05
+BASE_SWIPE_PACK_END_X = 1080  # 1080 * 1
+BASE_SWIPE_PACK_END_Y = 1190  # 1920 * 0.62
 
 # 卡牌上滑坐标（从下到上）
 BASE_SWIPE_CARD_START_Y = 1152  # 1920 * 0.6
-BASE_SWIPE_CARD_END_Y = 384     # 1920 * 0.2
+BASE_SWIPE_CARD_END_Y = 384  # 1920 * 0.2
 
 
 def tap_template(
-    adb, page_detector, template_name: str, threshold=DEFAULT_TEMPLATE_THRESHOLD, wait: float = 1.0
+    adb,
+    page_detector,
+    template_name: str,
+    threshold=DEFAULT_TEMPLATE_THRESHOLD,
+    wait: float = 1.0,
 ) -> Optional[ActionResult]:
     """点击指定模板位置"""
     box = page_detector.find_template(template_name, threshold=threshold)
@@ -58,7 +63,9 @@ def tap_center(adb, wait: float = 1.0) -> ActionResult:
     return tap(adb, adb.screen_width // 2, adb.screen_height // 2, wait=wait)
 
 
-def quick_tap(adb, x: int = None, y: int = None, times: int = 3, wait: float = 0.5) -> ActionResult:
+def quick_tap(
+    adb, x: int = None, y: int = None, times: int = 3, wait: float = 0.5
+) -> ActionResult:
     """
     快速点击指定位置多次
 
@@ -79,6 +86,7 @@ def quick_tap(adb, x: int = None, y: int = None, times: int = 3, wait: float = 0
         if i < times - 1:
             # 快速点击之间短暂等待
             import time
+
             time.sleep(0.05)
 
     logger.debug(f"快速点击 {times} 次: ({x}, {y})")
@@ -144,13 +152,52 @@ def tap_text(
                 return ActionResult.ok(wait=wait)
     return None
 
+
 def tap_text_exact(
     adb,
     ocr_results: list[dict],
     patterns: list[str],
     wait: float = 1.0,
 ) -> Optional[ActionResult]:
-    return tap_text(adb, ocr_results=ocr_results, patterns=patterns, wait=wait, exact=True)
+    return tap_text(
+        adb, ocr_results=ocr_results, patterns=patterns, wait=wait, exact=True
+    )
+
+
+def tap_ok(adb, ocr_results: list[dict], wait: float = 1.0) -> Optional[ActionResult]:
+    """点击 OK 按钮（通用弹窗确认按钮）"""
+    return tap_text_exact(adb, ocr_results, get_text_patterns("popup_ok"), wait=wait)
+
+
+def clear_text(
+    adb, x: int, y: int, max_chars: int = 20, wait: float = 0.5
+) -> ActionResult:
+    """
+    清空输入框文本
+
+    流程：
+    1. 点击输入框获取焦点
+    2. 发送多次退格键清空内容
+
+    Args:
+        adb: ADB 控制器
+        x: 输入框 X 坐标
+        y: 输入框 Y 坐标
+        max_chars: 最多删除字符数（默认20）
+        wait: 操作后等待时间
+    """
+    # 点击输入框获取焦点
+    adb.tap(x, y)
+    time.sleep(0.3)
+
+    # 发送退格键清空内容
+    for _ in range(max_chars):
+        adb.device.keyevent(67)  # KEYCODE_DEL
+        time.sleep(0.05)
+
+    logger.debug(f"清空输入框 ({x}, {y})，删除 {max_chars} 个字符")
+    return ActionResult.ok(wait=wait)
+
 
 def tap_by_priority(
     adb,
@@ -323,17 +370,22 @@ def scroll_until_template(
         last_signature = current_signature
     return None
 
+
 # 点继续文字
 def tap_continue(
-    adb, ocr_results: list[dict], patterns: Optional[list[str]] = None, wait: float = 1.0
+    adb,
+    ocr_results: list[dict],
+    patterns: Optional[list[str]] = None,
+    wait: float = 1.0,
 ) -> ActionResult:
     """点击继续文本"""
     if not patterns:
-      patterns = get_text_patterns("continue_button")
+        patterns = get_text_patterns("continue_button")
     result = tap_text(adb, ocr_results, patterns, exact=True, wait=wait)
     if result:
         return result
     return tap_center(adb, wait=wait)
+
 
 def click_close(
     adb, page_detector, ocr_results: list[dict], patterns: list[str]
@@ -365,14 +417,19 @@ def tap_home_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
     """点击主页图标"""
     return tap_bottom_icon(adb, page_detector, "icon_home", wait)
 
+
 def tap_community_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
     return tap_bottom_icon(adb, page_detector, "icon_community", wait)
 
-def tap_bottom_icon(adb, page_detector, template_name, wait: float = 1.0) -> ActionResult:
+
+def tap_bottom_icon(
+    adb, page_detector, template_name, wait: float = 1.0
+) -> ActionResult:
     result = tap_template(adb, page_detector, template_name=template_name, wait=wait)
     if result:
         return result
     return ActionResult.wait(wait)
+
 
 def navigate_back(
     adb,
@@ -393,6 +450,7 @@ def navigate_back(
         return result
 
     return press_back(adb, wait=1.0)
+
 
 def swipe_up(adb, ratio: float = 0.26, wait: float = 1.0) -> ActionResult:
     """向上滑动"""
