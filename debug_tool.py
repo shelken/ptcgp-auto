@@ -106,6 +106,24 @@ def main():
         default=None,
         help="匹配区域 (x,y,w,h)，例如: '100,200,500,500'。仅在指定区域内进行匹配以提升速度。",
     )
+    parser.add_argument(
+        "--test-pack",
+        type=str,
+        metavar="ACTION",
+        choices=["download", "compare", "match", "batch", "roi", "list", "clear"],
+        help="卡包测试模式: download=下载, compare=对比, match=匹配测试, batch=批量测试, list=列出, clear=清除",
+    )
+    parser.add_argument(
+        "--booster",
+        type=str,
+        metavar="NAME",
+        help="指定子包名称（多个用逗号分隔，如 Charizard,Mewtwo）",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="快速测试模式：与 --test-pack roi 配合，交互式选择卡包并立即测试匹配",
+    )
     args = parser.parse_args()
 
     host = None
@@ -119,6 +137,11 @@ def main():
             port = int(args.address)
 
     context.set_current_address(host, port)
+
+    # 处理卡包测试命令
+    if args.test_pack:
+        _run_pack_test(args)
+        return
 
     if args.ocr or args.template or args.screenshot or args.all_templates or args.cards:
         run_non_interactive(args)
@@ -164,6 +187,99 @@ def main():
         return
 
     run_cli()
+
+
+def _run_pack_test(args):
+    """运行卡包测试命令"""
+    from ptcgp_auto.debug_tools.pack_tester import (
+        test_download,
+        test_compare,
+        test_match,
+        test_batch,
+        test_roi_interactive,
+        test_quick_match,
+        list_all_packs,
+        clear_packs,
+    )
+
+    action = args.test_pack
+
+    if action == "list":
+        list_all_packs()
+        return
+
+    if action == "clear":
+        clear_packs(args.booster)
+        return
+
+    if action == "download":
+        if not args.booster:
+            print("错误: --download 需要指定 --booster 参数")
+            print(
+                "示例: python debug_tool.py --test-pack download --booster Charizard,Mewtwo"
+            )
+            return
+        boosters = [b.strip() for b in args.booster.split(",")]
+        test_download(boosters)
+        return
+
+    if action == "compare":
+        if not args.booster:
+            print("错误: --compare 需要指定 --booster 参数")
+            print("示例: python debug_tool.py --test-pack compare --booster Charizard")
+            return
+        test_compare(args.booster)
+        return
+
+    # 以下命令需要 ADB 连接
+    from ptcgp_auto.adb_controller import AdbController
+    from ptcgp_auto.debug_tools import context
+
+    adb = AdbController(
+        context.get_current_host(),
+        context.get_current_port(),
+    )
+    if not adb.connect():
+        print("无法连接到设备")
+        return
+
+    if action == "match":
+        if not args.booster:
+            print("错误: --match 需要指定 --booster 参数")
+            print(
+                "示例: python debug_tool.py -a 5755 --test-pack match --booster Charizard"
+            )
+            return
+        threshold = args.threshold or 0.8
+        test_match(adb, args.booster, scale=args.scale, threshold=threshold)
+        return
+
+    if action == "batch":
+        threshold = args.threshold or 0.8
+        boosters = None
+        if args.booster:
+            boosters = [b.strip() for b in args.booster.split(",")]
+        test_batch(adb, boosters=boosters, scale=args.scale, threshold=threshold)
+        return
+
+    if action == "roi":
+        if args.quick:
+            # 快速测试模式：交互式选择卡包并立即测试匹配
+            threshold = args.threshold or 0.8
+            test_quick_match(adb, threshold=threshold)
+            return
+        if not args.booster:
+            print("错误: --roi 需要指定 --booster 参数或使用 --quick 参数")
+            print(
+                "示例: python debug_tool.py -a 5755 --test-pack roi --booster Charizard"
+            )
+            print(
+                "      python debug_tool.py -a 5755 --test-pack roi --quick  # 快速测试模式"
+            )
+            return
+        threshold = args.threshold or 0.8
+        test_roi_interactive(adb, args.booster, threshold=threshold, scale=args.scale)
+        return
 
 
 if __name__ == "__main__":
