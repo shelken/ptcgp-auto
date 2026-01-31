@@ -193,6 +193,83 @@ model.train(
 
 ---
 
+## 错误 9：无脑复制低效算法（DCT 性能灾难）
+
+**问题**：直接复制 yolo-hash 分支的 DCT 实现，使用纯 Python 四重循环，导致每张卡牌哈希计算需要 ~1500ms
+
+**错误代码**（四重循环版）：
+```python
+def _compute_dct(pixels: list) -> list:
+    """纯 Python 嵌套循环 - 极慢！"""
+    n = int(np.sqrt(len(pixels)))
+    result = [0.0] * (FREQ_SIZE * FREQ_SIZE)
+    
+    for u in range(FREQ_SIZE):        # 8 次
+        for v in range(FREQ_SIZE):    # 8 次
+            total = 0.0
+            for y in range(n):        # 96 次
+                for x in range(n):    # 96 次
+                    total += pixels[y * n + x] * np.cos(...) * np.cos(...)
+            result[u * FREQ_SIZE + v] = ((2 * cu * cv) / n) * total
+    
+    return result
+# 总运算量: 8 × 8 × 96 × 96 = 589,824 次浮点运算/通道
+# 每张卡 (3通道): ~1.8M 次运算
+# 实际耗时: 1500ms × 3 = 4500ms/张
+```
+
+**性能灾难**：
+- 7 张卡牌识别总耗时: **~10.5 秒**
+- 用户反馈: "为什么这么慢？？"
+
+**优化方案**（scipy FFT）：
+```python
+def _compute_dct(pixels: list) -> list:
+    """scipy FFT 加速版 - 快 1800 倍！"""
+    from scipy.fftpack import dct
+    
+    n = int(np.sqrt(len(pixels)))
+    img = np.array(pixels, dtype=np.float32).reshape(n, n)
+    
+    # scipy 使用 Cooley-Tukey FFT 算法 + SIMD 优化
+    dct_rows = dct(img, type=2, norm='ortho', axis=0)
+    dct_2d = dct(dct_rows, type=2, norm='ortho', axis=1)
+    
+    return dct_2d[:FREQ_SIZE, :FREQ_SIZE].flatten().tolist()
+# 时间复杂度: O(n² log n) vs O(n⁴)
+# 实际耗时: 0.8ms × 3 = 2.4ms/张 (快 1800 倍！)
+```
+
+**优化后性能**：
+- 7 张卡牌识别总耗时: **~5.6 毫秒**
+- 速度提升: **1775 倍**
+
+**对比结果**（实际测试）：
+```
+卡牌 #1:
+  🔴 原始 DCT: 1509.0ms
+  🟢 Scipy DCT: 0.8ms
+  ⚡ 速度提升: 1775x
+```
+
+**根本原因**：
+1. **无脑复制** yolo-hash 分支代码，没有思考算法效率
+2. **没有性能基准**，不知道"慢"是相对于什么
+3. **没有预先调研**，不知道 scipy 有 FFT 优化
+
+**正确做法**：
+1. **先查标准库**：scipy/numpy 是否有现成实现？
+2. **性能优先**：图像处理必须用 SIMD/FFT 优化
+3. **对比测试**：保留原始实现用于验证正确性
+4. **预留优化空间**：接口设计要能切换算法
+
+**教训**：
+- 图像/信号处理算法必须用优化库（scipy, opencv, fftw）
+- 不要自己实现 DCT/DFT/卷积等基础算法，除非你是专家
+- Python 纯循环比 C/优化库慢 100-1000 倍是常态
+
+---
+
 ## 检查清单（下次避免）
 
 - [ ] 确认使用纯 uv（不用 pip）
@@ -201,6 +278,8 @@ model.train(
 - [ ] 验证 URL/API 结构（用 curl 测试）
 - [ ] 不在 Plan Mode 中执行命令
 - [ ] 保持与根项目 flake 风格一致
+- [ ] 复制代码前先验证算法效率，不要无脑复制
+- [ ] 图像/信号处理优先使用 scipy/opencv 等优化库
 
 ---
 

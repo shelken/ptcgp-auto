@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-生成 YOLO OBB 合成数据集
+生成 YOLO OBB 合成数据集（双模式 v2）
 基于 1vcian 的 trainCreator.py 核心逻辑
 
-生成 640x640 图像，每张 1-5 张卡牌，带旋转边界框标注
+双模式：
+- 网格模式（50%）：密集排列 50-300 张卡牌
+- 随机模式（50%）：1-15 张卡牌，包含小目标训练（0.08-0.15 缩放）
+
+生成 640x640 图像，带旋转边界框标注
 """
 
 import argparse
@@ -18,7 +22,7 @@ from tqdm import tqdm
 
 
 class DatasetGenerator:
-    """合成数据集生成器"""
+    """合成数据集生成器（双模式）"""
 
     def __init__(self, cards_dir: Path, backgrounds_dir: Path, output_dir: Path):
         self.cards_dir = cards_dir
@@ -64,18 +68,18 @@ class DatasetGenerator:
         card_img: Image.Image,
         bg_img: Image.Image,
         existing_boxes: list,
-        scale_factor: float = None,
+        scale_factor: float | None = None,
+        angle: float | None = None,
     ):
-        """在背景上放置一张卡牌，返回图像和 OBB 标注"""
+        """在背景上放置一张卡牌（随机模式），返回图像和 OBB 标注"""
         bg_w, bg_h = bg_img.size
         card_w, card_h = card_img.size
 
-        # 缩放卡牌（限制最大比例，确保旋转后不会超出背景）
+        # 缩放卡牌
         if scale_factor is None:
-            # 开包场景：卡牌较大，但最大不超过背景的 40%
             scale_factor = random.uniform(0.15, 0.35)
 
-        # 确保缩放后卡牌不会太大（考虑旋转后需要额外空间）
+        # 确保缩放后卡牌不会太大
         max_scale = min(0.4, 0.8 * min(bg_w, bg_h) / max(card_w, card_h))
         scale_factor = min(scale_factor, max_scale)
 
@@ -88,14 +92,16 @@ class DatasetGenerator:
 
         card_img = card_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        # 旋转（开包场景倾斜角度较小）
-        angle = random.uniform(-15, 15)
+        # 旋转（使用传入的角度或随机生成）
+        if angle is None:
+            angle = random.uniform(-15, 15)
+
         card_img = card_img.rotate(
             angle, expand=True, resample=Image.Resampling.BICUBIC
         )
         rot_w, rot_h = card_img.size
 
-        # 安全检查：如果旋转后还是太大，跳过这张卡牌
+        # 安全检查
         if rot_w >= bg_w or rot_h >= bg_h:
             return None, None, None
 
@@ -105,7 +111,7 @@ class DatasetGenerator:
             x = random.randint(0, bg_w - rot_w)
             y = random.randint(0, bg_h - rot_h)
 
-            # 检查重叠
+            # 检查重叠（IoU阈值0.1）
             new_box = [x, y, x + rot_w, y + rot_h]
             overlap = any(
                 self.calculate_iou(new_box, box) > 0.1 for box in existing_boxes
@@ -123,19 +129,16 @@ class DatasetGenerator:
                 center_x = (x + rot_w / 2) / bg_w
                 center_y = (y + rot_h / 2) / bg_h
 
-                # 原始尺寸（未旋转）的半宽高
                 half_w = new_w / 2 / bg_w
                 half_h = new_h / 2 / bg_h
 
-                # 四个角点（相对于中心）
                 corners = [
-                    (-half_w, -half_h),  # 左上
-                    (half_w, -half_h),  # 右上
-                    (half_w, half_h),  # 右下
-                    (-half_w, half_h),  # 左下
+                    (-half_w, -half_h),
+                    (half_w, -half_h),
+                    (half_w, half_h),
+                    (-half_w, half_h),
                 ]
 
-                # 应用旋转
                 angle_rad = math.radians(-angle)
                 rotated_corners = []
                 for cx, cy in corners:
@@ -143,36 +146,113 @@ class DatasetGenerator:
                     ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
                     rotated_corners.extend([center_x + rx, center_y + ry])
 
-                # YOLO OBB 格式: class x1 y1 x2 y2 x3 y3 x4 y4
                 yolo_bbox = [0] + [round(c, 6) for c in rotated_corners]
 
                 return result, yolo_bbox, new_box
 
         return None, None, None
 
-    def generate_image(self, idx: int, split: str, num_cards: int = None):
-        """生成单张数据集图像"""
+    def place_card_grid(
+        self,
+        card_img: Image.Image,
+        bg_img: Image.Image,
+        grid_x: int,
+        grid_y: int,
+        grid_cols: int = 5,
+        grid_rows: int = 4,
+    ):
+        """在网格位置放置卡牌（规整布局）"""
+        bg_w, bg_h = bg_img.size
+        card_w, card_h = card_img.size
+
+        # 计算网格单元大小
+        cell_w = bg_w // grid_cols
+        cell_h = bg_h // grid_rows
+
+        # 卡牌大小适配单元格（留边距）
+        card_scale = 0.99
+        new_w = int(cell_w * card_scale)
+        new_h = int(card_h * (new_w / card_w))
+
+        # 如果高度超限，按高度缩放
+        if new_h > cell_h * card_scale:
+            new_h = int(cell_h * card_scale)
+            new_w = int(card_w * (new_h / card_h))
+
+        card_img = card_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        # 轻微旋转（网格模式下角度更小）
+        angle = random.uniform(-5, 5)
+        card_img = card_img.rotate(
+            angle, expand=True, resample=Image.Resampling.BICUBIC
+        )
+        rot_w, rot_h = card_img.size
+
+        # 计算网格中心位置
+        base_x = grid_x * cell_w + cell_w // 2
+        base_y = grid_y * cell_h + cell_h // 2
+
+        # 添加随机偏移（±10像素）
+        paste_x = base_x - rot_w // 2 + random.randint(-10, 10)
+        paste_y = base_y - rot_h // 2 + random.randint(-10, 10)
+
+        # 边界检查
+        paste_x = max(0, min(paste_x, bg_w - rot_w))
+        paste_y = max(0, min(paste_y, bg_h - rot_h))
+
+        # 放置卡牌
+        result = bg_img.copy()
+        if card_img.mode == "RGBA":
+            result.paste(card_img, (paste_x, paste_y), card_img.split()[3])
+        else:
+            result.paste(card_img, (paste_x, paste_y))
+
+        # 计算OBB标注
+        center_x = (paste_x + rot_w / 2) / bg_w
+        center_y = (paste_y + rot_h / 2) / bg_h
+
+        half_w = new_w / 2 / bg_w
+        half_h = new_h / 2 / bg_h
+
+        corners = [
+            (-half_w, -half_h),
+            (half_w, -half_h),
+            (half_w, half_h),
+            (-half_w, half_h),
+        ]
+
+        angle_rad = math.radians(-angle)
+        rotated_corners = []
+        for cx, cy in corners:
+            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
+            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
+            rotated_corners.extend([center_x + rx, center_y + ry])
+
+        yolo_bbox = [0] + [round(c, 6) for c in rotated_corners]
+        pixel_bbox = [paste_x, paste_y, paste_x + rot_w, paste_y + rot_h]
+
+        return result, yolo_bbox, pixel_bbox
+
+    def generate_image(self, idx: int, split: str, num_cards: int | None = None):
+        """生成单张数据集图像（随机模式）"""
         if num_cards is None:
+            # 30%概率1-3张，70%概率8-15张
             num_cards = random.choices(
-                [1, 2, 3, 4, 5], weights=[0.1, 0.2, 0.3, 0.3, 0.1]
+                [1, 2, 3, random.randint(8, 15)], weights=[0.1, 0.1, 0.1, 0.7]
             )[0]
 
         # 选择或创建背景
         if self.use_solid_background:
-            # 使用纯色背景（模拟游戏界面）
-            # 随机颜色，避免纯白（255,255,255）
             bg_color = (
-                random.randint(200, 240),  # R
-                random.randint(200, 240),  # G
-                random.randint(200, 240),  # B
-                255,  # Alpha
+                random.randint(200, 240),
+                random.randint(200, 240),
+                random.randint(200, 240),
+                255,
             )
             bg_img = Image.new("RGBA", (640, 640), bg_color)
         else:
-            # 使用真实背景图片
             bg_file = random.choice(self.backgrounds_files)
             bg_img = Image.open(bg_file).convert("RGBA")
-            # 缩放到 640x640
             bg_img = bg_img.resize((640, 640), Image.Resampling.LANCZOS)
 
         existing_boxes = []
@@ -183,16 +263,24 @@ class DatasetGenerator:
             card_file = random.choice(self.cards_files)
             card_img = Image.open(card_file).convert("RGBA")
 
-            # 开包场景：1-3张时卡牌较大，4-5张时较小
-            if num_cards <= 2:
-                scale = random.uniform(0.5, 0.7)
+            # 根据卡牌数量确定缩放因子（原作者算法）
+            if num_cards == 1:
+                scale_factor = random.uniform(0.7, 0.8)
+            elif num_cards == 2:
+                scale_factor = random.uniform(0.35, 0.45)
             elif num_cards == 3:
-                scale = random.uniform(0.35, 0.5)
+                scale_factor = random.uniform(0.25, 0.35)
             else:
-                scale = random.uniform(0.25, 0.35)
+                scale_factor = random.uniform(0.08, 0.15)  # 小目标训练
+
+            # 旋转角度根据卡牌大小调整
+            if scale_factor > 0.3:
+                angle = random.uniform(-5, 5)
+            else:
+                angle = random.uniform(-15, 15)
 
             result, yolo_bbox, box = self.place_card(
-                card_img, bg_img, existing_boxes, scale
+                card_img, bg_img, existing_boxes, scale_factor, angle
             )
 
             if result is not None:
@@ -201,27 +289,87 @@ class DatasetGenerator:
                 yolo_bboxes.append(yolo_bbox)
 
         # 保存图像
-        img_path = self.output_dir / "images" / split / f"image_{idx:06d}.jpg"
+        img_path = self.output_dir / "images" / split / f"{idx:06d}.jpg"
         bg_img.convert("RGB").save(img_path, quality=95)
 
         # 保存标注
-        label_path = self.output_dir / "labels" / split / f"image_{idx:06d}.txt"
+        label_path = self.output_dir / "labels" / split / f"{idx:06d}.txt"
         with open(label_path, "w") as f:
             for bbox in yolo_bboxes:
                 f.write(" ".join(map(str, bbox)) + "\n")
 
         return img_path
 
-    def generate_dataset(self, total: int = 10000, train_ratio=0.8, val_ratio=0.1):
-        """生成完整数据集"""
-        print(f"🎯 生成 {total} 张合成图像...")
+    def generate_image_grid(
+        self,
+        idx: int,
+        split: str,
+        grid_rows: int | None = None,
+        grid_cols: int | None = None,
+    ):
+        """生成网格模式数据集图像（密集排列）"""
+        # 随机确定网格大小
+        if grid_rows is None:
+            grid_rows = random.randint(5, 15)
+        if grid_cols is None:
+            grid_cols = random.randint(10, 20)
+
+        # 选择背景
+        if self.use_solid_background:
+            bg_color = (
+                random.randint(200, 240),
+                random.randint(200, 240),
+                random.randint(200, 240),
+                255,
+            )
+            bg_img = Image.new("RGBA", (640, 640), bg_color)
+        else:
+            bg_file = random.choice(self.backgrounds_files)
+            bg_img = Image.open(bg_file).convert("RGBA")
+            bg_img = bg_img.resize((640, 640), Image.Resampling.LANCZOS)
+
+        yolo_bboxes = []
+
+        # 在网格中放置卡牌
+        for row in range(grid_rows):
+            for col in range(grid_cols):
+                card_file = random.choice(self.cards_files)
+                card_img = Image.open(card_file).convert("RGBA")
+
+                result, yolo_bbox, _ = self.place_card_grid(
+                    card_img, bg_img, col, row, grid_cols, grid_rows
+                )
+                bg_img = result
+                yolo_bboxes.append(yolo_bbox)
+
+        # 保存图像
+        img_path = self.output_dir / "images" / split / f"{idx:06d}.jpg"
+        bg_img.convert("RGB").save(img_path, quality=95)
+
+        # 保存标注
+        label_path = self.output_dir / "labels" / split / f"{idx:06d}.txt"
+        with open(label_path, "w") as f:
+            for bbox in yolo_bboxes:
+                f.write(" ".join(map(str, bbox)) + "\n")
+
+        return img_path
+
+    def generate_dataset(self, total: int = 1000, train_ratio=0.8, val_ratio=0.1):
+        """生成完整数据集（双模式：网格+随机）"""
+        print(f"\n🎯 生成 {total} 张数据集（双模式）:")
 
         # 创建目录
-        for split in ["train", "val", "test"]:
-            (self.output_dir / "images" / split).mkdir(parents=True, exist_ok=True)
-            (self.output_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
+        for subdir in [
+            "images/train",
+            "images/val",
+            "images/test",
+            "labels/train",
+            "labels/val",
+            "labels/test",
+        ]:
+            (self.output_dir / subdir).mkdir(parents=True, exist_ok=True)
 
-        # 计算数量
+        # 计算各split数量
         train_num = int(total * train_ratio)
         val_num = int(total * val_ratio)
         test_num = total - train_num - val_num
@@ -232,12 +380,32 @@ class DatasetGenerator:
             ("test", test_num, train_num + val_num),
         ]
 
-        for split, num, start_idx in splits:
-            print(f"\n📦 生成 {split} 集 ({num} 张)...")
-            for i in tqdm(range(num), desc=split):
-                self.generate_image(start_idx + i, split)
+        print(f"   网格模式: ~{total // 2}张（密集场景训练）")
+        print(f"   随机模式: ~{total // 2}张（真实场景训练）")
+        print(f"   Train: {train_num}, Val: {val_num}, Test: {test_num}")
 
-        print(f"\n✅ 数据集生成完成！")
+        current_idx = 0
+        for split, count, offset in splits:
+            print(f"\n📁 生成 {split} 集 ({count}张)...")
+
+            # 50%网格模式，50%随机模式
+            grid_count = count // 2
+            random_count = count - grid_count
+
+            # 生成网格模式图像
+            for i in tqdm(range(grid_count), desc=f"  网格模式"):
+                idx = offset + i
+                self.generate_image_grid(idx, split)
+                current_idx += 1
+
+            # 生成随机模式图像
+            for i in tqdm(range(random_count), desc=f"  随机模式"):
+                idx = offset + grid_count + i
+                self.generate_image(idx, split)
+                current_idx += 1
+
+        print(f"\n✅ 完成！共生成 {current_idx} 张图像")
+        return current_idx
 
 
 def create_yaml(output_dir: Path):
@@ -255,33 +423,39 @@ def create_yaml(output_dir: Path):
     with open(yaml_path, "w") as f:
         yaml.dump(data, f, default_flow_style=False)
 
-    print(f"✅ 配置文件: {yaml_path}")
+    print(f"\n📝 配置文件: {yaml_path}")
+    return yaml_path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="生成 YOLO 卡牌检测数据集")
-    parser.add_argument(
-        "--cards", type=Path, default="data/raw/cards", help="卡牌图片目录"
+    parser = argparse.ArgumentParser(
+        description="生成 YOLO OBB 合成数据集（双模式 v2）"
     )
+    parser.add_argument("--cards", type=Path, default="data/raw/cards")
+    parser.add_argument("--backgrounds", type=Path, default="data/raw/backgrounds")
+    parser.add_argument("--output", type=Path, default="data/synthetic")
     parser.add_argument(
-        "--backgrounds", type=Path, default="data/raw/backgrounds", help="背景图片目录"
+        "--total", type=int, default=1000, help="总图像数量（默认1000）"
     )
-    parser.add_argument(
-        "--output", type=Path, default="data/synthetic", help="输出目录"
-    )
-    parser.add_argument("--num-images", type=int, default=10000, help="生成图像总数")
+    parser.add_argument("--train-ratio", type=float, default=0.8)
+    parser.add_argument("--val-ratio", type=float, default=0.1)
     args = parser.parse_args()
 
     print("=" * 50)
-    print("YOLO 合成数据集生成器")
+    print("YOLO 合成数据集生成器（双模式 v2）")
     print("=" * 50)
 
-    generator = DatasetGenerator(args.cards, args.backgrounds, args.output)
-    generator.generate_dataset(args.num_images)
+    gen = DatasetGenerator(args.cards, args.backgrounds, args.output)
+
+    # 生成数据集
+    gen.generate_dataset(args.total, args.train_ratio, args.val_ratio)
+
+    # 创建 YAML
     create_yaml(args.output)
 
-    print(f"\n📁 数据集位置: {args.output}")
-    print("💡 下一步: python scripts/train.py")
+    print("\n" + "=" * 50)
+    print("💡 下一步: python scripts/train.py --epochs 50")
+    print("=" * 50)
 
 
 if __name__ == "__main__":

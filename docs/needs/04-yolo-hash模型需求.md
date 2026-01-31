@@ -47,22 +47,34 @@ YOLO + 感知哈希方案旨在替代当前模板匹配的卡牌识别方式，�
    - Python 3.12 + ultralytics 8.4.9
 
 2. **下载素材**
-   - ✅ 卡牌图片：98 张 A4 系列（`data/raw/cards/`）
-   - ✅ 背景图片：10 张 sample-images（`data/raw/backgrounds/`）
+   - ✅ 卡牌图片：**107 张**（多个系列，`data/raw/cards/`）
+   - ✅ 背景图片：**50 张** sample-images（`data/raw/backgrounds/`）
+     - 2026-01-31 更新：从 10 张扩充到 50 张，提升背景多样性
 
-3. **实现训练脚本**
+3. **实现双模式数据集生成器** ✅
+   - **网格模式**（50%）：密集排列 50-300 张卡牌，训练密集场景检测
+   - **随机模式**（50%）：1-15 张卡牌，包含小目标训练（0.08-0.15 缩放）
+   - **缩放分级**：根据卡牌数量动态调整
+     - 1 张：0.7-0.8（超大）
+     - 2 张：0.35-0.45（大）
+     - 3 张：0.25-0.35（中）
+     - 8+ 张：0.08-0.15（小目标训练）
+   - 参考实现：1vcian/Pokemon-TCGP-Card-Scanner/trainCreator.py
+   - 位置：`scripts/generate_dataset.py`
+
+4. **实现训练脚本**
    - `download_assets.py` - 并发下载卡牌（jsDelivr CDN）
-   - `generate_dataset.py` - 合成数据集生成（移植 trainCreator.py）
+   - `download_backgrounds.py` - 下载 sample-images 背景
    - `train.py` - YOLO 训练脚本（MPS 支持）
 
-4. **生成合成数据集**
-   - ✅ 100 张测试数据集（80 train / 10 val / 10 test）
-   - 位置：`data/synthetic/`
-   - 配置：`data/synthetic/data.yaml`
+### 进行中 ⏳（由用户执行）
 
-### 进行中 ⏳
+5. **生成数据集并训练**
+   - 生成 300-1000 张双模式数据集
+   - 训练 100 epochs（M3 MacBook Air，MPS 加速）
+   - 验证 mAP50 指标
 
-5. **整合到主项目** - 准备开始
+6. **整合到主项目** - 准备开始
    - 测试 CoreML 实际开包场景检测效果
    - 替换模板匹配为 YOLO + 哈希匹配
 
@@ -127,21 +139,30 @@ direnv allow  # 自动加载环境
 
 ## 技术实现细节
 
-### 1. 数据生成
+### 1. 数据生成（双模式 v2）
 
 **参考实现**：1vcian/Pokemon-TCGP-Card-Scanner/trainCreator.py
 
-**核心逻辑**：
-- 随机背景 + 随机卡牌（1-5张）
-- 随机旋转（-15° ~ +15°）
-- 随机缩放（0.15-0.35 倍背景尺寸）
-- 透视变换（模拟倾斜）
-- YOLO OBB 格式标注：`class x1 y1 x2 y2 x3 y3 x4 y4`
+**双模式设计**（2026-01-31 实现）：
 
-**改进点**：
-- 限制最大缩放比例，避免旋转后超出背景
-- 支持 .webp 卡牌格式
-- 支持纯色背景作为备选
+| 模式 | 占比 | 卡牌数量 | 缩放范围 | 用途 |
+|-----|------|---------|---------|-----|
+| 网格模式 | 50% | 50-300张 | 自适应 | 密集场景训练 |
+| 随机-少量 | 15% | 1-3张 | 0.25-0.8 | 大目标检测 |
+| 随机-多量 | 35% | 8-15张 | **0.08-0.15** | 小目标检测 |
+
+**缩放分级**（原作者算法）：
+- 1张卡：0.7-0.8（超大，旋转角度 ±5°）
+- 2张卡：0.35-0.45（大）
+- 3张卡：0.25-0.35（中）
+- 8+张卡：**0.08-0.15**（小目标，旋转角度 ±15°）
+
+**技术细节**:
+- 网格系统：5×4 网格 + 随机偏移（±10像素）
+- IoU 阈值：0.1（允许卡牌更接近）
+- YOLO OBB 格式：`class x1 y1 x2 y2 x3 y3 x4 y4`
+- 背景多样性：50张不同场景（室内/自然/纹理）
+- 备选：纯色背景（当没有背景图片时）
 
 ### 2. 模型训练
 
@@ -208,49 +229,83 @@ model.train(
 
 ---
 
-## 下一步行动
+## 下一步行动（由用户执行）
 
-### 立即执行（新会话）
+### 1. 生成完整数据集并训练
 
-**用户将执行训练，我来验证结果**：
-
+**进入工作目录**:
 ```bash
-cd yolo-card-training/
-python scripts/train.py --epochs 50 --batch 16
+cd /Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training
 ```
 
-**验证点**：
-1. 训练是否正常启动（MPS 启用、数据集读取）
-2. loss 是否正常下降
-3. 最终 mAP 是否 > 0.5
-4. 模型文件是否正确生成
+**完整训练（1000张 + 100 epochs，约1-2小时）**:
+```bash
+# 生成 1000 张数据集（约30-40分钟）
+time uv run python scripts/generate_dataset.py --total 1000 --output data/synthetic_v2
 
-### 下一步行动（新会话）
+# 训练 100 epochs（约30-80分钟）
+time uv run python scripts/train.py \
+    --data data/synthetic_v2/data.yaml \
+    --epochs 100 \
+    --batch 16 \
+    --device mps
+```
 
-**整合 CoreML 到主项目**：
+**执行后验证**:
+```bash
+# 检查生成的数据集
+echo "Train: $(ls data/synthetic_v2/images/train/*.jpg | wc -l) 张"
+echo "Val: $(ls data/synthetic_v2/images/val/*.jpg | wc -l) 张"
+echo "Test: $(ls data/synthetic_v2/images/test/*.jpg | wc -l) 张"
 
-1. 在 `feature/yolo-hash` 分支更新 YOLO 检测器
-   - 使用 `best.mlpackage` 替代 PyTorch 模型
-   - 测试开包截图检测效果
+# 查看最新训练结果
+ls -lt runs/obb/ | head -5
+tail -n 2 runs/obb/*/results.csv | head -n 1
+```
 
-2. 完整 Pipeline 验证
-   - ADB 截图 → YOLO CoreML 检测 → 透视变换 → 感知哈希匹配
-   - 对比模板匹配速度
+### 2. 验证训练结果
 
-3. 优化策略（根据测试结果）
-   - 如果检测准确但速度不够 → 考虑批量检测优化
-   - 如果检测不准确 → 需要更多真实场景数据重新训练
-   - 如果整体可行 → 替换主项目卡牌识别模块
+```bash
+# 查看最新训练结果
+ls -lt runs/obb/ | head -5
+
+# 检查 mAP50
+tail -n 2 runs/obb/*/results.csv | head -n 1
+
+# 查看训练曲线
+ls runs/obb/*/results.png | tail -1
+```
+
+**预期指标**:
+- mAP50 > 0.9：数据集质量良好，算法有效
+- mAP50 > 0.7：可用，但可能需要调整
+- mAP50 < 0.7：检查数据集和标注
+
+### 3. 整合到主项目（后续）
+
+待训练完成并验证效果后：
+1. 导出 CoreML 格式
+2. 在 `feature/yolo-hash` 分支更新检测器
+3. 完整 Pipeline 验证
 
 ---
 
 ## 文件参考
 
 **关键文件位置**：
-- 训练脚本：`yolo-card-training/scripts/train.py`
-- 数据集配置：`yolo-card-training/data/synthetic/data.yaml`
-- 实际模型输出：`runs/obb/output/models/card_obb/weights/best.pt`
-- CoreML 输出：`runs/obb/output/models/card_obb/weights/best.mlpackage`
+- **双模式数据集生成器**：`yolo-card-training/scripts/generate_dataset.py`
+  - 实现网格模式 + 随机模式
+  - 支持 50 张背景，107 张卡牌
+- **训练脚本**：`yolo-card-training/scripts/train.py`
+- **数据集配置**：`yolo-card-training/data/synthetic_v2/data.yaml`
+- **实际模型输出**：`runs/obb/*/weights/best.pt`
+- **CoreML 输出**：`runs/obb/*/weights/best.mlpackage`
+
+**工作目录**：`yolo-card-training/`
+```bash
+cd /Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training
+direnv allow  # 自动加载环境
+```
 
 **外部资源**：
 - 参考项目：https://github.com/1vcian/Pokemon-TCGP-Card-Scanner

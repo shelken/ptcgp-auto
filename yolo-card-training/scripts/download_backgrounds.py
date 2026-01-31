@@ -35,4 +35,4 @@ def download_backgrounds(start=1, end=100):
 
 
 if __name__ == "__main__":
-    download_backgrounds(1, 100)  # 先下载 100 张测试
+    download_backgrounds(1, 50)  # 下载 50 张背景
