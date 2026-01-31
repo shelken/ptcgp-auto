@@ -15,6 +15,7 @@ dependencies = [
     "adbutils>=2.0.0",
     "loguru>=0.7.0",
     "coremltools>=9.0",
+    "scipy>=1.17.0",
 ]
 
 [tool.uv]
