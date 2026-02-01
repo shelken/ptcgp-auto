@@ -29,10 +29,10 @@ class DatasetGenerator:
         self.backgrounds_dir = backgrounds_dir
         self.output_dir = output_dir
 
-        # 支持多种图片格式（包括 webp）
+        # 支持多种图片格式（递归扫描所有子目录）
         self.cards_files = []
         for ext in ["*.png", "*.jpg", "*.jpeg", "*.webp"]:
-            self.cards_files.extend(list(cards_dir.glob(ext)))
+            self.cards_files.extend(list(cards_dir.rglob(ext)))
 
         self.backgrounds_files = []
         for ext in ["*.jpg", "*.jpeg", "*.png", "*.webp"]:
