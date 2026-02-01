@@ -13,12 +13,14 @@
 
 import argparse
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Tuple
 
 import requests
 from tqdm import tqdm
+
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -34,6 +36,17 @@ session = requests.Session()
 session.headers.update(
     {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 )
+
+# 尝试获取 GitHub Token（用于提高 API 限制至 5000/小时）
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+if GITHUB_TOKEN:
+    session.headers.update({"Authorization": f"token {GITHUB_TOKEN}"})
+    print("🔐 使用 GitHub Token 认证（API 限制: 5000/小时）")
+else:
+    print("⚠️  未设置 GITHUB_TOKEN 环境变量（API 限制: 60/小时）")
+
+# API 请求间隔（秒），未认证时避免触发 GitHub 速率限制
+API_RATE_LIMIT_DELAY = 0.0 if GITHUB_TOKEN else 0.5
 
 
 def download_single_card(args: Tuple[str, int]) -> Tuple[str, int, bool]:
@@ -78,6 +91,7 @@ def discover_all_sets() -> List[str]:
     print("🔍 正在通过 GitHub API 发现所有可用系列...")
 
     try:
+        time.sleep(API_RATE_LIMIT_DELAY)  # 延迟避免速率限制
         response = session.get(GITHUB_API_URL, timeout=30)
         response.raise_for_status()
         items = response.json()
@@ -94,6 +108,9 @@ def discover_all_sets() -> List[str]:
 
     except Exception as e:
         print(f"❌ 发现失败: {e}")
+        if "403" in str(e) and "rate limit" in str(e).lower():
+            print("⚠️  GitHub API 速率限制，请等待1小时后再试")
+            print("💡 提示：GitHub API 对未认证请求限制每小时60次")
         return []
 
 
@@ -105,6 +122,7 @@ def discover_cards_in_set(set_name: str) -> List[int]:
     print(f"🔍 正在通过 GitHub API 发现 {set_name} 系列的卡牌...")
 
     try:
+        time.sleep(API_RATE_LIMIT_DELAY)  # 延迟避免速率限制
         url = f"{GITHUB_API_URL}/{set_name}"
         response = session.get(url, timeout=30)
 
