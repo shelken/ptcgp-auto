@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """
-下载训练素材脚本（高性能并发版）
+下载训练素材脚本（高性能并发版）- 中文 PNG 版本
 - 使用线程池并发下载
 - 连接复用（requests Session）
 - 自动重试机制
+- 来源：用户维护的繁体中文 PNG 资源
 
 用法：
-  python scripts/download_assets.py --sets A4          # 下载 A4 系列
-  python scripts/download_assets.py --all              # 下载所有系列
-  python scripts/download_assets.py --sets A1 A2 --max-workers 8  # 8线程
+  python scripts/download_assets.py --set A1           # 下载 A1 系列
+  python scripts/download_assets.py --set A1 --max-workers 8  # 8线程
 """
 
 import argparse
 import os
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import List, Tuple
+
 import requests
 from tqdm import tqdm
 
@@ -24,8 +25,8 @@ DATA_DIR = BASE_DIR / "data"
 CARDS_DIR = DATA_DIR / "raw" / "cards"
 BACKGROUNDS_DIR = DATA_DIR / "raw" / "backgrounds"
 
-# 使用 jsDelivr CDN 加速
-CARDS_BASE_URL = "https://cdn.jsdelivr.net/gh/marcelpanse/tcg-pocket-collection-tracker@main/frontend/public/images/en-US"
+# 使用用户维护的繁体中文 PNG 资源
+CARDS_BASE_URL = "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/images/zh-TW/cards-by-set"
 
 # 各扩展包卡牌数量（根据实际文件统计）
 SET_CARD_RANGES = {
@@ -49,12 +50,12 @@ session.headers.update(
 
 def download_single_card(args: Tuple[str, int]) -> Tuple[str, int, bool]:
     """
-    下载单张卡牌
+    下载单张卡牌（中文 PNG 版本）
     返回: (set_name, card_num, success)
     """
     set_name, card_num = args
-    filename = f"{set_name}-{card_num}.webp"
-    url = f"{CARDS_BASE_URL}/{filename}"
+    filename = f"{set_name}-{card_num}.png"  # 使用 PNG 格式
+    url = f"{CARDS_BASE_URL}/{set_name}/{card_num}.png"  # 新 URL 格式
     output_path = CARDS_DIR / filename
 
     # 已存在则跳过
@@ -74,32 +75,28 @@ def download_single_card(args: Tuple[str, int]) -> Tuple[str, int, bool]:
         return set_name, card_num, False
 
 
-def download_cards_concurrent(sets: List[str], max_workers: int = 10):
+def download_cards_concurrent(set_name: str, max_workers: int = 10):
     """
-    并发下载卡牌
+    并发下载卡牌（中文 PNG 版本）
 
     Args:
-        sets: 系列列表（如 ['A4', 'A3']）
+        set_name: 系列名称（如 'A1'）
         max_workers: 并发线程数（默认 10）
     """
     print(f"📥 并发下载卡牌（{max_workers} 线程）...")
     CARDS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 生成所有要下载的任务
-    tasks = []
-    for set_name in sets:
-        if set_name not in SET_CARD_RANGES:
-            print(f"⚠️  未知系列: {set_name}，跳过")
-            continue
-
-        start, end = SET_CARD_RANGES[set_name]
-        for card_num in range(start, end + 1):
-            tasks.append((set_name, card_num))
-
-    if not tasks:
-        print("❌ 没有要下载的任务")
+    # 检查系列是否有效
+    if set_name not in SET_CARD_RANGES:
+        print(f"❌ 未知系列: {set_name}")
+        print(f"可用系列: {', '.join(SET_CARD_RANGES.keys())}")
         return
 
+    # 生成所有要下载的任务
+    start, end = SET_CARD_RANGES[set_name]
+    tasks = [(set_name, card_num) for card_num in range(start, end + 1)]
+
+    print(f"   系列: {set_name} ({start}-{end})")
     print(f"   共 {len(tasks)} 个下载任务")
 
     # 并发下载
@@ -119,7 +116,7 @@ def download_cards_concurrent(sets: List[str], max_workers: int = 10):
                 set_name, card_num, success = future.result()
 
                 if success:
-                    if (CARDS_DIR / f"{set_name}-{card_num}.webp").exists():
+                    if (CARDS_DIR / f"{set_name}-{card_num}.png").exists():
                         # 检查是否真的刚下载的（文件时间）
                         downloaded += 1
                     else:
@@ -133,14 +130,12 @@ def download_cards_concurrent(sets: List[str], max_workers: int = 10):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="下载 YOLO 训练素材（并发版）")
+    parser = argparse.ArgumentParser(description="下载 YOLO 训练素材（中文 PNG 版）")
     parser.add_argument(
-        "--sets",
-        nargs="+",
-        default=["A4"],
-        help="要下载的系列（如 A1 A2 A3 A4），默认 A4",
+        "--set",
+        required=True,
+        help="要下载的系列（如 A1, A2, A3, A4, A1a, A2a, A2b, A3a, PA）",
     )
-    parser.add_argument("--all", action="store_true", help="下载所有系列")
     parser.add_argument(
         "--max-workers", type=int, default=10, help="并发线程数（默认 10，建议 5-20）"
     )
@@ -150,25 +145,26 @@ def main():
     args = parser.parse_args()
 
     print("=" * 50)
-    print("YOLO 训练素材下载（高性能并发版）")
+    print("YOLO 训练素材下载（中文 PNG 版）")
     print("=" * 50)
+    print(f"来源: shelken/ptcgp-assets (繁体中文)")
 
-    # 确定要下载的系列
-    if args.all:
-        sets_to_download = list(SET_CARD_RANGES.keys())
-    else:
-        sets_to_download = args.sets
+    # 验证系列
+    if args.set not in SET_CARD_RANGES:
+        print(f"\n❌ 未知系列: {args.set}")
+        print(f"可用系列: {', '.join(SET_CARD_RANGES.keys())}")
+        return
 
-    print(f"\n将下载系列: {', '.join(sets_to_download)}")
+    print(f"\n将下载系列: {args.set}")
     print(f"并发线程数: {args.max_workers}")
 
     # 下载卡牌
-    download_cards_concurrent(sets_to_download, args.max_workers)
+    download_cards_concurrent(args.set, args.max_workers)
 
     print("\n" + "=" * 50)
     print("✨ 完成！")
     print(f"📁 卡牌保存位置: {CARDS_DIR}")
-    print(f"   总文件数: {len(list(CARDS_DIR.glob('*.webp')))}")
+    print(f"   总文件数: {len(list(CARDS_DIR.glob('*.png')))}")
     print("=" * 50)
 
 
