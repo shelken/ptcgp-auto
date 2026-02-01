@@ -322,6 +322,7 @@ def run_matching_test(
     screenshot: Image.Image,
     similarity_threshold: float = 0.68,
     source: str = "ADB",
+    conf_threshold: float = 0.9,
 ):
     """核心匹配测试逻辑（支持 ADB 和文件两种来源）"""
     print("=" * 70)
@@ -339,8 +340,11 @@ def run_matching_test(
 
     # 3. YOLO 检测
     print(f"\n🚀 加载模型并检测: {model_path}")
+    print(f"   置信度阈值: {conf_threshold}")
     start_time = time.perf_counter()
-    cropped_cards, _, vis_img = detect_cards(model_path, screenshot, conf_threshold=0.6)
+    cropped_cards, _, vis_img = detect_cards(
+        model_path, screenshot, conf_threshold=conf_threshold
+    )
     detect_time = time.perf_counter() - start_time
 
     if not cropped_cards:
@@ -351,9 +355,9 @@ def run_matching_test(
         f"✅ 检测到 {len(cropped_cards)} 张卡牌 (检测耗时: {detect_time * 1000:.1f}ms)"
     )
 
-    # 4. 按阅读顺序排序（从左到右，从上到下）
+    # 4. 按阅读顺序排序（先行后列：从上到下，从左到右）
     start_time = time.perf_counter()
-    cropped_cards.sort(key=lambda c: (c["center_x"], c["center_y"]))
+    cropped_cards.sort(key=lambda c: (c["center_y"], c["center_x"]))
     # 重新编号
     for i, card in enumerate(cropped_cards, 1):
         card["index"] = i
@@ -505,9 +509,32 @@ def run_matching_test(
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="大规模匹配测试")
+    parser.add_argument(
+        "--set",
+        default="A1",
+        help="要匹配的卡牌系列（如 A1, A2 等），默认 A1",
+    )
+    parser.add_argument(
+        "--image",
+        help="从指定图片文件加载截图（不使用 ADB）",
+    )
+    parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.9,
+        help="YOLO 检测置信度阈值（默认 0.9）",
+    )
+    args = parser.parse_args()
+
     # 配置
     model_path = "../runs/obb/output/models/card_obb5/weights/best.pt"
-    hash_db_path = Path("data/hash_database_a1.json")
+    hash_db_path = Path(f"data/raw/cards/{args.set}/hash_database.json")
+
+    print(f"📂 使用系列: {args.set}")
+    print(f"   数据库: {hash_db_path}")
 
     # 检查文件
     if not Path(model_path).exists():
@@ -515,13 +542,31 @@ def main():
         sys.exit(1)
 
     if not hash_db_path.exists():
-        print(f"❌ 哈希数据库不存在: {hash_db_path}")
-        print("💡 请先运行: python scripts/generate_hash_db.py")
-        sys.exit(1)
+        print(f"⚠️  哈希数据库不存在: {hash_db_path}")
+        print("💡 尝试自动生成...")
 
-    # 检查是否有文件参数
-    if len(sys.argv) > 1:
-        screenshot_path = Path(sys.argv[1])
+        # 调用 generate_hash_db.py 生成
+        import subprocess
+
+        result = subprocess.run(
+            [sys.executable, "scripts/generate_hash_db.py", "--set", args.set],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            print(f"❌ 生成失败: {result.stderr}")
+            sys.exit(1)
+
+        print(result.stdout)
+
+        if not hash_db_path.exists():
+            print(f"❌ 生成后数据库仍不存在")
+            sys.exit(1)
+
+    # 检查是否有 --image 参数
+    if args.image:
+        screenshot_path = Path(args.image)
         if screenshot_path.exists():
             # 从文件加载截图
             print(f"📂 加载截图: {screenshot_path}")
@@ -532,6 +577,7 @@ def main():
                 screenshot=screenshot,
                 similarity_threshold=0.68,
                 source="文件",
+                conf_threshold=args.conf,
             )
             return
         else:
@@ -565,6 +611,7 @@ def main():
         screenshot=screenshot,
         similarity_threshold=0.68,
         source="ADB",
+        conf_threshold=args.conf,
     )
 
 
