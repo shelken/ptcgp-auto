@@ -18,7 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=2.5">
+    <link rel="stylesheet" href="/static/css/main.css?v=2.7">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -102,6 +102,14 @@
                 <!-- Separator -->
                 <div class="hidden lg:block w-px h-6 bg-separator" aria-hidden="true"></div>
 
+                <!-- Refresh -->
+                <button type="button" onclick="refreshRecords()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
+                    {{ t.refresh }} ↻
+                </button>
+
+                <!-- Separator -->
+                <div class="hidden lg:block w-px h-6 bg-separator" aria-hidden="true"></div>
+
                 <!-- Clear Filters -->
                 <button type="button" onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
                     {{ t.clear_filters }} ✕
@@ -153,6 +161,8 @@
             <div id="records-container"
                  class="space-y-12"
                  data-url="/api/records?page=0&lang={{ current_lang }}"
+                 data-auto-refresh="/api/records"
+                 data-refresh-include="#filter-form"
                  hx-swap="innerHTML">
             </div>
 
@@ -242,7 +252,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script src="/static/js/main.js?v=2.5"></script>
+    <script src="/static/js/main.js?v=2.7"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();
