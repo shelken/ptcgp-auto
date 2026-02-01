@@ -75,7 +75,8 @@ function openCardPreview(cardElement) {
     const cardRarity = cardElement.dataset.cardRarity || '';
     const cardSet = cardElement.dataset.cardSet || '';
     const cardNumber = cardElement.dataset.cardNumber || '';
-    const cardImage = cardElement.dataset.cardImage || '/static/card_back.png';
+    // 大图使用高清原图 (jsDelivr CDN)，缩略图使用 wsrv.nl 裁剪版
+    const cardImage = cardElement.dataset.cardImageHd || cardElement.dataset.cardImage || '/static/card_back.png';
 
     // 创建预览模态框 HTML
     const previewHTML = `
@@ -379,6 +380,85 @@ function clearFilters() {
     htmx.ajax('GET', `/api/records?page=0&lang=${lang}`, {target: '#records-container', swap: 'innerHTML'});
 }
 
+// 刷新记录列表（保留当前筛选条件）
+function refreshRecords() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lang') || 'en';
+    
+    // 构建带筛选参数的 URL
+    const form = document.getElementById('filter-form');
+    const formData = form ? new FormData(form) : null;
+    const params = new URLSearchParams();
+    
+    params.set('page', '0');
+    params.set('lang', lang);
+    
+    // 添加当前筛选条件
+    if (formData) {
+        formData.forEach((value, key) => {
+            if (key === 'rarity' || key === 'card_type') {
+                params.append(key, value);
+            }
+        });
+    }
+    
+    htmx.ajax('GET', `/api/records?${params.toString()}`, {target: '#records-container', swap: 'innerHTML'});
+    
+    // 显示提示
+    showToast('已刷新');
+}
+
+// 全局自动刷新抽象：刷新任何带有 data-auto-refresh 属性的容器
+function autoRefreshList(container) {
+    if (!container) return;
+    
+    // 检查容器是否在激活的 Tab 中
+    if (!isElementInActiveTab(container)) return;
+    
+    // 获取刷新配置
+    const baseUrl = container.dataset.autoRefresh;
+    const includeSelector = container.dataset.refreshInclude;
+    
+    // 构建 URL
+    let url = baseUrl;
+    
+    // 如果需要包含表单数据（如筛选条件）
+    if (includeSelector) {
+        const form = document.querySelector(includeSelector);
+        const params = new URLSearchParams();
+        params.set('page', '0');
+        
+        // 添加语言参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const lang = urlParams.get('lang') || 'en';
+        params.set('lang', lang);
+        
+        // 添加表单数据
+        if (form) {
+            const formData = new FormData(form);
+            formData.forEach((value, key) => {
+                params.append(key, value);
+            });
+        }
+        
+        url = `${baseUrl}?${params.toString()}`;
+    }
+    
+    htmx.ajax('GET', url, {
+        target: container,
+        swap: 'innerHTML'
+    });
+}
+
+// 检查元素是否在激活的 Tab 中
+function isElementInActiveTab(element) {
+    // 查找最近的 tab-content 父元素
+    const tabContent = element.closest('.tab-content');
+    if (!tabContent) return true; // 不在任何 tab 中，默认允许刷新
+    
+    return !tabContent.classList.contains('hidden');
+}
+
 // 3. View Mode Logic
 function setViewMode(mode) {
     const container = document.getElementById('records-container');
@@ -628,6 +708,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Auto-init on HTMX load
     document.body.addEventListener('htmx:load', function(evt) {
         initCustomSelects(evt.detail.elt);
+    });
+
+    // 页面重新获得焦点时自动刷新所有带有 data-auto-refresh 的列表
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            document.querySelectorAll('[data-auto-refresh]').forEach(container => {
+                autoRefreshList(container);
+            });
+        }
     });
 });
 

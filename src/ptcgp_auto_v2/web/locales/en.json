@@ -36,6 +36,7 @@
     "type_tool": "Tool",
     "type_Fossil": "Fossil",
     "clear_filters": "CLEAR FILTERS",
+    "refresh": "REFRESH",
     "project_name": "PTCGP ASSISTANT",
     "theme_label": "THEME",
     "themes": {
