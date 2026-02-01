@@ -1,3 +1,8 @@
+{# 图片资源使用的 locale 映射 #}
+{% set image_locale = 'zh-TW' if current_lang.startswith('zh') else 'en-US' %}
+{% set image_base_url = 'https://wsrv.nl/?url=raw.githubusercontent.com/shelken/ptcgp-assets/main/images/' ~ image_locale ~ '/cards-by-set' %}
+{% set image_cdn_url = 'https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/' ~ image_locale ~ '/cards-by-set' %}
+
 {% for item in records %}
 <div class="brutal-card p-8 flex flex-col md:flex-row gap-8">
     <!-- Left: Account & Pack Info -->
@@ -57,11 +62,12 @@
                      data-card-rarity="{{ card.rarity }}"
                      data-card-set="{{ card.card.set_code if card.card else '' }}"
                      data-card-number="{{ card.card.number if card.card else '' }}"
-                     data-card-image="{% if card.card and card.card.image_url %}https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards-by-set/{{ card.card.set_code }}/{{ card.card.number }}.webp&w=800&output=webp{% else %}/static/card_back.png{% endif %}">
+                     data-card-image="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&output=png{% else %}/static/card_back.png{% endif %}"
+                     data-card-image-hd="{% if card.card and card.card.image_url %}{{ image_cdn_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png{% else %}/static/card_back.png{% endif %}">
 
                 <!-- Card Image -->
                 {% if card.card and card.card.image_url %}
-                     <img src="https://wsrv.nl/?url=raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/cards-by-set/{{ card.card.set_code }}/{{ card.card.number }}.webp&w=400&output=webp"
+                     <img src="{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&w=400&output=png"
                          alt="{{ card.card_name }}"
                          class="w-full h-full object-cover"
                          loading="lazy"
