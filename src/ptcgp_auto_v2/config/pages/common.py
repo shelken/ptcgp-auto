@@ -93,11 +93,18 @@ COMMON_PAGES = [
     },
     # 游戏启动失败，尝试重启
     {
-        "name": "pop_up_game_launch_fail",
-        "identifiers": _get_patterns(TEXT_PATTERNS, "pop_up_game_launch_fail"),
+        "name": "popup_game_launch_fail",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "popup_game_launch_fail"),
         "priority": 500,
         "action": "tap_text",
         "patterns_key": "text_x",
+    },
+    # 回到標題畫面
+    {
+        "name": "popup_return_to_title_screen",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "popup_return_to_title_screen"),
+        "priority": 500,
+        "action": "tap_matched",
     },
     # 打开模拟器弹出页面
     {
