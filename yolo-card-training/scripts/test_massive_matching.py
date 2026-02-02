@@ -62,6 +62,11 @@ class MatchResult:
     card_id: str
     similarity: float
     confidence: float
+    bbox: Optional[Tuple[int, int, int, int]] = None  # (x1, y1, x2, y2) 边框坐标
+
+
+SIMILARITY_THRESHOLD = 0.8
+OBB_THRESHOLD = 0.95
 
 
 def load_hash_database(db_path: Path) -> Dict[str, np.ndarray]:
@@ -85,7 +90,9 @@ def load_hash_database(db_path: Path) -> Dict[str, np.ndarray]:
     return db_decoded
 
 
-def detect_cards(model_path: str, pil_image: Image.Image, conf_threshold: float = 0.6):
+def detect_cards(
+    model_path: str, pil_image: Image.Image, conf_threshold: float = OBB_THRESHOLD
+):
     """YOLO 检测卡牌，返回检测结果和带绿色框的可视化图片"""
     # 检查 YOLO 是否可用（已在全局导入）
     if not ULTRALYTICS_AVAILABLE:
@@ -206,7 +213,7 @@ def match_against_database(
     cropped_cards: List[Dict],
     hash_db: Dict[str, np.ndarray],
     vis_img: np.ndarray,
-    similarity_threshold: float = 0.55,
+    similarity_threshold: float = SIMILARITY_THRESHOLD,
 ) -> Tuple[List[MatchResult], int, int, np.ndarray]:
     """
     将检测到的卡牌与数据库匹配，并在匹配成功时绘制红色内框
@@ -219,7 +226,7 @@ def match_against_database(
     above_threshold_count = 0
 
     print(f"\n🔍 开始匹配 ({len(cropped_cards)} 张检测 × {len(hash_db)} 张数据库)")
-    print(f"   阈值: {similarity_threshold} (推荐生产环境使用 0.68)")
+    print(f"   阈值: {SIMILARITY_THRESHOLD}")
     print("-" * 70)
 
     start_time = time.perf_counter()
@@ -256,6 +263,7 @@ def match_against_database(
                     card_id=card_id,
                     similarity=similarity,
                     confidence=card["confidence"],
+                    bbox=card["bbox"],
                 )
 
         # 输出当前卡牌的最佳匹配（显示前3）
@@ -270,9 +278,11 @@ def match_against_database(
             top3 = all_similarities[:3]
 
             status = "✅" if best_match.similarity >= similarity_threshold else "❌"
+            x1, y1, x2, y2 = card["bbox"]
             print(
                 f"   卡牌 #{card['index']}: {status} 最佳匹配: {best_match.card_id} "
-                f"(相似度: {best_match.similarity:.4f}, 置信度: {best_match.confidence:.3f})"
+                f"(相似度: {best_match.similarity:.4f}, 边框置信度: {best_match.confidence:.3f}, "
+                f"坐标: ({x1},{y1},{x2},{y2}))"
             )
 
             # 显示前3候选
@@ -321,7 +331,7 @@ def run_matching_test_with_db(
     hash_db: Dict[str, np.ndarray],
     hash_db_path: Path,
     screenshot: Image.Image,
-    similarity_threshold: float = 0.68,
+    similarity_threshold: float = SIMILARITY_THRESHOLD,
     source: str = "ADB",
     conf_threshold: float = 0.9,
 ):
@@ -356,8 +366,43 @@ def run_matching_test_with_db(
     )
 
     # 4. 按阅读顺序排序（先行后列：从上到下，从左到右）
+    # 使用行分组策略：y坐标相近的（<10像素）视为同一行
     start_time = time.perf_counter()
-    cropped_cards.sort(key=lambda c: (c["center_y"], c["center_x"]))
+
+    def sort_by_rows(cards):
+        """按行分组排序：先从上到下分行，每行内从左到右"""
+        if not cards:
+            return cards
+
+        # 按y坐标排序
+        sorted_by_y = sorted(cards, key=lambda c: c["center_y"])
+
+        rows = []
+        current_row = [sorted_by_y[0]]
+        row_threshold = 10  # y坐标相差小于10像素视为同一行
+
+        for card in sorted_by_y[1:]:
+            if abs(card["center_y"] - current_row[0]["center_y"]) < row_threshold:
+                current_row.append(card)
+            else:
+                # 当前行结束，按x坐标排序并保存
+                current_row.sort(key=lambda c: c["center_x"])
+                rows.append(current_row)
+                current_row = [card]
+
+        # 处理最后一行
+        if current_row:
+            current_row.sort(key=lambda c: c["center_x"])
+            rows.append(current_row)
+
+        # 合并所有行
+        result = []
+        for row in rows:
+            result.extend(row)
+        return result
+
+    cropped_cards = sort_by_rows(cropped_cards)
+
     # 重新编号
     for i, card in enumerate(cropped_cards, 1):
         card["index"] = i
@@ -445,12 +490,15 @@ def run_matching_test_with_db(
     if unmatched:
         print(f"\n   ⚠️  未匹配的卡牌 ({len(unmatched)} 张):")
         for c in unmatched:
-            print(f"      卡牌 #{c['index']}: 置信度 {c['confidence']:.3f}")
+            x1, y1, x2, y2 = c["bbox"]
+            print(
+                f"      卡牌 #{c['index']}: 边框置信度 {c['confidence']:.3f}, 坐标: ({x1},{y1},{x2},{y2})"
+            )
 
     print("\n" + "=" * 70)
     print("结论:")
     if len(matches) >= len(cropped_cards) * 0.8:  # 80% 匹配率
-        print("   🎉 表现优秀！建议使用当前模型 (阈值 0.68)")
+        print("   🎉 表现优秀！建议使用当前模型")
     elif len(matches) >= len(cropped_cards) * 0.5:  # 50% 匹配率
         print("   ⚠️  表现一般，建议检查图片质量或调整阈值")
     else:
@@ -700,7 +748,7 @@ def main():
         hash_db=hash_db,
         hash_db_path=hash_db_path,
         screenshot=screenshot,
-        similarity_threshold=0.68,
+        similarity_threshold=SIMILARITY_THRESHOLD,
         source=source,
         conf_threshold=args.conf,
     )
