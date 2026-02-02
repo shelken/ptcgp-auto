@@ -25,7 +25,7 @@ class Account(SQLModel, table=True):
 
     字段说明：
     - game_id: 设备账号 ID（来自 XML deviceAccount 字段），唯一标识符
-    - friend_id: 游戏内朋友 ID（格式 XXXX-XXXX-XXXX-XXXX），用户可见
+    - friend_id: 游戏内朋友 ID（格式 XXXXXXXXXXXXXXXX，16位数字），用户可见
     - nintendo_id: Nintendo 账号 ID（从 JWT 解析）
     - nickname: 用户昵称
     - country: 国家/地区代码（从 JWT 解析）
@@ -38,7 +38,7 @@ class Account(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     game_id: str = Field(unique=True, description="deviceAccount 字段，唯一标识")
     friend_id: Optional[str] = Field(
-        default=None, description="朋友 ID，格式 XXXX-XXXX-XXXX-XXXX"
+        default=None, description="朋友 ID，格式 XXXXXXXXXXXXXXXX（16位数字）"
     )
     nintendo_id: Optional[str] = Field(default=None, description="Nintendo 账号 ID")
     nickname: Optional[str] = None
