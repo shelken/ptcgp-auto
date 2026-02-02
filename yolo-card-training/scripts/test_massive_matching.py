@@ -316,24 +316,24 @@ def match_against_database(
     return matches, total_checked, above_threshold_count, vis_img
 
 
-def run_matching_test(
+def run_matching_test_with_db(
     model_path: str,
+    hash_db: Dict[str, np.ndarray],
     hash_db_path: Path,
     screenshot: Image.Image,
     similarity_threshold: float = 0.68,
     source: str = "ADB",
     conf_threshold: float = 0.9,
 ):
-    """核心匹配测试逻辑（支持 ADB 和文件两种来源）"""
+    """核心匹配测试逻辑（接受已加载的数据库字典）"""
     print("=" * 70)
     print(f"大规模匹配测试（{source} 模式）")
     print("=" * 70)
 
-    # 1. 加载数据库
-    start_time = time.perf_counter()
-    hash_db = load_hash_database(hash_db_path)
-    db_load_time = time.perf_counter() - start_time
-    print(f"   耗时: {db_load_time * 1000:.1f}ms")
+    # 数据库已在外部加载
+    db_load_time = 0
+    print(f"📂 使用数据库: {hash_db_path}")
+    print(f"   已加载 {len(hash_db)} 张卡牌")
 
     # 2. 显示截图信息
     print(f"\n✅ 截图: {screenshot.width}x{screenshot.height}")
@@ -508,6 +508,52 @@ def run_matching_test(
         print(f"⚠️  终端显示失败，请直接查看文件: {vis_path}")
 
 
+def discover_all_card_sets(cards_dir: Path) -> List[str]:
+    """发现所有可用的卡牌系列"""
+    sets = []
+    if not cards_dir.exists():
+        return sets
+
+    for subdir in sorted(cards_dir.iterdir()):
+        if subdir.is_dir():
+            hash_db = subdir / "hash_database.json"
+            if hash_db.exists():
+                sets.append(subdir.name)
+
+    return sets
+
+
+def load_multiple_hash_databases(
+    sets: List[str], cards_dir: Path
+) -> Dict[str, np.ndarray]:
+    """加载多个系列的哈希数据库并合并"""
+    combined_db: Dict[str, np.ndarray] = {}
+
+    print(f"\n📂 加载 {len(sets)} 个系列的哈希数据库...")
+
+    for card_set in sets:
+        db_path = cards_dir / card_set / "hash_database.json"
+        if not db_path.exists():
+            print(f"   ⚠️  跳过 {card_set}: 数据库不存在")
+            continue
+
+        with open(db_path, "r", encoding="utf-8") as f:
+            db_raw = json.load(f)
+
+        set_count = 0
+        for hash_str, card_id in db_raw.items():
+            # 添加系列前缀，避免不同系列的相同ID冲突
+            prefixed_id = f"{card_set}/{card_id}"
+            hash_arr = decode_hash_from_base64(hash_str)
+            combined_db[prefixed_id] = hash_arr
+            set_count += 1
+
+        print(f"   ✅ {card_set}: {set_count} 张卡牌")
+
+    print(f"\n📊 总计加载: {len(combined_db)} 张卡牌（来自 {len(sets)} 个系列）")
+    return combined_db
+
+
 def main():
     import argparse
 
@@ -516,6 +562,11 @@ def main():
         "--set",
         default="A1",
         help="要匹配的卡牌系列（如 A1, A2 等），默认 A1",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="匹配所有可用的卡牌系列",
     )
     parser.add_argument(
         "--image",
@@ -531,86 +582,126 @@ def main():
 
     # 配置
     model_path = "../runs/obb/output/models/card_obb5/weights/best.pt"
-    hash_db_path = Path(f"data/raw/cards/{args.set}/hash_database.json")
+    cards_dir = Path("data/raw/cards")
 
-    print(f"📂 使用系列: {args.set}")
-    print(f"   数据库: {hash_db_path}")
-
-    # 检查文件
+    # 检查模型文件
     if not Path(model_path).exists():
         print(f"❌ 模型不存在: {model_path}")
         sys.exit(1)
 
-    if not hash_db_path.exists():
-        print(f"⚠️  哈希数据库不存在: {hash_db_path}")
-        print("💡 尝试自动生成...")
-
-        # 调用 generate_hash_db.py 生成
-        import subprocess
-
-        result = subprocess.run(
-            [sys.executable, "scripts/generate_hash_db.py", "--set", args.set],
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            print(f"❌ 生成失败: {result.stderr}")
-            sys.exit(1)
-
-        print(result.stdout)
-
-        if not hash_db_path.exists():
-            print(f"❌ 生成后数据库仍不存在")
-            sys.exit(1)
-
-    # 检查是否有 --image 参数
+    # 获取截图
     if args.image:
         screenshot_path = Path(args.image)
-        if screenshot_path.exists():
-            # 从文件加载截图
-            print(f"📂 加载截图: {screenshot_path}")
-            screenshot = Image.open(screenshot_path)
-            run_matching_test(
-                model_path=model_path,
-                hash_db_path=hash_db_path,
-                screenshot=screenshot,
-                similarity_threshold=0.68,
-                source="文件",
-                conf_threshold=args.conf,
-            )
-            return
-        else:
+        if not screenshot_path.exists():
             print(f"❌ 截图文件不存在: {screenshot_path}")
             sys.exit(1)
+        print(f"📂 加载截图: {screenshot_path}")
+        screenshot = Image.open(screenshot_path)
+        source = "文件"
+    else:
+        # 自动发现设备（ADB 模式）
+        print("🔍 自动发现ADB设备...")
+        devices = discover_devices_simple()
+        if not devices:
+            print("❌ 未发现ADB设备")
+            print("💡 使用方法: python test_massive_matching.py --image <截图文件路径>")
+            sys.exit(1)
 
-    # 自动发现设备（ADB 模式）
-    print("🔍 自动发现ADB设备...")
-    devices = discover_devices_simple()
-    if not devices:
-        print("❌ 未发现ADB设备")
-        print("💡 使用方法: python test_massive_matching.py <截图文件路径>")
-        sys.exit(1)
+        device_address = devices[0]
+        print(f"✅ 发现设备: {device_address}")
 
-    device_address = devices[0]
-    print(f"✅ 发现设备: {device_address}")
+        # ADB 截图
+        print(f"\n📱 连接设备: {device_address}")
+        adb = SimpleAdbController(device_address)
+        print("📸 正在截图...")
+        screenshot = adb.screenshot()
+        if not screenshot:
+            print("❌ 截图失败")
+            sys.exit(1)
+        source = "ADB"
 
-    # ADB 截图
-    print(f"\n📱 连接设备: {device_address}")
-    adb = SimpleAdbController(device_address)
-    print("📸 正在截图...")
-    screenshot = adb.screenshot()
-    if not screenshot:
-        print("❌ 截图失败")
-        sys.exit(1)
+    # 处理 --all 参数或单个系列
+    if args.all:
+        # 发现所有可用的系列
+        available_sets = discover_all_card_sets(cards_dir)
+        if not available_sets:
+            print(f"❌ 未在 {cards_dir} 下发现任何卡牌系列")
+            print("💡 请确保目录结构为: data/raw/cards/A1/hash_database.json")
+            sys.exit(1)
+
+        print(
+            f"\n🔍 发现 {len(available_sets)} 个卡牌系列: {', '.join(available_sets)}"
+        )
+
+        # 检查并自动生缺失的数据库
+        missing_sets = []
+        for card_set in available_sets:
+            db_path = cards_dir / card_set / "hash_database.json"
+            if not db_path.exists():
+                missing_sets.append(card_set)
+
+        if missing_sets:
+            print(
+                f"\n⚠️  以下系列缺少哈希数据库，尝试自动生成: {', '.join(missing_sets)}"
+            )
+            for card_set in missing_sets:
+                result = subprocess.run(
+                    [sys.executable, "scripts/generate_hash_db.py", "--set", card_set],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    print(f"   ❌ {card_set} 生成失败: {result.stderr}")
+                    available_sets.remove(card_set)
+                else:
+                    print(f"   ✅ {card_set} 生成成功")
+
+        if not available_sets:
+            print("❌ 没有可用的卡牌系列")
+            sys.exit(1)
+
+        # 加载所有系列的哈希数据库
+        print(f"\n📂 准备加载以下系列: {', '.join(available_sets)}")
+        hash_db = load_multiple_hash_databases(available_sets, cards_dir)
+        hash_db_path = cards_dir / "combined_all_sets"  # 虚拟路径用于显示
+    else:
+        # 单个系列模式
+        hash_db_path = cards_dir / args.set / "hash_database.json"
+        print(f"📂 使用系列: {args.set}")
+        print(f"   数据库: {hash_db_path}")
+
+        # 检查并自动生成数据库
+        if not hash_db_path.exists():
+            print(f"⚠️  哈希数据库不存在: {hash_db_path}")
+            print("💡 尝试自动生成...")
+
+            result = subprocess.run(
+                [sys.executable, "scripts/generate_hash_db.py", "--set", args.set],
+                capture_output=True,
+                text=True,
+            )
+
+            if result.returncode != 0:
+                print(f"❌ 生成失败: {result.stderr}")
+                sys.exit(1)
+
+            print(result.stdout)
+
+            if not hash_db_path.exists():
+                print(f"❌ 生成后数据库仍不存在")
+                sys.exit(1)
+
+        # 加载单个数据库
+        hash_db = load_hash_database(hash_db_path)
 
     # 执行匹配测试
-    run_matching_test(
+    run_matching_test_with_db(
         model_path=model_path,
+        hash_db=hash_db,
         hash_db_path=hash_db_path,
         screenshot=screenshot,
         similarity_threshold=0.68,
-        source="ADB",
+        source=source,
         conf_threshold=args.conf,
     )
 
