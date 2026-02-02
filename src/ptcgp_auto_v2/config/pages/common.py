@@ -106,6 +106,14 @@ COMMON_PAGES = [
         "priority": 500,
         "action": "tap_matched",
     },
+    # 確定要關閉應用程式嗎？
+    {
+        "name": "popup_close_game",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "popup_close_game"),
+        "priority": 500,
+        "action": "tap_text",
+        "patterns_key": "text_cancel",
+    },
     # 打开模拟器弹出页面
     {
         "name": "_to_home",
