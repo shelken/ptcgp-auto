@@ -42,12 +42,8 @@ class DatasetGenerator:
             f"📊 找到 {len(self.cards_files)} 张卡牌, {len(self.backgrounds_files)} 张背景"
         )
 
-        # 如果没有背景图片，创建纯色背景
         if len(self.backgrounds_files) == 0:
-            print("⚠️  未找到背景图片，将使用纯色背景")
-            self.use_solid_background = True
-        else:
-            self.use_solid_background = False
+            raise FileNotFoundError("未找到背景图片，请检查 backgrounds 目录")
 
     def calculate_iou(self, box1, box2):
         """计算 IoU（Intersection over Union）"""
@@ -62,6 +58,54 @@ class DatasetGenerator:
         union = area1 + area2 - intersection
 
         return intersection / union if union > 0 else 0
+
+    def _build_random_result(
+        self,
+        bg_img: Image.Image,
+        card_img: Image.Image,
+        x: int,
+        y: int,
+        rot_w: int,
+        rot_h: int,
+        new_w: int,
+        new_h: int,
+        angle: float,
+    ):
+        """根据随机模式位置与角度生成结果与 OBB 标注"""
+        bg_w, bg_h = bg_img.size
+
+        result = bg_img.copy()
+        if card_img.mode == "RGBA":
+            result.paste(card_img, (x, y), card_img.split()[3])
+        else:
+            result.paste(card_img, (x, y))
+
+        center_x = (x + rot_w / 2) / bg_w
+        center_y = (y + rot_h / 2) / bg_h
+
+        half_w = new_w / 2 / bg_w
+        half_h = new_h / 2 / bg_h
+
+        corners = [
+            (-half_w, -half_h),
+            (half_w, -half_h),
+            (half_w, half_h),
+            (-half_w, half_h),
+        ]
+
+        angle_rad = math.radians(-angle)
+        rotated_corners = []
+        for cx, cy in corners:
+            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
+            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
+            x_final = max(0, min(1, center_x + rx))
+            y_final = max(0, min(1, center_y + ry))
+            rotated_corners.extend([x_final, y_final])
+
+        yolo_bbox = [0] + [round(c, 6) for c in rotated_corners]
+        pixel_bbox = [x, y, x + rot_w, y + rot_h]
+
+        return result, yolo_bbox, pixel_bbox
 
     def place_card(
         self,
@@ -92,9 +136,12 @@ class DatasetGenerator:
 
         card_img = card_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        # 旋转（使用传入的角度或随机生成）
+        # 旋转角度（参考原版逻辑）
         if angle is None:
-            angle = random.uniform(-15, 15)
+            if scale_factor > 0.3:
+                angle = random.uniform(-5, 5)
+            else:
+                angle = random.uniform(-15, 15)
 
         card_img = card_img.rotate(
             angle, expand=True, resample=Image.Resampling.BICUBIC
@@ -105,11 +152,24 @@ class DatasetGenerator:
         if rot_w >= bg_w or rot_h >= bg_h:
             return None, None, None
 
-        # 尝试放置（避免重叠）
+        # 尝试放置（参考原版：网格随机格 + 偏移）
         max_attempts = 50
+        grid_cols = 5
+        grid_rows = 4
+        cell_w = bg_w // grid_cols
+        cell_h = bg_h // grid_rows
+
+        last_pos = None
         for _ in range(max_attempts):
-            x = random.randint(0, bg_w - rot_w)
-            y = random.randint(0, bg_h - rot_h)
+            grid_x = random.randint(0, grid_cols - 1)
+            grid_y = random.randint(0, grid_rows - 1)
+
+            base_x = grid_x * cell_w + random.randint(-10, 10)
+            base_y = grid_y * cell_h + random.randint(-10, 10)
+
+            x = max(0, min(base_x, bg_w - rot_w))
+            y = max(0, min(base_y, bg_h - rot_h))
+            last_pos = (x, y)
 
             # 检查重叠（IoU阈值0.1）
             new_box = [x, y, x + rot_w, y + rot_h]
@@ -118,39 +178,17 @@ class DatasetGenerator:
             )
 
             if not overlap:
-                # 放置卡牌
-                result = bg_img.copy()
-                if card_img.mode == "RGBA":
-                    result.paste(card_img, (x, y), card_img.split()[3])
-                else:
-                    result.paste(card_img, (x, y))
+                return self._build_random_result(
+                    bg_img, card_img, x, y, rot_w, rot_h, new_w, new_h, angle
+                )
 
-                # 计算 OBB 角点（归一化 0-1）
-                center_x = (x + rot_w / 2) / bg_w
-                center_y = (y + rot_h / 2) / bg_h
-
-                half_w = new_w / 2 / bg_w
-                half_h = new_h / 2 / bg_h
-
-                corners = [
-                    (-half_w, -half_h),
-                    (half_w, -half_h),
-                    (half_w, half_h),
-                    (-half_w, half_h),
-                ]
-
-                angle_rad = math.radians(-angle)
-                rotated_corners = []
-                for cx, cy in corners:
-                    rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
-                    ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
-                    rotated_corners.extend([center_x + rx, center_y + ry])
-
-                yolo_bbox = [0] + [round(c, 6) for c in rotated_corners]
-
-                return result, yolo_bbox, new_box
-
-        return None, None, None
+        # 兜底：使用最后一次位置
+        if last_pos is None:
+            return None, None, None
+        x, y = last_pos
+        return self._build_random_result(
+            bg_img, card_img, x, y, rot_w, rot_h, new_w, new_h, angle
+        )
 
     def place_card_grid(
         self,
@@ -181,20 +219,11 @@ class DatasetGenerator:
 
         card_img = card_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-        # 轻微旋转（网格模式下角度更小）
-        angle = random.uniform(-5, 5)
-        card_img = card_img.rotate(
-            angle, expand=True, resample=Image.Resampling.BICUBIC
-        )
-        rot_w, rot_h = card_img.size
+        # 网格模式不旋转、不偏移，严格居中对齐
+        rot_w, rot_h = new_w, new_h
 
-        # 计算网格中心位置
-        base_x = grid_x * cell_w + cell_w // 2
-        base_y = grid_y * cell_h + cell_h // 2
-
-        # 添加随机偏移（±10像素）
-        paste_x = base_x - rot_w // 2 + random.randint(-10, 10)
-        paste_y = base_y - rot_h // 2 + random.randint(-10, 10)
+        paste_x = grid_x * cell_w + (cell_w - rot_w) // 2
+        paste_y = grid_y * cell_h + (cell_h - rot_h) // 2
 
         # 边界检查
         paste_x = max(0, min(paste_x, bg_w - rot_w))
@@ -207,28 +236,17 @@ class DatasetGenerator:
         else:
             result.paste(card_img, (paste_x, paste_y))
 
-        # 计算OBB标注
-        center_x = (paste_x + rot_w / 2) / bg_w
-        center_y = (paste_y + rot_h / 2) / bg_h
+        # 计算 OBB 标注（轴对齐）
+        x1 = paste_x / bg_w
+        y1 = paste_y / bg_h
+        x2 = (paste_x + rot_w) / bg_w
+        y2 = y1
+        x3 = x2
+        y3 = (paste_y + rot_h) / bg_h
+        x4 = x1
+        y4 = y3
 
-        half_w = new_w / 2 / bg_w
-        half_h = new_h / 2 / bg_h
-
-        corners = [
-            (-half_w, -half_h),
-            (half_w, -half_h),
-            (half_w, half_h),
-            (-half_w, half_h),
-        ]
-
-        angle_rad = math.radians(-angle)
-        rotated_corners = []
-        for cx, cy in corners:
-            rx = cx * math.cos(angle_rad) - cy * math.sin(angle_rad)
-            ry = cx * math.sin(angle_rad) + cy * math.cos(angle_rad)
-            rotated_corners.extend([center_x + rx, center_y + ry])
-
-        yolo_bbox = [0] + [round(c, 6) for c in rotated_corners]
+        yolo_bbox = [0] + [round(v, 6) for v in [x1, y1, x2, y2, x3, y3, x4, y4]]
         pixel_bbox = [paste_x, paste_y, paste_x + rot_w, paste_y + rot_h]
 
         return result, yolo_bbox, pixel_bbox
@@ -241,19 +259,9 @@ class DatasetGenerator:
                 [1, 2, 3, random.randint(8, 15)], weights=[0.1, 0.1, 0.1, 0.7]
             )[0]
 
-        # 选择或创建背景
-        if self.use_solid_background:
-            bg_color = (
-                random.randint(200, 240),
-                random.randint(200, 240),
-                random.randint(200, 240),
-                255,
-            )
-            bg_img = Image.new("RGBA", (640, 640), bg_color)
-        else:
-            bg_file = random.choice(self.backgrounds_files)
-            bg_img = Image.open(bg_file).convert("RGBA")
-            bg_img = bg_img.resize((640, 640), Image.Resampling.LANCZOS)
+        bg_file = random.choice(self.backgrounds_files)
+        bg_img = Image.open(bg_file).convert("RGBA")
+        bg_img = bg_img.resize((640, 640), Image.Resampling.LANCZOS)
 
         existing_boxes = []
         yolo_bboxes = []
@@ -314,19 +322,9 @@ class DatasetGenerator:
         if grid_cols is None:
             grid_cols = random.randint(10, 20)
 
-        # 选择背景
-        if self.use_solid_background:
-            bg_color = (
-                random.randint(200, 240),
-                random.randint(200, 240),
-                random.randint(200, 240),
-                255,
-            )
-            bg_img = Image.new("RGBA", (640, 640), bg_color)
-        else:
-            bg_file = random.choice(self.backgrounds_files)
-            bg_img = Image.open(bg_file).convert("RGBA")
-            bg_img = bg_img.resize((640, 640), Image.Resampling.LANCZOS)
+        bg_file = random.choice(self.backgrounds_files)
+        bg_img = Image.open(bg_file).convert("RGBA")
+        bg_img = bg_img.resize((640, 640), Image.Resampling.LANCZOS)
 
         yolo_bboxes = []
 
