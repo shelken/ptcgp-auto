@@ -1,10 +1,8 @@
+{% from "partials/macros/modal.html" import modal_header, modal_footer %}
+{% from "partials/macros/forms.html" import input_field %}
 <div class="space-y-6">
-    <div class="flex justify-between items-center border-b-4 border-theme pb-4">
-        <h3 class="text-2xl font-bold uppercase">
-            {% if plan %}{{ t.title_edit_plan or 'Edit Plan' }}: {{ plan.name }}{% else %}{{ t.title_create_plan or 'Create New Plan' }}{% endif %}
-        </h3>
-        <button onclick="closeModal()" class="text-xl font-bold hover:opacity-50" aria-label="{{ t.label_close or 'Close' }}">✕</button>
-    </div>
+    {% set title = (t.title_edit_plan ~ ': ' ~ plan.name) if plan else t.title_create_plan or 'Create New Plan' %}
+    {{ modal_header(title, t) }}
 
     <form hx-post="/api/plans?lang={{ current_lang }}"
           hx-target="#management-content"
@@ -17,16 +15,8 @@
 
         <!-- Basic Info -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="space-y-2">
-                <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_name or 'Name' }}</label>
-                <input type="text" name="name" value="{{ plan.name if plan else '' }}" required
-                       class="brutal-input">
-            </div>
-            <div class="space-y-2">
-                <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_description or 'Description' }}</label>
-                <input type="text" name="description" value="{{ plan.description if plan else '' }}"
-                       class="brutal-input">
-            </div>
+            {{ input_field('name', t.label_name or 'Name', plan.name if plan else '', placeholder=t.label_name or 'Name', required=true, t=t) }}
+            {{ input_field('description', t.label_description or 'Description', plan.description if plan else '', placeholder=t.label_description or 'Description', t=t) }}
         </div>
 
         <!-- Hidden field for task order (only in request, not stored in DB) -->
@@ -38,7 +28,7 @@
                 <label class="block font-bold uppercase tracking-widest text-sm text-muted">{{ t.label_task_config or 'Tasks Configuration (Drag to Reorder)' }}</label>
                 <span class="text-xs text-muted">{{ t.desc_task_order_hint or 'Top tasks execute first' }}</span>
             </div>
-            <div id="tasks-list" class="border-2 border-theme p-4 space-y-4 max-h-[400px] overflow-y-auto">
+            <div id="tasks-list" class="sortable-list border-2 border-theme p-4 space-y-4 max-h-[400px] overflow-y-auto">
                 {% for task_type in available_tasks %}
                 {% set task_config = plan.config_dict.get(task_type, {}) if plan else {} %}
                 {% set is_enabled = task_type in (plan.task_types_list if plan else []) %}
@@ -96,73 +86,6 @@
         </div>
 
         <!-- Actions -->
-        <div class="flex justify-end gap-4 pt-4 border-t-2 border-subtle-light">
-            <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
-            <button type="submit" class="brutal-btn active" onclick="updateTaskOrder()">{{ t.label_save_plan or 'Save Plan' }}</button>
-        </div>
+        {{ modal_footer(t) }}
     </form>
-</div>
-
-<script>
-    // Initialize Sortable for tasks
-    (function() {
-        const list = document.getElementById('tasks-list');
-        if (list) {
-            new Sortable(list, {
-                animation: 150,
-                ghostClass: 'bg-subtle',
-                handle: '.cursor-move',
-                onEnd: function() {
-                    // Update order after drag
-                    updateTaskOrder();
-                }
-            });
-        }
-
-        // Initialize custom selects
-        if (typeof initCustomSelects === 'function') {
-            initCustomSelects(document.getElementById('modal-content'));
-        }
-    })();
-
-    function updateTaskItemState(checkbox) {
-        const taskItem = checkbox.closest('.task-item');
-        const configContainer = taskItem.querySelector('[data-config-container]');
-
-        if (checkbox.checked) {
-            taskItem.classList.remove('opacity-50');
-            if (configContainer) {
-                configContainer.classList.remove('opacity-50');
-            }
-            taskItem.setAttribute('data-enabled', 'true');
-        } else {
-            taskItem.classList.add('opacity-50');
-            if (configContainer) {
-                configContainer.classList.add('opacity-50');
-            }
-            taskItem.setAttribute('data-enabled', 'false');
-        }
-    }
-
-    function updateTaskOrder() {
-        const list = document.getElementById('tasks-list');
-        const items = list.querySelectorAll('.task-item');
-        const orderedTaskTypes = [];
-
-        items.forEach((item) => {
-            const taskType = item.getAttribute('data-task-type');
-            const isEnabled = item.getAttribute('data-enabled') === 'true';
-            if (isEnabled) {
-                orderedTaskTypes.push(taskType);
-            }
-        });
-
-        // Update hidden field with JSON array
-        document.getElementById('task_order').value = JSON.stringify(orderedTaskTypes);
-    }
-
-    // Initialize task order on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        updateTaskOrder();
-    });
-</script>
+    </div>

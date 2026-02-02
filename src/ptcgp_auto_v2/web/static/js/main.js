@@ -1,3 +1,7 @@
+// --- ES6 Modules Import ---
+import { getModal } from './modules/modal.js';
+import { showToast, throttle, debounce, isElementInActiveTab } from './modules/utils.js';
+
 // --- Constants ---
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_FILTERS = 'ptcgp_filters';
@@ -18,52 +22,6 @@ let cardPreviewState = {
     targetElement: null
 };
 
-// --- Focus Management ---
-let previousActiveElement = null;
-
-function saveFocus() {
-    previousActiveElement = document.activeElement;
-}
-
-function restoreFocus() {
-    if (previousActiveElement && previousActiveElement.focus) {
-        previousActiveElement.focus();
-    }
-}
-
-// --- Toast with aria-live ---
-function showToast(message) {
-    // Create or get toast container
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        container.setAttribute('aria-live', 'polite');
-        container.setAttribute('aria-atomic', 'true');
-        container.className = 'fixed bottom-4 right-4 z-50 flex flex-col gap-2';
-        document.body.appendChild(container);
-    }
-
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.className = 'bg-black text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300';
-    toast.textContent = message;
-    toast.setAttribute('role', 'alert');
-
-    container.appendChild(toast);
-
-    // Fade out and remove
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => {
-            container.removeChild(toast);
-            if (container.children.length === 0) {
-                container.remove();
-            }
-        }, 300);
-    }, 2000);
-}
-
 // --- Card Preview Functions ---
 
 function openCardPreview(cardElement) {
@@ -75,7 +33,7 @@ function openCardPreview(cardElement) {
     const cardRarity = cardElement.dataset.cardRarity || '';
     const cardSet = cardElement.dataset.cardSet || '';
     const cardNumber = cardElement.dataset.cardNumber || '';
-    // 大图使用高清原图 (jsDelivr CDN)，缩略图使用 wsrv.nl 裁剪版
+    // 大图使用高清原图 (jsDelivr CDN), 缩略图使用 wsrv.nl 裁剪版
     const cardImage = cardElement.dataset.cardImageHd || cardElement.dataset.cardImage || '/static/card_back.png';
 
     // 创建预览模态框 HTML
@@ -450,14 +408,7 @@ function autoRefreshList(container) {
     });
 }
 
-// 检查元素是否在激活的 Tab 中
-function isElementInActiveTab(element) {
-    // 查找最近的 tab-content 父元素
-    const tabContent = element.closest('.tab-content');
-    if (!tabContent) return true; // 不在任何 tab 中，默认允许刷新
-    
-    return !tabContent.classList.contains('hidden');
-}
+// Note: isElementInActiveTab 已从 modules/utils.js 导入
 
 // 3. View Mode Logic
 function setViewMode(mode) {
@@ -507,7 +458,13 @@ function restoreTheme() {
 }
 
 // 5. Tab Logic
-function switchTab(tabName) {
+function switchTab(tabName, options = {}) {
+    const {
+        preserveHash = false,
+        preferHash = null,
+        skipAutoSelect = false
+    } = options;
+    const initialHash = preferHash !== null ? preferHash : window.location.hash.replace('#', '');
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(el => {
         el.classList.add('hidden');
@@ -536,7 +493,7 @@ function switchTab(tabName) {
 
         // 更新 URL hash 以便刷新后恢复当前 Tab
         const hash = activeBtn.getAttribute('data-hash');
-        if (hash) {
+        if (hash && !preserveHash) {
             window.location.hash = hash;
         }
     }
@@ -550,14 +507,14 @@ function switchTab(tabName) {
     localStorage.setItem(STORAGE_KEY_TAB, tabName);
 
     // Auto-select first sidebar item if management tab is empty
-    if (tabName === 'management') {
+    if (tabName === 'management' && !skipAutoSelect) {
         const content = document.getElementById('management-content');
         // Check if content is empty or has only whitespace/text (default message)
         const hasContent = content.querySelector('table') || content.querySelector('form');
 
         if (!hasContent) {
             // Try to restore from hash first
-            const hash = window.location.hash.replace('#', '');
+            const hash = initialHash;
             let targetBtn = null;
             // 检查 hash 是否为 management 子项
             if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
@@ -600,67 +557,223 @@ function restoreTab() {
     }
 
     if (tabName) {
-        const btn = document.getElementById(`tab-btn-${tabName}`);
-        if (btn) {
-            // 如果 hash 匹配当前 Tab，不需要重复点击
-            // 但需要处理 management 子项的情况
-            if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
-                // 切换到 management tab，然后让 DOMContentLoaded 处理子项
-                btn.click();
-            } else if (!hash || hash !== tabName) {
-                // 没有 hash 或 hash 与恢复的 tab 不一致，需要点击
-                btn.click();
+        if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
+            switchTab('management', { preserveHash: true, preferHash: hash });
+        } else {
+            const btn = document.getElementById(`tab-btn-${tabName}`);
+            if (btn) {
+                if (!hash || hash !== tabName) {
+                    btn.click();
+                }
             }
-            // 如果 hash === tabName，页面已经正确显示，不需要点击
         }
     }
 }
 
-// 6. Modal Logic
-function openModal(contentHtml) {
-    const container = document.getElementById('modal-container');
-    const content = document.getElementById('modal-content');
-    if (container && content) {
-        saveFocus();
-        content.innerHTML = contentHtml;
-        container.classList.remove('hidden');
-        // Re-scan for HTMX content in modal
-        htmx.process(content);
-        // Focus first focusable element in modal
-        const firstFocusable = content.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-        if (firstFocusable) {
-            firstFocusable.focus();
+// 6. Sortable & Plan Management
+function updateTaskItemState(checkbox) {
+    const taskItem = checkbox.closest('.task-item');
+    if (!taskItem) return;
+    const configContainer = taskItem.querySelector('[data-config-container]');
+
+    if (checkbox.checked) {
+        taskItem.classList.remove('opacity-50');
+        if (configContainer) {
+            configContainer.classList.remove('opacity-50');
         }
-        // Trap focus in modal
-        container.setAttribute('aria-modal', 'true');
-        container.setAttribute('role', 'dialog');
+        taskItem.setAttribute('data-enabled', 'true');
+    } else {
+        taskItem.classList.add('opacity-50');
+        if (configContainer) {
+            configContainer.classList.add('opacity-50');
+        }
+        taskItem.setAttribute('data-enabled', 'false');
     }
 }
 
-function closeModal(event) {
-    // If event is provided, only close if clicked on backdrop (id=modal-container)
-    if (event && event.target.id !== 'modal-container') return;
+function updateTaskOrder() {
+    const list = document.getElementById('tasks-list');
+    if (!list) return;
+    const items = list.querySelectorAll('.task-item');
+    const orderedTaskTypes = [];
 
-    const container = document.getElementById('modal-container');
-    if (container) {
-        container.classList.add('hidden');
-        container.removeAttribute('aria-modal');
-        container.removeAttribute('role');
-        // Clear content to stop any polling or video playing
-        document.getElementById('modal-content').innerHTML = '';
-        restoreFocus();
+    items.forEach((item) => {
+        const taskType = item.getAttribute('data-task-type');
+        const isEnabled = item.getAttribute('data-enabled') === 'true';
+        if (isEnabled) {
+            orderedTaskTypes.push(taskType);
+        }
+    });
+
+    const orderField = document.getElementById('task_order');
+    if (orderField) {
+        orderField.value = JSON.stringify(orderedTaskTypes);
     }
 }
 
-// Helper to close modal from inside (e.g. Cancel button)
-function forceCloseModal() {
-    const container = document.getElementById('modal-container');
-    if (container) {
-        container.classList.add('hidden');
-        container.removeAttribute('aria-modal');
-        container.removeAttribute('role');
-        document.getElementById('modal-content').innerHTML = '';
-        restoreFocus();
+function getPlansMessages(list) {
+    return {
+        emptyMessage: list.dataset.emptyMessage || 'No plans assigned. Add one above.',
+        duplicateMessage: list.dataset.duplicateMessage || 'Plan already in list!',
+        saveErrorMessage: list.dataset.saveErrorMessage || 'Error saving plans',
+        saveSuccessMessage: list.dataset.saveSuccessMessage || 'Plans saved successfully!',
+        labelActive: list.dataset.labelActive || 'ACTIVE'
+    };
+}
+
+function checkEmpty(list = document.getElementById('plans-list')) {
+    if (!list) return;
+    const items = list.querySelectorAll('.plan-item');
+    let msg = document.getElementById('empty-message');
+    const messages = getPlansMessages(list);
+
+    if (items.length === 0) {
+        if (!msg) {
+            msg = document.createElement('div');
+            msg.id = 'empty-message';
+            msg.className = 'text-center text-muted py-8 italic select-none';
+            msg.textContent = messages.emptyMessage;
+            list.appendChild(msg);
+        }
+        msg.style.display = 'block';
+    } else if (msg) {
+        msg.style.display = 'none';
+    }
+}
+
+function addPlan() {
+    const list = document.getElementById('plans-list');
+    if (!list) return;
+    const messages = getPlansMessages(list);
+
+    const select = document.getElementById('add-plan-select');
+    if (!select) return;
+    const planId = select.value;
+    if (!planId) return;
+
+    const option = select.options[select.selectedIndex];
+    const planName = option.getAttribute('data-name');
+
+    const existing = document.querySelector(`.plan-item[data-id="${planId}"]`);
+    if (existing) {
+        alert(messages.duplicateMessage);
+        return;
+    }
+
+    const template = `
+        <div class="plan-item flex items-center gap-3 p-3 border border-subtle bg-card shadow-sm group select-none cursor-move" 
+             data-id="${planId}">
+            <div class="cursor-move text-muted hover:text-theme p-1">☰</div>
+            <div class="flex-grow">
+                <div class="font-bold text-lg text-theme">${planName}</div>
+                <div class="text-xs text-muted">ID: ${planId}</div>
+            </div>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <span class="text-xs font-bold uppercase text-theme">${messages.labelActive}</span>
+                <input type="checkbox" class="plan-active-checkbox w-5 h-5 accent-theme border-theme focus:ring-0" checked>
+            </label>
+            <button type="button" onclick="removePlan(this)" class="text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors">
+                ✕
+            </button>
+        </div>
+    `;
+
+    const msg = document.getElementById('empty-message');
+    if (msg) msg.style.display = 'none';
+
+    const div = document.createElement('div');
+    div.innerHTML = template.trim();
+    const newItem = div.firstChild;
+    list.appendChild(newItem);
+
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+}
+
+function removePlan(btn) {
+    const list = document.getElementById('plans-list');
+    if (!list) return;
+    const item = btn.closest('.plan-item');
+    if (!item) return;
+    item.remove();
+    checkEmpty(list);
+}
+
+function savePlans() {
+    const list = document.getElementById('plans-list');
+    if (!list) return;
+    const messages = getPlansMessages(list);
+    const accountId = list.dataset.accountId;
+    const lang = list.dataset.lang || 'en';
+
+    if (!accountId) return;
+
+    const items = list.querySelectorAll('.plan-item');
+    const data = [];
+
+    items.forEach((item) => {
+        const id = item.getAttribute('data-id');
+        const active = item.querySelector('.plan-active-checkbox').checked;
+        data.push({
+            plan_id: parseInt(id),
+            is_active: active
+        });
+    });
+
+    fetch(`/api/accounts/${accountId}/plans?lang=${lang}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => {
+        if (response.ok) {
+            closeModal();
+            const refreshBtn = document.querySelector('[hx-get*="/management/accounts"]');
+            if (refreshBtn) {
+                htmx.trigger(refreshBtn, 'click');
+            } else {
+                htmx.ajax('GET', `/management/accounts?lang=${lang}`, '#management-content');
+            }
+            showToast(messages.saveSuccessMessage);
+        } else {
+            alert(messages.saveErrorMessage);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert(messages.saveErrorMessage);
+    });
+}
+
+function initSortable(context = document) {
+    const taskList = context.querySelector('#tasks-list');
+    if (taskList && !taskList.dataset.sortableInit) {
+        new Sortable(taskList, {
+            animation: 150,
+            ghostClass: 'bg-subtle',
+            handle: '.cursor-move',
+            onEnd: function() {
+                updateTaskOrder();
+            }
+        });
+        taskList.dataset.sortableInit = 'true';
+        updateTaskOrder();
+    }
+
+    const plansList = context.querySelector('#plans-list');
+    if (plansList && !plansList.dataset.sortableInit) {
+        new Sortable(plansList, {
+            animation: 150,
+            ghostClass: 'bg-subtle',
+            handle: '.cursor-move',
+            onEnd: function() {
+                checkEmpty(plansList);
+            }
+        });
+        plansList.dataset.sortableInit = 'true';
+        checkEmpty(plansList);
     }
 }
 
@@ -676,13 +789,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // 处理 management 子项的选择（restoreTab 已处理 Tab 级别）
     const hash = window.location.hash.replace('#', '');
     if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
-        // 等待 restoreTab 完成后再选择子项
-        setTimeout(() => {
-            const targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
-            if (targetBtn) {
-                targetBtn.click();
-            }
-        }, 0);
+        const activeBtn = document.querySelector(`.sidebar-btn.active[data-hash="${hash}"]`);
+        if (!activeBtn) {
+            // 等待 restoreTab 完成后再选择子项
+            setTimeout(() => {
+                const targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
+                if (targetBtn) {
+                    targetBtn.click();
+                }
+            }, 0);
+        }
     }
 
     // prefers-reduced-motion support
@@ -708,6 +824,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Auto-init on HTMX load
     document.body.addEventListener('htmx:load', function(evt) {
         initCustomSelects(evt.detail.elt);
+    });
+
+    // Modal 内容完成交换后，统一打开并触发初始化
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail && evt.detail.target && evt.detail.target.id === 'modal-content') {
+            getModal().openFromSwap();
+        }
+    });
+
+    // Modal 打开时自动初始化内部组件
+    document.addEventListener('modal:opened', (e) => {
+        const modalContent = e.detail.modal.content;
+        // 自动初始化自定义选择器
+        if (typeof initCustomSelects === 'function') {
+            initCustomSelects(modalContent);
+        }
+        if (typeof initSortable === 'function' && modalContent.querySelector('.sortable-list')) {
+            initSortable(modalContent);
+        }
     });
 
     // 页面重新获得焦点时自动刷新所有带有 data-auto-refresh 的列表
@@ -894,3 +1029,23 @@ function initCustomSelects(context = document) {
         window.hasCustomSelectGlobalListener = true;
     }
 }
+
+// --- Global Exports for HTML Inline Handlers ---
+// 将需要在 HTML 中通过 onclick/onchange 调用的函数导出到全局
+window.setLang = setLang;
+window.setTheme = setTheme;
+window.saveFilters = saveFilters;
+window.clearFilters = clearFilters;
+window.refreshRecords = refreshRecords;
+window.setViewMode = setViewMode;
+window.switchTab = switchTab;
+window.openCardPreview = openCardPreview;
+window.closeCardPreview = closeCardPreview;
+window.updateSidebarState = updateSidebarState;
+window.updateTaskItemState = updateTaskItemState;
+window.updateTaskOrder = updateTaskOrder;
+window.addPlan = addPlan;
+window.removePlan = removePlan;
+window.savePlans = savePlans;
+// 以下函数从 modules/utils.js 导入，已自动注册到全局
+// window.showToast
