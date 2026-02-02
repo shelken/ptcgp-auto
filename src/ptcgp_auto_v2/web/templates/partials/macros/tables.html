@@ -1,0 +1,64 @@
+{# 表格宏组件 #}
+{# 提供统一的表格容器、表头和行组件 #}
+
+{% macro table_container(headers, t, empty_message='') %}
+<div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse">
+        <thead>
+            <tr class="border-b-4 border-theme">
+                {% for header in headers %}
+                    {% if header is mapping %}
+                    <th class="p-3 font-bold uppercase text-sm {{ header.class_name }}">{{ header.label }}</th>
+                    {% else %}
+                    <th class="p-3 font-bold uppercase text-sm">{{ header }}</th>
+                    {% endif %}
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {{ caller() }}
+        </tbody>
+    </table>
+    {% if empty_message %}
+    <div class="text-center py-8 text-muted">{{ empty_message }}</div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro table_row(cells, row_class='border-theme') %}
+<tr class="border-b {{ row_class }} hover-row transition-colors">
+    {% for cell in cells %}
+    <td class="p-3">{{ cell }}</td>
+    {% endfor %}
+</tr>
+{% endmacro %}
+
+{% macro action_button(icon, title, onclick, active=false, small=true) %}
+<button type="button" 
+        onclick="{{ onclick }}" 
+        class="brutal-btn{% if active %} active{% endif %}{% if small %} text-sm px-3 py-1{% endif %}" 
+        title="{{ title }}"
+        aria-label="{{ title }}">
+    {{ icon }}
+</button>
+{% endmacro %}
+
+{% macro status_badge(status, t) %}
+<span class="brutal-tag text-xs{% if status == 'active' or status == 'enabled' %} active{% endif %}">
+    {{ t['status_' ~ status] or status }}
+</span>
+{% endmacro %}
+
+{% macro pagination(url, current_page=0, has_more=true, t={}) %}
+{% if has_more %}
+<div hx-get="{{ url }}" 
+     hx-trigger="revealed" 
+     hx-swap="outerHTML"
+     class="h-12 w-full flex justify-center items-center opacity-0">
+</div>
+{% else %}
+<div class="text-center py-8 text-muted font-mono text-sm border-t-2 border-subtle-light mt-4">
+    {{ t.end_of_list or 'End of list' }}
+</div>
+{% endif %}
+{% endmacro %}

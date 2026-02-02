@@ -42,6 +42,9 @@ import ptcgp_auto_v2.tasks
 
 from ptcgp_auto_v2.db.models.card import Pack
 
+# 表单处理工具
+from ptcgp_auto_v2.web.utils.form_utils import safe_get_string, parse_json_label
+
 app = FastAPI(title="PTCGP Auto Web")
 
 # Mount static files
@@ -179,17 +182,11 @@ async def get_records(
     # Build lookup maps: code/name -> label_dict
     sets_map = {}
     for s in all_sets:
-        try:
-            sets_map[s.code] = json.loads(s.label_data) if s.label_data else {}
-        except:
-            sets_map[s.code] = {}
+        sets_map[s.code] = parse_json_label(s.label_data)
 
     packs_map = {}
     for p in all_packs:
-        try:
-            packs_map[p.name] = json.loads(p.label_data) if p.label_data else {}
-        except:
-            packs_map[p.name] = {}
+        packs_map[p.name] = parse_json_label(p.label_data)
 
     # 批量获取相关的 Pack Points (使用 account_id 和 pack_code 关联)
     # 收集需要查询的组合 (account_id, series)
@@ -514,18 +511,15 @@ async def update_account_details(
 ):
     """Handle Account Details Update (Nickname, Remark)"""
     form = await request.form()
-    nickname = form.get("nickname")
-    remark = form.get("remark")
+    nickname = safe_get_string(form, "nickname") or ""
+    remark = safe_get_string(form, "remark") or ""
 
     repo = AccountRepository()
     account = repo.get_by_id(account_id)
 
     if account:
-        if isinstance(nickname, str):
-            account.nickname = nickname
-        if isinstance(remark, str):
-            account.remark = remark
-
+        account.nickname = nickname
+        account.remark = remark
         repo.update(account)
 
     response = await get_management_accounts(request, lang=lang, session=session)
@@ -540,13 +534,9 @@ async def save_plan(
 ):
     """Handle Plan Create/Update"""
     form = await request.form()
-    plan_id = form.get("plan_id")
-    name = form.get("name")
-    if not isinstance(name, str):
-        name = ""
-    description = form.get("description")
-    if not isinstance(description, str):
-        description = None
+    plan_id = safe_get_string(form, "plan_id")
+    name = safe_get_string(form, "name") or ""
+    description = safe_get_string(form, "description")
 
     # Construct task_types and configuration from dynamic form data
     # This part depends on how the frontend sends data.
@@ -554,7 +544,7 @@ async def save_plan(
     # Form fields: tasks[open_pack][enabled], tasks[open_pack][reset_type], tasks[open_pack][interval]
 
     # Check for task_order field (JSON array with sorted task types)
-    task_order_str = form.get("task_order")
+    task_order_str = safe_get_string(form, "task_order")
     task_order = []
     if task_order_str:
         try:
@@ -572,8 +562,8 @@ async def save_plan(
             enabled_task_types.add(task_type)
 
             # Check config
-            r_type = form.get(f"task_reset_{task_type}")
-            interval = form.get(f"task_interval_{task_type}")
+            r_type = safe_get_string(form, f"task_reset_{task_type}")
+            interval = safe_get_string(form, f"task_interval_{task_type}")
 
             task_config = {}
             if (
@@ -712,20 +702,14 @@ async def update_set_label(
 ):
     """Update Card Set Label (zh)"""
     form = await request.form()
-    label_zh = form.get("label_zh")
+    label_zh = safe_get_string(form, "label_zh")
 
     repo = CardRepository()
     card_set = repo.get_set_by_code(code)
 
     if card_set:
-        try:
-            labels = json.loads(card_set.label_data) if card_set.label_data else {}
-        except:
-            labels = {}
-
-        if isinstance(label_zh, str):
-            labels["zh"] = label_zh
-
+        labels = parse_json_label(card_set.label_data)
+        labels["zh"] = label_zh
         repo.update_set_label(code, json.dumps(labels, ensure_ascii=False))
 
     # Return refreshed view
@@ -740,20 +724,14 @@ async def update_pack_label(
 ):
     """Update Pack Label (zh)"""
     form = await request.form()
-    label_zh = form.get("label_zh")
+    label_zh = safe_get_string(form, "label_zh")
 
     repo = CardRepository()
     pack = repo.get_pack_by_name(name)
 
     if pack:
-        try:
-            labels = json.loads(pack.label_data) if pack.label_data else {}
-        except:
-            labels = {}
-
-        if isinstance(label_zh, str):
-            labels["zh"] = label_zh
-
+        labels = parse_json_label(pack.label_data)
+        labels["zh"] = label_zh
         repo.update_pack_label(name, json.dumps(labels, ensure_ascii=False))
 
     return await get_management_metadata(request, lang=lang)
@@ -845,12 +823,8 @@ async def save_account_pack_config(
 ):
     """Save Account Pack Config"""
     form = await request.form()
-    pack_code = form.get("pack_code")
-    if not isinstance(pack_code, str):
-        pack_code = ""
-    booster_name = form.get("booster_name")
-    if not isinstance(booster_name, str):
-        booster_name = ""
+    pack_code = safe_get_string(form, "pack_code") or ""
+    booster_name = safe_get_string(form, "booster_name") or ""
 
     repo = AccountPackConfigRepository()
 
