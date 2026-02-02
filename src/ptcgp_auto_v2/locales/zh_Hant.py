@@ -61,6 +61,7 @@ TEXT_PATTERNS = {
     "game_open_page": ["點擊畫面開始遊戲"],
     "popup_game_launch_fail": ["啟動發生錯誤", "遊戲啟動失敗"],
     "popup_return_to_title_screen": ["回到標題畫面"],
+    "popup_close_game": ["關閉應用程式嗎"],
     "popup_auth_again": ["再度執行認證"],
     "popup_network_error": ["再試一次"],
     "popup_clean_and_download": ["清除快取", "重新下載"],
