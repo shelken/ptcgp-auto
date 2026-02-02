@@ -218,8 +218,8 @@ class InitAccountTask(Task):
     ALLOWED_COUNTRIES = ["香港", "台湾", "日本", "新加坡"]
     # 默认目标国家（向后兼容）
     TARGET_COUNTRY = "香港"
-    # 目标昵称
-    TARGET_NICKNAME = "skn"
+    # 昵称前缀
+    NICKNAME_PREFIX = "skn"
     # 出生年份偏移（当前年份 - OFFSET）
     BIRTH_YEAR_OFFSET = 20
     # 出生月份
@@ -229,6 +229,12 @@ class InitAccountTask(Task):
         super().__init__(adb, recognizer, page_detector)
         self._phase = InitAccountPhase.INIT
         self._action_cache: dict[str, bool] = {}
+
+    def _get_target_nickname(self) -> str:
+        """获取目标昵称，格式为 前缀 + 账号ID（如果没有账号则只有前缀）"""
+        if self.account and self.account.id:
+            return f"{self.NICKNAME_PREFIX}{self.account.id}"
+        return self.NICKNAME_PREFIX
 
     def _is_action_done(self, key: str) -> bool:
         """检查操作是否已完成"""
@@ -288,7 +294,9 @@ class InitAccountTask(Task):
 
     def _handle_speed_up(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
-        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok()
+        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok(
+            wait=0.5
+        )
 
     def _tap_text_exact(
         self, page_info: dict, pattern_key: str, log_msg: str
@@ -591,9 +599,11 @@ class InitAccountTask(Task):
         ocr_results = page_info.get("ocr_results", [])
         screenshot, _ = self.page_detector.get_last_page_context()
 
+        target_nickname = self._get_target_nickname()
+
         # 步骤 1: 精确检测目标昵称是否已设置成功
-        if is_text_visible(ocr_results, [self.TARGET_NICKNAME], exact=True):
-            logger.info(f"  -> 检测到昵称 {self.TARGET_NICKNAME} 已设置，点击 OK 完成")
+        if is_text_visible(ocr_results, [target_nickname], exact=True):
+            logger.info(f"  -> 检测到昵称 {target_nickname} 已设置，点击 OK 完成")
             result = tap_ok(self.adb, ocr_results, wait=1.0)
             return result or ActionResult.ok(wait=1.0)
 
@@ -607,8 +617,8 @@ class InitAccountTask(Task):
                 self.adb.scaled_y(INPUT_BOX_Y),
                 max_chars=20,
             )
-            logger.info(f"  -> 输入昵称: {self.TARGET_NICKNAME}")
-            self.adb.device.send_keys(self.TARGET_NICKNAME)
+            logger.info(f"  -> 输入昵称: {target_nickname}")
+            self.adb.device.send_keys(target_nickname)
             time.sleep(0.5)
             # 点击 OK 确认
             result = tap_ok(self.adb, ocr_results, wait=1.0)
@@ -625,8 +635,8 @@ class InitAccountTask(Task):
         # 步骤 4: 点击输入框并输入昵称（首次输入）
         result = tap(self.adb, self.adb.center_x(), INPUT_BOX_Y, wait=0.5)
         if result:
-            logger.info(f"  -> 点击输入框，输入昵称: {self.TARGET_NICKNAME}")
-            self.adb.device.send_keys(self.TARGET_NICKNAME)
+            logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
+            self.adb.device.send_keys(target_nickname)
             time.sleep(0.5)
 
         # 步骤 5: 点击 OK
