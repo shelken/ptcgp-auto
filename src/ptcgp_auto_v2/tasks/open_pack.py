@@ -345,7 +345,9 @@ class OpenPackTask(Task):
 
     def _handle_speed_up(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
-        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok()
+        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok(
+            wait=0.5
+        )
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
