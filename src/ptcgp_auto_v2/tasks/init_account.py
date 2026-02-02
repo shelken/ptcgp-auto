@@ -185,6 +185,7 @@ def _build_init_pages() -> list[dict]:
             "identifiers": get_text_patterns("pack_opening_result"),
             "priority": 99,
         },
+        {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
         {
             "name": "pack_card_register",
             "identifiers": get_text_patterns("pack_card_register"),
@@ -195,7 +196,6 @@ def _build_init_pages() -> list[dict]:
             "identifiers": get_text_patterns("long_press"),
             "priority": 99,
         },
-        {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
     ]
 
 
@@ -608,21 +608,21 @@ class InitAccountTask(Task):
             return result or ActionResult.ok(wait=1.0)
 
         # 步骤 2: 检测异常提示（如 "請勿使用本名"），需要清空重新输入
-        if is_text_visible(ocr_results, get_text_patterns("init_nickname_warning")):
-            logger.info("  -> 检测到昵称异常提示，清空重新输入")
-            # 清空输入框并重新输入
-            clear_text(
-                self.adb,
-                self.adb.center_x(),
-                self.adb.scaled_y(INPUT_BOX_Y),
-                max_chars=20,
-            )
-            logger.info(f"  -> 输入昵称: {target_nickname}")
-            self.adb.device.send_keys(target_nickname)
-            time.sleep(0.5)
-            # 点击 OK 确认
-            result = tap_ok(self.adb, ocr_results, wait=1.0)
-            return result or ActionResult.ok(wait=1.0)
+        # if is_text_visible(ocr_results, get_text_patterns("init_nickname_warning")):
+        #     logger.info("  -> 检测到昵称异常提示，清空重新输入")
+        #     # 清空输入框并重新输入
+        #     clear_text(
+        #         self.adb,
+        #         self.adb.center_x(),
+        #         self.adb.scaled_y(INPUT_BOX_Y),
+        #         max_chars=20,
+        #     )
+        #     logger.info(f"  -> 输入昵称: {target_nickname}")
+        #     self.adb.device.send_keys(target_nickname)
+        #     time.sleep(0.5)
+        #     # 点击 OK 确认
+        #     result = tap_ok(self.adb, ocr_results, wait=1.0)
+        #     return result or ActionResult.ok(wait=1.0)
 
         # 步骤 3: 点击铅笔图标进入编辑
         match = self.page_detector.find_template_with_scale(
@@ -633,9 +633,11 @@ class InitAccountTask(Task):
             return tap_box(self.adb, match.box, wait=1.0)
 
         # 步骤 4: 点击输入框并输入昵称（首次输入）
-        result = tap(self.adb, self.adb.center_x(), INPUT_BOX_Y, wait=0.5)
+        result = tap(self.adb, self.adb.center_x(), INPUT_BOX_Y, wait=1.0)
         if result:
             logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
+            # 等待键盘弹出
+            time.sleep(1.0)
             self.adb.device.send_keys(target_nickname)
             time.sleep(0.5)
 

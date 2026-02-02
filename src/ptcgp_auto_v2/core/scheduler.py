@@ -605,6 +605,98 @@ class Scheduler:
                 return task
         return None
 
+    def _get_next_non_init_batch(
+        self,
+    ) -> Optional[tuple["Account", list["TaskInstance"]]]:
+        """
+        获取下一个有待执行非init_account任务的账号
+
+        优先处理现有账号的其他任务（如open_pack, claim_rewards等），
+        让新账号创建在系统空闲时进行。
+
+        Returns:
+            (Account, task_instances_list) 或 None
+        """
+        # 获取所有有待执行任务的账号
+        account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
+
+        for account_id in account_ids:
+            # 检查该账号是否已经有正在执行的任务
+            if self._task_instance_repo.has_running_tasks(account_id):
+                continue
+
+            # 获取账号信息
+            account = self._account_repo.get_by_id(account_id)
+            if not account:
+                continue
+
+            # 获取该账号的所有待执行任务
+            pending_tasks = self._task_instance_repo.get_pending_by_account(account_id)
+            if not pending_tasks:
+                continue
+
+            # 【关键】过滤掉 init_account 任务，只处理其他任务
+            non_init_tasks = [t for t in pending_tasks if t.task_type != "init_account"]
+
+            if not non_init_tasks:
+                # 只有 init_account 任务，跳过这个账号
+                continue
+
+            # 检查是否需要前置任务（如 fetch_account_info）
+            non_init_tasks = self._ensure_prerequisites_in_batch(
+                account, non_init_tasks
+            )
+
+            # 按照任务计划顺序排列
+            ordered_tasks = self._order_tasks_by_plan(account, non_init_tasks)
+
+            return (account, ordered_tasks)
+
+        return None
+
+    def _trigger_multi_device_creation(self):
+        """
+        触发多设备并发创建新账号（后台异步执行，不阻塞主循环）
+
+        让所有空闲设备同时开始创建新账号，直到没有空闲设备或达到账号上限。
+        使用线程池并发启动，主循环立即返回继续调度其他任务。
+        """
+        available = self.device_pool.available_count
+        if available == 0:
+            return
+
+        # 计算还可以创建多少账号
+        current_count = self._account_repo.count_all()
+        remaining = self.config.max_accounts - current_count
+        if remaining <= 0:
+            logger.debug(
+                f"账号数量 ({current_count}) 已达上限 ({self.config.max_accounts})"
+            )
+            return
+
+        # 创建数量 = min(空闲设备数, 剩余可创建数)
+        create_count = min(available, remaining)
+        logger.info(f"触发多设备创建: {create_count} 个设备将在后台开始创建新账号")
+
+        # 【修复】使用调度器线程池后台执行，不阻塞主循环
+        # 每个任务提交后立即返回，异常由回调函数处理
+        def _creation_done_callback(future):
+            """账号创建任务完成后的回调"""
+            try:
+                result = future.result()
+                if result:
+                    logger.debug("后台账号创建任务成功完成")
+                else:
+                    logger.debug("后台账号创建任务未成功（可能设备已被占用或达到上限）")
+            except Exception as e:
+                logger.exception(f"后台账号创建任务异常: {e}")
+
+        for _ in range(create_count):
+            future = self._executor_pool.submit(
+                check_and_trigger_account_creation, self
+            )
+            future.add_done_callback(_creation_done_callback)
+
     def _build_executor_config(self) -> ExecutorConfig:
         """构建带停止事件的执行器配置"""
         return ExecutorConfig(
@@ -680,18 +772,16 @@ class Scheduler:
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # 获取下一个账号的批量任务
+                # 【修复】优先执行所有待处理任务（包括init_account）
+                # 只有在完全没有待执行任务时才创建新账号
                 batch = self._get_next_account_batch()
                 if batch:
                     # 有待执行任务，优先执行
                     account, task_instances = batch
                     self._dispatch_account_batch(account, task_instances)
-                elif (
-                    self.config.auto_create_accounts
-                    and not self._has_creating_account()
-                ):
-                    # 没有待执行任务且配置启用，尝试创建新账号
-                    check_and_trigger_account_creation(self)
+                elif self.config.auto_create_accounts:
+                    # 没有待执行任务，且启用自动创建，为每个空闲设备创建新账号
+                    self._trigger_multi_device_creation()
                     time.sleep(self.config.poll_interval)
 
             except RuntimeError as e:

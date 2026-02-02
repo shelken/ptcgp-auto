@@ -123,9 +123,7 @@ class BaseExecutor(ABC):
             recognizer=self._recognizer,
             page_detector=self._page_detector,
         )
-        task.register_handlers(
-            build_common_handlers(self._adb, self._page_detector)
-        )
+        task.register_handlers(build_common_handlers(self._adb, self._page_detector))
         task.bind_account(account)
         if self.config.stop_event:
             task.set_stop_event(self.config.stop_event)
@@ -208,9 +206,7 @@ class BaseExecutor(ABC):
         repo = TaskInstanceRepository()
         blocked_tasks = repo.get_blocked_by_account(account.id)
         for task in blocked_tasks:
-            logger.info(
-                f"恢复被阻塞任务: {task.task_type} (账号: {account.nickname})"
-            )
+            logger.info(f"恢复被阻塞任务: {task.task_type} (账号: {account.nickname})")
             task.status = TaskStatus.PENDING.value
             task.save()
 
@@ -320,7 +316,12 @@ class TaskExecutor(BaseExecutor):
         """
         # 设置日志上下文（端口号、账号昵称、任务名）
         from ptcgp_auto_v2.utils.logger import set_context, clear_context
-        port = self.device.address.split(":")[-1] if ":" in self.device.address else self.device.address
+
+        port = (
+            self.device.address.split(":")[-1]
+            if ":" in self.device.address
+            else self.device.address
+        )
         set_context(
             port=port,
             nickname=self.account.nickname or self.account.display_name,
@@ -372,9 +373,7 @@ class TaskExecutor(BaseExecutor):
                                 clear_error_on_success=False,
                             )
                         else:
-                            logger.info(
-                                f"任务完成: {self.task_instance.task_type}"
-                            )
+                            logger.info(f"任务完成: {self.task_instance.task_type}")
                             self._update_status(TaskStatus.COMPLETED)
                         return
                     else:
@@ -399,9 +398,7 @@ class TaskExecutor(BaseExecutor):
                     time.sleep(self.config.retry_delay)
 
             # 超过最大重试次数
-            logger.error(
-                f"任务最终失败: {self.task_instance.task_type}"
-            )
+            logger.error(f"任务最终失败: {self.task_instance.task_type}")
             self._update_status(TaskStatus.FAILED, last_error)
 
         except Exception as e:
@@ -537,9 +534,13 @@ class AccountBatchExecutor(BaseExecutor):
             if ":" in self.device.address
             else self.device.address
         )
-        set_context(
-            port=port, nickname=self.account.nickname or self.account.display_name
-        )
+        # 日志显示优先级: nickname -> id
+        # 特殊处理：当 nickname 为 "skn" 时，追加账号 ID 便于区分多账号
+        if self.account.nickname and self.account.nickname.lower() == "skn":
+            display_id = f"skn{self.account.id}"
+        else:
+            display_id = self.account.nickname or str(self.account.id)
+        set_context(port=port, nickname=display_id)
 
         task_types = [t.task_type for t in self.task_instances]
         logger.info(f"开始批量执行 {len(self.task_instances)} 个任务: {task_types}")
@@ -615,5 +616,7 @@ def run_account_batch_executor(
         device_pool: 设备池
         config: 执行器配置
     """
-    executor = AccountBatchExecutor(device, account, task_instances, device_pool, config)
+    executor = AccountBatchExecutor(
+        device, account, task_instances, device_pool, config
+    )
     executor.run()

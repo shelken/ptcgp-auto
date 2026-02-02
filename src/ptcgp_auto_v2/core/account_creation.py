@@ -14,11 +14,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# 账号创建冷却时间（秒）
-ACCOUNT_CREATION_COOLDOWN = 60.0
-
-# 上次触发创建的时间戳（全局变量，跨调用保持）
-_last_creation_time: float = 0.0
+# 注：冷却时间已移除，允许多设备并发创建
 
 
 def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
@@ -29,7 +25,8 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
     1. 启用了自动创建账号 (auto_create_accounts=True)
     2. 当前账号数 < 最大账号数
     3. 存在空闲设备
-    4. 没有正在创建中的账号（没有 pending init_account 任务）
+
+    支持多设备并发创建。
 
     Args:
         scheduler: 调度器实例
@@ -37,19 +34,8 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
     Returns:
         True 如果触发了创建，False 否则
     """
-    global _last_creation_time
-
     # 1. 检查是否启用自动创建
     if not scheduler.config.auto_create_accounts:
-        return False
-
-    # 2. 检查冷却时间（避免频繁重置）
-    current_time = time.time()
-    elapsed = current_time - _last_creation_time
-    if elapsed < ACCOUNT_CREATION_COOLDOWN:
-        logger.debug(
-            f"距离上次创建触发仅 {elapsed:.1f} 秒，冷却中 ({ACCOUNT_CREATION_COOLDOWN} 秒)"
-        )
         return False
 
     # 2. 检查账号数是否达上限
@@ -68,15 +54,21 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         logger.debug("没有空闲设备，跳过创建")
         return False
 
-    # 4. 检查是否已有正在创建中的账号
-    if scheduler._has_creating_account():
-        logger.debug("已有账号正在创建中，跳过创建")
-        return False
-
-    # 5. 获取空闲设备并重置环境
+    # 4. 获取空闲设备并重置环境
     device = scheduler.device_pool.acquire()
     if not device:
         return False
+
+    # 【关键修复】检查设备是否正被某个账号的任务占用
+    if device.current_account_id is not None:
+        logger.debug(
+            f"设备 {device.address} 正被账号 {device.current_account_id} 占用，跳过创建"
+        )
+        scheduler.device_pool.release(device)
+        return False
+
+    # 标记设备正在创建账号
+    device.is_creating_account = True
 
     try:
         logger.info(f"准备创建新账号，重置设备 {device.address} 环境")
@@ -170,7 +162,6 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
                 time.sleep(5)
 
         if new_account:
-            _last_creation_time = time.time()  # 更新冷却时间戳
             logger.info(f"新账号创建流程完成，账号ID: {new_account.game_id}")
             return True
         else:
@@ -181,5 +172,6 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         logger.exception(f"触发新账号创建失败: {e}")
         return False
     finally:
-        # 归还设备，让主调度器正常分配任务
+        # 取消设备创建标记并归还
+        device.is_creating_account = False
         scheduler.device_pool.release(device)

@@ -14,9 +14,10 @@ from typing import Optional
 
 class DeviceStatus(Enum):
     """设备状态枚举"""
-    AVAILABLE = "available"      # 空闲可用
-    BUSY = "busy"                # 正在执行任务
-    UNHEALTHY = "unhealthy"      # 不健康（连接失败等）
+
+    AVAILABLE = "available"  # 空闲可用
+    BUSY = "busy"  # 正在执行任务
+    UNHEALTHY = "unhealthy"  # 不健康（连接失败等）
 
 
 @dataclass
@@ -26,10 +27,12 @@ class Device:
 
     表示一个 ADB 连接的模拟器设备。
     """
-    address: str                          # ADB 地址，如 "127.0.0.1:5555"
+
+    address: str  # ADB 地址，如 "127.0.0.1:5555"
     status: DeviceStatus = DeviceStatus.AVAILABLE
     current_account_id: Optional[int] = None  # 当前登录的账号 ID
     last_used_at: Optional[datetime] = None
+    is_creating_account: bool = False  # 是否正在创建新账号
 
     @property
     def is_available(self) -> bool:
@@ -56,6 +59,8 @@ class Device:
     def mark_available(self):
         """标记设备为空闲状态"""
         self.status = DeviceStatus.AVAILABLE
+        # 【修复】清空当前账号ID，允许创建流程占用设备
+        self.current_account_id = None
 
     def mark_unhealthy(self):
         """标记设备为不健康状态"""
@@ -97,7 +102,9 @@ class DevicePool:
     def busy_count(self) -> int:
         """忙碌设备数"""
         with self._lock:
-            return sum(1 for d in self._devices.values() if d.status == DeviceStatus.BUSY)
+            return sum(
+                1 for d in self._devices.values() if d.status == DeviceStatus.BUSY
+            )
 
     def acquire(self) -> Optional[Device]:
         """
@@ -182,6 +189,11 @@ class DevicePool:
         """获取所有可用设备列表"""
         with self._lock:
             return [d for d in self._devices.values() if d.is_available]
+
+    def get_creating_count(self) -> int:
+        """获取正在创建账号的设备数"""
+        with self._lock:
+            return sum(1 for d in self._devices.values() if d.is_creating_account)
 
     def get_status_summary(self) -> dict:
         """
