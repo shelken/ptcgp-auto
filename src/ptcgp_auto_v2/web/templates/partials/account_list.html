@@ -29,7 +29,7 @@
             {% set game_cell %}
                 {% if account.friend_id %}
                 <div class="group relative inline-block cursor-pointer" onclick="navigator.clipboard.writeText('{{ account.friend_id }}'); showToast('{{ t.msg_copied or 'Copied!' }}')">
-                    <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ account.friend_id }}</span>
+                    <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ account.friend_id[:4] }}-{{ account.friend_id[4:8] }}-{{ account.friend_id[8:12] }}-{{ account.friend_id[12:] }}</span>
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
                         <div class="bg-card text-theme border-2 border-theme text-xs p-2 rounded shadow-lg">
                             {{ t.col_game_id or 'Game ID' }}: {{ account.game_id }}

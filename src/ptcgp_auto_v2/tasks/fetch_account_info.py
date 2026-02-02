@@ -217,7 +217,8 @@ class FetchAccountInfoTask(Task):
             if not self._friend_id:
                 m = FRIEND_ID_PATTERN.search(text)
                 if m:
-                    self._friend_id = m.group()
+                    # 去掉破折号，存储纯数字格式
+                    self._friend_id = m.group().replace("-", "")
                     logger.debug(f"  -> friend_id: {self._friend_id}")
             if not self._level:
                 m = LEVEL_PATTERN.search(text)
