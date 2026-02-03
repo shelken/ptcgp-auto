@@ -9,6 +9,11 @@ import logging
 from enum import Enum, auto
 from typing import Optional
 
+from ptcgp_auto_v2.config.rarity_icons import (
+    RARITY_CODE_REVERSE,
+    RARITY_GROUP_DEFAULTS,
+    RARITY_ICON_TEMPLATES,
+)
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -27,15 +32,10 @@ from ptcgp_auto_v2.utils.gesture import (
     click_close,
     quick_tap,
     swipe_up,
+    tap_ok,
     tap_template,
     tap_text,
     tap_text_exact,
-    tap_ok,
-)
-from ptcgp_auto_v2.config.rarity_icons import (
-    RARITY_CODE_REVERSE,
-    RARITY_GROUP_DEFAULTS,
-    RARITY_ICON_TEMPLATES,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ BASE_SORT_ROW_TOL = 30
 BASE_SORT_BTN_X = 965
 BASE_SORT_BTN_Y = 1672
 
-HIGH_RARITY_TARGETS = ["SR", "SAR", "IM", "UR", "SSR"]
+HIGH_RARITY_TARGETS = ["RR", "SR", "SAR", "IM", "UR", "SSR"]
 
 
 class CollectPhase(Enum):
@@ -84,6 +84,7 @@ def _build_collect_pages() -> list[dict]:
         {
             "name": "card_page_own",
             "templates": ["icon_bottom_card_clicked"],
+            "template_threshold": 0.8,
             "priority": 10,
         },
         {
@@ -218,6 +219,14 @@ class CollectAccountCardsTask(Task):
 
     def _handle_filter_panel(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])
+
+        no_target_box = self._find_text_box(
+            ocr_results, get_text_patterns("card_filter_no_target"), exact=False
+        )
+        if no_target_box:
+            logger.info("筛选界面提示无对象卡牌，任务直接结束")
+            self._completed = True
+            return ActionResult.ok(wait=0.5)
 
         if not self._is_action_done("filter_cleared"):
             result = tap_text_exact(

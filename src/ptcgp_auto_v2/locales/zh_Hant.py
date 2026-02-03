@@ -120,6 +120,7 @@ TEXT_PATTERNS = {
     "card_page_own": ["自己的卡牌"],
     "card_filter_title": ["稀有度"],
     "card_filter_clear": ["清除"],
+    "card_filter_no_target": ["沒有對象卡牌"],
     "card_sort_title": ["排序"],
     "card_sort_by_acquired": ["按卡牌獲得順序"],
     # ============================================================
