@@ -32,11 +32,19 @@ class FakeTaskRepo:
 
 
 class FakeAccount:
-    def __init__(self, account_id, friend_id=None, nickname=None, level=None):
+    def __init__(
+        self,
+        account_id,
+        friend_id=None,
+        nickname=None,
+        level=None,
+        exchange_points=None,
+    ):
         self.id = account_id
         self.friend_id = friend_id
         self.nickname = nickname
         self.level = level
+        self.exchange_points = exchange_points
 
 
 class TestSchedulerPrerequisites(unittest.TestCase):
@@ -44,9 +52,13 @@ class TestSchedulerPrerequisites(unittest.TestCase):
         self.scheduler = Scheduler(device_addresses=[])
 
     def test_no_fetch_needed_returns_original_tasks(self):
-        account = FakeAccount(account_id=1, friend_id="f", nickname="n", level=1)
+        account = FakeAccount(
+            account_id=1, friend_id="f", nickname="n", level=1, exchange_points=0
+        )
         task = FakeTaskInstance("open_pack", TaskStatus.PENDING.value, account.id)
-        prereq = FakeTaskInstance("fetch_account_info", TaskStatus.PENDING.value, account.id)
+        prereq = FakeTaskInstance(
+            "fetch_account_info", TaskStatus.PENDING.value, account.id
+        )
         repo = FakeTaskRepo(prereq)
         self.scheduler._task_instance_repo = repo
 
@@ -57,7 +69,9 @@ class TestSchedulerPrerequisites(unittest.TestCase):
 
     def test_existing_fetch_task_returns_original_tasks(self):
         account = FakeAccount(account_id=1, friend_id=None, nickname=None, level=None)
-        fetch_task = FakeTaskInstance("fetch_account_info", TaskStatus.PENDING.value, account.id)
+        fetch_task = FakeTaskInstance(
+            "fetch_account_info", TaskStatus.PENDING.value, account.id
+        )
         repo = FakeTaskRepo(fetch_task)
         self.scheduler._task_instance_repo = repo
 
@@ -69,7 +83,9 @@ class TestSchedulerPrerequisites(unittest.TestCase):
     def test_inserts_fetch_task_and_resets_status(self):
         account = FakeAccount(account_id=1, friend_id=None, nickname=None, level=None)
         task = FakeTaskInstance("open_pack", TaskStatus.PENDING.value, account.id)
-        prereq = FakeTaskInstance("fetch_account_info", TaskStatus.COMPLETED.value, account.id)
+        prereq = FakeTaskInstance(
+            "fetch_account_info", TaskStatus.COMPLETED.value, account.id
+        )
         repo = FakeTaskRepo(prereq)
         self.scheduler._task_instance_repo = repo
 
@@ -83,8 +99,12 @@ class TestSchedulerPrerequisites(unittest.TestCase):
 
     def test_insert_prerequisite_blocks_original_task(self):
         account = FakeAccount(account_id=2, friend_id=None, nickname="n", level=None)
-        original = FakeTaskInstance("open_pack", TaskStatus.PENDING.value, account.id, account=account)
-        prereq = FakeTaskInstance("fetch_account_info", TaskStatus.COMPLETED.value, account.id)
+        original = FakeTaskInstance(
+            "open_pack", TaskStatus.PENDING.value, account.id, account=account
+        )
+        prereq = FakeTaskInstance(
+            "fetch_account_info", TaskStatus.COMPLETED.value, account.id
+        )
         repo = FakeTaskRepo(prereq)
         self.scheduler._task_instance_repo = repo
 

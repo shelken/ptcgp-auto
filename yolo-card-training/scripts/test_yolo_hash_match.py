@@ -4,6 +4,8 @@ YOLO + 哈希匹配测试脚本
 测试 A1-183 卡牌能否被正确识别
 """
 
+__test__ = False
+
 import base64
 import io
 import sys

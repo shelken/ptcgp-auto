@@ -3,6 +3,8 @@
 支持终端内联图片预览（Kitty icat）和ADB自动截图
 """
 
+__test__ = False
+
 import argparse
 import cv2
 import io
