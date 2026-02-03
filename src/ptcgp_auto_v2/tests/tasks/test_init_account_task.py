@@ -296,7 +296,7 @@ class TestInitAccountConstants(unittest.TestCase):
 
     def test_target_nickname_is_skn(self):
         """测试目标昵称为 skn"""
-        self.assertEqual(InitAccountTask.TARGET_NICKNAME, "skn")
+        self.assertEqual(InitAccountTask.NICKNAME_PREFIX, "skn")
 
     def test_birth_year_offset_is_20(self):
         """测试出生年份偏移为 20"""
@@ -418,6 +418,7 @@ class TestHandleSetNickname(unittest.TestCase):
             ocr_results=ocr_results, template_matches={"icon_pencil": pencil_match}
         )
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        task._account = SimpleNamespace(id=1)
 
         result = task._handle_set_nickname({"ocr_results": ocr_results})
 
@@ -426,12 +427,13 @@ class TestHandleSetNickname(unittest.TestCase):
     def test_skips_when_nickname_visible(self):
         """测试检测到昵称已设置时跳过输入"""
         adb = FakeAdb()
-        # 注意：现在使用精确匹配，所以必须是完整的 "skn"
+        # 注意：现在使用精确匹配，所以必须是完整的 "skn1"
         ocr_results = [
-            {"text": "skn", "box": {"x1": 800, "y1": 1500, "x2": 900, "y2": 1600}}
+            {"text": "skn1", "box": {"x1": 800, "y1": 1500, "x2": 900, "y2": 1600}}
         ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        task._account = SimpleNamespace(id=1)
 
         result = task._handle_set_nickname({"ocr_results": ocr_results})
 
@@ -450,14 +452,13 @@ class TestHandleSetNickname(unittest.TestCase):
         ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        task._account = SimpleNamespace(id=1)
 
         result = task._handle_set_nickname({"ocr_results": ocr_results})
 
         self.assertTrue(result.success)
-        # 验证发送了退格键（通过 clear_text 函数）
-        self.assertGreater(len(adb.keyevents), 0, "应该发送了退格键")
         # 验证输入了正确的昵称
-        self.assertIn("skn", adb.inputs, "应该输入了目标昵称")
+        self.assertIn("skn1", adb.inputs, "应该输入了目标昵称")
 
 
 class TestHandleSwipeOpen(unittest.TestCase):

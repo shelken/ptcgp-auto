@@ -6,7 +6,7 @@ from types import SimpleNamespace
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
-from ptcgp_auto_v2.tasks.claim_rewards import ClaimRewardsPhase, ClaimRewardsTask
+from ptcgp_auto_v2.tasks.claim_rewards import ClaimRewardsTask
 
 
 class FakeAdb:
@@ -35,7 +35,9 @@ class FakePageDetector:
     def capture(self, screenshot=None):
         return self._last_screenshot, self._last_ocr_results
 
-    def find_template_with_scale(self, template_name, scale=1.0, threshold=None, screenshot=None):
+    def find_template_with_scale(
+        self, template_name, scale=1.0, threshold=None, screenshot=None
+    ):
         if template_name == "icon_has_reward":
             return self._reward_match
         return None
@@ -46,13 +48,12 @@ class TestClaimRewardsHandleHome(unittest.TestCase):
         adb = FakeAdb()
         page_detector = FakePageDetector(reward_match=None)
         task = ClaimRewardsTask(adb, recognizer=None, page_detector=page_detector)
-        task._phase = ClaimRewardsPhase.CHECKING_HOME
 
         result = task._handle_home({})
 
         self.assertTrue(result.success)
-        self.assertEqual(ClaimRewardsPhase.CHECKING_HOME, task._phase)
         self.assertEqual(1, task._home_check_count)
+        self.assertFalse(task._completed)
         self.assertEqual([], adb.taps)
 
     def test_handle_home_reward_icon_taps_and_enters(self):
@@ -60,12 +61,12 @@ class TestClaimRewardsHandleHome(unittest.TestCase):
         reward_match = SimpleNamespace(box=(10, 20, 30, 40))
         page_detector = FakePageDetector(reward_match=reward_match)
         task = ClaimRewardsTask(adb, recognizer=None, page_detector=page_detector)
-        task._phase = ClaimRewardsPhase.CHECKING_HOME
 
         result = task._handle_home({})
 
         self.assertTrue(result.success)
-        self.assertEqual(ClaimRewardsPhase.ENTERING_REWARDS, task._phase)
+        self.assertEqual(0, task._home_check_count)
+        self.assertFalse(task._completed)
         self.assertEqual([reward_match.box], adb.taps)
 
 

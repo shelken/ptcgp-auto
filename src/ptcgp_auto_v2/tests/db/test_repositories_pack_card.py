@@ -6,6 +6,7 @@ from datetime import datetime
 from ptcgp_auto_v2.db.models import Account, Card, CardSet, PackRecord, PackCard
 from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
 
+
 # Create a fresh in-memory database for each test
 @pytest.fixture(name="engine")
 def engine_fixture():
@@ -13,10 +14,21 @@ def engine_fixture():
     SQLModel.metadata.create_all(engine)
     return engine
 
+
 @pytest.fixture(name="mock_get_engine")
 def mock_get_engine_fixture(engine):
-    with patch("ptcgp_auto_v2.db.repositories.get_engine", return_value=engine):
+    with (
+        patch(
+            "ptcgp_auto_v2.db.repositories.card_repository.get_engine",
+            return_value=engine,
+        ),
+        patch(
+            "ptcgp_auto_v2.db.repositories.pack_record_repository.get_engine",
+            return_value=engine,
+        ),
+    ):
         yield
+
 
 def seed_data(engine):
     with Session(engine) as session:
@@ -29,14 +41,27 @@ def seed_data(engine):
         session.add(card_set)
 
         # Create Cards
-        c1 = Card(set_code="A1", number=1, name="Bulbasaur", rarity="diamond_1", image_url="url1")
-        c2 = Card(set_code="A1", number=25, name="Pikachu", rarity="diamond_2", image_url="url2")
+        c1 = Card(
+            set_code="A1",
+            number=1,
+            name="Bulbasaur",
+            rarity="diamond_1",
+            image_url="url1",
+        )
+        c2 = Card(
+            set_code="A1",
+            number=25,
+            name="Pikachu",
+            rarity="diamond_2",
+            image_url="url2",
+        )
         session.add(c1)
         session.add(c2)
 
         session.commit()
         # Return account.id. Since session is closed, we return the scalar ID.
         return account.id
+
 
 class TestCardRepository:
     def test_get_card_by_template_name_valid_format(self, engine, mock_get_engine):
@@ -71,6 +96,7 @@ class TestCardRepository:
         card = repo.get_card_by_template_name("A1", "999_Unknown")
         assert card is None
 
+
 class TestPackRecordRepository:
     def test_create_for_account_with_cards(self, engine, mock_get_engine):
         account_id = seed_data(engine)
@@ -89,22 +115,20 @@ class TestPackRecordRepository:
                 "rarity": "diamond_1",
                 "is_new": True,
                 "position": 1,
-                "confidence": 0.95
+                "confidence": 0.95,
             },
             {
-                "card_id": None, # Unmatched card
+                "card_id": None,  # Unmatched card
                 "card_name": "Unknown Card",
                 "rarity": "star_1",
                 "is_new": False,
-                "position": 2
-            }
+                "position": 2,
+            },
         ]
 
         # Execute
         record = repo.create_for_account(
-            account_id=account_id,
-            pack_type="Mewtwo",
-            cards=cards_data
+            account_id=account_id, pack_type="Mewtwo", cards=cards_data
         )
 
         # Verify PackRecord

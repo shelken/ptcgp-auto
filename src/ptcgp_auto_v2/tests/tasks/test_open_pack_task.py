@@ -6,7 +6,7 @@ from types import SimpleNamespace
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
-from ptcgp_auto_v2.tasks.open_pack import OpenPackPhase, OpenPackTask
+from ptcgp_auto_v2.tasks.open_pack import HOME_CHECK_THRESHOLD, OpenPackTask
 from ptcgp_auto_v2.utils.gesture import scroll_until_template
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 
@@ -62,7 +62,11 @@ class FakePageDetector:
         return None, []
 
     def find_template_with_scale(
-        self, template_name, scale=1.0, threshold=DEFAULT_TEMPLATE_THRESHOLD, screenshot=None
+        self,
+        template_name,
+        scale=1.0,
+        threshold=DEFAULT_TEMPLATE_THRESHOLD,
+        screenshot=None,
     ):
         if template_name == "icon_free_pack_available":
             return self._free_match
@@ -80,13 +84,13 @@ class TestOpenPackHandleHome(unittest.TestCase):
         adb = FakeAdb()
         page_detector = FakePageDetector()
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
-        task._phase = OpenPackPhase.CHECKING_HOME
 
-        for _ in range(task.HOME_CHECK_THRESHOLD):
+        for _ in range(HOME_CHECK_THRESHOLD):
             result = task._handle_home({})
             self.assertTrue(result.success)
 
-        self.assertEqual(OpenPackPhase.NO_FREE_PACK, task._phase)
+        self.assertTrue(task._completed)
+        self.assertEqual(HOME_CHECK_THRESHOLD, task._home_check_count)
         self.assertEqual([], adb.taps)
 
     def test_handle_home_free_pack_prefers_pack_open_icon(self):
@@ -95,14 +99,13 @@ class TestOpenPackHandleHome(unittest.TestCase):
         pack_match = SimpleNamespace(box=(50, 60, 70, 80))
         page_detector = FakePageDetector(free_match=free_match, pack_match=pack_match)
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
-        task._phase = OpenPackPhase.CHECKING_HOME
         task._home_check_count = 2
 
         result = task._handle_home({})
 
         self.assertTrue(result.success)
-        self.assertEqual(OpenPackPhase.ENTERING_PACK, task._phase)
         self.assertEqual(0, task._home_check_count)
+        self.assertFalse(task._completed)
         self.assertEqual([pack_match.box], adb.taps)
 
     def test_handle_home_free_pack_skips_free_pack_icon_when_no_open_icon(self):
@@ -110,14 +113,13 @@ class TestOpenPackHandleHome(unittest.TestCase):
         free_match = SimpleNamespace(box=(1, 2, 3, 4))
         page_detector = FakePageDetector(free_match=free_match, pack_match=None)
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
-        task._phase = OpenPackPhase.CHECKING_HOME
         task._home_check_count = 1
 
         result = task._handle_home({})
 
         self.assertTrue(result.success)
-        self.assertEqual(OpenPackPhase.ENTERING_PACK, task._phase)
         self.assertEqual(0, task._home_check_count)
+        self.assertFalse(task._completed)
         self.assertEqual([], adb.taps)
 
 
@@ -164,6 +166,7 @@ class TestGestureTemplateFlows(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual([], page_detector.adb.taps)
+
 
 if __name__ == "__main__":
     unittest.main()
