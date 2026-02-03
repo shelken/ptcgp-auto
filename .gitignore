@@ -17,3 +17,4 @@ templates/cards/
 templates/packs_auto/
 .alma-snapshots
 runs/**
+output

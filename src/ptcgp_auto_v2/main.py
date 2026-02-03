@@ -12,10 +12,13 @@ import threading
 from pathlib import Path
 
 import uvicorn
-from ptcgp_auto_v2.config.settings import Settings, get_settings, set_settings
+
+# 导入任务模块以触发注册
+import ptcgp_auto_v2.tasks
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
-from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
+from ptcgp_auto_v2.config.settings import Settings, get_settings, set_settings
 from ptcgp_auto_v2.core.executor import ExecutorConfig
+from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
 from ptcgp_auto_v2.core.task_base import TaskRegistry
 from ptcgp_auto_v2.db.connection import get_database
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskInstanceRepository
@@ -23,9 +26,6 @@ from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
 from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
-
-# 导入任务模块以触发注册
-import ptcgp_auto_v2.tasks
 
 logger = logging.getLogger(__name__)
 
@@ -344,8 +344,8 @@ def sync_account(device_address: str):
     Args:
         device_address: ADB 设备地址
     """
-    from ptcgp_auto_v2.infra.adb import AdbController
     from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+    from ptcgp_auto_v2.infra.adb import AdbController
 
     print(f"\n正在连接设备: {device_address}")
     adb = AdbController(device_address)
@@ -388,9 +388,9 @@ def run_init_account(device_address: str) -> bool:
     Returns:
         bool: 是否成功（指重置操作是否完成）
     """
-    from ptcgp_auto_v2.infra.adb import AdbController
     from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
     from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+    from ptcgp_auto_v2.infra.adb import AdbController
 
     print(f"\n正在连接设备: {device_address}")
     adb = AdbController(device_address)
@@ -595,6 +595,13 @@ def main():
         PackRecordRepository().migrate_legacy_data()
     except Exception as e:
         logger.warning(f"数据迁移失败: {e}")
+
+    # 异步加载YOLO模型（后台线程，不阻塞主流程）
+    from ptcgp_auto_v2.infra.model_manager import get_model_manager
+
+    model_manager = get_model_manager()
+    model_manager.load_model_async()
+    logger.debug("YOLO模型异步加载已启动...")
 
     # 处理列表命令
     if args.list_tasks:
