@@ -345,14 +345,20 @@ class FetchAccountInfoTask(Task):
         return None
 
     def _extract_exchange_points(self, ocr: list) -> Optional[int]:
-        """从交换页面提取点数（找第一个纯数字）"""
+        """从交换页面提取点数（过滤单位数字，优先位数最多）"""
+        candidates = []
         for item in ocr:
             text = item["text"].replace(",", "").replace(" ", "")
-            if text.isdigit():
+            if text.isdecimal():
                 value = int(text)
-                if 0 < value <= 999999:
-                    return value
-        return None
+                if 0 < value <= 999999 and len(text) >= 2:
+                    candidates.append((text, value))
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda item: (len(item[0]), item[1]), reverse=True)
+        return candidates[0][1]
 
     def _update_account(self):
         """更新数据库"""
