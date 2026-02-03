@@ -22,25 +22,21 @@ RARITY_GROUP_DEFAULTS = {
     "min_count": 1,
 }
 
-# 正向映射：检测结果 -> rarity_code
-RARITY_CODE_MAP = {
-    ("diamond", 1): "C",
-    ("diamond", 2): "U",
-    ("diamond", 3): "R",
-    ("diamond", 4): "RR",
-    ("star", 1): "AR",
-    ("star", 2): "SR",
-    ("star", 3): "IM",
-    ("shiny_star", 1): "S",
-    ("shiny_star", 2): "SSR",
-    ("crown", 1): "UR",
-}
-
-# 反向映射：rarity_code -> (template_name, count)
+# 唯一配置来源：rarity_code -> (template_name, count)
 RARITY_CODE_REVERSE = {
+    # diamond
+    "C": ("diamond", 1),
+    "U": ("diamond", 2),
+    "R": ("diamond", 3),
+    "RR": ("diamond", 4),
+    # star
+    "AR": ("star", 1),
     "SR": ("star", 2),
     "SAR": ("star", 2),
     "IM": ("star", 3),
-    "UR": ("crown", 1),
+    # shiny_star
+    "S": ("shiny_star", 1),
     "SSR": ("shiny_star", 2),
+    # crown
+    "UR": ("crown", 1),
 }
