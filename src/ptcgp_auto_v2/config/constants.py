@@ -59,6 +59,8 @@ SCALE_PACK_DETAIL = 5.05  # 旧值: 1.0
 
 # ========== YOLO + 感知哈希识别配置 ==========
 # YOLO检测置信度阈值（来自 test_massive_matching.py 实测验证）
-YOLO_OBB_THRESHOLD = 0.95
+YOLO_OBB_THRESHOLD = 0.55
 # Hash匹配相似度阈值（来自 test_massive_matching.py 实测验证）
 HASH_SIMILARITY_THRESHOLD = 0.7
+# Hash匹配相似度最小差距（用于排除相近候选）
+HASH_SIMILARITY_GAP_MIN = 0.02

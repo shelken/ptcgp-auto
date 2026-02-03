@@ -29,6 +29,7 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 - **Web 可视化界面**：内置现代化 Web UI，支持开包记录查看、高级筛选（稀有度/类型）、多视图切换及移动端适配
 - **断点续传**：任务执行失败自动重试，进程重启后自动恢复进度
 - **YOLO+感知哈希卡牌识别**：使用 YOLO 检测+感知哈希匹配自动识别开包结果，替代传统模板匹配
+- **账号卡牌采集**：在卡牌列表页筛选高稀有度并写入账号卡牌关联表
 
 ## 🚀 快速开始
 
@@ -102,7 +103,7 @@ ptcgp-auto/
 ├── src/
 │   ├── ptcgp_auto_v2/          # v2 核心代码
 │   │   ├── core/               # 调度核心 (Scheduler, Executor)
-│   │   ├── tasks/              # 任务实现 (OpenPack, ClaimRewards...)
+│   │   ├── tasks/              # 任务实现 (OpenPack, CollectAccountCards...)
 │   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
 │   │   ├── infra/              # 基础设施层
 │   │   │   ├── adb.py          # ADB 控制封装
@@ -110,6 +111,7 @@ ptcgp-auto/
 │   │   │   ├── model_manager.py    # [新增] YOLO模型管理
 │   │   │   ├── card_hash_manager.py # [新增] 卡牌Hash索引管理
 │   │   │   ├── yolo_card_recognizer.py # [新增] YOLO+Hash识别器
+│   │   │   └── icon_group_detector.py # 稀有度图标分组检测
 │   │   │   ├── page_detector.py  # 页面检测器
 │   │   │   └── account_switcher.py # 账号切换逻辑
 │   │   ├── web/                # Web UI (FastAPI/HTMX)

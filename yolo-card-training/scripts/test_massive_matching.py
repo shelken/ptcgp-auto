@@ -19,7 +19,7 @@ from PIL import Image
 
 # 全局导入 YOLO（避免每次调用都重新初始化）
 try:
-    from ultralytics import YOLO
+    from ultralytics import YOLO  # type: ignore
 
     ULTRALYTICS_AVAILABLE = True
 except ImportError:
@@ -39,7 +39,7 @@ from test_yolo_hash_match import (
 # 引入终端预览工具
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 try:
-    from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline
+    from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline  # type: ignore
 except ImportError:
     # 如果导入失败，定义一个空函数避免报错
     def preview_image_inline(image, **kwargs):
@@ -65,8 +65,8 @@ class MatchResult:
     bbox: Optional[Tuple[int, int, int, int]] = None  # (x1, y1, x2, y2) 边框坐标
 
 
-SIMILARITY_THRESHOLD = 0.8
-OBB_THRESHOLD = 0.95
+SIMILARITY_THRESHOLD = 0.7
+YOLO_OBB_THRESHOLD = 0.55
 
 
 def load_hash_database(db_path: Path) -> Dict[str, np.ndarray]:
@@ -91,12 +91,14 @@ def load_hash_database(db_path: Path) -> Dict[str, np.ndarray]:
 
 
 def detect_cards(
-    model_path: str, pil_image: Image.Image, conf_threshold: float = OBB_THRESHOLD
+    model_path: str, pil_image: Image.Image, conf_threshold: float = YOLO_OBB_THRESHOLD
 ):
     """YOLO 检测卡牌，返回检测结果和带绿色框的可视化图片"""
     # 检查 YOLO 是否可用（已在全局导入）
     if not ULTRALYTICS_AVAILABLE:
         raise ImportError("ultralytics not installed")
+    if YOLO is None:
+        raise ImportError("ultralytics YOLO not available")
 
     print("     [1/7] 检查 YOLO 可用性...", end=" ")
     t1 = time.perf_counter()
@@ -105,7 +107,7 @@ def detect_cards(
 
     print("     [2/7] 加载 YOLO 模型...", end=" ")
     t2 = time.perf_counter()
-    model = YOLO(model_path)
+    model = YOLO(model_path, task="obb")
     print(f"✅ ({(time.perf_counter() - t2) * 1000:.1f}ms)")
 
     print("     [3/7] PIL 转 numpy...", end=" ")
@@ -623,17 +625,27 @@ def main():
     parser.add_argument(
         "--conf",
         type=float,
-        default=0.9,
-        help="YOLO 检测置信度阈值（默认 0.9）",
+        default=YOLO_OBB_THRESHOLD,
+        help="YOLO 检测置信度阈值",
+    )
+    parser.add_argument(
+        "--coreml",
+        action="store_true",
+        help="使用 CoreML 模型（best.mlpackage）",
     )
     args = parser.parse_args()
 
     # 配置（基于脚本所在目录，避免运行路径影响）
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent.parent
-    model_path = (
-        repo_root / "runs/obb/output/models/card_obb5/weights/best.pt"
-    ).resolve()
+    if args.coreml:
+        model_path = (
+            repo_root / "data/models/yolo11n-5k-25-2026.02.02/best.mlpackage"
+        ).resolve()
+    else:
+        model_path = (
+            repo_root / "data/models/yolo11n-5k-25-2026.02.02/best.pt"
+        ).resolve()
     cards_dir = (script_dir.parent / "data/raw/cards").resolve()
 
     # 检查模型文件

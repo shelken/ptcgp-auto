@@ -11,6 +11,7 @@ from ptcgp_auto_v2.tasks import fetch_account_info
 from ptcgp_auto_v2.tasks import claim_rewards
 from ptcgp_auto_v2.tasks import claim_gifts
 from ptcgp_auto_v2.tasks import init_account
+from ptcgp_auto_v2.tasks import collect_account_cards
 
 # 导出任务注册表
 from ptcgp_auto_v2.core.task_base import TaskRegistry
