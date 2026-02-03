@@ -57,18 +57,22 @@
     - `open_pack.py` - 开包任务
     - `claim_rewards.py` - 领取奖励任务
     - `fetch_account_info.py` - 账号信息同步任务
+    - `collect_account_cards.py` - 账号高稀有度卡牌采集任务
   - `infra/` - 基础设施层
     - `adb.py` - ADB 控制封装
     - `ocr.py` - OCR 引擎封装
     - `model_manager.py` - [新增] YOLO模型管理（全局单例，异步加载）
     - `card_hash_manager.py` - [新增] 卡牌Hash索引管理（内存缓存）
     - `yolo_card_recognizer.py` - [新增] YOLO+Hash卡牌识别器
+    - `icon_group_detector.py` - 稀有度图标分组检测
     - `page_detector.py` - 页面检测器
     - `account_switcher.py` - 账号切换逻辑
   - `db/` - 数据库层
     - `models/` - 数据模型 (Account, TaskInstance)
+      - `account_card.py` - 账号卡牌关联表
     - `repositories.py` - 数据访问对象 (DAO)
   - `config/` - 配置管理
+    - `rarity_icons.py` - 稀有度图标与映射配置
   - `locales/` - 多语言配置
 
 ### 调度流程
