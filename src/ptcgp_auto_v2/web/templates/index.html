@@ -210,6 +210,24 @@
                               class="space-y-4"
                               onchange="saveOwnedFilters()">
 
+                            <div>
+                                <label for="owned-account-id" class="block text-xs uppercase tracking-widest text-muted mb-2">
+                                    {{ t.filter_account_id or t.account_id }}
+                                </label>
+                                <input
+                                    id="owned-account-id"
+                                    name="account_id"
+                                    type="text"
+                                    inputmode="numeric"
+                                    placeholder="{{ t.filter_account_id_placeholder }}"
+                                    class="brutal-input w-full text-sm"
+                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
+                                    hx-target="#owned-cards-container"
+                                    hx-include="#owned-filter-form,#owned-sort-select"
+                                    hx-trigger="input changed delay:400ms"
+                                    oninput="saveOwnedFilters()">
+                            </div>
+
                             <div class="owned-filter-group is-open" data-filter-group>
                                 <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
                                     <span>{{ t.filter_rarity }}</span>
@@ -436,7 +454,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.27"></script>
+    <script type="module" src="/static/js/main.js?v=4.28"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();

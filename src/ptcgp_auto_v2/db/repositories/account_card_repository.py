@@ -73,6 +73,7 @@ class AccountCardRepository:
         self,
         page: int,
         page_size: int,
+        account_id: Optional[int] = None,
         rarities: Optional[List[str]] = None,
         card_types: Optional[List[str]] = None,
         set_codes: Optional[List[str]] = None,
@@ -94,9 +95,9 @@ class AccountCardRepository:
             else_=0,
         )
 
-        accounts_count = func.count(distinct(AccountCard.account_id))
-        total_count = func.sum(AccountCard.count)
-        latest_acquired = func.max(AccountCard.created_at)
+        accounts_count = func.count(distinct(col(AccountCard.account_id)))
+        total_count = func.sum(col(AccountCard.count))
+        latest_acquired = func.max(col(AccountCard.created_at))
 
         with Session(get_engine()) as session:
             statement = (
@@ -106,8 +107,11 @@ class AccountCardRepository:
                     total_count.label("total_count"),
                 )
                 .join(AccountCard, col(AccountCard.card_id) == col(Card.id))
-                .group_by(Card.id)
+                .group_by(col(Card.id))  # type: ignore[arg-type]
             )
+
+            if account_id:
+                statement = statement.where(col(AccountCard.account_id) == account_id)
 
             if rarities:
                 statement = statement.where(col(Card.rarity).in_(rarities))

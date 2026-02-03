@@ -10,6 +10,8 @@
     "filter_set": "Set:",
     "filter_pack": "Pack:",
     "filter_element": "Element:",
+    "filter_account_id": "Account ID",
+    "filter_account_id_placeholder": "Search by account ID",
     "loading_text": "LOADING PACKS...",
     "owned_cols_label": "COLUMNS",
     "owned_cards_empty": "NO OWNED CARDS",
