@@ -1,0 +1,60 @@
+{# 图片资源使用的 locale 映射 #}
+{% set image_locale = 'zh-TW' if current_lang.startswith('zh') else 'en-US' %}
+{% set image_base_url = 'https://wsrv.nl/?url=raw.githubusercontent.com/shelken/ptcgp-assets/main/images/' ~ image_locale ~ '/cards-by-set' %}
+{% set image_cdn_url = 'https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/' ~ image_locale ~ '/cards-by-set' %}
+
+{% if items %}
+<div class="owned-grid">
+    {% for item in items %}
+    <button
+        type="button"
+        class="owned-card brutal-card"
+        hx-get="/api/owned-cards/modal?card_id={{ item.card.id }}&lang={{ current_lang }}"
+        hx-target="#modal-content"
+        hx-swap="innerHTML"
+        title="{{ item.card.name }}">
+        <div class="owned-card-media">
+            <img
+                src="{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.png&w=400&output=png"
+                alt="{{ item.card.name }}"
+                class="owned-card-image"
+                loading="lazy"
+                decoding="async"
+                onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+            <div class="owned-card-placeholder hidden">
+                {{ t.no_image }}
+            </div>
+        </div>
+
+        <div class="owned-card-badge">
+            {{ item.card.rarity }}
+        </div>
+
+        <div class="owned-card-count" title="{{ item.owned_accounts_count }} {{ t.owned_accounts_label }}">
+            {{ item.owned_accounts_count }}
+        </div>
+
+        <div class="owned-card-name">
+            {{ item.card.name }}
+        </div>
+    </button>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16 text-muted font-mono">
+    {{ t.owned_cards_empty }}
+</div>
+<script>
+    var loader = document.querySelector('.htmx-indicator');
+    if (loader) loader.classList.remove('flex');
+    if (loader) loader.classList.add('hidden');
+</script>
+{% endif %}
+
+{% if items %}
+<div hx-get="{{ next_page_url }}"
+     hx-trigger="revealed"
+     hx-swap="outerHTML"
+     class="h-12 w-full flex justify-center items-center opacity-0">
+</div>
+{% endif %}

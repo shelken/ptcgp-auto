@@ -1,0 +1,73 @@
+{% from "partials/macros/modal.html" import modal_header %}
+
+{# 图片资源使用的 locale 映射 #}
+{% set image_locale = 'zh-TW' if current_lang.startswith('zh') else 'en-US' %}
+{% set image_base_url = 'https://wsrv.nl/?url=raw.githubusercontent.com/shelken/ptcgp-assets/main/images/' ~ image_locale ~ '/cards-by-set' %}
+{% set image_cdn_url = 'https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/' ~ image_locale ~ '/cards-by-set' %}
+
+{{ modal_header(t.owned_cards_modal_title or 'OWNED CARD', t) }}
+
+<div class="grid md:grid-cols-2 gap-6">
+    <div class="brutal-card p-4">
+        <div class="text-sm text-muted font-mono mb-2">
+            {{ t.label_set_code }}: {{ card.set_code }}
+        </div>
+        <div class="text-2xl font-bold mb-4 break-words">
+            {{ card.name }}
+        </div>
+        <div class="flex flex-wrap gap-2 mb-4">
+            <span class="brutal-tag text-xs">{{ t.label_card_number }} #{{ card.number }}</span>
+            <span class="brutal-tag text-xs">{{ t.label_rarity }} {{ card.rarity }}</span>
+            {% if card.type %}
+            <span class="brutal-tag text-xs">{{ t['type_' + card.type] or card.type }}</span>
+            {% endif %}
+            {% if card.element %}
+            <span class="brutal-tag text-xs">{{ t['element_' + card.element] or card.element }}</span>
+            {% endif %}
+        </div>
+        <div class="owned-card-preview">
+            <img
+                src="{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.png"
+                alt="{{ card.name }}"
+                class="owned-card-preview-image"
+                loading="lazy"
+                decoding="async"
+                onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+            <div class="owned-card-placeholder hidden">
+                {{ t.no_image }}
+            </div>
+        </div>
+    </div>
+
+    <div class="brutal-card p-4">
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+            <h4 class="text-xl font-bold">{{ t.owned_accounts_title }}</h4>
+            <div class="text-xs font-mono text-muted">
+                {{ t.owned_accounts_total }}: {{ total_accounts }} ｜ {{ t.owned_count_total }}: {{ total_count }}
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left border-b border-subtle">
+                        <th class="py-2">{{ t.col_account_id }}</th>
+                        <th class="py-2">{{ t.col_friend_id }}</th>
+                        <th class="py-2">{{ t.col_nickname }}</th>
+                        <th class="py-2 text-right">{{ t.col_count }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in accounts %}
+                    <tr class="border-b border-subtle-light">
+                        <td class="py-2 font-mono">#{{ item.account_id }}</td>
+                        <td class="py-2 font-mono">{{ item.friend_id or '-' }}</td>
+                        <td class="py-2">{{ item.nickname or '-' }}</td>
+                        <td class="py-2 text-right font-mono">{{ item.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

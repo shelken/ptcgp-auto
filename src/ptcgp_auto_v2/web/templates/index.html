@@ -18,7 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=4.5">
+    <link rel="stylesheet" href="/static/css/main.css?v=4.9">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -75,6 +75,16 @@
                     data-title="{{ t.header_title }}"
                     aria-label="{{ t.tab_records or 'RECORDS' }}">
                     {{ t.tab_records or 'RECORDS' }}
+                </button>
+                <button
+                    type="button"
+                    onclick="switchTab('owned-cards')"
+                    class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
+                    id="tab-btn-owned-cards"
+                    data-hash="owned-cards"
+                    data-title="{{ t.header_owned_cards or 'OWNED CARDS' }}"
+                    aria-label="{{ t.tab_owned_cards or 'OWNED CARDS' }}">
+                    {{ t.tab_owned_cards or 'OWNED CARDS' }}
                 </button>
                 <button
                     type="button"
@@ -161,6 +171,7 @@
             <div id="records-container"
                  class="space-y-12"
                  data-url="/api/records?page=0&lang={{ current_lang }}"
+                 data-base-url="/api/records?page=0&lang={{ current_lang }}"
                  data-auto-refresh="/api/records"
                  data-refresh-include="#filter-form"
                  hx-swap="innerHTML">
@@ -176,6 +187,166 @@
             <div id="end-of-records" class="hidden text-center py-20">
                 <div class="inline-block border-2 border-theme px-8 py-4 font-bold text-xl bg-surface shadow-[4px_4px_0px_0px_var(--shadow-color)]">
                     {{ t.end_of_records }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Owned Cards Tab Content -->
+        <div id="tab-content-owned-cards" class="tab-content hidden">
+            <div class="flex flex-col lg:flex-row gap-8">
+                <aside class="w-full lg:w-64 flex-shrink-0">
+                    <div class="brutal-card p-4 sticky top-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.filter_title or 'FILTERS' }}</span>
+                            <button type="button" onclick="clearOwnedFilters()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
+                                {{ t.clear_filters }}
+                            </button>
+                        </div>
+
+                        <form id="owned-filter-form"
+                              hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
+                              hx-target="#owned-cards-container"
+                              hx-swap="innerHTML"
+                              class="space-y-4"
+                              onchange="saveOwnedFilters()">
+
+                            <div class="owned-filter-group is-open" data-filter-group>
+                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                    <span>{{ t.filter_rarity }}</span>
+                                    <span class="owned-filter-chevron">▾</span>
+                                </button>
+                                <div class="owned-filter-summary" data-filter-summary></div>
+                                <div class="owned-filter-content">
+                                    <div class="flex flex-wrap gap-2">
+                                        {% for r in rarities %}
+                                        <div>
+                                            <input type="checkbox" id="owned-rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                            <label for="owned-rarity-{{ r }}" class="filter-label brutal-btn">{{ t['rarity_' + r] or r }}</label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="owned-filter-group" data-filter-group>
+                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                    <span>{{ t.filter_type }}</span>
+                                    <span class="owned-filter-chevron">▾</span>
+                                </button>
+                                <div class="owned-filter-summary" data-filter-summary></div>
+                                <div class="owned-filter-content">
+                                    <div class="flex flex-wrap gap-2">
+                                        {% for type in card_types %}
+                                        <div>
+                                            <input type="checkbox" id="owned-type-{{ type }}" name="card_type" value="{{ type }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                            <label for="owned-type-{{ type }}" class="filter-label brutal-btn uppercase">{{ t['type_' + type] or type }}</label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="owned-filter-group" data-filter-group>
+                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                    <span>{{ t.filter_set }}</span>
+                                    <span class="owned-filter-chevron">▾</span>
+                                </button>
+                                <div class="owned-filter-summary" data-filter-summary></div>
+                                <div class="owned-filter-content">
+                                    <div class="flex flex-wrap gap-2">
+                                        {% for item in card_sets %}
+                                        <div>
+                                            <input type="checkbox" id="owned-set-{{ item.code }}" name="set_code" value="{{ item.code }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                            <label for="owned-set-{{ item.code }}" class="filter-label brutal-btn">
+                                                {{ item.label.get(lang_key) or item.label.get('en') or item.code }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="owned-filter-group" data-filter-group>
+                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                    <span>{{ t.filter_pack }}</span>
+                                    <span class="owned-filter-chevron">▾</span>
+                                </button>
+                                <div class="owned-filter-summary" data-filter-summary></div>
+                                <div class="owned-filter-content">
+                                    <div class="flex flex-wrap gap-2">
+                                        {% for item in packs %}
+                                        <div>
+                                            <input type="checkbox" id="owned-pack-{{ item.name }}" name="pack_name" value="{{ item.name }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                            <label for="owned-pack-{{ item.name }}" class="filter-label brutal-btn">
+                                                {{ item.label.get(lang_key) or item.label.get('en') or item.name }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="owned-filter-group" data-filter-group>
+                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                    <span>{{ t.filter_element }}</span>
+                                    <span class="owned-filter-chevron">▾</span>
+                                </button>
+                                <div class="owned-filter-summary" data-filter-summary></div>
+                                <div class="owned-filter-content">
+                                    <div class="flex flex-wrap gap-2">
+                                        {% for el in elements %}
+                                        <div>
+                                            <input type="checkbox" id="owned-element-{{ el }}" name="element" value="{{ el }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                            <label for="owned-element-{{ el }}" class="filter-label brutal-btn uppercase">{{ t['element_' + el] or el }}</label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </aside>
+
+                <div class="flex-1">
+                    <div class="flex flex-wrap justify-between items-center gap-6 mb-6">
+                        <div class="flex items-center gap-3">
+                            <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.owned_cols_label }}</span>
+                            <div class="flex items-center gap-2">
+                                <button type="button" class="brutal-btn owned-cols-btn" data-cols="5" onclick="setOwnedGridCols(5)">5</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-cols="6" onclick="setOwnedGridCols(6)">6</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-cols="7" onclick="setOwnedGridCols(7)">7</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button type="button" onclick="refreshOwnedCards()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
+                                {{ t.refresh }} ↻
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="owned-cards-container"
+                         class="space-y-6"
+                         data-url="/api/owned-cards?page=0&lang={{ current_lang }}"
+                         data-base-url="/api/owned-cards?page=0&lang={{ current_lang }}"
+                         hx-swap="innerHTML">
+                    </div>
+
+                    <div class="htmx-indicator w-full justify-center items-center py-12">
+                        <div class="animate-spin w-12 h-12 border-4 border-theme border-t-transparent rounded-full"></div>
+                        <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
+                    </div>
+
+                    <div id="end-of-owned-cards" class="hidden text-center py-20">
+                        <div class="inline-block border-2 border-theme px-8 py-4 font-bold text-xl bg-surface shadow-[4px_4px_0px_0px_var(--shadow-color)]">
+                            {{ t.owned_cards_end }}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -238,7 +409,7 @@
     </main>
 
     <!-- Modal Container -->
-    <div id="modal-container" class="fixed inset-0 bg-overlay z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div id="modal-container" class="fixed inset-0 bg-overlay z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" onclick="if(event.target === this) closeModal()">
         <div id="modal-content" class="bg-surface p-6 brutal-border w-full max-w-4xl max-h-[90vh] overflow-y-auto relative"></div>
     </div>
 
@@ -247,7 +418,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.5"></script>
+    <script type="module" src="/static/js/main.js?v=4.21"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();
