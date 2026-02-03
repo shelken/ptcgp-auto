@@ -65,6 +65,7 @@ TEXT_PATTERNS = {
     "popup_auth_again": ["再度執行認證"],
     "popup_network_error": ["再試一次"],
     "popup_clean_and_download": ["清除快取", "重新下載"],
+    "error_code_103_011_05400": ["103-011-05400"],
     ## 游戏外
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
