@@ -1,14 +1,29 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
-from sqlmodel import Session, select
+from sqlalchemy import case, distinct, func
+from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import AccountCard
+from ptcgp_auto_v2.db.models import Account, AccountCard, Card, CardPack
 
 
 class AccountCardRepository:
     """账号-卡牌关联数据访问层"""
+
+    _rarity_order_map = {
+        "C": 1,
+        "U": 2,
+        "R": 3,
+        "RR": 4,
+        "AR": 5,
+        "SR": 6,
+        "SAR": 7,
+        "UR": 8,
+        "IM": 9,
+        "S": 10,
+        "SSR": 11,
+    }
 
     def get(self, account_id: int, card_id: int) -> Optional[AccountCard]:
         with Session(get_engine()) as session:
@@ -53,3 +68,111 @@ class AccountCardRepository:
             session.commit()
             session.refresh(record)
             return record
+
+    def list_owned_cards(
+        self,
+        page: int,
+        page_size: int,
+        rarities: Optional[List[str]] = None,
+        card_types: Optional[List[str]] = None,
+        set_codes: Optional[List[str]] = None,
+        pack_names: Optional[List[str]] = None,
+        elements: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        rarities = rarities or []
+        card_types = card_types or []
+        set_codes = set_codes or []
+        pack_names = pack_names or []
+        elements = [str(e).lower() for e in (elements or []) if e]
+
+        rarity_case = case(
+            *[
+                (col(Card.rarity) == rarity, order)
+                for rarity, order in self._rarity_order_map.items()
+            ],
+            else_=0,
+        )
+
+        accounts_count = func.count(distinct(AccountCard.account_id))
+        total_count = func.sum(AccountCard.count)
+
+        with Session(get_engine()) as session:
+            statement = (
+                select(
+                    Card,
+                    accounts_count.label("accounts_count"),
+                    total_count.label("total_count"),
+                )
+                .join(AccountCard, col(AccountCard.card_id) == col(Card.id))
+                .group_by(Card.id)
+            )
+
+            if rarities:
+                statement = statement.where(col(Card.rarity).in_(rarities))
+
+            if card_types:
+                statement = statement.where(col(Card.type).in_(card_types))
+
+            if set_codes:
+                statement = statement.where(col(Card.set_code).in_(set_codes))
+
+            if elements:
+                statement = statement.where(func.lower(col(Card.element)).in_(elements))
+
+            if pack_names:
+                pack_subquery = (
+                    select(CardPack.card_id)
+                    .where(col(CardPack.pack_name).in_(pack_names))
+                    .distinct()
+                )
+                statement = statement.where(col(Card.id).in_(pack_subquery))
+
+            statement = statement.order_by(
+                rarity_case.desc(),
+                col(Card.set_code),
+                col(Card.number),
+            )
+
+            statement = statement.offset(page * page_size).limit(page_size)
+
+            rows = session.exec(statement).all()
+            items = []
+            for row in rows:
+                card, accounts_count_value, total_count_value = row
+                items.append(
+                    {
+                        "card": card,
+                        "owned_accounts_count": int(accounts_count_value or 0),
+                        "total_count": int(total_count_value or 0),
+                    }
+                )
+            return items
+
+    def get_owned_card_accounts(self, card_id: int) -> Dict[str, Any]:
+        with Session(get_engine()) as session:
+            statement = (
+                select(AccountCard, Account)
+                .join(Account, col(Account.id) == col(AccountCard.account_id))
+                .where(AccountCard.card_id == card_id)
+                .order_by(col(Account.id))
+            )
+            rows = session.exec(statement).all()
+
+            accounts = []
+            total_count = 0
+            for account_card, account in rows:
+                total_count += account_card.count
+                accounts.append(
+                    {
+                        "account_id": account.id,
+                        "friend_id": account.friend_id,
+                        "nickname": account.nickname,
+                        "count": account_card.count,
+                    }
+                )
+
+            return {
+                "accounts": accounts,
+                "total_accounts": len(accounts),
+                "total_count": total_count,
+            }
