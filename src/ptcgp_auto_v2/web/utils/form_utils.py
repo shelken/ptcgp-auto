@@ -26,6 +26,21 @@ def safe_get_int(form_data: Any, key: str, default: int = 0) -> int:
         return default
 
 
+def parse_optional_int(value: Any) -> Optional[int]:
+    """安全解析可选整数"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        value = stripped
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_json_label(label_data: Optional[str]) -> dict:
     """安全地解析 JSON 标签数据"""
     if not label_data:

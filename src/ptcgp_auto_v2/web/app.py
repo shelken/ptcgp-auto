@@ -44,7 +44,11 @@ import ptcgp_auto_v2.tasks
 from ptcgp_auto_v2.db.models.card import Pack
 
 # 表单处理工具
-from ptcgp_auto_v2.web.utils.form_utils import safe_get_string, parse_json_label
+from ptcgp_auto_v2.web.utils.form_utils import (
+    safe_get_string,
+    parse_json_label,
+    parse_optional_int,
+)
 from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 
 app = FastAPI(title="PTCGP Auto Web")
@@ -174,6 +178,7 @@ async def get_owned_cards(
     request: Request,
     page: int = 0,
     page_size: int = 60,
+    account_id: str | None = Query(default=None),
     rarity: List[str] = Query(default=[]),
     card_type: List[str] = Query(default=[]),
     set_code: List[str] = Query(default=[]),
@@ -184,9 +189,11 @@ async def get_owned_cards(
 ):
     t = get_translations(lang)
     repo = AccountCardRepository()
+    account_id_value = parse_optional_int(account_id)
     items = repo.list_owned_cards(
         page=page,
         page_size=page_size,
+        account_id=account_id_value,
         rarities=rarity,
         card_types=card_type,
         set_codes=set_code,
@@ -199,6 +206,8 @@ async def get_owned_cards(
         return ""
 
     next_page_url = f"/api/owned-cards?page={page + 1}&lang={lang}&sort_by={sort_by}"
+    if account_id_value is not None:
+        next_page_url += f"&account_id={account_id_value}"
     for r in rarity:
         next_page_url += f"&rarity={r}"
     for c_type in card_type:

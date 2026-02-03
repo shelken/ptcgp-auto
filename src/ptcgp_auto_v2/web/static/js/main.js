@@ -298,6 +298,7 @@ function saveOwnedFilters() {
     const sortSelect = document.getElementById('owned-sort-select');
     const sortValue = sortSelect ? sortSelect.value : 'rarity';
     const filters = {
+        account_id: formData.get('account_id') || '',
         rarity: formData.getAll('rarity'),
         card_type: formData.getAll('card_type'),
         set_code: formData.getAll('set_code'),
@@ -374,6 +375,13 @@ function restoreOwnedFilters() {
                     }
                 }
                 queryParts.push(`sort_by=${filters.sort_by}`);
+            }
+            if (filters.account_id) {
+                const input = form.querySelector('input[name="account_id"]');
+                if (input) {
+                    input.value = filters.account_id;
+                }
+                queryParts.push(`account_id=${filters.account_id}`);
             }
             if (filters.rarity) {
                 filters.rarity.forEach(val => {
@@ -517,6 +525,8 @@ function clearFilters() {
 
 function clearOwnedFilters() {
     document.querySelectorAll('.owned-filter-checkbox').forEach(el => el.checked = false);
+    const accountInput = document.querySelector('#owned-filter-form input[name="account_id"]');
+    if (accountInput) accountInput.value = '';
     localStorage.removeItem(STORAGE_KEY_OWNED_FILTERS);
 
     const sortSelect = document.getElementById('owned-sort-select');
