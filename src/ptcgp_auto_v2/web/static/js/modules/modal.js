@@ -8,7 +8,16 @@ export class ModalManager {
         this.container = document.getElementById(containerId);
         this.content = document.getElementById(contentId);
         this.previousActiveElement = null;
+        this.previousBodyOverflow = null;
         this.isOpen = false;
+
+        if (this.container) {
+            this.container.addEventListener('click', (event) => {
+                if (event.target === this.container) {
+                    this.close();
+                }
+            });
+        }
     }
 
     open(htmlContent) {
@@ -26,6 +35,8 @@ export class ModalManager {
         this.container.setAttribute('aria-modal', 'true');
         this.container.setAttribute('role', 'dialog');
         this.isOpen = true;
+
+        this.lockBodyScroll();
         
         // Trap focus
         this.trapFocus();
@@ -44,6 +55,8 @@ export class ModalManager {
         this.container.removeAttribute('role');
         this.content.innerHTML = '';
         this.isOpen = false;
+
+        this.unlockBodyScroll();
         
         // Restore focus
         if (this.previousActiveElement && this.previousActiveElement.focus) {
@@ -72,12 +85,31 @@ export class ModalManager {
             this.container.setAttribute('aria-modal', 'true');
             this.container.setAttribute('role', 'dialog');
             this.isOpen = true;
+            this.lockBodyScroll();
         }
 
         this.trapFocus();
         document.dispatchEvent(new CustomEvent('modal:opened', {
             detail: { modal: this }
         }));
+    }
+
+    lockBodyScroll() {
+        if (this.previousBodyOverflow === null) {
+            this.previousBodyOverflow = document.body.style.overflow;
+        }
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+    }
+
+    unlockBodyScroll() {
+        if (this.previousBodyOverflow !== null) {
+            document.body.style.overflow = this.previousBodyOverflow;
+            this.previousBodyOverflow = null;
+        } else {
+            document.body.style.overflow = '';
+        }
+        document.documentElement.style.overflow = '';
     }
 }
 

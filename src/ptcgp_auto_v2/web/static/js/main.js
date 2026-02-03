@@ -5,7 +5,9 @@ import { showToast, throttle, debounce, isElementInActiveTab } from './modules/u
 // --- Constants ---
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_FILTERS = 'ptcgp_filters';
+const STORAGE_KEY_OWNED_FILTERS = 'ptcgp_owned_filters';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
+const STORAGE_KEY_OWNED_COLS = 'ptcgp_owned_cols';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
 const STORAGE_KEY_TAB = 'ptcgp_active_tab';
 
@@ -21,6 +23,9 @@ let cardPreviewState = {
     rotateY: 0,
     targetElement: null
 };
+
+// --- Tab State ---
+let currentTabName = null;
 
 // --- Card Preview Functions ---
 
@@ -285,6 +290,22 @@ function saveFilters() {
     localStorage.setItem(STORAGE_KEY_FILTERS, JSON.stringify(filters));
 }
 
+function saveOwnedFilters() {
+    const form = document.getElementById('owned-filter-form');
+    if (!form) return;
+
+    const formData = new FormData(form);
+    const filters = {
+        rarity: formData.getAll('rarity'),
+        card_type: formData.getAll('card_type'),
+        set_code: formData.getAll('set_code'),
+        pack_name: formData.getAll('pack_name'),
+        element: formData.getAll('element')
+    };
+    localStorage.setItem(STORAGE_KEY_OWNED_FILTERS, JSON.stringify(filters));
+    updateOwnedFilterGroupsState();
+}
+
 function restoreFilters() {
     const stored = localStorage.getItem(STORAGE_KEY_FILTERS);
     let queryParts = [];
@@ -314,16 +335,159 @@ function restoreFilters() {
     // Always trigger initial load via JS
     const container = document.getElementById('records-container');
     if (container) {
-        const baseAttr = container.getAttribute('data-url');
+        if (!isElementInActiveTab(container)) {
+            return;
+        }
+        if (container.dataset.loaded === 'true') {
+            return;
+        }
+        const baseAttr = container.getAttribute('data-base-url') || container.getAttribute('data-url');
         let finalUrl = baseAttr;
 
         if (queryParts.length > 0) {
             finalUrl = baseAttr + '&' + queryParts.join('&');
-            container.setAttribute('data-url', finalUrl);
         }
 
         htmx.ajax('GET', finalUrl, {target: '#records-container', swap: 'innerHTML'});
+        container.dataset.loaded = 'true';
     }
+}
+
+function restoreOwnedFilters() {
+    const stored = localStorage.getItem(STORAGE_KEY_OWNED_FILTERS);
+    let queryParts = [];
+    const form = document.getElementById('owned-filter-form');
+    if (!form) return;
+
+    if (stored) {
+        try {
+            const filters = JSON.parse(stored);
+            if (filters.rarity) {
+                filters.rarity.forEach(val => {
+                    const el = form.querySelector(`input[name="rarity"][value="${val}"]`);
+                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
+                    queryParts.push(`rarity=${val}`);
+                });
+            }
+            if (filters.card_type) {
+                filters.card_type.forEach(val => {
+                    const el = form.querySelector(`input[name="card_type"][value="${val}"]`);
+                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
+                    queryParts.push(`card_type=${val}`);
+                });
+            }
+            if (filters.set_code) {
+                filters.set_code.forEach(val => {
+                    const el = form.querySelector(`input[name="set_code"][value="${val}"]`);
+                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
+                    queryParts.push(`set_code=${val}`);
+                });
+            }
+            if (filters.pack_name) {
+                filters.pack_name.forEach(val => {
+                    const el = form.querySelector(`input[name="pack_name"][value="${val}"]`);
+                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
+                    queryParts.push(`pack_name=${val}`);
+                });
+            }
+            if (filters.element) {
+                filters.element.forEach(val => {
+                    const el = form.querySelector(`input[name="element"][value="${val}"]`);
+                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
+                    queryParts.push(`element=${val}`);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to restore owned filters', e);
+        }
+    }
+
+    updateOwnedFilterGroupsState();
+
+    const container = document.getElementById('owned-cards-container');
+    if (container) {
+        if (!isElementInActiveTab(container)) {
+            return;
+        }
+        if (container.dataset.loaded === 'true') {
+            return;
+        }
+        const baseAttr = container.getAttribute('data-base-url') || container.getAttribute('data-url');
+        let finalUrl = baseAttr;
+
+        if (queryParts.length > 0) {
+            finalUrl = baseAttr + '&' + queryParts.join('&');
+        }
+
+        htmx.ajax('GET', finalUrl, {target: '#owned-cards-container', swap: 'innerHTML'});
+        container.dataset.loaded = 'true';
+    }
+}
+
+function hasOwnedFilterSelection(group) {
+    const inputs = group.querySelectorAll('input[type="checkbox"]');
+    return Array.from(inputs).some((input) => input.checked);
+}
+
+function updateOwnedFilterGroupSummary(group) {
+    const summary = group.querySelector('[data-filter-summary]');
+    if (!summary) return;
+
+    const checkedInputs = Array.from(group.querySelectorAll('input[type="checkbox"]'))
+        .filter((input) => input.checked);
+
+    if (checkedInputs.length === 0) {
+        summary.classList.remove('has-items');
+        summary.innerHTML = '';
+        return;
+    }
+
+    const items = checkedInputs.map((input) => {
+        const label = group.querySelector(`label[for="${input.id}"]`);
+        return {
+            id: input.id,
+            text: label ? label.textContent.trim() : input.value
+        };
+    });
+
+    summary.classList.add('has-items');
+    summary.innerHTML = items.map((item) => (
+        `<button type="button" class="owned-filter-chip" data-input-id="${item.id}" onclick="toggleOwnedFilterChip('${item.id}')">${item.text}</button>`
+    )).join('');
+}
+
+function toggleOwnedFilterChip(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.checked = !input.checked;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function toggleOwnedFilterGroup(button) {
+    const group = button.closest('[data-filter-group]');
+    if (!group) return;
+
+    const isOpen = group.classList.contains('is-open');
+
+    updateOwnedFilterGroupSummary(group);
+
+    if (isOpen) {
+        group.classList.remove('is-open');
+        return;
+    }
+
+    document.querySelectorAll('[data-filter-group].is-open').forEach((other) => {
+        if (other === group) return;
+        other.classList.remove('is-open');
+    });
+
+    group.classList.add('is-open');
+}
+
+function updateOwnedFilterGroupsState() {
+    document.querySelectorAll('[data-filter-group]').forEach((group) => {
+        updateOwnedFilterGroupSummary(group);
+    });
 }
 
 function clearFilters() {
@@ -336,6 +500,20 @@ function clearFilters() {
     const lang = urlParams.get('lang') || 'en';
     
     htmx.ajax('GET', `/api/records?page=0&lang=${lang}`, {target: '#records-container', swap: 'innerHTML'});
+}
+
+function clearOwnedFilters() {
+    document.querySelectorAll('.owned-filter-checkbox').forEach(el => el.checked = false);
+    localStorage.removeItem(STORAGE_KEY_OWNED_FILTERS);
+
+    document.querySelectorAll('[data-filter-group]').forEach((group) => {
+        updateOwnedFilterGroupSummary(group);
+        group.classList.remove('is-open');
+    });
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lang') || 'en';
+    htmx.ajax('GET', `/api/owned-cards?page=0&lang=${lang}`, {target: '#owned-cards-container', swap: 'innerHTML'});
 }
 
 // 刷新记录列表（保留当前筛选条件）
@@ -364,6 +542,54 @@ function refreshRecords() {
     
     // 显示提示
     showToast('已刷新');
+}
+
+function refreshOwnedCards() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lang') || 'en';
+
+    const form = document.getElementById('owned-filter-form');
+    const formData = form ? new FormData(form) : null;
+    const params = new URLSearchParams();
+
+    params.set('page', '0');
+    params.set('lang', lang);
+
+    if (formData) {
+        formData.forEach((value, key) => {
+            params.append(key, value);
+        });
+    }
+
+    htmx.ajax('GET', `/api/owned-cards?${params.toString()}`, {target: '#owned-cards-container', swap: 'innerHTML'});
+    showToast('已刷新');
+}
+
+function setOwnedGridCols(value) {
+    const container = document.getElementById('owned-cards-container');
+    if (!container) return;
+    const cols = parseInt(value, 10);
+    if (Number.isNaN(cols)) return;
+
+    container.style.setProperty('--owned-grid-cols', cols);
+    const label = document.getElementById('owned-cols-value');
+    if (label) label.textContent = cols;
+    localStorage.setItem(STORAGE_KEY_OWNED_COLS, String(cols));
+
+    document.querySelectorAll('.owned-cols-btn').forEach((button) => {
+        const target = parseInt(button.dataset.cols, 10);
+        if (target === cols) {
+            button.classList.add('active');
+        } else {
+            button.classList.remove('active');
+        }
+    });
+}
+
+function restoreOwnedGridCols() {
+    const stored = localStorage.getItem(STORAGE_KEY_OWNED_COLS);
+    const value = stored || '5';
+    setOwnedGridCols(value);
 }
 
 // 全局自动刷新抽象：刷新任何带有 data-auto-refresh 属性的容器
@@ -478,6 +704,8 @@ function switchTab(tabName, options = {}) {
         selected.classList.add('block');
     }
 
+    currentTabName = tabName;
+
     // Update buttons
     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
     const activeBtn = document.getElementById(`tab-btn-${tabName}`);
@@ -502,6 +730,21 @@ function switchTab(tabName, options = {}) {
     const filters = document.getElementById('records-filters');
     if (filters) {
         filters.classList.toggle('hidden', tabName !== 'records');
+    }
+
+    if (tabName === 'records') {
+        const container = document.getElementById('records-container');
+        if (container && container.dataset.loaded !== 'true') {
+            restoreFilters();
+        }
+    }
+
+    if (tabName === 'owned-cards') {
+        const container = document.getElementById('owned-cards-container');
+        if (container && container.dataset.loaded !== 'true') {
+            restoreOwnedFilters();
+        }
+        updateOwnedFilterGroupsState();
     }
 
     localStorage.setItem(STORAGE_KEY_TAB, tabName);
@@ -545,7 +788,7 @@ function restoreTab() {
     const hash = window.location.hash.replace('#', '');
     let tabName = null;
 
-    if (hash === 'records' || hash === 'management') {
+    if (hash === 'records' || hash === 'management' || hash === 'owned-cards') {
         // Hash 直接指向 Tab
         tabName = hash;
     } else if (['accounts', 'plans', 'metadata'].includes(hash)) {
@@ -562,9 +805,7 @@ function restoreTab() {
         } else {
             const btn = document.getElementById(`tab-btn-${tabName}`);
             if (btn) {
-                if (!hash || hash !== tabName) {
-                    btn.click();
-                }
+                btn.click();
             }
         }
     }
@@ -782,8 +1023,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initLang();
     restoreTheme(); // Restore theme first to avoid flash
     restoreTab();
-    restoreFilters(); // This triggers data load
+    if (currentTabName === 'records') {
+        restoreFilters();
+    }
+    if (currentTabName === 'owned-cards') {
+        restoreOwnedFilters();
+    }
+    updateOwnedFilterGroupsState();
     restoreViewMode();
+    restoreOwnedGridCols();
     initCustomSelects(document); // Initialize custom selects
 
     // 处理 management 子项的选择（restoreTab 已处理 Tab 级别）
@@ -825,6 +1073,33 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.addEventListener('htmx:load', function(evt) {
         initCustomSelects(evt.detail.elt);
     });
+
+    document.body.addEventListener('change', (event) => {
+        if (event.target && event.target.classList.contains('owned-filter-checkbox')) {
+            updateOwnedFilterGroupsState();
+        }
+    });
+
+    const ownedFilterForm = document.getElementById('owned-filter-form');
+    if (ownedFilterForm) {
+        ownedFilterForm.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target && target.tagName === 'LABEL' && target.classList.contains('filter-label')) {
+                requestAnimationFrame(() => {
+                    updateOwnedFilterGroupsState();
+                });
+            }
+        });
+
+        ownedFilterForm.addEventListener('change', (event) => {
+            if (event.target && event.target.classList.contains('owned-filter-checkbox')) {
+                requestAnimationFrame(() => {
+                    saveOwnedFilters();
+                    updateOwnedFilterGroupsState();
+                });
+            }
+        });
+    }
 
     // Modal 内容完成交换后，统一打开并触发初始化
     document.body.addEventListener('htmx:afterSwap', function(evt) {
@@ -1035,12 +1310,19 @@ function initCustomSelects(context = document) {
 window.setLang = setLang;
 window.setTheme = setTheme;
 window.saveFilters = saveFilters;
+window.saveOwnedFilters = saveOwnedFilters;
 window.clearFilters = clearFilters;
+window.clearOwnedFilters = clearOwnedFilters;
 window.refreshRecords = refreshRecords;
+window.refreshOwnedCards = refreshOwnedCards;
 window.setViewMode = setViewMode;
 window.switchTab = switchTab;
 window.openCardPreview = openCardPreview;
 window.closeCardPreview = closeCardPreview;
+window.setOwnedGridCols = setOwnedGridCols;
+window.toggleOwnedFilterGroup = toggleOwnedFilterGroup;
+window.toggleOwnedFilterChip = toggleOwnedFilterChip;
+window.reinitCustomSelect = reinitCustomSelect;
 window.updateSidebarState = updateSidebarState;
 window.updateTaskItemState = updateTaskItemState;
 window.updateTaskOrder = updateTaskOrder;

@@ -30,6 +30,7 @@ from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.models.account_pack_point import AccountPackPoint
 from ptcgp_auto_v2.db.repositories import (
+    AccountCardRepository,
     AccountRepository,
     TaskPlanRepository,
     CardRepository,
@@ -44,6 +45,7 @@ from ptcgp_auto_v2.db.models.card import Pack
 
 # 表单处理工具
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string, parse_json_label
+from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 
 app = FastAPI(title="PTCGP Auto Web")
 
@@ -127,12 +129,122 @@ async def read_root(
     card_types = session.exec(select(distinct(Card.type)).order_by(Card.type)).all()
     card_types = [t for t in card_types if t]
 
+    elements = session.exec(select(distinct(Card.element)).order_by(Card.element)).all()
+    elements = normalize_elements(elements)
+
+    card_repo = CardRepository()
+    card_sets = card_repo.get_all_sets()
+    packs = card_repo.get_all_packs()
+
+    lang_key = "zh" if lang.startswith("zh") else "en"
+    sets_data = [
+        {
+            "code": s.code,
+            "label": parse_json_label(s.label_data),
+        }
+        for s in card_sets
+    ]
+    packs_data = [
+        {
+            "name": p.name,
+            "set_code": p.set_code,
+            "label": parse_json_label(p.label_data),
+        }
+        for p in packs
+    ]
+
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
             "rarities": rarities,
             "card_types": card_types,
+            "elements": elements,
+            "card_sets": sets_data,
+            "packs": packs_data,
+            "lang_key": lang_key,
+            "t": t,
+            "current_lang": lang,
+        },
+    )
+
+
+@app.get("/api/owned-cards", response_class=HTMLResponse)
+async def get_owned_cards(
+    request: Request,
+    page: int = 0,
+    page_size: int = 60,
+    rarity: List[str] = Query(default=[]),
+    card_type: List[str] = Query(default=[]),
+    set_code: List[str] = Query(default=[]),
+    pack_name: List[str] = Query(default=[]),
+    element: List[str] = Query(default=[]),
+    lang: str = Query(default="en"),
+):
+    t = get_translations(lang)
+    repo = AccountCardRepository()
+    items = repo.list_owned_cards(
+        page=page,
+        page_size=page_size,
+        rarities=rarity,
+        card_types=card_type,
+        set_codes=set_code,
+        pack_names=pack_name,
+        elements=element,
+    )
+
+    if not items and page > 0:
+        return ""
+
+    next_page_url = f"/api/owned-cards?page={page + 1}&lang={lang}"
+    for r in rarity:
+        next_page_url += f"&rarity={r}"
+    for c_type in card_type:
+        next_page_url += f"&card_type={c_type}"
+    for s_code in set_code:
+        next_page_url += f"&set_code={s_code}"
+    for p_name in pack_name:
+        next_page_url += f"&pack_name={p_name}"
+    for el in element:
+        next_page_url += f"&element={el}"
+
+    return templates.TemplateResponse(
+        "partials/owned_card_list.html",
+        {
+            "request": request,
+            "items": items,
+            "next_page_url": next_page_url,
+            "page": page,
+            "t": t,
+            "current_lang": lang,
+        },
+    )
+
+
+@app.get("/api/owned-cards/modal", response_class=HTMLResponse)
+async def get_owned_card_modal(
+    request: Request,
+    card_id: int,
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
+):
+    t = get_translations(lang)
+    card = session.get(Card, card_id)
+    if not card:
+        return HTMLResponse(
+            t.get("owned_cards_not_found", "Card not found"), status_code=404
+        )
+
+    repo = AccountCardRepository()
+    data = repo.get_owned_card_accounts(card_id)
+    return templates.TemplateResponse(
+        "partials/modals/owned_card_detail.html",
+        {
+            "request": request,
+            "card": card,
+            "accounts": data["accounts"],
+            "total_accounts": data["total_accounts"],
+            "total_count": data["total_count"],
             "t": t,
             "current_lang": lang,
         },
