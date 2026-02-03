@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from sqlmodel import SQLModel, Session, create_engine
+from datetime import datetime
+
+from sqlmodel import SQLModel, Session, create_engine, select
 
 from ptcgp_auto_v2.db import engine as db_engine
 from ptcgp_auto_v2.db.repositories import AccountCardRepository
@@ -138,3 +140,36 @@ def test_get_owned_card_accounts():
     assert result["total_accounts"] == 2
     assert result["total_count"] == 3
     assert {item["account_id"] for item in result["accounts"]} == {1, 2}
+
+
+def test_list_owned_cards_sort_by_acquired_desc():
+    db_engine._engine = create_engine("sqlite:///:memory:")
+    SQLModel.metadata.create_all(db_engine._engine)
+    _seed_owned_cards_data()
+
+    with Session(db_engine._engine) as session:
+        card1_records = session.exec(
+            select(AccountCard).where(AccountCard.card_id == 1)
+        ).all()
+        card2_records = session.exec(
+            select(AccountCard).where(AccountCard.card_id == 2)
+        ).all()
+        card3_records = session.exec(
+            select(AccountCard).where(AccountCard.card_id == 3)
+        ).all()
+
+        for record in card1_records:
+            record.created_at = datetime(2024, 1, 2, 12, 0, 0)
+            session.add(record)
+        for record in card2_records:
+            record.created_at = datetime(2024, 1, 3, 12, 0, 0)
+            session.add(record)
+        for record in card3_records:
+            record.created_at = datetime(2024, 1, 1, 12, 0, 0)
+            session.add(record)
+
+        session.commit()
+
+    repo = AccountCardRepository()
+    items = repo.list_owned_cards(page=0, page_size=10, sort_by="acquired")
+    assert [item["card"].id for item in items] == [2, 1, 3]

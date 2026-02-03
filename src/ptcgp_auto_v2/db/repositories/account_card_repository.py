@@ -78,6 +78,7 @@ class AccountCardRepository:
         set_codes: Optional[List[str]] = None,
         pack_names: Optional[List[str]] = None,
         elements: Optional[List[str]] = None,
+        sort_by: str = "rarity",
     ) -> List[Dict[str, Any]]:
         rarities = rarities or []
         card_types = card_types or []
@@ -95,6 +96,7 @@ class AccountCardRepository:
 
         accounts_count = func.count(distinct(AccountCard.account_id))
         total_count = func.sum(AccountCard.count)
+        latest_acquired = func.max(AccountCard.created_at)
 
         with Session(get_engine()) as session:
             statement = (
@@ -127,11 +129,19 @@ class AccountCardRepository:
                 )
                 statement = statement.where(col(Card.id).in_(pack_subquery))
 
-            statement = statement.order_by(
-                rarity_case.desc(),
-                col(Card.set_code),
-                col(Card.number),
-            )
+            if sort_by == "acquired":
+                statement = statement.order_by(
+                    latest_acquired.desc(),
+                    rarity_case.desc(),
+                    col(Card.set_code),
+                    col(Card.number),
+                )
+            else:
+                statement = statement.order_by(
+                    rarity_case.desc(),
+                    col(Card.set_code),
+                    col(Card.number),
+                )
 
             statement = statement.offset(page * page_size).limit(page_size)
 
