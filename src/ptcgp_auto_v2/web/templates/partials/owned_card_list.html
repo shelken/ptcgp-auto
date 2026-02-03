@@ -26,16 +26,8 @@
             </div>
         </div>
 
-        <div class="owned-card-badge">
-            {{ item.card.rarity }}
-        </div>
-
         <div class="owned-card-count" title="{{ item.owned_accounts_count }} {{ t.owned_accounts_label }}">
             {{ item.owned_accounts_count }}
-        </div>
-
-        <div class="owned-card-name">
-            {{ item.card.name }}
         </div>
     </button>
     {% endfor %}

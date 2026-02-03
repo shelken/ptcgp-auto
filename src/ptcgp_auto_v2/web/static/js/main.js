@@ -295,12 +295,15 @@ function saveOwnedFilters() {
     if (!form) return;
 
     const formData = new FormData(form);
+    const sortSelect = document.getElementById('owned-sort-select');
+    const sortValue = sortSelect ? sortSelect.value : 'rarity';
     const filters = {
         rarity: formData.getAll('rarity'),
         card_type: formData.getAll('card_type'),
         set_code: formData.getAll('set_code'),
         pack_name: formData.getAll('pack_name'),
-        element: formData.getAll('element')
+        element: formData.getAll('element'),
+        sort_by: sortValue
     };
     localStorage.setItem(STORAGE_KEY_OWNED_FILTERS, JSON.stringify(filters));
     updateOwnedFilterGroupsState();
@@ -362,6 +365,16 @@ function restoreOwnedFilters() {
     if (stored) {
         try {
             const filters = JSON.parse(stored);
+            if (filters.sort_by) {
+                const select = document.getElementById('owned-sort-select');
+                if (select) {
+                    select.value = filters.sort_by;
+                    if (select.classList.contains('custom-select-initialized')) {
+                        reinitCustomSelect(select);
+                    }
+                }
+                queryParts.push(`sort_by=${filters.sort_by}`);
+            }
             if (filters.rarity) {
                 filters.rarity.forEach(val => {
                     const el = form.querySelector(`input[name="rarity"][value="${val}"]`);
@@ -506,6 +519,14 @@ function clearOwnedFilters() {
     document.querySelectorAll('.owned-filter-checkbox').forEach(el => el.checked = false);
     localStorage.removeItem(STORAGE_KEY_OWNED_FILTERS);
 
+    const sortSelect = document.getElementById('owned-sort-select');
+    if (sortSelect) {
+        sortSelect.value = 'rarity';
+        if (sortSelect.classList.contains('custom-select-initialized')) {
+            reinitCustomSelect(sortSelect);
+        }
+    }
+
     document.querySelectorAll('[data-filter-group]').forEach((group) => {
         updateOwnedFilterGroupSummary(group);
         group.classList.remove('is-open');
@@ -584,6 +605,22 @@ function setOwnedGridCols(value) {
             button.classList.remove('active');
         }
     });
+}
+
+function toggleOwnedCounts() {
+    const container = document.getElementById('owned-cards-container');
+    if (!container) return;
+    container.classList.toggle('show-counts');
+
+    const btn = document.getElementById('owned-counts-toggle');
+    if (!btn) return;
+    const showText = btn.dataset.showText || btn.textContent;
+    const hideText = btn.dataset.hideText || btn.textContent;
+    if (container.classList.contains('show-counts')) {
+        btn.textContent = hideText;
+    } else {
+        btn.textContent = showText;
+    }
 }
 
 function restoreOwnedGridCols() {
@@ -1320,6 +1357,7 @@ window.switchTab = switchTab;
 window.openCardPreview = openCardPreview;
 window.closeCardPreview = closeCardPreview;
 window.setOwnedGridCols = setOwnedGridCols;
+window.toggleOwnedCounts = toggleOwnedCounts;
 window.toggleOwnedFilterGroup = toggleOwnedFilterGroup;
 window.toggleOwnedFilterChip = toggleOwnedFilterChip;
 window.reinitCustomSelect = reinitCustomSelect;

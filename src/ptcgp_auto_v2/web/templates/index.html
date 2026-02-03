@@ -221,7 +221,7 @@
                                         {% for r in rarities %}
                                         <div>
                                             <input type="checkbox" id="owned-rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-rarity-{{ r }}" class="filter-label brutal-btn">{{ t['rarity_' + r] or r }}</label>
                                         </div>
                                         {% endfor %}
@@ -240,7 +240,7 @@
                                         {% for type in card_types %}
                                         <div>
                                             <input type="checkbox" id="owned-type-{{ type }}" name="card_type" value="{{ type }}" class="hidden owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-type-{{ type }}" class="filter-label brutal-btn uppercase">{{ t['type_' + type] or type }}</label>
                                         </div>
                                         {% endfor %}
@@ -259,7 +259,7 @@
                                         {% for item in card_sets %}
                                         <div>
                                             <input type="checkbox" id="owned-set-{{ item.code }}" name="set_code" value="{{ item.code }}" class="hidden owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-set-{{ item.code }}" class="filter-label brutal-btn">
                                                 {{ item.label.get(lang_key) or item.label.get('en') or item.code }}
                                             </label>
@@ -280,7 +280,7 @@
                                         {% for item in packs %}
                                         <div>
                                             <input type="checkbox" id="owned-pack-{{ item.name }}" name="pack_name" value="{{ item.name }}" class="hidden owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-pack-{{ item.name }}" class="filter-label brutal-btn">
                                                 {{ item.label.get(lang_key) or item.label.get('en') or item.name }}
                                             </label>
@@ -301,7 +301,7 @@
                                         {% for el in elements %}
                                         <div>
                                             <input type="checkbox" id="owned-element-{{ el }}" name="element" value="{{ el }}" class="hidden owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-element-{{ el }}" class="filter-label brutal-btn uppercase">{{ t['element_' + el] or el }}</label>
                                         </div>
                                         {% endfor %}
@@ -324,8 +324,26 @@
                         </div>
 
                         <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold uppercase tracking-widest text-xs text-muted">{{ t.owned_sort_label }}</span>
+                                <select
+                                    id="owned-sort-select"
+                                    name="sort_by"
+                                    form="owned-filter-form"
+                                    class="js-custom-select brutal-input text-xs py-1 px-2"
+                                    onchange="saveOwnedFilters()"
+                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
+                                    hx-target="#owned-cards-container"
+                                    hx-include="#owned-filter-form,#owned-sort-select">
+                                    <option value="rarity">{{ t.owned_sort_rarity }}</option>
+                                    <option value="acquired">{{ t.owned_sort_acquired }}</option>
+                                </select>
+                            </div>
                             <button type="button" onclick="refreshOwnedCards()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
                                 {{ t.refresh }} ↻
+                            </button>
+                            <button type="button" onclick="toggleOwnedCounts()" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_toggle }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
+                                {{ t.owned_counts_toggle }}
                             </button>
                         </div>
                     </div>
@@ -418,7 +436,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.21"></script>
+    <script type="module" src="/static/js/main.js?v=4.27"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();

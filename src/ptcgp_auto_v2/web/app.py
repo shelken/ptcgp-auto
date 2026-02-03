@@ -179,6 +179,7 @@ async def get_owned_cards(
     set_code: List[str] = Query(default=[]),
     pack_name: List[str] = Query(default=[]),
     element: List[str] = Query(default=[]),
+    sort_by: str = Query(default="rarity"),
     lang: str = Query(default="en"),
 ):
     t = get_translations(lang)
@@ -191,12 +192,13 @@ async def get_owned_cards(
         set_codes=set_code,
         pack_names=pack_name,
         elements=element,
+        sort_by=sort_by,
     )
 
     if not items and page > 0:
         return ""
 
-    next_page_url = f"/api/owned-cards?page={page + 1}&lang={lang}"
+    next_page_url = f"/api/owned-cards?page={page + 1}&lang={lang}&sort_by={sort_by}"
     for r in rarity:
         next_page_url += f"&rarity={r}"
     for c_type in card_type:
