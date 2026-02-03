@@ -30,25 +30,12 @@ def test_relationships_no_fk(session: Session):
     account = Account(
         game_id="acc_001",
         nickname="TestUser",
-        task_plan_id=plan.id,  # 显式设置 ID
     )
     session.add(account)
     session.commit()
     session.refresh(account)
 
-    # 2. 验证 Account -> TaskPlan (One-to-Many)
-    stmt = (
-        select(Account)
-        .where(Account.id == account.id)
-        .options(selectinload(Account.task_plan))
-    )
-    acc_loaded = session.exec(stmt).first()
-    assert acc_loaded is not None
-    assert acc_loaded.task_plan is not None
-    assert acc_loaded.task_plan.name == "daily_plan"
-    print("✅ Account -> TaskPlan (One-to-Many) passed")
-
-    # 3. 验证 TaskInstance -> Account (Many-to-One)
+    # 2. 验证 TaskInstance -> Account (Many-to-One)
     task_instance = TaskInstance(
         account_id=account.id, task_type="open_pack", status="pending"
     )
@@ -67,7 +54,7 @@ def test_relationships_no_fk(session: Session):
     assert ti_loaded.account.game_id == "acc_001"
     print("✅ TaskInstance -> Account (Many-to-One) passed")
 
-    # 4. 验证 Account -> TaskInstances (Reverse One-to-Many)
+    # 3. 验证 Account -> TaskInstances (Reverse One-to-Many)
     stmt = (
         select(Account)
         .where(Account.id == account.id)
@@ -78,7 +65,7 @@ def test_relationships_no_fk(session: Session):
     assert acc_loaded_2.task_instances[0].task_type == "open_pack"
     print("✅ Account -> TaskInstances passed")
 
-    # 5. 验证 AccountTaskPlan (Many-to-Many Association)
+    # 4. 验证 AccountTaskPlan (Many-to-Many Association)
     assoc = AccountTaskPlan(account_id=account.id, task_plan_id=plan.id, priority=10)
     session.add(assoc)
     session.commit()
