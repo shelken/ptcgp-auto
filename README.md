@@ -28,6 +28,7 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 - **数据持久化**：使用 SQLite 记录账号信息、任务状态和开包历史
 - **Web 可视化界面**：内置现代化 Web UI，支持开包记录查看、高级筛选（稀有度/类型）、多视图切换及移动端适配
 - **断点续传**：任务执行失败自动重试，进程重启后自动恢复进度
+- **YOLO+感知哈希卡牌识别**：使用 YOLO 检测+感知哈希匹配自动识别开包结果，替代传统模板匹配
 
 ## 🚀 快速开始
 
@@ -55,6 +56,14 @@ python main_v2.py --daemon
 # 指定设备启动
 python main_v2.py --daemon -d 127.0.0.1:5555
 ```
+
+## 📦 模型自动下载
+
+首次启动时会自动从 `shelken/ptcgp-assets` 仓库下载：
+- **macOS**: CoreML 格式模型 (`best.mlpackage`)
+- **其他平台**: PyTorch 格式模型 (`best.pt`)
+
+模型文件保存在 `data/models/` 目录，下载完成后自动加载到内存。
 
 ### 3. 常用命令
 
@@ -95,7 +104,14 @@ ptcgp-auto/
 │   │   ├── core/               # 调度核心 (Scheduler, Executor)
 │   │   ├── tasks/              # 任务实现 (OpenPack, ClaimRewards...)
 │   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
-│   │   ├── infra/              # 基础设施 (ADB, OCR, PageDetector)
+│   │   ├── infra/              # 基础设施层
+│   │   │   ├── adb.py          # ADB 控制封装
+│   │   │   ├── ocr.py          # OCR 引擎封装
+│   │   │   ├── model_manager.py    # [新增] YOLO模型管理
+│   │   │   ├── card_hash_manager.py # [新增] 卡牌Hash索引管理
+│   │   │   ├── yolo_card_recognizer.py # [新增] YOLO+Hash识别器
+│   │   │   ├── page_detector.py  # 页面检测器
+│   │   │   └── account_switcher.py # 账号切换逻辑
 │   │   ├── web/                # Web UI (FastAPI/HTMX)
 │   │   ├── config/             # 配置文件
 │   │   └── utils/              # 工具函数

@@ -628,12 +628,16 @@ def main():
     )
     args = parser.parse_args()
 
-    # 配置
-    model_path = "../runs/obb/output/models/card_obb5/weights/best.pt"
-    cards_dir = Path("data/raw/cards")
+    # 配置（基于脚本所在目录，避免运行路径影响）
+    script_dir = Path(__file__).resolve().parent
+    repo_root = script_dir.parent.parent
+    model_path = (
+        repo_root / "runs/obb/output/models/card_obb5/weights/best.pt"
+    ).resolve()
+    cards_dir = (script_dir.parent / "data/raw/cards").resolve()
 
     # 检查模型文件
-    if not Path(model_path).exists():
+    if not model_path.exists():
         print(f"❌ 模型不存在: {model_path}")
         sys.exit(1)
 
@@ -744,7 +748,7 @@ def main():
 
     # 执行匹配测试
     run_matching_test_with_db(
-        model_path=model_path,
+        model_path=str(model_path),
         hash_db=hash_db,
         hash_db_path=hash_db_path,
         screenshot=screenshot,

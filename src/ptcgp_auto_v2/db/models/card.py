@@ -126,6 +126,9 @@ class Card(SQLModel, TimestampMixin, table=True):
     local_image_path: Optional[str] = Field(
         default=None, description="本地模板图片路径"
     )
+    perceptual_hash: Optional[str] = Field(
+        default=None, description="感知哈希值(Base64编码)"
+    )
     data: Optional[str] = Field(
         default=None, description="JSON格式的其他属性 (保留字段)"
     )

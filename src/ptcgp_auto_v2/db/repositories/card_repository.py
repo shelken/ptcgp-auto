@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 from datetime import datetime
-from typing import Any, List, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
@@ -73,7 +73,7 @@ class CardRepository:
     def get_pack_by_name(self, name: str) -> Optional[Pack]:
         """获取卡包详情"""
         with Session(get_engine()) as session:
-             return session.get(Pack, name)
+            return session.get(Pack, name)
 
     def update_pack_label(self, name: str, label_data: str) -> bool:
         """更新卡包的多语言标签"""
@@ -107,7 +107,9 @@ class CardRepository:
             )
             return session.exec(statement).first()
 
-    def get_card_by_template_name(self, set_code: str, template_name: str) -> Optional[Card]:
+    def get_card_by_template_name(
+        self, set_code: str, template_name: str
+    ) -> Optional[Card]:
         """
         根据模板名称获取卡牌
 
@@ -249,10 +251,7 @@ class CardRepository:
                 return None
 
             # 2. 获取该系列下的所有子包
-            statement = (
-                select(Pack)
-                .where(Pack.set_code == latest_set.code)
-            )
+            statement = select(Pack).where(Pack.set_code == latest_set.code)
             packs = list(session.exec(statement).all())
 
             if not packs:
@@ -283,3 +282,32 @@ class CardRepository:
                 .options(selectinload(cast(Any, Card.packs)))
             )
             return list(session.exec(statement).all())
+
+    def get_cards_without_hash(self, set_code: str) -> List[Card]:
+        """获取某系列缺少感知哈希的卡牌"""
+        with Session(get_engine()) as session:
+            statement = select(Card).where(
+                Card.set_code == set_code, Card.perceptual_hash.is_(None)
+            )
+            return list(session.exec(statement).all())
+
+    def update_card_hash(self, card_id: int, hash_value: str) -> bool:
+        """更新卡牌感知哈希值"""
+        with Session(get_engine()) as session:
+            card = session.get(Card, card_id)
+            if not card:
+                return False
+            card.perceptual_hash = hash_value
+            card.updated_at = datetime.now()
+            session.add(card)
+            session.commit()
+            return True
+
+    def get_cards_with_hash_by_set(self, set_code: str) -> Dict[int, str]:
+        """获取某系列所有有hash的卡牌 {number: hash}"""
+        with Session(get_engine()) as session:
+            statement = select(Card).where(
+                Card.set_code == set_code, Card.perceptual_hash.is_not(None)
+            )
+            cards = session.exec(statement).all()
+            return {card.number: card.perceptual_hash for card in cards}

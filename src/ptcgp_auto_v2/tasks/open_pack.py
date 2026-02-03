@@ -7,6 +7,7 @@
 """
 
 import logging
+import threading
 import time
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -23,6 +24,9 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
+from ptcgp_auto_v2.infra.model_manager import get_model_manager
+from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
@@ -164,11 +168,10 @@ class OpenPackTask(Task):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-        # 初始化卡牌识别器
-        from ptcgp_auto_v2.infra.card_recognizer import CardRecognizer
-
-        _, template_matcher = recognizer
-        self.card_recognizer = CardRecognizer(adb, template_matcher)
+        # 初始化 YOLO+Hash 卡牌识别器
+        self.card_recognizer = YoloCardRecognizer(
+            adb=adb, model_manager=get_model_manager(), hash_manager=CardHashManager()
+        )
 
         # 页面内操作缓存（用于记录当前页面已完成操作）
         self._action_cache: dict[str, bool] = {}
@@ -268,6 +271,18 @@ class OpenPackTask(Task):
         # 加载子包列表
         pack_code = self.target_pack.get("pack_code") if self.target_pack else None
         self._boosters_list = self._load_boosters_list(pack_code) if pack_code else []
+
+        # 预加载目标系列 Hash（后台线程，不阻塞任务启动）
+        if pack_code:
+
+            def _preload_hash():
+                try:
+                    self.card_recognizer.hash_manager.ensure_series_ready(pack_code)
+                    logger.debug(f"目标系列 {pack_code} Hash 预加载完成")
+                except Exception as e:
+                    logger.warning(f"预加载系列 {pack_code} Hash 失败: {e}")
+
+            threading.Thread(target=_preload_hash, daemon=True).start()
 
     def _prepare_image_resources(self):
         """准备图片资源（按需加载）"""
@@ -662,35 +677,49 @@ class OpenPackTask(Task):
         return tap_continue(self.adb, page_info.get("ocr_results", []), wait=1.5)
 
     def _recognize_cards(self):
-        """识别卡牌并保存记录"""
+        """识别卡牌并保存记录（YOLO+Hash 版本）"""
         max_retries = 3
+
+        set_code = (
+            self.target_pack.get("pack_code", "Unknown")
+            if self.target_pack
+            else "Unknown"
+        )
+
         for attempt in range(max_retries):
             try:
-                cards = self.card_recognizer.scan_pack_result()
+                cards = self.card_recognizer.scan_pack_result(
+                    set_code, similarity_threshold=0.68
+                )
                 if cards:
                     if self._packs_opened_count == 0:
                         self._packs_opened_count = 1
 
-                    card_names = [f"{c.name}({c.confidence:.2f})" for c in cards]
+                    card_names = [
+                        f"{c.card_number}(Conf:{c.confidence:.2f},Sim:{c.similarity:.2f})"
+                        for c in cards
+                    ]
                     logger.debug(f"====== 识别到 {len(cards)} 张卡牌 ======")
 
-                    set_code = (
-                        self.target_pack.get("pack_code", "Unknown")
-                        if self.target_pack
-                        else "Unknown"
-                    )
                     current_batch_cards = []
 
                     for i, c in enumerate(cards):
-                        logger.debug(f"  - {c.name} (Conf: {c.confidence:.2f})")
+                        logger.debug(
+                            f"  - #{c.card_number} (Conf: {c.confidence:.2f}, Sim: {c.similarity:.2f})"
+                        )
+                        # 使用 card_number 查询卡牌详情
                         card_obj = (
-                            self._card_repo.get_card_by_template_name(set_code, c.name)
+                            self._card_repo.get_card_by_set_and_number(
+                                set_code, c.card_number
+                            )
                             if self._card_repo
                             else None
                         )
 
                         card_data = {
-                            "card_name": card_obj.name if card_obj else c.name,
+                            "card_name": card_obj.name
+                            if card_obj
+                            else f"Card #{c.card_number}",
                             "rarity": card_obj.rarity if card_obj else "Unknown",
                             "card_id": card_obj.id if card_obj else None,
                             "is_new": False,

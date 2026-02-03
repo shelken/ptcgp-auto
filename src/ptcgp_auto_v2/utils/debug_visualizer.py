@@ -8,15 +8,15 @@
 
 import logging
 import time
-from typing import List, Tuple, Optional, Any, Union
 from pathlib import Path
+from typing import Any, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 from PIL import Image
 
 from ptcgp_auto_v2.config.settings import get_settings
-from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline, _is_kitty
+from ptcgp_auto_v2.utils.terminal_preview import _is_kitty, preview_image_inline
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class DebugVisualizer:
     def draw_recognition_result(
         image: np.ndarray,
         roi: Optional[Tuple[int, int, int, int]],
-        cards: List[Any],  # RecognizedCard
+        cards: List[Any],
         filename_prefix: str = "rec",
     ):
         """
@@ -48,7 +48,7 @@ class DebugVisualizer:
         Args:
             image: 原始图像 (OpenCV 格式)
             roi: 感兴趣区域 (x, y, w, h) - 原始分辨率坐标
-            cards: 识别到的卡牌列表 (RecognizedCard)
+            cards: 识别到的卡牌列表
             filename_prefix: 保存文件名前缀
         """
         settings = get_settings()
@@ -127,10 +127,14 @@ class DebugVisualizer:
                 new_w = max(1, new_w)
                 new_h = max(1, new_h)
 
-                display_img_cv = cv2.resize(debug_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                display_img_cv = cv2.resize(
+                    debug_img, (new_w, new_h), interpolation=cv2.INTER_AREA
+                )
 
                 # 转换为 PIL Image
-                display_img_pil = Image.fromarray(cv2.cvtColor(display_img_cv, cv2.COLOR_BGR2RGB))
+                display_img_pil = Image.fromarray(
+                    cv2.cvtColor(display_img_cv, cv2.COLOR_BGR2RGB)
+                )
 
                 DebugVisualizer.show_in_kitty(display_img_pil)
                 print(flush=True)  # 换行并刷新

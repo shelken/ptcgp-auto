@@ -60,6 +60,9 @@
   - `infra/` - 基础设施层
     - `adb.py` - ADB 控制封装
     - `ocr.py` - OCR 引擎封装
+    - `model_manager.py` - [新增] YOLO模型管理（全局单例，异步加载）
+    - `card_hash_manager.py` - [新增] 卡牌Hash索引管理（内存缓存）
+    - `yolo_card_recognizer.py` - [新增] YOLO+Hash卡牌识别器
     - `page_detector.py` - 页面检测器
     - `account_switcher.py` - 账号切换逻辑
   - `db/` - 数据库层
@@ -96,9 +99,15 @@ ptcgp-auto/
 │   │   ├── core/               # 核心框架
 │   │   ├── tasks/              # 任务实现
 │   │   ├── db/                 # 数据库
+│   │   │   └── models/
+│   │   │       └── card.py     # 新增 perceptual_hash 字段
 │   │   ├── infra/              # 基础设施
+│   │   │   ├── model_manager.py       # [新增] 模型管理
+│   │   │   ├── card_hash_manager.py   # [新增] Hash管理
+│   │   │   └── yolo_card_recognizer.py # [新增] YOLO识别
 │   │   ├── config/             # 配置
 │   │   └── utils/              # 工具
+│   │       └── perceptual_hash.py    # [新增] 哈希计算
 │   └── ptcgp_auto/             # [v1] 旧版代码
 └── docs/                       # 文档
 ```
@@ -118,10 +127,16 @@ python debug_tool.py
 1. **新增任务**: 在 `src/ptcgp_auto_v2/tasks/` 创建新文件，继承 `Task` 类并使用 `@TaskRegistry.register` 装饰器。
 2. **页面定义**: 在 `src/ptcgp_auto_v2/config/pages/` 中定义页面识别规则。
 3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id>` 单独测试任务。
+4. **卡牌识别配置**: 在 `src/ptcgp_auto_v2/config/constants.py` 中调整 YOLO 和 Hash 阈值
+   - `YOLO_OBB_THRESHOLD` - YOLO检测置信度阈值
+   - `HASH_SIMILARITY_THRESHOLD` - Hash匹配相似度阈值
 
 ## 注意事项
 
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
+- **新增依赖**: 需要安装 `ultralytics>=8.3.0` 和 `scipy>=1.17.0`
+- **模型来源**: YOLO模型从 `shelken/ptcgp-assets` 自动下载
+- **Hash计算**: 使用 scipy DCT 实现，比纯Python快 100-1000 倍
 - **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)
   - **重要**: 为保持灵活性，**所有物理外键 (Foreign Key) 约束已被移除**。表之间的关系由 SQLAlchemy/SQLModel 的逻辑外键 (`Relationship` with `primaryjoin`) 维护。
   - 修改模型后无需迁移（目前自动初始化，复杂变更需手动处理）
