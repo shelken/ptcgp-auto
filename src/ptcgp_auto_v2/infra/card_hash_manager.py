@@ -6,6 +6,7 @@
 """
 
 import logging
+import threading
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -271,3 +272,27 @@ class CardHashManager:
             return sum(
                 1 for k in self._failed_downloads if k.startswith(f"{set_code}/")
             )
+
+
+# 全局单例实例
+_card_hash_manager_instance: Optional[CardHashManager] = None
+_card_hash_manager_lock = threading.Lock()
+
+
+def get_card_hash_manager() -> CardHashManager:
+    """
+    获取全局卡牌 Hash 管理器单例
+
+    使用双重检查锁定确保线程安全。
+
+    Returns:
+        CardHashManager 单例实例
+    """
+    global _card_hash_manager_instance
+
+    if _card_hash_manager_instance is None:
+        with _card_hash_manager_lock:
+            if _card_hash_manager_instance is None:
+                _card_hash_manager_instance = CardHashManager()
+
+    return _card_hash_manager_instance

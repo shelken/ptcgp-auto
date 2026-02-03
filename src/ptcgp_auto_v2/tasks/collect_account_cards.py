@@ -20,7 +20,7 @@ from ptcgp_auto_v2.core.task_base import (
     Task,
     TaskRegistry,
 )
-from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
+from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import (
     IconGroupDetector,
     find_group_by_rarity,
@@ -115,7 +115,9 @@ class CollectAccountCardsTask(Task):
         super().__init__(adb, recognizer, page_detector)
 
         self.card_recognizer = YoloCardRecognizer(
-            adb=adb, model_manager=get_model_manager(), hash_manager=CardHashManager()
+            adb=adb,
+            model_manager=get_model_manager(),
+            hash_manager=get_card_hash_manager(),
         )
         self.icon_detector = IconGroupDetector(
             template_matcher=page_detector.template_matcher

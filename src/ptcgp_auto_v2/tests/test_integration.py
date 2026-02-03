@@ -16,7 +16,10 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
+from ptcgp_auto_v2.infra.card_hash_manager import (
+    CardHashManager,
+    get_card_hash_manager,
+)
 from ptcgp_auto_v2.infra.model_manager import ModelManager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import (
     DetectedCard,
@@ -114,6 +117,17 @@ class TestYoloCardRecognizerIntegration:
 
 class TestCardHashManagerIntegration:
     """CardHashManager 集成测试"""
+
+    def test_get_card_hash_manager_singleton(self, monkeypatch):
+        """全局单例应复用同一实例"""
+        import ptcgp_auto_v2.infra.card_hash_manager as module
+
+        monkeypatch.setattr(module, "_card_hash_manager_instance", None)
+        first = get_card_hash_manager()
+        second = get_card_hash_manager()
+
+        assert first is second
+        assert isinstance(first, CardHashManager)
 
     @pytest.fixture
     def hash_manager(self):
