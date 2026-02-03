@@ -22,8 +22,14 @@ COMMON_PAGES = [
         "identifiers": _get_patterns(TEXT_PATTERNS, "popup_clean_and_download"),
         "match_all": True,
         "priority": 140,
-        "action": "tap_text",
-        "patterns_key": "text_cancel",
+        "action": "restart_emulator",
+    },
+    {
+        "name": "popup_error_code_103_011_05400",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "error_code_103_011_05400"),
+        "match_all": True,
+        "priority": 145,
+        "action": "restart_emulator",
     },
     {
         "name": "popup_ok",
