@@ -24,7 +24,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
+from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
@@ -170,7 +170,9 @@ class OpenPackTask(Task):
 
         # 初始化 YOLO+Hash 卡牌识别器
         self.card_recognizer = YoloCardRecognizer(
-            adb=adb, model_manager=get_model_manager(), hash_manager=CardHashManager()
+            adb=adb,
+            model_manager=get_model_manager(),
+            hash_manager=get_card_hash_manager(),
         )
 
         # 页面内操作缓存（用于记录当前页面已完成操作）
