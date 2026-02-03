@@ -119,6 +119,33 @@ class YoloCardRecognizer:
         logger.info(f"识别完成: {len(converted)}/{total} 张卡牌匹配成功")
         return converted
 
+    def scan_with_debug(
+        self,
+        set_code: Optional[str] = None,
+        obb_threshold: float = DEFAULT_OBB_THRESHOLD,
+        similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    ) -> tuple[List[DetectedCard], List[dict]]:
+        """扫描并返回匹配与未匹配卡牌详情"""
+        results, total, unmatched = self._scan_common_with_unmatched(
+            set_code=set_code,
+            obb_threshold=obb_threshold,
+            similarity_threshold=similarity_threshold,
+        )
+        converted = [
+            DetectedCard(
+                set_code=item["set_code"],
+                card_number=item["card_number"],
+                confidence=item["confidence"],
+                similarity=item["similarity"],
+                bbox=item["bbox"],
+                center=item["center"],
+            )
+            for item in results
+        ]
+        converted = self._sort_by_reading_order(converted)
+        logger.info(f"识别完成: {len(converted)}/{total} 张卡牌匹配成功")
+        return converted, unmatched
+
     def _scan_common(
         self,
         set_code: Optional[str],
@@ -220,11 +247,119 @@ class YoloCardRecognizer:
 
         return results, len(detected_cards)
 
+    def _scan_common_with_unmatched(
+        self,
+        set_code: Optional[str],
+        obb_threshold: float,
+        similarity_threshold: float,
+    ) -> Tuple[List[dict], int, List[dict]]:
+        """通用扫描内部逻辑（包含未匹配卡牌）"""
+        # 1. 确保模型已加载
+        if not self.model_manager.is_model_ready():
+            logger.warning("YOLO模型尚未加载完成")
+            return [], 0, []
+
+        # 2. 确保Hash已就绪
+        if set_code:
+            if not self.hash_manager.ensure_series_ready(set_code):
+                logger.error(f"无法确保系列 {set_code} Hash就绪")
+                return [], 0, []
+        else:
+            if not self.hash_manager.load_all_hashes():
+                logger.error("无法加载全局Hash索引")
+                return [], 0, []
+
+        # 3. 截图
+        screenshot = self.adb.screenshot()
+        if not screenshot:
+            logger.error("截图失败")
+            return [], 0, []
+
+        # 4. YOLO检测卡牌
+        detected_cards = self._detect_cards(screenshot, obb_threshold)
+        if not detected_cards:
+            logger.debug("未检测到卡牌")
+            return [], 0, []
+
+        # 5. 对每张检测到的卡牌进行Hash匹配
+        label = set_code or "global"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path("output") / "recognition_debug" / f"{label}_{timestamp}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        results = []
+        unmatched: List[dict] = []
+        for card_info in detected_cards:
+            cropped = card_info["cropped"]
+
+            color_pixels = bgr_to_color_pixels(cropped)
+            card_hash = calculate_perceptual_hash(color_pixels)
+
+            match_set_code: Optional[str] = None
+            match_card_number: Optional[int] = None
+            similarity = 0.0
+            match = self.hash_manager.find_best_match(
+                card_hash, set_code=set_code, threshold=0.0
+            )
+
+            if match:
+                if set_code:
+                    match_card_number, similarity = match
+                    match_set_code = set_code
+                else:
+                    match_set_code, match_card_number, similarity = match
+
+                if similarity >= similarity_threshold:
+                    results.append(
+                        {
+                            "set_code": match_set_code,
+                            "card_number": match_card_number,
+                            "confidence": card_info["confidence"],
+                            "similarity": similarity,
+                            "bbox": card_info["bbox"],
+                            "center": card_info["center"],
+                        }
+                    )
+                else:
+                    unmatched.append(
+                        {
+                            "best_set_code": match_set_code,
+                            "best_card_number": match_card_number,
+                            "similarity": similarity,
+                            "confidence": card_info["confidence"],
+                        }
+                    )
+            else:
+                unmatched.append(
+                    {
+                        "best_set_code": None,
+                        "best_card_number": None,
+                        "similarity": 0.0,
+                        "confidence": card_info["confidence"],
+                    }
+                )
+
+            save_name = "unknown"
+            save_similarity = 0.0
+            if match_set_code and match_card_number is not None:
+                save_name = f"{match_set_code}_{match_card_number:03d}"
+                save_similarity = similarity
+            file_name = (
+                f"card_{card_info['index']:02d}_best_{save_name}"
+                f"_conf_{card_info['confidence']:.3f}_sim_{save_similarity:.4f}.png"
+            )
+            cv2.imwrite(str(output_dir / file_name), cropped)
+
+        return results, len(detected_cards), unmatched
+
     def _detect_cards(
         self, screenshot: Image.Image, conf_threshold: float
     ) -> List[dict]:
         """使用YOLO检测卡牌位置"""
         model = self.model_manager.get_model()
+        if model is None:
+            logger.warning("YOLO模型未就绪，跳过检测")
+            return []
 
         # PIL -> numpy (BGR)
         img_array = np.array(screenshot)

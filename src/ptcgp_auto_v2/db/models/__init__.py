@@ -8,6 +8,7 @@ SQLModel 模型定义
 from .account import Account
 from .account_pack_config import AccountPackConfig
 from .account_pack_point import AccountPackPoint
+from .account_card import AccountCard
 from .account_task_plan import AccountTaskPlan
 from .base import TimestampMixin
 from .pack_record import PackRecord
@@ -26,6 +27,7 @@ __all__ = [
     "PackCard",
     "AccountPackConfig",
     "AccountPackPoint",
+    "AccountCard",
     "Card",
     "CardSet",
     "CardPack",
