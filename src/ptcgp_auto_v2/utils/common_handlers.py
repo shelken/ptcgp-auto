@@ -14,6 +14,9 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_box,
     tap_matched_element,
 )
+from ptcgp_auto_v2.utils.bluestacks_manager import (
+    restart_bluestacks_instance_for_device,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +34,15 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
         key = page_conf.get("patterns_key")
 
         def handler(page_info: dict) -> ActionResult:
-            return tap_text(
-                adb,
-                page_info.get("ocr_results", []),
-                get_text_patterns(key) if key else [],
-                wait=1.0,
-            ) or ActionResult.ok()
+            return (
+                tap_text(
+                    adb,
+                    page_info.get("ocr_results", []),
+                    get_text_patterns(key) if key else [],
+                    wait=1.0,
+                )
+                or ActionResult.ok()
+            )
 
         return handler
 
@@ -72,6 +78,9 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
         tpl = page_conf.get("template_name")
 
         def handler(page_info: dict) -> ActionResult:
+            if not tpl:
+                logger.warning("未配置模板名称，跳过点击")
+                return ActionResult.ok(wait=1.0)
             # 优先使用页面检测阶段匹配到的具体模板信息
             matched_template = page_info.get("matched_template")
             if matched_template and matched_template.get("box"):
@@ -117,9 +126,18 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
             logger.info("执行页面配置的重启操作")
             adb.restart_app(settings.app_package)
             return ActionResult.ok(wait=8.0)
+
         return handler
 
+    def action_restart_emulator(page_conf: dict) -> Handler:
+        def handler(page_info: dict) -> ActionResult:
+            logger.info("执行页面配置的重启模拟器操作")
+            success = restart_bluestacks_instance_for_device(adb.address)
+            if not success:
+                return ActionResult.ok(wait=3.0)
+            return ActionResult.ok(wait=12.0)
 
+        return handler
 
     # 动作类型映射表
     action_map = {
@@ -131,6 +149,7 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
         "tap_matched": action_tap_matched,
         "wait": action_wait,
         "restart_game": action_restart_game,
+        "restart_emulator": action_restart_emulator,
     }
 
     handlers = {}
