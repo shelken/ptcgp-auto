@@ -139,6 +139,7 @@ class PageDetector:
             page_name = page_info.get("name", "")
             identifiers = page_info.get("identifiers", [])
             templates = page_info.get("templates", [])
+            template_threshold = page_info.get("template_threshold")
             exact_match = page_info.get("exact_match", False)
             match_all = page_info.get("match_all", False)
             exclude_identifiers = page_info.get("exclude_identifiers", [])
@@ -162,7 +163,9 @@ class PageDetector:
                 # 如果有模板要求，也必须匹配模板
                 template_match = None
                 if templates:
-                    template_match = self._check_templates(screenshot, templates)
+                    template_match = self._check_templates(
+                        screenshot, templates, threshold=template_threshold
+                    )
                     if not template_match:
                         continue  # 模板不匹配，跳过
 
@@ -184,7 +187,9 @@ class PageDetector:
 
             # 检查纯模板匹配（没有 identifiers 的情况）
             if not identifiers and templates:
-                template_match = self._check_templates(screenshot, templates)
+                template_match = self._check_templates(
+                    screenshot, templates, threshold=template_threshold
+                )
                 if template_match:
                     logger.debug(
                         f"[匹配] {page_name} <- 模板 {template_match['template']}"
@@ -262,10 +267,13 @@ class PageDetector:
         self,
         screenshot: Image.Image,
         templates: List[str],
+        threshold: Optional[float] = None,
     ) -> Optional[dict]:
         """检查模板匹配"""
         for template_name in templates:
-            match = self.template_matcher.find(screenshot, template_name)
+            match = self.template_matcher.find(
+                screenshot, template_name, threshold=threshold
+            )
             if match:
                 return {
                     "type": "template",
@@ -392,7 +400,7 @@ class PageDetector:
         template_name: str,
         screenshot: Optional[Image.Image] = None,
         threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
-        scale: float = 1.0
+        scale: float = 1.0,
     ) -> List[TemplateMatch]:
         f"""
         在屏幕上查找所有匹配的模板的位置
@@ -411,4 +419,6 @@ class PageDetector:
                 return []
         self._last_screenshot = screenshot
 
-        return self.template_matcher.find_all(screenshot, template_name, threshold, scale=scale)
+        return self.template_matcher.find_all(
+            screenshot, template_name, threshold, scale=scale
+        )
