@@ -9,6 +9,7 @@ import logging
 from enum import Enum, auto
 from typing import Optional
 
+from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS
 from ptcgp_auto_v2.config.rarity_icons import (
     RARITY_CODE_REVERSE,
     RARITY_GROUP_DEFAULTS,
@@ -53,8 +54,6 @@ FILTER_SCROLL_WAIT = 1.2
 BASE_SORT_ROW_TOL = 30
 BASE_SORT_BTN_X = 965
 BASE_SORT_BTN_Y = 1672
-
-HIGH_RARITY_TARGETS = ["RR", "SR", "SAR", "IM", "UR", "SSR"]
 
 
 class CollectPhase(Enum):

@@ -1,5 +1,6 @@
 import sys
 import unittest
+from unittest.mock import Mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,6 +8,7 @@ src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.open_pack import HOME_CHECK_THRESHOLD, OpenPackTask
+from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
 from ptcgp_auto_v2.utils.gesture import scroll_until_template
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 
@@ -166,6 +168,54 @@ class TestGestureTemplateFlows(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual([], page_detector.adb.taps)
+
+
+class TestOpenPackRecognizeCards(unittest.TestCase):
+    def test_recognize_cards_creates_account_card_records(self):
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+
+        task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+        task.target_pack = {"pack_code": "A1", "booster_name": "Test"}
+
+        high_card = SimpleNamespace(id=101, name="High", rarity="SR")
+        low_card = SimpleNamespace(id=202, name="Low", rarity="C")
+        task._card_repo = Mock()
+        task._card_repo.get_card_by_set_and_number.side_effect = [high_card, low_card]
+
+        task._pack_record_repo = Mock()
+        task._account_card_repo = Mock()
+
+        task.card_recognizer = Mock()
+        task.card_recognizer.scan_pack_result.return_value = [
+            DetectedCard(
+                set_code="A1",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.85,
+                bbox=(0, 0, 1, 1),
+                center=(0.0, 0.0),
+            ),
+            DetectedCard(
+                set_code="A1",
+                card_number=2,
+                confidence=0.7,
+                similarity=0.4,
+                bbox=(0, 0, 1, 1),
+                center=(0.0, 0.0),
+            ),
+        ]
+
+        task._recognize_cards()
+
+        task._account_card_repo.upsert.assert_called_once_with(
+            account_id=1,
+            card_id=101,
+            count=1,
+            yolo_conf=0.9,
+            hash_similarity=0.85,
+        )
 
 
 if __name__ == "__main__":

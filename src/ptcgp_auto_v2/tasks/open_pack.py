@@ -12,6 +12,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.constants import (
+    HIGH_RARITY_TARGETS,
     PACK_TEMPLATE_THRESHOLD,
     SWIPE_DURATION_OPEN,
     SWIPE_DURATION_REGISTER,
@@ -50,6 +51,7 @@ from ptcgp_auto_v2.utils.gesture import (
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (
+        AccountCardRepository,
         AccountPackConfigRepository,
         AccountPackPointRepository,
         CardRepository,
@@ -195,6 +197,7 @@ class OpenPackTask(Task):
         self._pack_record_repo: "PackRecordRepository | None" = None
         self._card_repo: "CardRepository | None" = None
         self._pack_point_repo: "AccountPackPointRepository | None" = None
+        self._account_card_repo: "AccountCardRepository | None" = None
 
     def _is_action_done(self, key: str) -> bool:
         """检查操作是否已完成"""
@@ -211,12 +214,14 @@ class OpenPackTask(Task):
     def on_start(self):
         """任务开始前的初始化"""
         from ptcgp_auto_v2.db.repositories import (
+            AccountCardRepository,
             AccountPackConfigRepository,
             AccountPackPointRepository,
             CardRepository,
             PackRecordRepository,
         )
 
+        self._account_card_repo = AccountCardRepository()
         self._pack_config_repo = AccountPackConfigRepository()
         self._pack_record_repo = PackRecordRepository()
         self._card_repo = CardRepository()
@@ -727,6 +732,7 @@ class OpenPackTask(Task):
                             "is_new": False,
                             "position": i + 1,
                             "confidence": float(c.confidence),
+                            "hash_similarity": float(c.similarity),
                         }
                         current_batch_cards.append(card_data)
 
@@ -762,6 +768,9 @@ class OpenPackTask(Task):
                         except Exception as e:
                             logger.error(f"保存开包记录失败: {e}")
 
+                    if self._account_card_repo and self.account.id:
+                        self._save_high_rarity_cards(current_batch_cards)
+
                     logger.debug("==================================")
                     self._result_recognized = True
                     break
@@ -779,6 +788,24 @@ class OpenPackTask(Task):
                 logger.error(f"识别卡牌失败: {e}")
                 if attempt >= max_retries - 1:
                     self._result_recognized = True
+
+    def _save_high_rarity_cards(self, cards: list[dict]) -> None:
+        """记录高稀有度卡牌到账号卡牌表"""
+        if not self._account_card_repo or not self.account.id:
+            return
+
+        for item in cards:
+            card_id = item.get("card_id")
+            rarity = item.get("rarity")
+            if not card_id or rarity not in HIGH_RARITY_TARGETS:
+                continue
+            self._account_card_repo.upsert(
+                account_id=self.account.id,
+                card_id=card_id,
+                count=1,
+                yolo_conf=float(item.get("confidence") or 0.0),
+                hash_similarity=float(item.get("hash_similarity") or 0.0),
+            )
 
     def _load_boosters_list(self, pack_code: str) -> list[str]:
         """从 packs.json 加载子包列表"""
