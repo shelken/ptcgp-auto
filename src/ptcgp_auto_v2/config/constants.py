@@ -64,3 +64,6 @@ YOLO_OBB_THRESHOLD = 0.55
 HASH_SIMILARITY_THRESHOLD = 0.7
 # Hash匹配相似度最小差距（用于排除相近候选）
 HASH_SIMILARITY_GAP_MIN = 0.02
+
+# 高稀有度卡牌范围（用于记录账号卡牌）
+HIGH_RARITY_TARGETS = ["RR", "SR", "SAR", "IM", "UR", "SSR"]
