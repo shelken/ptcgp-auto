@@ -471,7 +471,6 @@ body {
     background-color: var(--bg-subtle);
 }
 
-.owned-card-badge,
 .owned-card-count {
     position: absolute;
     top: 0;
@@ -483,30 +482,15 @@ body {
     z-index: 2;
 }
 
-.owned-card-badge {
+.owned-card-count {
     right: 0;
     border-left: 2px solid var(--border-color);
     border-bottom: 2px solid var(--border-color);
+    display: none;
 }
 
-.owned-card-count {
-    left: 0;
-    border-right: 2px solid var(--border-color);
-    border-bottom: 2px solid var(--border-color);
-}
-
-.owned-card-name {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 6px 8px;
-    font-size: 12px;
-    font-weight: bold;
-    text-align: center;
-    background-color: var(--border-color);
-    color: var(--bg-color);
-    border-top: 2px solid var(--border-color);
+.show-counts .owned-card-count {
+    display: block;
 }
 
 .owned-card-preview {
