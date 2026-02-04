@@ -6,9 +6,8 @@ YOLO + 感知哈希卡牌识别器
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 import cv2
@@ -28,6 +27,8 @@ from ptcgp_auto_v2.utils.perceptual_hash import (
 )
 
 logger = logging.getLogger(__name__)
+
+UNKNOWN_CARD_NUMBER = -1  # 未匹配卡牌编号占位
 
 
 @dataclass
@@ -53,7 +54,7 @@ class YoloCardRecognizer:
     # 这些值来源于 yolo-card-training/scripts/test_massive_matching.py 测试验证
     BASE_TARGET_WIDTH = 480  # 透视变换后卡牌宽度基准值
     BASE_TARGET_HEIGHT = 670  # 透视变换后卡牌高度基准值
-    BASE_ROW_THRESHOLD = 10  # 同一行卡牌Y坐标差异阈值基准值
+    BASE_ROW_THRESHOLD = 25  # 同一行卡牌Y坐标差异阈值基准值
 
     def __init__(
         self,
@@ -70,27 +71,15 @@ class YoloCardRecognizer:
         set_code: str,
         obb_threshold: float = DEFAULT_OBB_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        debug: bool = False,
     ) -> List[DetectedCard]:
         """扫描开包结果页，返回识别到的卡牌列表"""
-        results, total = self._scan_common(
+        return self.scan(
             set_code=set_code,
             obb_threshold=obb_threshold,
             similarity_threshold=similarity_threshold,
+            debug=debug,
         )
-        converted = [
-            DetectedCard(
-                set_code=set_code,
-                card_number=item["card_number"],
-                confidence=item["confidence"],
-                similarity=item["similarity"],
-                bbox=item["bbox"],
-                center=item["center"],
-            )
-            for item in results
-        ]
-        converted = self._sort_by_reading_order(converted)
-        logger.info(f"识别完成: {len(converted)}/{total} 张卡牌匹配成功")
-        return converted
 
     def scan(
         self,
@@ -98,49 +87,29 @@ class YoloCardRecognizer:
         obb_threshold: float = DEFAULT_OBB_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         debug: bool = False,
-        resolve_name: Optional[callable] = None,
+        resolve_name: Optional[Callable[[Optional[str], int], str]] = None,
     ) -> List[DetectedCard]:
         """通用扫描接口，支持全局或指定系列"""
-        unmatched: List[dict] = []
-        if debug:
-            results, total, unmatched = self._scan_common_with_unmatched(
-                set_code=set_code,
-                obb_threshold=obb_threshold,
-                similarity_threshold=similarity_threshold,
-            )
-        else:
-            results, total = self._scan_common(
-                set_code=set_code,
-                obb_threshold=obb_threshold,
-                similarity_threshold=similarity_threshold,
-            )
+        results, total, _ = self._scan_common(
+            set_code=set_code,
+            obb_threshold=obb_threshold,
+            similarity_threshold=similarity_threshold,
+            debug=debug,
+            resolve_name=resolve_name,
+        )
 
-        converted = [
-            DetectedCard(
-                set_code=item["set_code"],
-                card_number=item["card_number"],
-                confidence=item["confidence"],
-                similarity=item["similarity"],
-                bbox=item["bbox"],
-                center=item["center"],
-            )
-            for item in results
-        ]
-        converted = self._sort_by_reading_order(converted)
-        logger.info(f"识别完成: {len(converted)}/{total} 张卡牌匹配成功")
-        if debug:
-            self._log_debug_details(converted, unmatched, resolve_name)
-        return converted
+        logger.info(f"识别完成: {len(results)}/{total} 张卡牌匹配成功")
+        return results
 
     @staticmethod
     def _log_debug_details(
         detected: List[DetectedCard],
-        unmatched: List[dict],
-        resolve_name: Optional[callable] = None,
-    ):
+        unmatched: List[DetectedCard],
+        resolve_name: Optional[Callable[[Optional[str], int], str]] = None,
+    ) -> None:
         if detected:
             logger.info("====== 识别到 %s 张卡牌 ======", len(detected))
-            for item in detected:
+            for idx, item in enumerate(detected, start=1):
                 card_name = (
                     resolve_name(item.set_code, item.card_number)
                     if resolve_name
@@ -148,26 +117,37 @@ class YoloCardRecognizer:
                 )
                 name_suffix = f"{card_name}" if card_name else ""
                 logger.info(
-                    "  - %s-%s-%s (Conf: %.2f, Sim: %.2f)",
-                    item.set_code or "?",
+                    "  - #%s %s/%s-%s conf=%.2f sim=%.2f center=(%.1f, %.1f)",
+                    idx,
+                    item.set_code or "unknown",
                     item.card_number,
                     name_suffix,
                     item.confidence,
                     item.similarity,
+                    item.center[0],
+                    item.center[1],
                 )
 
         if unmatched:
             logger.info("====== 未匹配 %s 张卡牌 ======", len(unmatched))
             for idx, item in enumerate(unmatched, start=1):
+                card_number = item.card_number
+                card_name = (
+                    resolve_name(item.set_code, card_number)
+                    if resolve_name and card_number != UNKNOWN_CARD_NUMBER
+                    else None
+                )
+                name_suffix = f"{card_name}" if card_name else ""
                 logger.info(
-                    "  - #%s best=%s/%s (Conf: %.2f, Sim: %.2f)",
+                    "  - #%s %s/%s-%s conf=%.2f sim=%.2f center=(%.1f, %.1f)",
                     idx,
-                    item.get("best_set_code") or "unknown",
-                    item.get("best_card_number")
-                    if item.get("best_card_number") is not None
-                    else "unknown",
-                    float(item.get("confidence") or 0.0),
-                    float(item.get("similarity") or 0.0),
+                    item.set_code or "unknown",
+                    card_number if card_number != UNKNOWN_CARD_NUMBER else "unknown",
+                    name_suffix,
+                    item.confidence,
+                    item.similarity,
+                    item.center[0],
+                    item.center[1],
                 )
 
     def _scan_common(
@@ -175,112 +155,13 @@ class YoloCardRecognizer:
         set_code: Optional[str],
         obb_threshold: float,
         similarity_threshold: float,
-    ) -> Tuple[List[dict], int]:
+        debug: bool,
+        resolve_name: Optional[Callable[[Optional[str], int], str]] = None,
+    ) -> Tuple[List[DetectedCard], int, List[DetectedCard]]:
         """通用扫描内部逻辑"""
         # 1. 确保模型已加载
         if not self.model_manager.is_model_ready():
             logger.warning("YOLO模型尚未加载完成")
-            return [], 0
-
-        # 2. 确保Hash已就绪
-        if set_code:
-            if not self.hash_manager.ensure_series_ready(set_code):
-                logger.error(f"无法确保系列 {set_code} Hash就绪")
-                return [], 0
-        else:
-            if not self.hash_manager.load_all_hashes():
-                logger.error("无法加载全局Hash索引")
-                return [], 0
-
-        # 3. 截图
-        screenshot = self.adb.screenshot()
-        if not screenshot:
-            logger.error("截图失败")
-            return [], 0
-
-        # 4. YOLO检测卡牌
-        detected_cards = self._detect_cards(screenshot, obb_threshold)
-        if not detected_cards:
-            logger.debug("未检测到卡牌")
-            return [], 0
-
-        # 5. 对每张检测到的卡牌进行Hash匹配
-        label = set_code or "global"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path("output") / "recognition_debug" / f"{label}_{timestamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        results = []
-        for card_info in detected_cards:
-            cropped = card_info["cropped"]
-
-            color_pixels = bgr_to_color_pixels(cropped)
-            card_hash = calculate_perceptual_hash(color_pixels)
-
-            match_set_code: Optional[str] = None
-            match_card_number: Optional[int] = None
-            similarity = 0.0
-            match = self.hash_manager.find_best_match(
-                card_hash, set_code=set_code, threshold=0.0
-            )
-
-            if match:
-                if set_code:
-                    match_card_number, similarity = match
-                    match_set_code = set_code
-                else:
-                    match_set_code, match_card_number, similarity = match
-
-                if similarity >= similarity_threshold:
-                    results.append(
-                        {
-                            "set_code": match_set_code,
-                            "card_number": match_card_number,
-                            "confidence": card_info["confidence"],
-                            "similarity": similarity,
-                            "bbox": card_info["bbox"],
-                            "center": card_info["center"],
-                        }
-                    )
-                else:
-                    logger.debug(
-                        "未匹配卡牌: best=%s/%s, sim=%.4f, threshold=%.4f",
-                        match_set_code or "unknown",
-                        match_card_number
-                        if match_card_number is not None
-                        else "unknown",
-                        similarity,
-                        similarity_threshold,
-                    )
-            else:
-                logger.debug(
-                    "未匹配卡牌: best=unknown, sim=0.0000, threshold=%.4f",
-                    similarity_threshold,
-                )
-
-            save_name = "unknown"
-            save_similarity = 0.0
-            if match_set_code and match_card_number is not None:
-                save_name = f"{match_set_code}_{match_card_number:03d}"
-                save_similarity = similarity
-            file_name = (
-                f"card_{card_info['index']:02d}_best_{save_name}"
-                f"_conf_{card_info['confidence']:.3f}_sim_{save_similarity:.4f}.png"
-            )
-            cv2.imwrite(str(output_dir / file_name), cropped)
-
-        return results, len(detected_cards)
-
-    def _scan_common_with_unmatched(
-        self,
-        set_code: Optional[str],
-        obb_threshold: float,
-        similarity_threshold: float,
-    ) -> Tuple[List[dict], int, List[dict]]:
-        """通用扫描内部逻辑（包含未匹配卡牌）"""
-        # 1. 确保模型已加载
-        if not self.model_manager.is_model_ready():
-            logger.warning("YOLO模型尚未加载完成")
             return [], 0, []
 
         # 2. 确保Hash已就绪
@@ -305,14 +186,8 @@ class YoloCardRecognizer:
             logger.debug("未检测到卡牌")
             return [], 0, []
 
-        # 5. 对每张检测到的卡牌进行Hash匹配
-        label = set_code or "global"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path("output") / "recognition_debug" / f"{label}_{timestamp}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        results = []
-        unmatched: List[dict] = []
+        results: List[DetectedCard] = []
+        unmatched: List[DetectedCard] = []
         for card_info in detected_cards:
             cropped = card_info["cropped"]
 
@@ -333,47 +208,45 @@ class YoloCardRecognizer:
                 else:
                     match_set_code, match_card_number, similarity = match
 
-                if similarity >= similarity_threshold:
+                if similarity >= similarity_threshold and match_card_number is not None:
                     results.append(
-                        {
-                            "set_code": match_set_code,
-                            "card_number": match_card_number,
-                            "confidence": card_info["confidence"],
-                            "similarity": similarity,
-                            "bbox": card_info["bbox"],
-                            "center": card_info["center"],
-                        }
+                        DetectedCard(
+                            set_code=match_set_code,
+                            card_number=match_card_number,
+                            confidence=card_info["confidence"],
+                            similarity=similarity,
+                            bbox=card_info["bbox"],
+                            center=card_info["center"],
+                        )
                     )
                 else:
                     unmatched.append(
-                        {
-                            "best_set_code": match_set_code,
-                            "best_card_number": match_card_number,
-                            "similarity": similarity,
-                            "confidence": card_info["confidence"],
-                        }
+                        DetectedCard(
+                            set_code=match_set_code or set_code,
+                            card_number=match_card_number
+                            if match_card_number is not None
+                            else UNKNOWN_CARD_NUMBER,
+                            confidence=card_info["confidence"],
+                            similarity=similarity,
+                            bbox=card_info["bbox"],
+                            center=card_info["center"],
+                        )
                     )
             else:
                 unmatched.append(
-                    {
-                        "best_set_code": None,
-                        "best_card_number": None,
-                        "similarity": 0.0,
-                        "confidence": card_info["confidence"],
-                    }
+                    DetectedCard(
+                        set_code=set_code,
+                        card_number=UNKNOWN_CARD_NUMBER,
+                        confidence=card_info["confidence"],
+                        similarity=0.0,
+                        bbox=card_info["bbox"],
+                        center=card_info["center"],
+                    )
                 )
 
-            save_name = "unknown"
-            save_similarity = 0.0
-            if match_set_code and match_card_number is not None:
-                save_name = f"{match_set_code}_{match_card_number:03d}"
-                save_similarity = similarity
-            file_name = (
-                f"card_{card_info['index']:02d}_best_{save_name}"
-                f"_conf_{card_info['confidence']:.3f}_sim_{save_similarity:.4f}.png"
-            )
-            cv2.imwrite(str(output_dir / file_name), cropped)
-
+        results = self._sort_by_reading_order(results)
+        if debug:
+            self._log_debug_details(results, unmatched, resolve_name)
         return results, len(detected_cards), unmatched
 
     def _detect_cards(
@@ -455,7 +328,6 @@ class YoloCardRecognizer:
 
         rows = []
         current_row = [sorted_by_y[0]]
-        # 根据当前分辨率缩放行阈值（基准100px对应1080x1920）
         row_threshold = self.adb.scaled_y(self.BASE_ROW_THRESHOLD)
 
         for card in sorted_by_y[1:]:

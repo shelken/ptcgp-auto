@@ -458,6 +458,12 @@ def swipe_up(adb, ratio: float = 0.26, wait: float = 1.0) -> ActionResult:
     return ActionResult.ok(wait=wait)
 
 
+def swipe_down(adb, ratio: float = 0.26, wait: float = 1.0) -> ActionResult:
+    """向下滑动"""
+    adb.swipe_down(ratio=ratio)
+    return ActionResult.ok(wait=wait)
+
+
 def swipe(
     adb,
     start: Tuple[int, int],

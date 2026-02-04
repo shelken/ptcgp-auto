@@ -152,3 +152,104 @@ def test_yolo_card_recognizer_scan_pack_result_sorts_by_row():
 
     results = recognizer.scan_pack_result("A1")
     assert [card.card_number for card in results] == [102, 101]
+
+
+def test_yolo_card_recognizer_scan_debug_flag_uses_unmatched_path():
+    """scan 在 debug=True 时应使用未匹配路径但返回识别列表"""
+
+    class FakeRecognizer(YoloCardRecognizer):
+        def __init__(self):
+            self.called_common = False
+            self.called_debug = False
+
+        def _scan_common(self, set_code, obb_threshold, similarity_threshold):
+            self.called_common = True
+            return (
+                [
+                    {
+                        "set_code": "A",
+                        "card_number": 1,
+                        "confidence": 0.9,
+                        "similarity": 0.9,
+                        "bbox": (0, 0, 10, 10),
+                        "center": (1.0, 2.0),
+                    }
+                ],
+                1,
+            )
+
+        def _scan_common_with_unmatched(
+            self, set_code, obb_threshold, similarity_threshold
+        ):
+            self.called_debug = True
+            return (
+                [
+                    {
+                        "set_code": "A",
+                        "card_number": 2,
+                        "confidence": 0.8,
+                        "similarity": 0.8,
+                        "bbox": (0, 0, 10, 10),
+                        "center": (3.0, 4.0),
+                    }
+                ],
+                1,
+                [{"best_set_code": "A", "best_card_number": 2}],
+            )
+
+        def _sort_by_reading_order(self, cards):
+            return cards
+
+    recognizer = FakeRecognizer()
+
+    results = recognizer.scan()
+    assert recognizer.called_common is True
+    assert recognizer.called_debug is False
+    assert [card.card_number for card in results] == [1]
+
+    recognizer = FakeRecognizer()
+    results = recognizer.scan(debug=True)
+    assert recognizer.called_common is False
+    assert recognizer.called_debug is True
+    assert [card.card_number for card in results] == [2]
+
+
+def test_yolo_card_recognizer_scan_debug_calls_name_resolver():
+    """scan debug 时应调用名称解析器"""
+
+    class FakeRecognizer(YoloCardRecognizer):
+        def __init__(self):
+            self.resolved = []
+
+        def _scan_common_with_unmatched(
+            self, set_code, obb_threshold, similarity_threshold
+        ):
+            return (
+                [
+                    {
+                        "set_code": "B2",
+                        "card_number": 28,
+                        "confidence": 0.9,
+                        "similarity": 0.9,
+                        "bbox": (0, 0, 10, 10),
+                        "center": (1.0, 2.0),
+                    }
+                ],
+                1,
+                [],
+            )
+
+        def _sort_by_reading_order(self, cards):
+            return cards
+
+        def _log_debug_details(self, detected, unmatched, resolve_name=None):
+            if resolve_name:
+                for item in detected:
+                    self.resolved.append(resolve_name(item.set_code, item.card_number))
+
+    def resolver(set_code, card_number):
+        return f"{set_code}-{card_number}-name"
+
+    recognizer = FakeRecognizer()
+    recognizer.scan(debug=True, resolve_name=resolver)
+    assert recognizer.resolved == ["B2-28-name"]
