@@ -42,6 +42,7 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_text,
     tap_text_exact,
 )
+from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 
 if TYPE_CHECKING:
     pass
@@ -674,9 +675,7 @@ class InitAccountTask(Task):
     def _handle_select_favorite_card(self, page_info: dict) -> ActionResult:
         """处理选择喜欢的卡牌页面"""
         logger.info("  -> 选择喜欢的卡牌")
-        tap_x = self.adb.center_x()
-        tap_y = self.adb.scaled_y(740)
-        return tap(self.adb, tap_x, tap_y, wait=1.0)
+        return tap_favorite_card(self.adb, wait=1.0)
 
     def _handle_enjoy(self, page_info: dict) -> ActionResult:
         """处理完成页面"""
