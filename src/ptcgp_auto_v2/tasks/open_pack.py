@@ -12,7 +12,6 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.constants import (
-    HIGH_RARITY_TARGETS,
     PACK_TEMPLATE_THRESHOLD,
     SWIPE_DURATION_OPEN,
     SWIPE_DURATION_REGISTER,
@@ -30,6 +29,7 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
+from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     long_press_text,
@@ -791,21 +791,7 @@ class OpenPackTask(Task):
 
     def _save_high_rarity_cards(self, cards: list[dict]) -> None:
         """记录高稀有度卡牌到账号卡牌表"""
-        if not self._account_card_repo or not self.account.id:
-            return
-
-        for item in cards:
-            card_id = item.get("card_id")
-            rarity = item.get("rarity")
-            if not card_id or rarity not in HIGH_RARITY_TARGETS:
-                continue
-            self._account_card_repo.upsert(
-                account_id=self.account.id,
-                card_id=card_id,
-                count=1,
-                yolo_conf=float(item.get("confidence") or 0.0),
-                hash_similarity=float(item.get("hash_similarity") or 0.0),
-            )
+        save_high_rarity_cards(self._account_card_repo, self.account.id, cards)
 
     def _load_boosters_list(self, pack_code: str) -> list[str]:
         """从 packs.json 加载子包列表"""
