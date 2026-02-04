@@ -81,40 +81,40 @@
                                 {% set interval_secs = interval_seconds % 60 %}
                                 <label class="text-xs uppercase font-bold text-muted">{{ t.label_interval or 'Interval' }}</label>
                                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                    <div class="flex items-center gap-2 min-w-0">
+                                    <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" inputmode="numeric" autocomplete="off"
                                                name="task_interval_days_{{ task_type }}" data-interval-unit="days"
                                                oninput="updateIntervalSeconds(this)" value="{{ interval_days }}"
                                                aria-label="{{ t.label_interval_days or 'Days' }}"
-                                               class="brutal-input w-full p-2 text-sm">
-                                        <span class="text-xs uppercase font-bold text-muted shrink-0">{{ t.label_interval_days or 'Days' }}</span>
+                                               class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
+                                        <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_days or 'Days' }}</span>
                                     </div>
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <input type="number" min="0" inputmode="numeric" autocomplete="off"
+                                    <div class="flex flex-col gap-1 min-w-0">
+                                        <input type="number" min="0" max="23" inputmode="numeric" autocomplete="off"
                                                name="task_interval_hours_{{ task_type }}" data-interval-unit="hours"
                                                oninput="updateIntervalSeconds(this)" value="{{ interval_hours }}"
                                                aria-label="{{ t.label_interval_hours or 'Hours' }}"
-                                               class="brutal-input w-full p-2 text-sm">
-                                        <span class="text-xs uppercase font-bold text-muted shrink-0">{{ t.label_interval_hours or 'Hours' }}</span>
+                                               class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
+                                        <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_hours or 'Hours' }}</span>
                                     </div>
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <input type="number" min="0" inputmode="numeric" autocomplete="off"
+                                    <div class="flex flex-col gap-1 min-w-0">
+                                        <input type="number" min="0" max="59" inputmode="numeric" autocomplete="off"
                                                name="task_interval_minutes_{{ task_type }}" data-interval-unit="minutes"
                                                oninput="updateIntervalSeconds(this)" value="{{ interval_minutes }}"
                                                aria-label="{{ t.label_interval_minutes or 'Minutes' }}"
-                                               class="brutal-input w-full p-2 text-sm">
-                                        <span class="text-xs uppercase font-bold text-muted shrink-0">{{ t.label_interval_minutes or 'Minutes' }}</span>
+                                               class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
+                                        <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_minutes or 'Minutes' }}</span>
                                     </div>
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <input type="number" min="0" inputmode="numeric" autocomplete="off"
+                                    <div class="flex flex-col gap-1 min-w-0">
+                                        <input type="number" min="0" max="59" inputmode="numeric" autocomplete="off"
                                                name="task_interval_seconds_{{ task_type }}" data-interval-unit="seconds"
                                                oninput="updateIntervalSeconds(this)" value="{{ interval_secs }}"
                                                aria-label="{{ t.label_interval_seconds or 'Seconds' }}"
-                                               class="brutal-input w-full p-2 text-sm">
-                                        <span class="text-xs uppercase font-bold text-muted shrink-0">{{ t.label_interval_seconds or 'Seconds' }}</span>
+                                               class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
+                                        <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_seconds or 'Seconds' }}</span>
                                     </div>
                                 </div>
-                                <input type="hidden" name="task_interval_{{ task_type }}" value="{{ interval_seconds }}">
+                                <input type="hidden" name="task_interval_{{ task_type }}" value="{{ interval_seconds }}" data-interval-total>
                                 <div class="text-xs text-muted pt-1">{{ t.desc_interval_hint or '自动换算为秒保存' }}</div>
                             </div>
                         </div>
