@@ -6,9 +6,9 @@ YOLO + 感知哈希卡牌识别器
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import cv2
@@ -16,12 +16,12 @@ import numpy as np
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import (
-    YOLO_OBB_THRESHOLD,
     HASH_SIMILARITY_THRESHOLD,
+    YOLO_OBB_THRESHOLD,
 )
 from ptcgp_auto_v2.infra.adb import AdbController
-from ptcgp_auto_v2.infra.model_manager import ModelManager
 from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
+from ptcgp_auto_v2.infra.model_manager import ModelManager
 from ptcgp_auto_v2.utils.perceptual_hash import (
     bgr_to_color_pixels,
     calculate_perceptual_hash,
@@ -97,13 +97,24 @@ class YoloCardRecognizer:
         set_code: Optional[str] = None,
         obb_threshold: float = DEFAULT_OBB_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+        debug: bool = False,
+        resolve_name: Optional[callable] = None,
     ) -> List[DetectedCard]:
         """通用扫描接口，支持全局或指定系列"""
-        results, total = self._scan_common(
-            set_code=set_code,
-            obb_threshold=obb_threshold,
-            similarity_threshold=similarity_threshold,
-        )
+        unmatched: List[dict] = []
+        if debug:
+            results, total, unmatched = self._scan_common_with_unmatched(
+                set_code=set_code,
+                obb_threshold=obb_threshold,
+                similarity_threshold=similarity_threshold,
+            )
+        else:
+            results, total = self._scan_common(
+                set_code=set_code,
+                obb_threshold=obb_threshold,
+                similarity_threshold=similarity_threshold,
+            )
+
         converted = [
             DetectedCard(
                 set_code=item["set_code"],
@@ -117,34 +128,47 @@ class YoloCardRecognizer:
         ]
         converted = self._sort_by_reading_order(converted)
         logger.info(f"识别完成: {len(converted)}/{total} 张卡牌匹配成功")
+        if debug:
+            self._log_debug_details(converted, unmatched, resolve_name)
         return converted
 
-    def scan_with_debug(
-        self,
-        set_code: Optional[str] = None,
-        obb_threshold: float = DEFAULT_OBB_THRESHOLD,
-        similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-    ) -> tuple[List[DetectedCard], List[dict]]:
-        """扫描并返回匹配与未匹配卡牌详情"""
-        results, total, unmatched = self._scan_common_with_unmatched(
-            set_code=set_code,
-            obb_threshold=obb_threshold,
-            similarity_threshold=similarity_threshold,
-        )
-        converted = [
-            DetectedCard(
-                set_code=item["set_code"],
-                card_number=item["card_number"],
-                confidence=item["confidence"],
-                similarity=item["similarity"],
-                bbox=item["bbox"],
-                center=item["center"],
-            )
-            for item in results
-        ]
-        converted = self._sort_by_reading_order(converted)
-        logger.info(f"识别完成: {len(converted)}/{total} 张卡牌匹配成功")
-        return converted, unmatched
+    @staticmethod
+    def _log_debug_details(
+        detected: List[DetectedCard],
+        unmatched: List[dict],
+        resolve_name: Optional[callable] = None,
+    ):
+        if detected:
+            logger.info("====== 识别到 %s 张卡牌 ======", len(detected))
+            for item in detected:
+                card_name = (
+                    resolve_name(item.set_code, item.card_number)
+                    if resolve_name
+                    else None
+                )
+                name_suffix = f"{card_name}" if card_name else ""
+                logger.info(
+                    "  - %s-%s-%s (Conf: %.2f, Sim: %.2f)",
+                    item.set_code or "?",
+                    item.card_number,
+                    name_suffix,
+                    item.confidence,
+                    item.similarity,
+                )
+
+        if unmatched:
+            logger.info("====== 未匹配 %s 张卡牌 ======", len(unmatched))
+            for idx, item in enumerate(unmatched, start=1):
+                logger.info(
+                    "  - #%s best=%s/%s (Conf: %.2f, Sim: %.2f)",
+                    idx,
+                    item.get("best_set_code") or "unknown",
+                    item.get("best_card_number")
+                    if item.get("best_card_number") is not None
+                    else "unknown",
+                    float(item.get("confidence") or 0.0),
+                    float(item.get("similarity") or 0.0),
+                )
 
     def _scan_common(
         self,
