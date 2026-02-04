@@ -125,6 +125,15 @@ TEXT_PATTERNS = {
     "card_sort_title": ["排序"],
     "card_sort_by_acquired": ["按卡牌獲得順序"],
     # ============================================================
+    # 得卡挑战相关
+    # ============================================================
+    "card_challenge_title": ["得卡挑戰"],
+    "card_challenge_get": ["GET!"],
+    "card_challenge_remaining_plays": ["剩餘遊玩次數"],
+    "card_challenge_recover": ["恢復"],
+    "card_challenge_end_already": ["已挑戰"],
+    "card_challenge_end_finished": ["已結束"],
+    # ============================================================
     # 新账号初始化流程
     # ============================================================
     "init_select_country": ["選擇國家", "請選擇您居住的國家"],

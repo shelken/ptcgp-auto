@@ -28,8 +28,8 @@ from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
-from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
+from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     long_press_text,
@@ -696,7 +696,7 @@ class OpenPackTask(Task):
         for attempt in range(max_retries):
             try:
                 cards = self.card_recognizer.scan_pack_result(
-                    set_code, similarity_threshold=0.68
+                    set_code, similarity_threshold=0.68, debug=True
                 )
                 if cards:
                     if self._packs_opened_count == 0:
@@ -706,14 +706,9 @@ class OpenPackTask(Task):
                         f"{c.card_number}(Conf:{c.confidence:.2f},Sim:{c.similarity:.2f})"
                         for c in cards
                     ]
-                    logger.debug(f"====== 识别到 {len(cards)} 张卡牌 ======")
-
                     current_batch_cards = []
 
                     for i, c in enumerate(cards):
-                        logger.debug(
-                            f"  - #{c.card_number} (Conf: {c.confidence:.2f}, Sim: {c.similarity:.2f})"
-                        )
                         # 使用 card_number 查询卡牌详情
                         card_obj = (
                             self._card_repo.get_card_by_set_and_number(
