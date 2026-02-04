@@ -29,6 +29,7 @@ from ptcgp_auto_v2.infra.icon_group_detector import (
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     quick_tap,
@@ -403,35 +404,14 @@ class CollectAccountCardsTask(Task):
         if self.account.id is None:
             return None
 
-        detected, unmatched = self.card_recognizer.scan_with_debug()
-        total_detected = len(detected) + len(unmatched)
-        if total_detected == 0:
-            logger.debug("未识别到卡牌或模型未就绪")
+        detected = self.card_recognizer.scan(
+            debug=True,
+            resolve_name=lambda set_code, card_number: resolve_card_name(
+                self._card_repo, set_code, card_number
+            ),
+        )
+        if not detected:
             return None
-
-        logger.info("====== 识别到 %s/%s 张卡牌 ======", len(detected), total_detected)
-        for item in detected:
-            logger.info(
-                "  - %s%s (Conf: %.2f, Sim: %.2f)",
-                item.set_code or "?",
-                item.card_number,
-                item.confidence,
-                item.similarity,
-            )
-
-        if unmatched:
-            logger.info("====== 未匹配 %s 张卡牌 ======", len(unmatched))
-            for idx, item in enumerate(unmatched, start=1):
-                logger.info(
-                    "  - #%s best=%s/%s (Conf: %.2f, Sim: %.2f)",
-                    idx,
-                    item.get("best_set_code") or "unknown",
-                    item.get("best_card_number")
-                    if item.get("best_card_number") is not None
-                    else "unknown",
-                    float(item.get("confidence") or 0.0),
-                    float(item.get("similarity") or 0.0),
-                )
 
         written = 0
         skipped_not_high = 0

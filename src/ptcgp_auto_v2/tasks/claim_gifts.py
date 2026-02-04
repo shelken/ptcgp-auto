@@ -20,12 +20,12 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
+    normalize_text,
     swipe,
     swipe_card_coords,
+    tap_box,
     tap_home_icon,
     tap_text,
-    tap_box,
-    normalize_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,8 +73,8 @@ def _build_claim_gifts_pages() -> list[dict]:
         },
         {
             # 送出谢谢弹窗：朋友礼物需要点击"謝謝！"确认
-            "name": "send_thanks_popup",
-            "identifiers": get_text_patterns("gift_send_thanks"),
+            "name": "popup_send_thanks",
+            "identifiers": get_text_patterns("popup_send_thanks"),
             "priority": 13,
         },
         {
@@ -148,7 +148,7 @@ class ClaimGiftsTask(Task):
             "gift_box_empty": self._handle_gift_box_empty,
             "game_home_main": self._handle_home,
             "card_register_page": self._handle_card_register,
-            "send_thanks_popup": self._handle_send_thanks,
+            "popup_send_thanks": self._handle_send_thanks,
             "gift_box_page": self._handle_gift_box,
             "home_icon": self._handle_home_icon,
         }
@@ -208,7 +208,7 @@ class ClaimGiftsTask(Task):
     def _handle_send_thanks(self, page_info: dict) -> ActionResult:
         """处理送出谢谢弹窗：点击"謝謝！"按钮"""
         ocr_results = page_info.get("ocr_results", [])
-        thanks_patterns = get_text_patterns("gift_thanks_button")
+        thanks_patterns = get_text_patterns("thanks_button")
 
         # 精确匹配「謝謝！」按钮
         result = tap_text(self.adb, ocr_results, thanks_patterns, wait=1.5, exact=True)
