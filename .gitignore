@@ -14,6 +14,7 @@ build/
 _out
 data**
 templates/cards/
+templates/packs/
 templates/packs_auto/
 .alma-snapshots
 runs/**
