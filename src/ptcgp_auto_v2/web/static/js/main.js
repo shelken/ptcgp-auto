@@ -906,9 +906,21 @@ function updateIntervalSeconds(inputEl) {
     const group = inputEl.closest('[data-interval-group]');
     if (!group) return;
 
-    const safeInt = (value) => {
-        const parsed = parseInt(value || '0', 10);
-        return Number.isNaN(parsed) ? 0 : parsed;
+    const parseUnit = (input, max) => {
+        if (!input) return 0;
+        const raw = input.value;
+        if (raw === '') return 0;
+        let value = parseInt(raw, 10);
+        if (Number.isNaN(value)) value = 0;
+        if (value < 0) {
+            value = 0;
+            input.value = '0';
+        }
+        if (typeof max === 'number' && value > max) {
+            value = max;
+            input.value = String(max);
+        }
+        return value;
     };
 
     const daysInput = group.querySelector("[data-interval-unit='days']");
@@ -916,13 +928,13 @@ function updateIntervalSeconds(inputEl) {
     const minutesInput = group.querySelector("[data-interval-unit='minutes']");
     const secondsInput = group.querySelector("[data-interval-unit='seconds']");
 
-    const days = safeInt(daysInput ? daysInput.value : 0);
-    const hours = safeInt(hoursInput ? hoursInput.value : 0);
-    const minutes = safeInt(minutesInput ? minutesInput.value : 0);
-    const seconds = safeInt(secondsInput ? secondsInput.value : 0);
+    const days = parseUnit(daysInput);
+    const hours = parseUnit(hoursInput, 23);
+    const minutes = parseUnit(minutesInput, 59);
+    const seconds = parseUnit(secondsInput, 59);
 
     const total = (days * 86400) + (hours * 3600) + (minutes * 60) + seconds;
-    const hidden = group.querySelector("input[name^='task_interval_']");
+    const hidden = group.querySelector('[data-interval-total]');
     if (hidden) {
         hidden.value = String(Math.max(0, total));
     }
