@@ -877,6 +877,8 @@ function updateTaskItemState(checkbox) {
         }
         taskItem.setAttribute('data-enabled', 'false');
     }
+
+    updateTaskOrder();
 }
 
 function updateTaskOrder() {
@@ -896,6 +898,33 @@ function updateTaskOrder() {
     const orderField = document.getElementById('task_order');
     if (orderField) {
         orderField.value = JSON.stringify(orderedTaskTypes);
+    }
+}
+
+function updateIntervalSeconds(inputEl) {
+    if (!inputEl) return;
+    const group = inputEl.closest('[data-interval-group]');
+    if (!group) return;
+
+    const safeInt = (value) => {
+        const parsed = parseInt(value || '0', 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const daysInput = group.querySelector("[data-interval-unit='days']");
+    const hoursInput = group.querySelector("[data-interval-unit='hours']");
+    const minutesInput = group.querySelector("[data-interval-unit='minutes']");
+    const secondsInput = group.querySelector("[data-interval-unit='seconds']");
+
+    const days = safeInt(daysInput ? daysInput.value : 0);
+    const hours = safeInt(hoursInput ? hoursInput.value : 0);
+    const minutes = safeInt(minutesInput ? minutesInput.value : 0);
+    const seconds = safeInt(secondsInput ? secondsInput.value : 0);
+
+    const total = (days * 86400) + (hours * 3600) + (minutes * 60) + seconds;
+    const hidden = group.querySelector("input[name^='task_interval_']");
+    if (hidden) {
+        hidden.value = String(Math.max(0, total));
     }
 }
 
@@ -1374,6 +1403,7 @@ window.reinitCustomSelect = reinitCustomSelect;
 window.updateSidebarState = updateSidebarState;
 window.updateTaskItemState = updateTaskItemState;
 window.updateTaskOrder = updateTaskOrder;
+window.updateIntervalSeconds = updateIntervalSeconds;
 window.addPlan = addPlan;
 window.removePlan = removePlan;
 window.savePlans = savePlans;
