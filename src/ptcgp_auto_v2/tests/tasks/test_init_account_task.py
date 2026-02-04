@@ -7,6 +7,7 @@
 
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,7 +19,7 @@ from ptcgp_auto_v2.tasks.init_account import (
     InitAccountTask,
     _build_init_pages,
 )
-from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
+from ptcgp_auto_v2.core.task_base import ActionResult, TaskRegistry, ResetType
 
 
 class FakeDevice:
@@ -495,6 +496,26 @@ class TestHandleEnjoy(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(task._phase, InitAccountPhase.COMPLETED)
+
+
+class TestHandleSelectFavoriteCard(unittest.TestCase):
+    """测试选择喜欢的卡牌页面处理"""
+
+    def test_uses_card_pick_helper(self):
+        """测试调用选卡共用助手"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+
+        with patch(
+            "ptcgp_auto_v2.tasks.init_account.tap_favorite_card",
+            create=True,
+            return_value=ActionResult.ok(wait=0.5),
+        ) as mock_helper:
+            result = task._handle_select_favorite_card({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        mock_helper.assert_called_once_with(adb, wait=1.0)
 
 
 if __name__ == "__main__":
