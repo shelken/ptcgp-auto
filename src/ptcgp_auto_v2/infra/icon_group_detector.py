@@ -41,6 +41,12 @@ def _calc_center(box: Tuple[int, int, int, int]) -> Tuple[float, float]:
     return (x1 + x2) / 2.0, (y1 + y2) / 2.0
 
 
+def _normalize_template_path(template_path: str) -> str:
+    if template_path.lower().endswith(".png"):
+        return template_path
+    return f"{template_path}.png"
+
+
 def _nms_boxes(
     boxes: List[Tuple[int, int, int, int, float]],
     iou_thresh: float,
@@ -86,7 +92,8 @@ class IconGroupDetector:
         if screen_width:
             self.template_matcher.set_screen_width(screen_width)
         for template_path in templates:
-            self.template_matcher.load_template(template_path)
+            normalized_path = _normalize_template_path(template_path)
+            self.template_matcher.load_template(normalized_path)
 
     def detect_icons(
         self,
@@ -108,9 +115,12 @@ class IconGroupDetector:
 
         hits: List[IconHit] = []
         for template_name, template_path in template_paths.items():
-            self.template_matcher.load_template(template_path)
+            normalized_path = _normalize_template_path(template_path)
+            self.template_matcher.load_template(normalized_path)
             template_key = (
-                template_path[:-4] if template_path.endswith(".png") else template_path
+                normalized_path[:-4]
+                if normalized_path.endswith(".png")
+                else normalized_path
             )
             template = self.template_matcher.templates.get(template_key)
             if template is None:
