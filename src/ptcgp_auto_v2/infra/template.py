@@ -140,81 +140,6 @@ class TemplateMatcher:
         logger.debug(f"加载核心模板: {count} 个")
         self._core_loaded = True
 
-    # 兼容旧接口
-    def load_templates(self, screen_width: int = TEMPLATE_BASE_WIDTH):
-        self.load_core_templates(screen_width)
-
-    def load_pack_templates(
-        self, pack_code: str, booster_name: Optional[str] = None
-    ) -> int:
-        """
-        加载指定卡包的模板（卡牌图片）
-
-        Args:
-            pack_code: 卡包代码，如 "A1"
-            booster_name: 子包名称，如 "Charizard" (可选，若不传则加载该系列下所有卡牌)
-
-        Returns:
-            加载数量
-        """
-        # 路径规则: cards/{pack_code}[/{booster_name_safe}]
-        sub_dir = f"cards/{pack_code}"
-
-        if booster_name:
-            # 确保空格被替换为下划线
-            safe_booster = normalize_name_str(booster_name)
-            sub_dir = f"{sub_dir}/{safe_booster}"
-
-        target_dir = self.templates_dir / sub_dir
-        if not target_dir.exists():
-            logger.warning(f"卡包模板目录不存在: {target_dir}")
-            return 0
-
-        count = 0
-        for file in target_dir.glob("**/*.png"):
-            if self._load_template_file(file, is_pack_template=True):
-                count += 1
-
-        label = f"{pack_code}/{booster_name}" if booster_name else f"{pack_code}(All)"
-        logger.debug(f"加载卡包模板 {label}: {count} 个")
-        return count
-
-    def unload_pack_templates(self):
-        """卸载所有已加载的卡包模板，释放内存"""
-        if not self._loaded_pack_templates:
-            return
-
-        count = 0
-        for name in self._loaded_pack_templates:
-            if name in self.templates:
-                del self.templates[name]
-                count += 1
-
-        self._loaded_pack_templates.clear()
-        logger.debug(f"已卸载 {count} 个卡包模板")
-
-    def load_additional_templates(self, sub_dir: str, is_pack_template: bool = False):
-        """
-        加载指定子目录的模板（增量加载）
-
-        Args:
-            sub_dir: 相对于 templates 的子目录，如 "cards/A1/Charizard"
-            is_pack_template: 是否标记为 pack template（用于卡牌识别）
-        """
-        target_dir = self.templates_dir / sub_dir
-        if not target_dir.exists():
-            logger.warning(f"附加模板目录不存在: {target_dir}")
-            return
-
-        count = 0
-        for file in target_dir.glob("**/*.png"):
-            if self._load_template_file(file, is_pack_template=is_pack_template):
-                count += 1
-
-        logger.debug(
-            f"加载附加模板 {sub_dir} (pack_template={is_pack_template}): {count} 个"
-        )
-
     def load_template(self, template_path: str, is_pack_template: bool = False) -> bool:
         """
         加载单个模板文件
@@ -267,10 +192,6 @@ class TemplateMatcher:
         """确保核心模板已加载"""
         if not self._core_loaded:
             self.load_core_templates()
-
-    def _load_core_templates_only(self):
-        """已弃用，使用 load_core_templates"""
-        self.load_core_templates()
 
     def find(
         self,

@@ -22,10 +22,7 @@ def get_boosters(pack_code: str) -> List[str]:
         如果 pack_code 不存在，返回空列表
     """
     repo = CardRepository()
-    data = repo.get_packs_by_set(pack_code)
-    if not data or pack_code not in data:
-        return []
-    return data[pack_code].get("boosters", [])
+    return repo.get_pack_names_by_set(pack_code)
 
 
 def get_booster_count(pack_code: str) -> int:
