@@ -1,8 +1,11 @@
 import json
 
+import json
+
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
-from ptcgp_auto_v2.db.repositories import TaskPlanRepository
+from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
@@ -114,7 +117,13 @@ def upsert_plan_from_form(form) -> None:
             task_types=json.dumps(task_types),
             configuration=json.dumps(configuration),
         )
-        repo.create(plan)
+        plan = repo.create(plan)
+
+    if plan and plan.id is not None:
+        account_repo = AccountRepository()
+        accounts = account_repo.list_accounts_by_plan_id(plan.id)
+        for account in accounts:
+            recompute_next_run_at_for_account(account, plan.task_types_list)
 
 
 def delete_plan_by_id(plan_id: int) -> None:

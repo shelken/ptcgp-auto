@@ -198,6 +198,59 @@ export function restoreTasksFilters(context = document) {
     applyFormFilters(form, filters);
 }
 
+// --- 初始化任务排序控件 ---
+export function initTaskSortControls(context = document) {
+    const form = context.querySelector('#task-filter-form') || document.querySelector('#task-filter-form');
+    if (!form) return;
+    const sortInput = form.querySelector('#task-sort-by');
+    const orderInput = form.querySelector('#task-sort-order');
+    if (!sortInput || !orderInput) return;
+
+    let buttons = context.querySelectorAll('.task-sort-btn');
+    if (!buttons.length) {
+        buttons = document.querySelectorAll('.task-sort-btn');
+    }
+    if (!buttons.length) return;
+
+    const updateArrows = () => {
+        const currentSort = sortInput.value || 'last_completed_at';
+        const currentOrder = orderInput.value === 'asc' ? 'asc' : 'desc';
+        buttons.forEach((button) => {
+            const arrow = button.querySelector('.task-sort-arrow');
+            if (!arrow) return;
+            if (button.dataset.sortBy === currentSort) {
+                arrow.textContent = currentOrder === 'asc' ? '↑' : '↓';
+            } else {
+                arrow.textContent = '';
+            }
+        });
+    };
+
+    const setSort = (sortBy, order) => {
+        sortInput.value = sortBy;
+        orderInput.value = order;
+        updateArrows();
+        orderInput.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    updateArrows();
+
+    buttons.forEach((button) => {
+        if (button.dataset.bound) return;
+        button.addEventListener('click', () => {
+            const sortBy = button.dataset.sortBy || 'last_completed_at';
+            const defaultOrder = button.dataset.defaultOrder || 'desc';
+            if (sortInput.value === sortBy) {
+                const nextOrder = orderInput.value === 'asc' ? 'desc' : 'asc';
+                setSort(sortBy, nextOrder);
+                return;
+            }
+            setSort(sortBy, defaultOrder);
+        });
+        button.dataset.bound = 'true';
+    });
+}
+
 // --- 检查筛选组是否有选择 ---
 function hasOwnedFilterSelection(group) {
     const inputs = group.querySelectorAll('input[type="checkbox"]');

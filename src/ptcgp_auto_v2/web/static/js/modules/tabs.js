@@ -60,6 +60,9 @@ export function switchTab(tabName, options = {}) {
         if (container && container.dataset.loaded !== 'true') {
             restoreFilters();
         }
+        if (container && container.dataset.autoRefresh) {
+            triggerAutoRefresh(container);
+        }
     }
 
     if (tabName === 'owned-cards') {
@@ -89,6 +92,39 @@ export function switchTab(tabName, options = {}) {
             if (targetBtn) targetBtn.click();
         }
     }
+}
+
+function triggerAutoRefresh(container) {
+    if (!container) return;
+    if (!isElementInActiveTab(container)) return;
+
+    const baseUrl = container.dataset.autoRefresh;
+    const includeSelector = container.dataset.refreshInclude;
+    let url = baseUrl;
+
+    if (includeSelector) {
+        const form = document.querySelector(includeSelector);
+        const params = new URLSearchParams();
+        params.set('page', '0');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const lang = urlParams.get('lang') || 'en';
+        params.set('lang', lang);
+
+        if (form) {
+            const formData = new FormData(form);
+            formData.forEach((value, key) => {
+                params.append(key, value);
+            });
+        }
+
+        url = `${baseUrl}?${params.toString()}`;
+    }
+
+    htmx.ajax('GET', url, {
+        target: container,
+        swap: 'innerHTML'
+    });
 }
 
 // --- 更新侧边栏状态 ---
