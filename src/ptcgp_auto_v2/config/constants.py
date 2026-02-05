@@ -13,6 +13,7 @@ PACK_AUTO_HASH_VIRTUAL_NODES = 32  # 一致性哈希虚拟节点数
 # ADB 配置
 DEFAULT_ADB_PORT = 5555  # 默认 ADB 端口
 DEFAULT_ADB_ADDRESS = "127.0.0.1:5555"  # 默认 ADB 地址
+ADB_CONNECT_FAIL_RESTART_THRESHOLD = 3  # 连接失败重启模拟器阈值
 
 # 应用配置
 APP_PACKAGE = "jp.pokemon.pokemontcgp"
@@ -65,7 +66,7 @@ SCALE_PACK_DETAIL = 5.05  # 旧值: 1.0
 # YOLO检测置信度阈值（来自 test_massive_matching.py 实测验证）
 YOLO_OBB_THRESHOLD = 0.55
 # Hash匹配相似度阈值（来自 test_massive_matching.py 实测验证）
-HASH_SIMILARITY_THRESHOLD = 0.7
+HASH_SIMILARITY_THRESHOLD = 0.75
 # Hash匹配相似度最小差距（用于排除相近候选）
 HASH_SIMILARITY_GAP_MIN = 0.02
 
