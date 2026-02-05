@@ -1,0 +1,101 @@
+from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
+
+from ptcgp_auto_v2.db.models.account import Account
+from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
+from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
+from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+
+
+def get_accounts_context(session: Session, lang: str) -> dict:
+    """获取账号管理列表视图数据。"""
+    current_lang = normalize_lang(lang)
+    t = get_translations(current_lang)
+    repo = AccountRepository()
+    accounts = repo.get_all()
+
+    config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
+    all_configs = session.exec(config_stm).all()
+    pack_configs_map = {item.account_id: item for item in all_configs}
+
+    return {
+        "accounts": accounts,
+        "pack_configs": pack_configs_map,
+        "t": t,
+        "current_lang": current_lang,
+    }
+
+
+def build_account_edit_context(account_id: int, lang: str) -> dict | None:
+    """构建账号编辑弹窗数据。"""
+    current_lang = normalize_lang(lang)
+    t = get_translations(current_lang)
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+    if not account:
+        return None
+    return {"account": account, "t": t, "current_lang": current_lang}
+
+
+def update_account_details(account_id: int, nickname: str, remark: str) -> None:
+    """更新账号信息。"""
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+    if not account:
+        return
+    account.nickname = nickname
+    account.remark = remark
+    repo.update(account)
+
+
+def build_account_plans_context(
+    session: Session, account_id: int, lang: str
+) -> dict | None:
+    """构建账号计划编辑弹窗数据。"""
+    current_lang = normalize_lang(lang)
+    t = get_translations(current_lang)
+    statement = (
+        select(Account)
+        .where(Account.id == account_id)
+        .options(
+            selectinload(Account.task_plan_associations).selectinload(
+                AccountTaskPlan.task_plan
+            )
+        )
+    )
+    account = session.exec(statement).first()
+    if not account:
+        return None
+
+    plan_repo = TaskPlanRepository()
+    all_plans = plan_repo.get_all()
+    current_assocs = sorted(
+        account.task_plan_associations, key=lambda item: -item.priority
+    )
+    associated_plan_ids = {assoc.task_plan_id for assoc in current_assocs}
+    available_plans = [plan for plan in all_plans if plan.id not in associated_plan_ids]
+
+    return {
+        "account": account,
+        "current_assocs": current_assocs,
+        "available_plans": available_plans,
+        "t": t,
+        "current_lang": current_lang,
+    }
+
+
+def update_account_plans(account_id: int, data: list[dict]) -> None:
+    """保存账号计划关联关系。"""
+    repo = AccountRepository()
+    plans_data = []
+    base_priority = 100
+    for index, item in enumerate(data):
+        plan_id = item.get("plan_id")
+        is_active = item.get("is_active", True)
+        if plan_id:
+            priority = max(0, base_priority - (index * 10))
+            plans_data.append(
+                {"plan_id": int(plan_id), "is_active": is_active, "priority": priority}
+            )
+    repo.update_plan_associations(account_id, plans_data)
