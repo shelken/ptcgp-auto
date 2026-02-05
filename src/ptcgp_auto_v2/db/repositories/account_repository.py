@@ -88,6 +88,25 @@ class AccountRepository:
             accounts = list(session.exec(statement).all())
             return accounts
 
+    def list_accounts_by_plan_id(self, plan_id: int) -> List[Account]:
+        """获取关联指定计划的账号列表。"""
+        with Session(get_engine()) as session:
+            statement = (
+                select(Account)
+                .join(
+                    AccountTaskPlan,
+                    AccountTaskPlan.account_id == Account.id,
+                )
+                .where(AccountTaskPlan.task_plan_id == plan_id)
+                .options(
+                    selectinload(
+                        cast(Any, Account.task_plan_associations)
+                    ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
+                )
+                .order_by(col(Account.id))
+            )
+            return list(session.exec(statement).all())
+
     def create(self, account: Account, auto_assign_plan: bool = True) -> Account:
         """创建账号
 

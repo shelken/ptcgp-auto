@@ -105,23 +105,27 @@
     {{ rows_content }}
 {% else %}
     <div class="brutal-card p-6">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-            <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
-            <button class="brutal-btn"
-                    hx-get="/management/tasks?lang={{ current_lang }}"
-                    hx-target="#management-content">
-                {{ t.btn_refresh or 'Refresh' }}
-            </button>
-        </div>
-
         <form id="task-filter-form"
-              class="flex flex-col lg:flex-row flex-wrap gap-4 mb-6"
               hx-get="/api/tasks?page=0&lang={{ current_lang }}"
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
               onchange="saveTasksFilters()">
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
+                <button class="brutal-btn"
+                        type="button"
+                        hx-get="/management/tasks?lang={{ current_lang }}"
+                        hx-target="#management-content">
+                    {{ t.btn_refresh or 'Refresh' }}
+                </button>
+            </div>
+
+            <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'last_completed_at' }}">
+            <input type="hidden" name="sort_order" id="task-sort-order" value="{{ selected_sort_order or 'desc' }}">
+
+            <div class="flex flex-col lg:flex-row flex-wrap gap-4 mb-6">
+                <div class="flex flex-col gap-1">
                 <label for="task-filter-status" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_status or 'Status' }}</label>
                 <select id="task-filter-status" name="status" class="js-custom-select brutal-input w-52">
                     <option value="">{{ t.label_all or 'All' }}</option>
@@ -164,18 +168,42 @@
                     {% endfor %}
                 </select>
             </div>
+            </div>
         </form>
 
         <div id="task-table-container" class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="border-b-4 border-theme">
-                        {% for header in table_headers %}
-                            <th class="p-3 font-bold uppercase text-sm">{{ header }}</th>
-                        {% endfor %}
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_account or 'Account' }}</th>
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_task or 'Task' }}</th>
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_status or 'Status' }}</th>
+                        <th class="p-3 font-bold uppercase text-sm">
+                            <button type="button"
+                                    class="task-sort-btn flex items-center gap-1"
+                                    data-sort-by="last_completed_at"
+                                    data-default-order="desc">
+                                <span>{{ t.col_last_completed or 'Last Completed' }}</span>
+                                <span class="task-sort-arrow" aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="p-3 font-bold uppercase text-sm">
+                            <button type="button"
+                                    class="task-sort-btn flex items-center gap-1"
+                                    data-sort-by="next_run_at"
+                                    data-default-order="asc">
+                                <span>{{ t.col_next_run or 'Next Run' }}</span>
+                                <span class="task-sort-arrow" aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_reset_type or 'Reset Type' }}</th>
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_plan or 'Plan' }}</th>
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_error or 'Error' }}</th>
                     </tr>
                 </thead>
                 <tbody id="task-table-body"
+                       data-auto-refresh="/api/tasks"
+                       data-refresh-include="#task-filter-form"
                        data-relative-locale="{{ current_lang }}"
                        data-relative-just-now="{{ t.relative_just_now or 'Just now' }}"
                        data-relative-soon="{{ t.relative_soon or 'Soon' }}"

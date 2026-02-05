@@ -23,6 +23,8 @@ async def get_management_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
+    sort_by: str = Query(default="last_completed_at"),
+    sort_order: str = Query(default="desc"),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染任务管理列表。"""
@@ -50,6 +52,8 @@ async def get_management_tasks(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     next_page_url = build_tasks_page_url(
         page + 1,
@@ -57,6 +61,8 @@ async def get_management_tasks(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
     templates = get_templates()
@@ -75,6 +81,8 @@ async def get_management_tasks(
             "selected_status": normalized_status,
             "selected_task_type": normalized_task_type,
             "selected_account_id": parsed_account_id,
+            "selected_sort_by": sort_by,
+            "selected_sort_order": sort_order,
             "table_only": False,
             "t": t,
             "current_lang": current_lang,
@@ -90,6 +98,8 @@ async def get_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
+    sort_by: str = Query(default="last_completed_at"),
+    sort_order: str = Query(default="desc"),
     lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
@@ -116,6 +126,8 @@ async def get_tasks(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
     if not tasks and page > 0:
         return ""
@@ -126,6 +138,8 @@ async def get_tasks(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
     )
 
     templates = get_templates()
@@ -144,6 +158,8 @@ async def get_tasks(
             "selected_status": normalized_status,
             "selected_task_type": normalized_task_type,
             "selected_account_id": parsed_account_id,
+            "selected_sort_by": sort_by,
+            "selected_sort_order": sort_order,
             "table_only": True,
             "t": t,
             "current_lang": current_lang,

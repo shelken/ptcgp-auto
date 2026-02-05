@@ -41,6 +41,7 @@ class TaskInstance(SQLModel, table=True):
     reset_type: str = Field(default="daily", description="daily/weekly/once")
     error_message: Optional[str] = None
     last_completed_at: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
@@ -71,6 +72,7 @@ class TaskInstance(SQLModel, table=True):
             "last_completed_at": (
                 self.last_completed_at.isoformat() if self.last_completed_at else None
             ),
+            "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
