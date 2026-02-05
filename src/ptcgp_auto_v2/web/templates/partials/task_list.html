@@ -35,12 +35,21 @@
                 {% endif %}
             {% endset %}
             {% set next_run_cell %}
-            {% if item.next_run_at %}
-                <span class="font-mono text-sm tooltip-text relative-time"
-                      data-iso="{{ item.next_run_at_iso }}"
-                      data-tooltip="{{ item.next_run_at|datetime }}">
-                    {{ item.next_run_at|datetime }}
-                </span>
+            {% if item.status == 'running' %}
+                <span class="font-mono text-sm text-muted">{{ t.status_running or 'Running' }}</span>
+            {% elif item.next_run_at %}
+                {% if item.next_run_at_is_past %}
+                    <span class="font-mono text-sm text-muted tooltip-text"
+                          data-tooltip="{{ item.next_run_at|datetime }}">
+                        {{ t.next_run_overdue or 'Overdue' }}
+                    </span>
+                {% else %}
+                    <span class="font-mono text-sm tooltip-text relative-time"
+                          data-iso="{{ item.next_run_at_iso }}"
+                          data-tooltip="{{ item.next_run_at|datetime }}">
+                        {{ item.next_run_at|datetime }}
+                    </span>
+                {% endif %}
             {% else %}
                 <span class="text-muted">--</span>
             {% endif %}
@@ -110,13 +119,15 @@
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
-              onchange="saveTasksFilters()">
+              onchange="saveTasksFilters()"
+              data-restore-trigger="true">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
                 <button class="brutal-btn"
                         type="button"
                         hx-get="/management/tasks?lang={{ current_lang }}"
-                        hx-target="#management-content">
+                        hx-target="#management-content"
+                        hx-include="#task-filter-form">
                     {{ t.btn_refresh or 'Refresh' }}
                 </button>
             </div>
