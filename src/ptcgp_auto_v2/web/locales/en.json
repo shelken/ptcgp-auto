@@ -90,6 +90,7 @@
     "label_nickname": "NICKNAME",
     "btn_refresh": "Refresh",
     "btn_reset_completed": "Reset Completed",
+    "label_auto": "Auto",
     "btn_new_plan": "+ New Plan",
     "col_id": "ID",
     "col_game_id": "Game ID",

@@ -5,8 +5,16 @@ from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
+from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
-from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+from ptcgp_auto_v2.db.repositories import (
+    AccountRepository,
+    CardRepository,
+    PackRecordRepository,
+    TaskPlanRepository,
+)
+from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
@@ -22,9 +30,28 @@ def get_accounts_context(session: Session, lang: str) -> dict:
     all_configs = session.exec(config_stm).all()
     pack_configs_map = {item.account_id: item for item in all_configs}
 
+    auto_pack_map: dict[int, dict] = {}
+    if accounts:
+        settings = get_settings()
+        card_repo = CardRepository()
+        record_repo = PackRecordRepository()
+        for account in accounts:
+            if account.id is None or account.id in pack_configs_map:
+                continue
+            selected = select_pack_for_account(
+                account=account,
+                strategy=settings.pack_auto_strategy,
+                card_repo=card_repo,
+                record_repo=record_repo,
+                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+            )
+            if selected:
+                auto_pack_map[account.id] = selected
+
     return {
         "accounts": accounts,
         "pack_configs": pack_configs_map,
+        "auto_pack_map": auto_pack_map,
         "t": t,
         "current_lang": current_lang,
     }
