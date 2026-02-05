@@ -1,6 +1,6 @@
-{% from "partials/macros/tables.html" import table_container, table_row %}
+{% from "partials/macros/tables.html" import table_container, table_row, auto_refresh_container %}
 
-<div class="brutal-card p-6">
+{% call auto_refresh_container("/management/plans?lang=" ~ current_lang, '', 'outerHTML', 'brutal-card p-6') %}
     <div class="flex justify-between items-center mb-6">
         <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_plans or 'TASK PLANS' }}</h2>
         <div class="flex gap-2">
@@ -56,4 +56,4 @@
             ], row_class='border-subtle hover-bg-subtle') }}
         {% endfor %}
     {% endcall %}
-</div>
+{% endcall %}

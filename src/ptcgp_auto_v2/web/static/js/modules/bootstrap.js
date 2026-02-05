@@ -7,6 +7,7 @@ import {
     restoreTasksFilters,
     updateOwnedFilterGroupsState,
     saveOwnedFilters,
+    initTaskSortControls,
 } from './filters.js';
 import { restoreOwnedGridCols } from './owned_cards.js';
 import { initSortable } from './tasks.js';
@@ -94,9 +95,22 @@ export function restoreTheme() {
 function autoRefreshList(container) {
     if (!container) return;
     if (!isElementInActiveTab(container)) return;
+    if (container.dataset.loaded === 'false') return;
 
     const baseUrl = container.dataset.autoRefresh;
     const includeSelector = container.dataset.refreshInclude;
+    const swap = container.dataset.refreshSwap || 'innerHTML';
+    const targetSelector = container.dataset.refreshTarget;
+    const target = targetSelector ? document.querySelector(targetSelector) : container;
+    if (target && target.dataset && target.dataset.refreshing === '1') {
+        return;
+    }
+    if (target && target.dataset) {
+        if (target.dataset.refreshing === '1') {
+            return;
+        }
+        target.dataset.refreshing = '1';
+    }
 
     let url = baseUrl;
 
@@ -120,8 +134,8 @@ function autoRefreshList(container) {
     }
 
     htmx.ajax('GET', url, {
-        target: container,
-        swap: 'innerHTML'
+        target: target || container,
+        swap
     });
 }
 
@@ -251,6 +265,7 @@ export function initApp() {
             initCustomSelects(evt.detail.elt);
             updateRelativeTimes(evt.detail.elt);
             restoreTasksFilters(evt.detail.elt);
+            initTaskSortControls(evt.detail.elt);
         });
 
         document.body.addEventListener('change', (event) => {
@@ -299,13 +314,22 @@ export function initApp() {
             }
         });
 
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                document.querySelectorAll('[data-auto-refresh]').forEach(container => {
-                    autoRefreshList(container);
-                });
+        const triggerAutoRefreshAll = () => {
+            if (document.visibilityState !== 'visible') {
+                return;
             }
-        });
+            const now = Date.now();
+            if (window.lastAutoRefreshAt && now - window.lastAutoRefreshAt < 500) {
+                return;
+            }
+            window.lastAutoRefreshAt = now;
+            document.querySelectorAll('[data-auto-refresh]').forEach(container => {
+                autoRefreshList(container);
+            });
+        };
+
+        document.addEventListener('visibilitychange', triggerAutoRefreshAll);
+        window.addEventListener('focus', triggerAutoRefreshAll);
 
         document.body.addEventListener('htmx:beforeRequest', (event) => {
             const elt = event.detail && event.detail.elt;
@@ -318,6 +342,9 @@ export function initApp() {
                 event.preventDefault();
                 return;
             }
+            if (target && target.dataset) {
+                target.dataset.refreshing = '1';
+            }
 
             const trigger = elt ? elt.getAttribute('hx-trigger') || '' : '';
             const hxGet = elt ? elt.getAttribute('hx-get') || '' : '';
@@ -327,6 +354,13 @@ export function initApp() {
                 && !window.ownedCardsUserScrolled
             ) {
                 event.preventDefault();
+            }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', (event) => {
+            const target = event.detail && event.detail.target;
+            if (target && target.dataset) {
+                target.dataset.refreshing = '0';
             }
         });
 
@@ -364,5 +398,7 @@ export function initApp() {
             observer.observe(document.body, { childList: true, subtree: true });
             window.customSelectObserver = observer;
         }
+
+        initTaskSortControls(document);
     });
 }

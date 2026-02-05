@@ -1,10 +1,13 @@
 from sqlmodel import Session, select
+from typing import Any, cast
+
 from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
 
@@ -59,8 +62,8 @@ def build_account_plans_context(
         select(Account)
         .where(Account.id == account_id)
         .options(
-            selectinload(Account.task_plan_associations).selectinload(
-                AccountTaskPlan.task_plan
+            selectinload(cast(Any, Account.task_plan_associations)).selectinload(
+                cast(Any, AccountTaskPlan.task_plan)
             )
         )
     )
@@ -99,3 +102,13 @@ def update_account_plans(account_id: int, data: list[dict]) -> None:
                 {"plan_id": int(plan_id), "is_active": is_active, "priority": priority}
             )
     repo.update_plan_associations(account_id, plans_data)
+
+    account = repo.get_by_id(account_id)
+    if not account:
+        return
+    task_types: set[str] = set()
+    for assoc in account.task_plan_associations or []:
+        if not assoc.is_active or not assoc.task_plan:
+            continue
+        task_types.update(assoc.task_plan.task_types_list)
+    recompute_next_run_at_for_account(account, list(task_types))

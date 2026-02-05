@@ -13,11 +13,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
+from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult, TaskStatus
-from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
-from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
+from ptcgp_auto_v2.core.task_plan_utils import (
+    build_account_plan_cache,
+    compute_next_run_for_instance,
+)
 from ptcgp_auto_v2.infra.page_detector import DEFAULT_TEMPLATE_THRESHOLD
+from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account, TaskInstance
@@ -87,12 +91,12 @@ class BaseExecutor(ABC):
 
     def _init_components(self):
         """初始化基础设施组件"""
-        from ptcgp_auto_v2.infra.adb import AdbController
-        from ptcgp_auto_v2.infra.ocr import OcrEngine
-        from ptcgp_auto_v2.infra.template import TemplateMatcher
-        from ptcgp_auto_v2.infra.page_detector import PageDetector
         from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
         from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+        from ptcgp_auto_v2.infra.adb import AdbController
+        from ptcgp_auto_v2.infra.ocr import OcrEngine
+        from ptcgp_auto_v2.infra.page_detector import PageDetector
+        from ptcgp_auto_v2.infra.template import TemplateMatcher
 
         self._adb = AdbController(self.device.address)
         if not self._adb.connect():
@@ -242,6 +246,13 @@ class BaseExecutor(ABC):
         task_instance.status = status.value
         if status == TaskStatus.COMPLETED:
             task_instance.last_completed_at = datetime.now()
+            # 根据账号计划配置计算下次运行时间
+            account_cache = build_account_plan_cache(account)
+            next_run_at, _, _, _ = compute_next_run_for_instance(
+                task_instance,
+                account_cache,
+            )
+            task_instance.next_run_at = next_run_at
             # 恢复被阻塞的任务（前置任务完成后）
             self._unblock_dependent_tasks(account)
             if clear_error_on_success:
@@ -292,7 +303,10 @@ class TaskExecutor(BaseExecutor):
     @property
     def account(self) -> "Account":
         """获取任务关联的账号"""
-        return self.task_instance.account
+        account = self.task_instance.account
+        if account is None:
+            raise RuntimeError("任务实例未绑定账号")
+        return account
 
     def _create_task(self) -> Task:
         """创建任务实例"""
@@ -315,7 +329,7 @@ class TaskExecutor(BaseExecutor):
         包含重试逻辑和错误处理。
         """
         # 设置日志上下文（端口号、账号昵称、任务名）
-        from ptcgp_auto_v2.utils.logger import set_context, clear_context
+        from ptcgp_auto_v2.utils.logger import clear_context, set_context
 
         port = (
             self.device.address.split(":")[-1]
@@ -527,7 +541,7 @@ class AccountBatchExecutor(BaseExecutor):
 
         按顺序执行所有任务，单个任务失败不影响后续任务执行。
         """
-        from ptcgp_auto_v2.utils.logger import set_context, clear_context
+        from ptcgp_auto_v2.utils.logger import clear_context, set_context
 
         port = (
             self.device.address.split(":")[-1]

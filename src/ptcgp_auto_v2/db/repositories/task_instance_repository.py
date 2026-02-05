@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import TaskInstance
+from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskInstance
 
 
 class TaskInstanceRepository:
@@ -59,6 +60,11 @@ class TaskInstanceRepository:
             statement = (
                 select(TaskInstance)
                 .where(TaskInstance.status == "pending")
+                .options(
+                    selectinload(cast(Any, TaskInstance.account))
+                    .selectinload(cast(Any, Account.task_plan_associations))
+                    .selectinload(cast(Any, AccountTaskPlan.task_plan))
+                )
                 .order_by(col(TaskInstance.created_at))
                 .limit(1)
             )
@@ -84,6 +90,11 @@ class TaskInstanceRepository:
                 select(TaskInstance)
                 .where(TaskInstance.status == "pending")
                 .where(col(TaskInstance.account_id).notin_(busy_account_ids))
+                .options(
+                    selectinload(cast(Any, TaskInstance.account))
+                    .selectinload(cast(Any, Account.task_plan_associations))
+                    .selectinload(cast(Any, AccountTaskPlan.task_plan))
+                )
                 .order_by(col(TaskInstance.created_at))
                 .limit(1)
             )
@@ -97,9 +108,15 @@ class TaskInstanceRepository:
         """获取账号的所有待执行任务（不排序，由调度器决定顺序）"""
         with Session(get_engine()) as session:
             statement = (
-                select(TaskInstance).where(
+                select(TaskInstance)
+                .where(
                     TaskInstance.account_id == account_id,
                     TaskInstance.status == "pending",
+                )
+                .options(
+                    selectinload(cast(Any, TaskInstance.account))
+                    .selectinload(cast(Any, Account.task_plan_associations))
+                    .selectinload(cast(Any, AccountTaskPlan.task_plan))
                 )
                 # 不排序，由调度器根据 task_plan 的 task_types 顺序重新排序
             )
@@ -113,6 +130,11 @@ class TaskInstanceRepository:
                 .where(
                     TaskInstance.account_id == account_id,
                     TaskInstance.status == "blocked",
+                )
+                .options(
+                    selectinload(cast(Any, TaskInstance.account))
+                    .selectinload(cast(Any, Account.task_plan_associations))
+                    .selectinload(cast(Any, AccountTaskPlan.task_plan))
                 )
                 .order_by(col(TaskInstance.created_at))
             )
@@ -172,10 +194,41 @@ class TaskInstanceRepository:
             db_instance.status = instance.status
             db_instance.error_message = instance.error_message
             db_instance.last_completed_at = instance.last_completed_at
+            db_instance.next_run_at = instance.next_run_at
             db_instance.updated_at = datetime.now()
             session.add(db_instance)
             session.commit()
             return True
+
+    def list_by_account_and_task_types(
+        self, account_id: int, task_types: List[str]
+    ) -> List[TaskInstance]:
+        """按账号与任务类型列表获取任务实例。"""
+        if not task_types:
+            return []
+        with Session(get_engine()) as session:
+            statement = select(TaskInstance).where(
+                TaskInstance.account_id == account_id,
+                col(TaskInstance.task_type).in_(task_types),
+            )
+            return list(session.exec(statement).all())
+
+    def update_next_run_at(self, instances: List[TaskInstance]) -> int:
+        """批量更新任务实例的 next_run_at。"""
+        if not instances:
+            return 0
+        with Session(get_engine()) as session:
+            count = 0
+            for instance in instances:
+                db_instance = session.get(TaskInstance, instance.id)
+                if not db_instance:
+                    continue
+                db_instance.next_run_at = instance.next_run_at
+                db_instance.updated_at = datetime.now()
+                session.add(db_instance)
+                count += 1
+            session.commit()
+            return count
 
     def reset_all_pending(self) -> int:
         """将所有异常状态的任务重置为待执行（用于程序重启后恢复）

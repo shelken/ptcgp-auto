@@ -170,6 +170,7 @@
             <!-- Records Container -->
             <div id="records-container"
                  class="space-y-12"
+                 data-loaded="false"
                  data-url="/api/records?page=0&lang={{ current_lang }}"
                  data-base-url="/api/records?page=0&lang={{ current_lang }}"
                  data-auto-refresh="/api/records"
@@ -376,8 +377,11 @@
 
                     <div id="owned-cards-container"
                          class="space-y-6"
+                         data-loaded="false"
                          data-url="/api/owned-cards?page=0&lang={{ current_lang }}"
                          data-base-url="/api/owned-cards?page=0&lang={{ current_lang }}"
+                         data-auto-refresh="/api/owned-cards"
+                         data-refresh-include="#owned-filter-form,#owned-sort-select"
                          hx-swap="innerHTML">
                     </div>
 
@@ -474,7 +478,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.46"></script>
+    <script type="module" src="/static/js/main.js?v=4.55"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();
