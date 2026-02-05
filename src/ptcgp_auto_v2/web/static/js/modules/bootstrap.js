@@ -1,5 +1,5 @@
 import { getModal } from './modal.js';
-import { isElementInActiveTab } from './utils.js';
+import { isElementInActiveTab, showToast } from './utils.js';
 import { initCustomSelects } from './custom_select.js';
 import {
     restoreFilters,
@@ -365,6 +365,18 @@ export function initApp() {
                     target.dataset.loaded = 'true';
                     target.dataset.loading = 'false';
                 }
+            }
+        });
+
+        document.body.addEventListener('showToast', (event) => {
+            const detail = event.detail;
+            if (!detail) return;
+            if (typeof detail === 'string') {
+                showToast(detail);
+                return;
+            }
+            if (detail.message) {
+                showToast(detail.message);
             }
         });
 

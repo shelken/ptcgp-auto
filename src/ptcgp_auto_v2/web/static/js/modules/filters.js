@@ -94,6 +94,8 @@ export function saveOwnedFilters() {
 // --- 保存任务筛选 ---
 export function saveTasksFilters() {
     saveFormFilters('task-filter-form', STORAGE_KEY_TASKS_FILTERS);
+    const form = document.getElementById('task-filter-form');
+    updateTaskResetButtonState(form);
 }
 
 // --- 获取任务筛选缓存 ---
@@ -196,10 +198,31 @@ export function restoreTasksFilters(context = document) {
     if (!filters) return;
     initCustomSelects(form);
     applyFormFilters(form, filters);
+    updateTaskResetButtonState(form);
 
     if (form.dataset.restoreTrigger === 'true' && form.dataset.restoreApplied !== 'true') {
         form.dataset.restoreApplied = 'true';
         form.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+}
+
+// --- 更新重置按钮状态 ---
+export function updateTaskResetButtonState(form) {
+    if (!form) return;
+    const statusSelect = form.querySelector('[name="status"]');
+    const resetButton = document.getElementById('task-reset-completed-btn');
+    const resetWrapper = document.getElementById('task-reset-completed-wrapper');
+    if (!resetButton) return;
+    const currentStatus = statusSelect ? statusSelect.value : '';
+    const shouldDisable = currentStatus && currentStatus !== 'completed';
+    resetButton.disabled = shouldDisable;
+    resetButton.setAttribute('aria-disabled', shouldDisable ? 'true' : 'false');
+    resetButton.classList.toggle('opacity-50', shouldDisable);
+    resetButton.classList.toggle('cursor-not-allowed', shouldDisable);
+    if (resetWrapper) {
+        resetWrapper.dataset.tooltip = shouldDisable
+            ? (resetWrapper.dataset.disabledTooltip || '')
+            : '';
     }
 }
 

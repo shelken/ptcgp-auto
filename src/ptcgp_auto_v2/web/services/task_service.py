@@ -13,7 +13,10 @@ from ptcgp_auto_v2.core.task_plan_utils import (
 )
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-from ptcgp_auto_v2.web.queries.task_queries import fetch_task_instances
+from ptcgp_auto_v2.web.queries.task_queries import (
+    fetch_task_instances,
+    reset_completed_task_instances,
+)
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
 
 
@@ -129,3 +132,18 @@ def recompute_next_run_at_for_account(
         next_run_at, _, _, _ = compute_next_run_for_instance(instance, account_cache)
         instance.next_run_at = next_run_at
     repo.update_next_run_at(instances)
+
+
+def reset_completed_tasks_by_filters(
+    session: Session,
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+) -> int:
+    """按筛选条件重置已完成任务为待执行。"""
+    return reset_completed_task_instances(
+        session=session,
+        status=status,
+        task_type=task_type,
+        account_id=account_id,
+    )
