@@ -7,9 +7,11 @@
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 from io import BytesIO
+from urllib.parse import quote
 
 import requests
 from PIL import Image
@@ -19,8 +21,15 @@ from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 logger = logging.getLogger(__name__)
 
 # 配置参数（基于测试可调整）
-# 公共图片基础 URL
-PACK_IMAGE_BASE_URL = "https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/packs"
+# 公共图片基础 URL（优先 jsDelivr，失败回退 GitHub Raw）
+PACK_IMAGE_BASE_URLS = [
+    "https://cdn.jsdelivr.net/gh/flibustier/pokemon-tcg-exchange@main/public/images/packs",
+    "https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/packs",
+]
+
+# 下载重试与超时
+PACK_IMAGE_DOWNLOAD_RETRIES = 3
+PACK_IMAGE_DOWNLOAD_TIMEOUT = 15
 
 # 裁剪区域比例 (left, top, right, bottom)
 # 通过交互式 ROI 测试确定的最佳参数
@@ -123,22 +132,29 @@ class PackImageManager:
         Returns:
             图片二进制数据，失败返回 None
         """
-        # 构造 URL（使用原始文件名，包含空格）
-        url = f"{PACK_IMAGE_BASE_URL}/{booster_name}.webp"
+        # 构造 URL（保留空格转义）
+        encoded_name = quote(booster_name, safe="")
 
-        try:
-            logger.debug(f"下载卡包图片: {url}")
-            resp = self.session.get(url, timeout=15)
+        for base_url in PACK_IMAGE_BASE_URLS:
+            url = f"{base_url}/{encoded_name}.webp"
+            for attempt in range(1, PACK_IMAGE_DOWNLOAD_RETRIES + 1):
+                try:
+                    logger.debug(
+                        f"下载卡包图片: {url} (尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
+                    )
+                    resp = self.session.get(url, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
+                    if resp.status_code == 200 and resp.content:
+                        return resp.content
+                    logger.warning(
+                        f"下载失败: {url} (HTTP {resp.status_code}, 尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"下载异常: {url} - {e} (尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
+                    )
+                time.sleep(0.5 * attempt)
 
-            if resp.status_code == 200:
-                return resp.content
-            else:
-                logger.warning(f"下载失败: {url} (HTTP {resp.status_code})")
-                return None
-
-        except Exception as e:
-            logger.warning(f"下载异常: {url} - {e}")
-            return None
+        return None
 
     def process_and_save(self, booster_name: str, image_data: bytes) -> bool:
         """

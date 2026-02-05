@@ -6,6 +6,9 @@
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
 PACK_TEMPLATE_THRESHOLD = 0.75  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
 PACK_SERIES_CODES = ["A", "B"]  # 扩充包系列代号（仅用于切换次数控制）
+PACK_AUTO_STRATEGIES = ["latest", "hash_balance", "least_used"]  # 自动选包策略
+PACK_AUTO_EXCLUDE_SET_CODES = ["A4b"]  # 排除的限时系列
+PACK_AUTO_HASH_VIRTUAL_NODES = 32  # 一致性哈希虚拟节点数
 
 # ADB 配置
 DEFAULT_ADB_PORT = 5555  # 默认 ADB 端口
@@ -67,4 +70,4 @@ HASH_SIMILARITY_THRESHOLD = 0.7
 HASH_SIMILARITY_GAP_MIN = 0.02
 
 # 高稀有度卡牌范围（用于记录账号卡牌）
-HIGH_RARITY_TARGETS = ["RR", "SR", "SAR", "IM", "UR", "SSR"]
+HIGH_RARITY_TARGETS = ["RR", "AR", "SR", "SAR", "IM", "UR", "S", "SSR"]
