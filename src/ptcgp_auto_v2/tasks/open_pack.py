@@ -12,6 +12,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.constants import (
+    PACK_AUTO_EXCLUDE_SET_CODES,
     PACK_SERIES_CODES,
     PACK_TEMPLATE_THRESHOLD,
     SWIPE_DURATION_OPEN,
@@ -49,6 +50,7 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_template_or_text,
     tap_template_with_scale,
 )
+from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (
@@ -189,6 +191,8 @@ class OpenPackTask(Task):
         self._skip_reason: Optional[str] = None  # 跳过原因
         self._completed = False  # 任务完成标志
         self._skipped = False  # 任务跳过标志
+        self._failed = False  # 任务失败标志
+        self._fail_reason: Optional[str] = None  # 失败原因
 
         # 目标卡包配置
         self.target_pack: dict[str, str] | None = None
@@ -233,6 +237,8 @@ class OpenPackTask(Task):
         self._packs_opened_count = 0
         self._completed = False
         self._skipped = False
+        self._failed = False
+        self._fail_reason = None
 
         # 检查账号 ID
         if self.account.id is None:
@@ -247,25 +253,37 @@ class OpenPackTask(Task):
         )
 
         if not config:
-            # 未配置时，自动选择最新发布的系列
+            # 未配置时，自动选择卡包策略
             logger.info(
-                f"账号 {self.account.display_name} 未配置开包目标，尝试选择最新系列"
+                f"账号 {self.account.display_name} 未配置开包目标，尝试自动选择"
             )
-            result = self._card_repo.get_latest_set_with_pack()
-            if result:
-                card_set, pack = result
-                self.target_pack = {
-                    "pack_code": card_set.code,
-                    "booster_name": pack.name,
-                }
-                logger.info(f"自动选择最新卡包: {card_set.code}/{pack.name}")
-            else:
+            settings = get_settings()
+            selected = select_pack_for_account(
+                account=self.account,
+                strategy=settings.pack_auto_strategy,
+                card_repo=self._card_repo,
+                record_repo=self._pack_record_repo,
+                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+            )
+            if not selected:
                 logger.info(
                     f"账号 {self.account.display_name} 无法找到可用的开包目标，任务跳过"
                 )
                 self._skipped = True
                 self._skip_reason = SKIP_REASON_NO_PACK_CONFIG
                 return
+
+            self.target_pack = {
+                "pack_code": selected["pack_code"],
+                "booster_name": selected["booster_name"],
+            }
+            logger.info(
+                "自动选择卡包: %s/%s (策略=%s, 候选=%s)",
+                selected["pack_code"],
+                selected["booster_name"],
+                selected.get("strategy"),
+                selected.get("candidate_count"),
+            )
         else:
             self.target_pack = {
                 "pack_code": config.pack_code,
@@ -274,7 +292,10 @@ class OpenPackTask(Task):
             logger.info(f"目标卡包: {config.pack_code}/{config.booster_name}")
 
         # 准备图片资源
-        self._prepare_image_resources()
+        if not self._prepare_image_resources():
+            self._failed = True
+            self._fail_reason = "准备卡包图片资源失败"
+            return
 
         pack_code = self.target_pack.get("pack_code") if self.target_pack else None
 
@@ -290,14 +311,14 @@ class OpenPackTask(Task):
 
             threading.Thread(target=_preload_hash, daemon=True).start()
 
-    def _prepare_image_resources(self):
-        """准备图片资源（按需加载）"""
+    def _prepare_image_resources(self) -> bool:
+        """准备图片资源（失败将直接结束任务）"""
         pack_code = self.target_pack.get("pack_code") if self.target_pack else None
         booster_name = (
             self.target_pack.get("booster_name") if self.target_pack else None
         )
         if not pack_code or not booster_name:
-            return
+            return False
 
         try:
             from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
@@ -318,8 +339,12 @@ class OpenPackTask(Task):
                     )
             else:
                 logger.error(f"准备卡包图片资源失败: {booster_name}")
+                return False
         except Exception as e:
             logger.error(f"准备卡包图片资源失败: {e}")
+            return False
+
+        return True
 
     def is_completed(self) -> bool:
         """判断任务是否已完成"""
@@ -331,6 +356,8 @@ class OpenPackTask(Task):
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """处理识别到的页面"""
+        if self._failed:
+            return ActionResult.fail(self._fail_reason or "准备卡包图片资源失败")
         logger.debug(f"处理页面: {page_name}")
 
         # 页面处理器映射
@@ -471,8 +498,8 @@ class OpenPackTask(Task):
             template_name,
             scale=settings.scale_pack_series_select,
             max_attempts=max_attempts,
-            swipe_ratio=0.23,  # 旧值: 0.21
-            wait=1.2,
+            swipe_ratio=0.16,  # 步进调小，避免跳过
+            wait=1,
         )
         if result:
             return result
@@ -576,7 +603,7 @@ class OpenPackTask(Task):
                 template_name,
                 scale=settings.scale_pack_detail,
                 screenshot=screenshot,
-                threshold=PACK_TEMPLATE_THRESHOLD,
+                threshold=0.68,
             )
             if not match:
                 logger.info(f"  -> 当前卡包不是目标卡包 ({template_name})，返回")
