@@ -206,6 +206,7 @@
     "reset_once": "Once",
     "status_pending": "Pending",
     "status_running": "Running",
+    "next_run_overdue": "Overdue",
     "status_completed": "Completed",
     "status_failed": "Failed",
     "status_skipped": "Skipped",

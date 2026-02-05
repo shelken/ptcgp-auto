@@ -1,4 +1,6 @@
 from typing import Any
+
+from datetime import datetime
 from typing import Any
 
 from urllib.parse import urlencode
@@ -63,6 +65,7 @@ def list_task_status_view(
 
     account_cache: dict[int, dict] = {}
     rows: list[dict[str, Any]] = []
+    now = datetime.now()
     for instance in instances:
         account = instance.account
         if not account or account.id is None:
@@ -76,6 +79,8 @@ def list_task_status_view(
             compute_next_run_for_instance(instance, cache)
         )
         next_run_at = instance.next_run_at or computed_next_run_at
+
+        next_run_at_is_past = next_run_at is not None and next_run_at <= now
 
         rows.append(
             {
@@ -95,6 +100,7 @@ def list_task_status_view(
                 "error_message": instance.error_message,
                 "next_run_at": next_run_at,
                 "next_run_at_iso": format_datetime_iso(next_run_at),
+                "next_run_at_is_past": next_run_at_is_past,
                 "interval_seconds": interval_seconds,
                 "plan_name": plan_source["name"] if plan_source else None,
                 "plan_priority": plan_source["priority"] if plan_source else None,

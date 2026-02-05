@@ -211,6 +211,7 @@
     "reset_once": "一次性",
     "status_pending": "待执行",
     "status_running": "执行中",
+    "next_run_overdue": "已到期",
     "status_completed": "已完成",
     "status_failed": "失败",
     "status_skipped": "已跳过",
