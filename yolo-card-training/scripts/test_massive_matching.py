@@ -39,7 +39,9 @@ from test_yolo_hash_match import (
 # 引入终端预览工具
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 try:
-    from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline  # type: ignore
+    from ptcgp_auto_v2.utils.terminal_preview import (
+        preview_image_inline,  # type: ignore
+    )
 except ImportError:
     # 如果导入失败，定义一个空函数避免报错
     def preview_image_inline(image, **kwargs):
@@ -65,7 +67,7 @@ class MatchResult:
     bbox: Optional[Tuple[int, int, int, int]] = None  # (x1, y1, x2, y2) 边框坐标
 
 
-SIMILARITY_THRESHOLD = 0.7
+HASH_SIMILARITY_THRESHOLD = 0.75
 YOLO_OBB_THRESHOLD = 0.55
 
 
@@ -215,7 +217,7 @@ def match_against_database(
     cropped_cards: List[Dict],
     hash_db: Dict[str, np.ndarray],
     vis_img: np.ndarray,
-    similarity_threshold: float = SIMILARITY_THRESHOLD,
+    similarity_threshold: float = HASH_SIMILARITY_THRESHOLD,
 ) -> Tuple[List[MatchResult], int, int, np.ndarray]:
     """
     将检测到的卡牌与数据库匹配，并在匹配成功时绘制红色内框
@@ -228,7 +230,7 @@ def match_against_database(
     above_threshold_count = 0
 
     print(f"\n🔍 开始匹配 ({len(cropped_cards)} 张检测 × {len(hash_db)} 张数据库)")
-    print(f"   阈值: {SIMILARITY_THRESHOLD}")
+    print(f"   阈值: {HASH_SIMILARITY_THRESHOLD}")
     print("-" * 70)
 
     start_time = time.perf_counter()
@@ -333,7 +335,7 @@ def run_matching_test_with_db(
     hash_db: Dict[str, np.ndarray],
     hash_db_path: Path,
     screenshot: Image.Image,
-    similarity_threshold: float = SIMILARITY_THRESHOLD,
+    similarity_threshold: float = HASH_SIMILARITY_THRESHOLD,
     source: str = "ADB",
     conf_threshold: float = 0.9,
 ):
@@ -764,7 +766,7 @@ def main():
         hash_db=hash_db,
         hash_db_path=hash_db_path,
         screenshot=screenshot,
-        similarity_threshold=SIMILARITY_THRESHOLD,
+        similarity_threshold=HASH_SIMILARITY_THRESHOLD,
         source=source,
         conf_threshold=args.conf,
     )
