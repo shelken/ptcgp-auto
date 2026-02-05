@@ -5,13 +5,18 @@ from typing import Any
 
 from urllib.parse import urlencode
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ptcgp_auto_v2.core.task_plan_utils import (
     build_account_plan_cache,
     compute_next_run_for_instance,
 )
+from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account import Account
+from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
+from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
+from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
@@ -67,6 +72,41 @@ def list_task_status_view(
     )
 
     account_cache: dict[int, dict] = {}
+    pack_configs_map: dict[int, AccountPackConfig] = {}
+    auto_pack_map: dict[int, dict] = {}
+    account_ids = [
+        instance.account_id for instance in instances if instance.account_id is not None
+    ]
+    if account_ids:
+        config_stm = select(AccountPackConfig).where(
+            AccountPackConfig.type == "daily",
+            AccountPackConfig.account_id.in_(account_ids),
+        )
+        configs = session.exec(config_stm).all()
+        pack_configs_map = {item.account_id: item for item in configs}
+
+        settings = get_settings()
+        card_repo = CardRepository()
+        record_repo = PackRecordRepository()
+        for instance in instances:
+            if instance.account_id is None:
+                continue
+            if instance.account_id in pack_configs_map:
+                continue
+            account = instance.account
+            if not account:
+                continue
+            if instance.account_id in auto_pack_map:
+                continue
+            selected = select_pack_for_account(
+                account=account,
+                strategy=settings.pack_auto_strategy,
+                card_repo=card_repo,
+                record_repo=record_repo,
+                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+            )
+            if selected:
+                auto_pack_map[instance.account_id] = selected
     rows: list[dict[str, Any]] = []
     now = datetime.now()
     for instance in instances:
@@ -107,8 +147,27 @@ def list_task_status_view(
                 "interval_seconds": interval_seconds,
                 "plan_name": plan_source["name"] if plan_source else None,
                 "plan_priority": plan_source["priority"] if plan_source else None,
+                "target_pack_label": None,
+                "target_pack_auto": False,
             }
         )
+
+        if instance.task_type == "open_pack":
+            target_pack_label = None
+            target_pack_auto = False
+            config = pack_configs_map.get(account.id)
+            if config:
+                target_pack_label = f"{config.pack_code}/{config.booster_name}"
+            else:
+                auto_pack = auto_pack_map.get(account.id)
+                if auto_pack:
+                    target_pack_label = (
+                        f"{auto_pack['pack_code']}/{auto_pack['booster_name']}"
+                    )
+                    target_pack_auto = True
+
+            rows[-1]["target_pack_label"] = target_pack_label
+            rows[-1]["target_pack_auto"] = target_pack_auto
 
     return rows, has_more
 

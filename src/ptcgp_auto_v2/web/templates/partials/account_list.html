@@ -66,10 +66,16 @@
             {% endset %}
             {% set target_pack_cell %}
                 {% set config = pack_configs.get(account.id) %}
+                {% set auto_pack = auto_pack_map.get(account.id) %}
                 {% if config %}
                 <div class="flex flex-col">
                     <span class="font-bold text-xs">{{ config.pack_code }}</span>
                     <span class="text-xs text-muted">{{ config.booster_name }}</span>
+                </div>
+                {% elif auto_pack %}
+                <div class="flex flex-col">
+                    <span class="font-bold text-xs">{{ auto_pack.pack_code }}</span>
+                    <span class="text-xs text-muted">{{ auto_pack.booster_name }} ({{ t.label_auto or 'Auto' }})</span>
                 </div>
                 {% else %}
                 <span class="text-muted">-</span>
