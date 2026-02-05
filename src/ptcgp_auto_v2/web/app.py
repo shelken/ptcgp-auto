@@ -16,6 +16,7 @@ from sqlmodel import Session, select, desc, col, distinct
 from sqlalchemy.orm import selectinload
 from typing import Annotated, List, Optional, Dict, cast, Any
 from datetime import datetime
+from urllib.parse import urlencode
 import os
 import math
 
@@ -23,6 +24,7 @@ import math
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.models.pack_record import PackRecord
 from ptcgp_auto_v2.db.models.account import Account
+from ptcgp_auto_v2.db.models.task_instance import TaskInstance
 from ptcgp_auto_v2.db.models.pack_card import PackCard
 from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
@@ -36,7 +38,12 @@ from ptcgp_auto_v2.db.repositories import (
     CardRepository,
     AccountPackConfigRepository,
 )
-from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
+from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType, TaskStatus
+from ptcgp_auto_v2.core.task_schedule import (
+    compute_next_run_at,
+    get_effective_reset_type,
+    get_interval_seconds,
+)
 
 # 导入任务模块以触发注册
 import ptcgp_auto_v2.tasks
@@ -94,7 +101,161 @@ def format_datetime(value: datetime):
     return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def format_datetime_iso(value: datetime | None) -> str | None:
+    if not value:
+        return None
+    return value.isoformat(timespec="seconds")
+
+
 templates.env.filters["datetime"] = format_datetime
+
+
+def _build_account_plan_cache(account: Account) -> dict:
+    associations = [
+        assoc
+        for assoc in (account.task_plan_associations or [])
+        if assoc.is_active and assoc.task_plan
+    ]
+    associations.sort(key=lambda x: (-x.priority, x.task_plan_id))
+
+    merged_config: dict[str, dict] = {}
+    plan_source: dict[str, dict] = {}
+
+    for assoc in reversed(associations):
+        plan = assoc.task_plan
+        if not plan:
+            continue
+        plan_config = plan.config_dict
+        for task_type, config in plan_config.items():
+            if task_type in merged_config:
+                merged_config[task_type].update(config)
+            else:
+                merged_config[task_type] = config.copy()
+
+    for assoc in associations:
+        plan = assoc.task_plan
+        if not plan:
+            continue
+        for task_type in plan.task_types_list:
+            if task_type not in plan_source:
+                plan_source[task_type] = {
+                    "name": plan.name,
+                    "priority": assoc.priority,
+                }
+
+    return {
+        "config": merged_config,
+        "source": plan_source,
+    }
+
+
+def _build_tasks_page_url(
+    page: int,
+    lang: str,
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+) -> str:
+    params = [("page", page), ("lang", lang)]
+    for item in status:
+        params.append(("status", item))
+    for item in task_type:
+        params.append(("task_type", item))
+    if account_id is not None:
+        params.append(("account_id", account_id))
+    return f"/api/tasks?{urlencode(params)}"
+
+
+def _fetch_task_status_view(
+    session: Session,
+    page: int,
+    page_size: int,
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+) -> tuple[list[dict], bool]:
+    statement = select(TaskInstance).options(
+        selectinload(cast(Any, TaskInstance.account))
+        .selectinload(cast(Any, Account.task_plan_associations))
+        .selectinload(cast(Any, AccountTaskPlan.task_plan))
+    )
+
+    if status:
+        statement = statement.where(col(TaskInstance.status).in_(status))
+    if task_type:
+        statement = statement.where(col(TaskInstance.task_type).in_(task_type))
+    if account_id is not None:
+        statement = statement.where(TaskInstance.account_id == account_id)
+
+    statement = statement.order_by(desc(TaskInstance.updated_at))
+
+    offset = page * page_size
+    statement = statement.offset(offset).limit(page_size + 1)
+    instances = list(session.exec(statement).all())
+
+    has_more = len(instances) > page_size
+    if has_more:
+        instances = instances[:page_size]
+
+    account_cache: dict[int, dict] = {}
+    rows = []
+    for instance in instances:
+        account = instance.account
+        if not account:
+            continue
+        if account.id is None:
+            continue
+        if account.id not in account_cache:
+            account_cache[account.id] = _build_account_plan_cache(account)
+
+        cache = account_cache[account.id]
+        config = cache["config"].get(instance.task_type, {})
+        task_class = TaskRegistry.get_or_none(instance.task_type)
+        if task_class:
+            effective_reset_type = get_effective_reset_type(task_class, config)
+        else:
+            try:
+                effective_reset_type = ResetType(instance.reset_type)
+            except ValueError:
+                effective_reset_type = ResetType.DAILY
+
+        interval_seconds = None
+        if effective_reset_type == ResetType.INTERVAL:
+            interval_seconds = get_interval_seconds(config)
+
+        next_run_at = compute_next_run_at(
+            instance.last_completed_at,
+            effective_reset_type,
+            config,
+        )
+
+        plan_source = cache["source"].get(instance.task_type)
+
+        rows.append(
+            {
+                "id": instance.id,
+                "account_id": account.id,
+                "account_name": account.nickname
+                or account.display_name
+                or str(account.id),
+                "task_type": instance.task_type,
+                "status": instance.status,
+                "reset_type": effective_reset_type.value,
+                "last_completed_at": instance.last_completed_at,
+                "last_completed_at_iso": format_datetime_iso(
+                    instance.last_completed_at
+                ),
+                "updated_at": instance.updated_at,
+                "error_message": instance.error_message,
+                "next_run_at": next_run_at,
+                "next_run_at_iso": format_datetime_iso(next_run_at),
+                "interval_seconds": interval_seconds,
+                "plan_name": plan_source["name"] if plan_source else None,
+                "plan_priority": plan_source["priority"] if plan_source else None,
+            }
+        )
+
+    return rows, has_more
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -453,6 +614,58 @@ async def get_management_accounts(
     )
 
 
+@app.get("/management/tasks", response_class=HTMLResponse)
+async def get_management_tasks(
+    request: Request,
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
+):
+    t = get_translations(lang)
+    repo = AccountRepository()
+    accounts = repo.get_all()
+    status_options = [status.value for status in TaskStatus]
+    task_types = TaskRegistry.all_types()
+
+    page = 0
+    page_size = 50
+    tasks, has_more = _fetch_task_status_view(
+        session=session,
+        page=page,
+        page_size=page_size,
+        status=[],
+        task_type=[],
+        account_id=None,
+    )
+    next_page_url = _build_tasks_page_url(
+        page + 1,
+        lang,
+        status=[],
+        task_type=[],
+        account_id=None,
+    )
+
+    return templates.TemplateResponse(
+        "partials/task_list.html",
+        {
+            "request": request,
+            "tasks": tasks,
+            "has_more": has_more,
+            "next_page_url": next_page_url,
+            "page": page,
+            "page_size": page_size,
+            "status_options": status_options,
+            "task_types": task_types,
+            "accounts": accounts,
+            "selected_status": [],
+            "selected_task_type": [],
+            "selected_account_id": None,
+            "table_only": False,
+            "t": t,
+            "current_lang": lang,
+        },
+    )
+
+
 @app.get("/management/plans", response_class=HTMLResponse)
 async def get_management_plans(
     request: Request,
@@ -466,6 +679,72 @@ async def get_management_plans(
     return templates.TemplateResponse(
         "partials/plan_list.html",
         {"request": request, "plans": plans, "t": t, "current_lang": lang},
+    )
+
+
+@app.get("/api/tasks", response_class=HTMLResponse)
+async def get_tasks(
+    request: Request,
+    page: int = 0,
+    page_size: int = 50,
+    status: List[str] = Query(default=[]),
+    task_type: List[str] = Query(default=[]),
+    account_id: Optional[str] = Query(default=None),
+    lang: str = Query(default="en"),
+    session: Session = Depends(get_fastapi_session),
+):
+    t = get_translations(lang)
+    repo = AccountRepository()
+    accounts = repo.get_all()
+    status_options = [status_item.value for status_item in TaskStatus]
+    task_types = TaskRegistry.all_types()
+
+    normalized_status = [item for item in status if item]
+    normalized_task_type = [item for item in task_type if item]
+    parsed_account_id: Optional[int] = None
+    if account_id:
+        account_id_str = str(account_id).strip()
+        if account_id_str.isdigit():
+            parsed_account_id = int(account_id_str)
+
+    tasks, has_more = _fetch_task_status_view(
+        session=session,
+        page=page,
+        page_size=page_size,
+        status=normalized_status,
+        task_type=normalized_task_type,
+        account_id=parsed_account_id,
+    )
+    if not tasks and page > 0:
+        return ""
+
+    next_page_url = _build_tasks_page_url(
+        page + 1,
+        lang,
+        status=normalized_status,
+        task_type=normalized_task_type,
+        account_id=parsed_account_id,
+    )
+
+    return templates.TemplateResponse(
+        "partials/task_list.html",
+        {
+            "request": request,
+            "tasks": tasks,
+            "has_more": has_more,
+            "next_page_url": next_page_url,
+            "page": page,
+            "page_size": page_size,
+            "status_options": status_options,
+            "task_types": task_types,
+            "accounts": accounts,
+            "selected_status": normalized_status,
+            "selected_task_type": normalized_task_type,
+            "selected_account_id": parsed_account_id,
+            "table_only": True,
+            "t": t,
+            "current_lang": lang,
+        },
     )
 
 

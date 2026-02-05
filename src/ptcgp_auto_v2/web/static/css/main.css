@@ -289,6 +289,61 @@ body {
     border-radius: var(--radius);
 }
 
+.tooltip-tag {
+    position: relative;
+    cursor: help;
+}
+
+.tooltip-tag::after,
+.tooltip-text::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(6px);
+    background-color: var(--bg-surface);
+    color: var(--text-color);
+    border: var(--border-width) solid var(--border-color);
+    padding: 6px 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    box-shadow: 2px 2px 0px var(--shadow-color);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 20;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.tooltip-tag::before,
+.tooltip-text::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 2px);
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--border-color) transparent transparent transparent;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.tooltip-tag:hover::after,
+.tooltip-tag:hover::before,
+.tooltip-text:hover::after,
+.tooltip-text:hover::before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.tooltip-text {
+    position: relative;
+    cursor: help;
+    display: inline-block;
+}
+
 [data-theme="retro"] .brutal-tag { color: #000; background-color: var(--text-color); }
 [data-theme="luxury"] .brutal-tag { color: #000; background-color: var(--border-color); }
 
@@ -772,20 +827,23 @@ body {
 }
 
 .custom-select-option:hover,
-.custom-select-option.selected {
+.custom-select-option.selected,
+.custom-select-option.focused {
     background-color: var(--bg-subtle);
     color: var(--text-color);
 }
 
 /* Specific theme option states */
 [data-theme="retro"] .custom-select-option:hover,
-[data-theme="retro"] .custom-select-option.selected {
+[data-theme="retro"] .custom-select-option.selected,
+[data-theme="retro"] .custom-select-option.focused {
     background-color: rgba(0, 255, 157, 0.2);
     color: var(--active-color);
 }
 
 [data-theme="luxury"] .custom-select-option:hover,
-[data-theme="luxury"] .custom-select-option.selected {
+[data-theme="luxury"] .custom-select-option.selected,
+[data-theme="luxury"] .custom-select-option.focused {
     background-color: rgba(212, 175, 55, 0.15);
     border-left: 2px solid var(--active-color);
 }
