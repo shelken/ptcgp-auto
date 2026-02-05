@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
+from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
@@ -76,6 +77,24 @@ class CardRepository:
             statement = (
                 select(Pack.name).where(Pack.set_code == set_code).order_by(Pack.name)
             )
+            return list(session.exec(statement).all())
+
+    def get_packs_by_set_prefixes(
+        self, prefixes: list[str], exclude_set_codes: list[str]
+    ) -> List[Pack]:
+        """按系列前缀获取子包列表并排除指定系列。"""
+        normalized_prefixes = [item for item in prefixes if item]
+        exclude_set = {code.upper() for code in exclude_set_codes}
+        with Session(get_engine()) as session:
+            statement = select(Pack)
+            if normalized_prefixes:
+                conditions = [
+                    col(Pack.set_code).like(f"{item}%") for item in normalized_prefixes
+                ]
+                statement = statement.where(or_(*conditions))
+            if exclude_set:
+                statement = statement.where(col(Pack.set_code).not_in(exclude_set))
+            statement = statement.order_by(Pack.set_code, Pack.name)
             return list(session.exec(statement).all())
 
     def get_pack_by_name(self, name: str) -> Optional[Pack]:

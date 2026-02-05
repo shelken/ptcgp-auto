@@ -132,6 +132,7 @@ class CollectAccountCardsTask(Task):
         self._last_detect_signature: Optional[str] = None
         self._pending_cards: list[tuple[int, float, float]] = []
         self._pending_seen: set[int] = set()
+        self._consecutive_all_owned = 0
 
         self._account_card_repo = None
         self._card_repo = None
@@ -160,6 +161,7 @@ class CollectAccountCardsTask(Task):
         self._last_detect_signature = None
         self._pending_cards = []
         self._pending_seen = set()
+        self._consecutive_all_owned = 0
 
         if self.account.id is None:
             logger.error("账号 ID 为空，无法执行收集任务")
@@ -375,6 +377,11 @@ class CollectAccountCardsTask(Task):
             self._last_signature = signature
 
         detect_signature = self._scan_current_page()
+        if self._consecutive_all_owned >= 3:
+            logger.info("连续三次识别卡牌均已入库，提前结束扫描")
+            self._flush_pending_cards()
+            self._completed = True
+            return ActionResult.ok(wait=1.0)
         if detect_signature:
             if (
                 self._last_detect_signature
@@ -411,6 +418,7 @@ class CollectAccountCardsTask(Task):
             ),
         )
         if not detected:
+            self._consecutive_all_owned = 0
             return None
 
         written = 0
@@ -418,22 +426,29 @@ class CollectAccountCardsTask(Task):
         skipped_missing = 0
         skipped_no_set = 0
         signature_items = []
+        all_in_db = True
         for item in detected:
             if not item.set_code:
                 skipped_no_set += 1
+                all_in_db = False
                 continue
             card = self._card_repo.get_card_by_set_and_number(
                 item.set_code, item.card_number
             )
             if not card:
                 skipped_missing += 1
+                all_in_db = False
                 continue
             signature_items.append(f"{item.set_code}:{item.card_number}")
             if card.rarity not in HIGH_RARITY_TARGETS:
                 skipped_not_high += 1
+                all_in_db = False
                 continue
             if card.id is None:
+                all_in_db = False
                 continue
+            if self._account_card_repo.get(self.account.id, card.id) is None:
+                all_in_db = False
             if card.id in self._pending_seen:
                 continue
             self._pending_seen.add(card.id)
@@ -441,6 +456,12 @@ class CollectAccountCardsTask(Task):
                 (card.id, float(item.confidence), float(item.similarity))
             )
             written += 1
+
+        # 注意：该逻辑依赖“按获得顺序最新到旧”的排序，若变更排序需重新评估
+        if all_in_db:
+            self._consecutive_all_owned += 1
+        else:
+            self._consecutive_all_owned = 0
 
         logger.info("已写入高稀有度卡牌: %s 张", written)
         logger.info(

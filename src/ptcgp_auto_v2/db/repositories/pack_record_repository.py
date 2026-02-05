@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any, List, Optional
 
+from sqlalchemy import tuple_
 from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
@@ -100,7 +101,7 @@ class PackRecordRepository:
             # 2. 如果有卡牌明细，创建 PackCard
             if cards:
                 if record.id is None:
-                     # 理论上 flush 后不应该为 None，但为了类型安全
+                    # 理论上 flush 后不应该为 None，但为了类型安全
                     session.refresh(record)
 
                 if record.id:
@@ -167,3 +168,27 @@ class PackRecordRepository:
                 session.commit()
                 return True
             return False
+
+    def get_pack_usage_counts(self, pack_keys: list[tuple[str, str]]) -> dict:
+        """统计指定 pack_code/pack_name 的开包次数。"""
+        if not pack_keys:
+            return {}
+
+        with Session(get_engine()) as session:
+            statement = (
+                select(
+                    PackRecord.pack_code,
+                    PackRecord.pack_name,
+                    func.count().label("count"),
+                )
+                .where(
+                    tuple_(PackRecord.pack_code, PackRecord.pack_name).in_(pack_keys)
+                )
+                .group_by(PackRecord.pack_code, PackRecord.pack_name)
+            )
+            results = session.exec(statement).all()
+            counts = {(code, name): count for code, name, count in results}
+
+        for key in pack_keys:
+            counts.setdefault(key, 0)
+        return counts

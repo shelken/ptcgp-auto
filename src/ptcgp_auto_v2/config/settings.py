@@ -108,6 +108,10 @@ class Settings:
     # 语言配置
     locale: str = "zh_Hant"  # 默认界面语言 (对应 locales/ 下的文件名)
 
+    # 未配置开包目标时的自动选包策略
+    # 可选值: latest / hash_balance / least_used
+    pack_auto_strategy: str = "hash_balance"
+
     # 调度配置
     poll_interval: float = DEFAULT_POLL_INTERVAL
     max_workers: int = DEFAULT_MAX_WORKERS
@@ -181,7 +185,7 @@ class Settings:
 
     def configure_logging(self):
         """配置日志系统（使用 loguru）"""
-        from ptcgp_auto_v2.utils.logger import setup_logging, intercept_standard_logging
+        from ptcgp_auto_v2.utils.logger import intercept_standard_logging, setup_logging
 
         # 初始化 loguru 日志
         setup_logging(level=self.log_level)
