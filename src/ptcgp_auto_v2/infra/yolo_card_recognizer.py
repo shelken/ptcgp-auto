@@ -330,6 +330,13 @@ class YoloCardRecognizer:
         current_row = [sorted_by_y[0]]
         row_threshold = self.adb.scaled_y(self.BASE_ROW_THRESHOLD)
 
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("row_threshold=%s", row_threshold)
+            logger.debug(
+                "sorted_by_y=%s",
+                [(card.card_number, card.center) for card in sorted_by_y],
+            )
+
         for card in sorted_by_y[1:]:
             if abs(card.center[1] - current_row[0].center[1]) < row_threshold:
                 current_row.append(card)
@@ -337,12 +344,22 @@ class YoloCardRecognizer:
                 # 当前行结束，按X坐标排序并保存
                 current_row.sort(key=lambda c: c.center[0])
                 rows.append(current_row)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "row=%s",
+                        [(card.card_number, card.center) for card in current_row],
+                    )
                 current_row = [card]
 
         # 处理最后一行
         if current_row:
             current_row.sort(key=lambda c: c.center[0])
             rows.append(current_row)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "row=%s",
+                    [(card.card_number, card.center) for card in current_row],
+                )
 
         # 合并所有行
         result = []
