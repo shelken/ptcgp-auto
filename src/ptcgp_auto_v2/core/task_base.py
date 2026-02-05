@@ -5,17 +5,24 @@
 定义可插拔任务的接口规范和注册机制。
 """
 
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-import threading
-from typing import Any, Callable, Optional, TYPE_CHECKING
-from ptcgp_auto_v2.infra.page_detector import PageDetector
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
 from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.infra.ocr import OcrEngine
+from ptcgp_auto_v2.infra.page_detector import PageDetector
+from ptcgp_auto_v2.infra.template import TemplateMatcher
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account
+
+
+Recognizer = tuple[OcrEngine, TemplateMatcher]
+"""识别器类型（OCR + 模板匹配器）。"""
 
 
 class ResetType(Enum):
@@ -126,7 +133,12 @@ class Task(ABC):
     # 连续未知页面上限
     max_unknown_pages: int = MAX_UNKNOWN_PAGES
 
-    def __init__(self, adb: AdbController, recognizer, page_detector: PageDetector):
+    def __init__(
+        self,
+        adb: AdbController,
+        recognizer: Optional[Recognizer],
+        page_detector: PageDetector,
+    ):
         """
         初始化任务
 
@@ -136,7 +148,7 @@ class Task(ABC):
             page_detector: 页面检测器实例
         """
         self.adb = adb
-        self.recognizer = recognizer
+        self.recognizer: Optional[Recognizer] = recognizer
         self.page_detector = page_detector
         self._account: Optional["Account"] = None
         self._handlers: dict[str, Callable[[dict], ActionResult]] = {}

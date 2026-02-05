@@ -70,6 +70,14 @@ class CardRepository:
             statement = select(Pack).order_by(Pack.set_code, Pack.name)
             return list(session.exec(statement).all())
 
+    def get_pack_names_by_set(self, set_code: str) -> List[str]:
+        """按系列获取子包名称列表。"""
+        with Session(get_engine()) as session:
+            statement = (
+                select(Pack.name).where(Pack.set_code == set_code).order_by(Pack.name)
+            )
+            return list(session.exec(statement).all())
+
     def get_pack_by_name(self, name: str) -> Optional[Pack]:
         """获取卡包详情"""
         with Session(get_engine()) as session:

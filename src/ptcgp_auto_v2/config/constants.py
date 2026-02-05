@@ -5,6 +5,7 @@
 
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
 PACK_TEMPLATE_THRESHOLD = 0.75  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
+PACK_SERIES_CODES = ["A", "B"]  # 扩充包系列代号（仅用于切换次数控制）
 
 # ADB 配置
 DEFAULT_ADB_PORT = 5555  # 默认 ADB 端口
