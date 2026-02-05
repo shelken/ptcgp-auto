@@ -102,7 +102,7 @@ ptcgp-auto/
 ├── debug_tool.py               # 调试工具
 ├── src/
 │   ├── ptcgp_auto_v2/          # v2 核心代码
-│   │   ├── core/               # 调度核心 (Scheduler, Executor)
+│   │   ├── core/               # 调度核心 (Scheduler, Executor, TaskSchedule)
 │   │   ├── tasks/              # 任务实现 (OpenPack, CollectAccountCards...)
 │   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
 │   │   ├── infra/              # 基础设施层

@@ -20,6 +20,10 @@ from ptcgp_auto_v2.core.executor import (
     run_account_batch_executor,
 )
 from ptcgp_auto_v2.core.task_base import TaskRegistry, TaskStatus, ResetType
+from ptcgp_auto_v2.core.task_schedule import (
+    get_effective_reset_type,
+    should_reset_task,
+)
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import TaskInstance, Account
@@ -272,15 +276,7 @@ class Scheduler:
             return
 
         # 确定重置类型：配置覆盖 > 默认
-        reset_type_str = config.get("reset_type")
-        if reset_type_str:
-            try:
-                reset_type = ResetType(reset_type_str)
-            except ValueError:
-                logger.warning(f"无效的 reset_type: {reset_type_str}，使用默认值")
-                reset_type = task_class.reset_type
-        else:
-            reset_type = task_class.reset_type
+        reset_type = get_effective_reset_type(task_class, config)
 
         # 查找或创建任务实例
         instance = self._task_instance_repo.get_or_create(
@@ -319,37 +315,7 @@ class Scheduler:
         """
         if config is None:
             config = {}
-        # 如果任务未完成，不需要重置
-        if instance.status != TaskStatus.COMPLETED.value:
-            return False
-
-        # 如果没有完成时间，不需要重置
-        if not instance.last_completed_at:
-            return False
-
-        now = datetime.now()
-        last_completed = instance.last_completed_at
-
-        if reset_type == ResetType.DAILY:
-            # 检查是否跨天
-            return last_completed.date() < now.date()
-
-        elif reset_type == ResetType.WEEKLY:
-            # 检查是否跨周（假设周一重置）
-            last_week = last_completed.isocalendar()[1]
-            current_week = now.isocalendar()[1]
-            return last_week != current_week or last_completed.year != now.year
-
-        elif reset_type == ResetType.ONCE:
-            # 一次性任务不重置
-            return False
-
-        elif reset_type == ResetType.INTERVAL:
-            # 按时间间隔重置
-            interval = config.get("interval_seconds", 3600)  # 默认 1 小时
-            return (now - last_completed).total_seconds() >= interval
-
-        return False
+        return should_reset_task(instance, reset_type, config)
 
     def _get_next_task(self) -> Optional["TaskInstance"]:
         """

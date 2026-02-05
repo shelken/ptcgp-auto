@@ -6,6 +6,7 @@ import { showToast, throttle, debounce, isElementInActiveTab } from './modules/u
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_FILTERS = 'ptcgp_filters';
 const STORAGE_KEY_OWNED_FILTERS = 'ptcgp_owned_filters';
+const STORAGE_KEY_TASKS_FILTERS = 'ptcgp_tasks_filters';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_OWNED_COLS = 'ptcgp_owned_cols';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
@@ -278,36 +279,88 @@ function initLang() {
 }
 
 // 2. Filter Persistence
-function saveFilters() {
-    const form = document.getElementById('filter-form');
-    if (!form) return;
-    
+function serializeFormFilters(form, extraSelectors = []) {
     const formData = new FormData(form);
-    const filters = {
-        rarity: formData.getAll('rarity'),
-        card_type: formData.getAll('card_type')
-    };
-    localStorage.setItem(STORAGE_KEY_FILTERS, JSON.stringify(filters));
+    const filters = {};
+
+    for (const [key, value] of formData.entries()) {
+        if (filters[key]) {
+            if (Array.isArray(filters[key])) {
+                filters[key].push(value);
+            } else {
+                filters[key] = [filters[key], value];
+            }
+        } else {
+            filters[key] = value;
+        }
+    }
+
+    extraSelectors.forEach((selector) => {
+        const element = document.querySelector(selector);
+        if (!element || !element.name) return;
+        filters[element.name] = element.value || '';
+    });
+
+    return filters;
+}
+
+function applyFormFilters(form, filters, extraSelectors = []) {
+    if (!filters) return;
+
+    Object.entries(filters).forEach(([name, rawValue]) => {
+        const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+        const elements = Array.from(form.querySelectorAll(`[name="${name}"]`));
+        extraSelectors.forEach((selector) => {
+            const element = document.querySelector(selector);
+            if (element && element.name === name) {
+                elements.push(element);
+            }
+        });
+
+        elements.forEach((element) => {
+            if (element.type === 'checkbox' || element.type === 'radio') {
+                element.checked = values.includes(element.value);
+            } else {
+                element.value = values[0] ?? '';
+                if (element.classList.contains('custom-select-initialized')) {
+                    reinitCustomSelect(element);
+                }
+            }
+        });
+    });
+}
+
+function buildQueryParts(filters) {
+    const parts = [];
+    if (!filters) return parts;
+    Object.entries(filters).forEach(([name, rawValue]) => {
+        const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+        values.forEach((value) => {
+            if (value === '' || value === null || value === undefined) return;
+            parts.push(`${encodeURIComponent(name)}=${encodeURIComponent(value)}`);
+        });
+    });
+    return parts;
+}
+
+function saveFormFilters(formId, storageKey, extraSelectors = []) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    const filters = serializeFormFilters(form, extraSelectors);
+    localStorage.setItem(storageKey, JSON.stringify(filters));
+}
+
+function saveFilters() {
+    saveFormFilters('filter-form', STORAGE_KEY_FILTERS);
 }
 
 function saveOwnedFilters() {
-    const form = document.getElementById('owned-filter-form');
-    if (!form) return;
-
-    const formData = new FormData(form);
-    const sortSelect = document.getElementById('owned-sort-select');
-    const sortValue = sortSelect ? sortSelect.value : 'rarity';
-    const filters = {
-        account_id: formData.get('account_id') || '',
-        rarity: formData.getAll('rarity'),
-        card_type: formData.getAll('card_type'),
-        set_code: formData.getAll('set_code'),
-        pack_name: formData.getAll('pack_name'),
-        element: formData.getAll('element'),
-        sort_by: sortValue
-    };
-    localStorage.setItem(STORAGE_KEY_OWNED_FILTERS, JSON.stringify(filters));
+    saveFormFilters('owned-filter-form', STORAGE_KEY_OWNED_FILTERS, ['#owned-sort-select']);
     updateOwnedFilterGroupsState();
+}
+
+function saveTasksFilters() {
+    saveFormFilters('task-filter-form', STORAGE_KEY_TASKS_FILTERS);
 }
 
 function restoreFilters() {
@@ -317,22 +370,14 @@ function restoreFilters() {
     if (stored) {
         try {
             const filters = JSON.parse(stored);
-            if (filters.rarity) {
-                filters.rarity.forEach(val => {
-                    const el = document.querySelector(`input[name="rarity"][value="${val}"]`);
-                    if (el) el.checked = true;
-                    queryParts.push(`rarity=${val}`);
-                });
+            const form = document.getElementById('filter-form');
+            if (form) {
+                initCustomSelects(form);
+                applyFormFilters(form, filters);
             }
-            if (filters.card_type) {
-                filters.card_type.forEach(val => {
-                    const el = document.querySelector(`input[name="card_type"][value="${val}"]`);
-                    if (el) el.checked = true;
-                    queryParts.push(`card_type=${val}`);
-                });
-            }
+            queryParts = buildQueryParts(filters);
         } catch (e) {
-            console.error("Failed to restore filters", e);
+            console.error('Failed to restore filters', e);
         }
     }
 
@@ -366,58 +411,9 @@ function restoreOwnedFilters() {
     if (stored) {
         try {
             const filters = JSON.parse(stored);
-            if (filters.sort_by) {
-                const select = document.getElementById('owned-sort-select');
-                if (select) {
-                    select.value = filters.sort_by;
-                    if (select.classList.contains('custom-select-initialized')) {
-                        reinitCustomSelect(select);
-                    }
-                }
-                queryParts.push(`sort_by=${filters.sort_by}`);
-            }
-            if (filters.account_id) {
-                const input = form.querySelector('input[name="account_id"]');
-                if (input) {
-                    input.value = filters.account_id;
-                }
-                queryParts.push(`account_id=${filters.account_id}`);
-            }
-            if (filters.rarity) {
-                filters.rarity.forEach(val => {
-                    const el = form.querySelector(`input[name="rarity"][value="${val}"]`);
-                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
-                    queryParts.push(`rarity=${val}`);
-                });
-            }
-            if (filters.card_type) {
-                filters.card_type.forEach(val => {
-                    const el = form.querySelector(`input[name="card_type"][value="${val}"]`);
-                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
-                    queryParts.push(`card_type=${val}`);
-                });
-            }
-            if (filters.set_code) {
-                filters.set_code.forEach(val => {
-                    const el = form.querySelector(`input[name="set_code"][value="${val}"]`);
-                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
-                    queryParts.push(`set_code=${val}`);
-                });
-            }
-            if (filters.pack_name) {
-                filters.pack_name.forEach(val => {
-                    const el = form.querySelector(`input[name="pack_name"][value="${val}"]`);
-                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
-                    queryParts.push(`pack_name=${val}`);
-                });
-            }
-            if (filters.element) {
-                filters.element.forEach(val => {
-                    const el = form.querySelector(`input[name="element"][value="${val}"]`);
-                    if (el && el.classList.contains('owned-filter-checkbox')) el.checked = true;
-                    queryParts.push(`element=${val}`);
-                });
-            }
+            initCustomSelects(form);
+            applyFormFilters(form, filters, ['#owned-sort-select']);
+            queryParts = buildQueryParts(filters);
         } catch (e) {
             console.error('Failed to restore owned filters', e);
         }
@@ -442,6 +438,28 @@ function restoreOwnedFilters() {
 
         htmx.ajax('GET', finalUrl, {target: '#owned-cards-container', swap: 'innerHTML'});
         container.dataset.loaded = 'true';
+    }
+}
+
+function restoreTasksFilters(context = document) {
+    const form = context.querySelector('#task-filter-form');
+    if (!form) return;
+
+    const stored = localStorage.getItem(STORAGE_KEY_TASKS_FILTERS);
+    if (!stored) return;
+
+    try {
+        const filters = JSON.parse(stored);
+        initCustomSelects(form);
+        applyFormFilters(form, filters);
+        const queryParts = buildQueryParts(filters);
+        if (queryParts.length === 0) return;
+
+        const baseUrl = form.getAttribute('hx-get') || '/api/tasks?page=0&lang=en';
+        const finalUrl = `${baseUrl}&${queryParts.join('&')}`;
+        htmx.ajax('GET', finalUrl, { target: '#task-table-body', swap: 'innerHTML' });
+    } catch (e) {
+        console.error('Failed to restore task filters', e);
     }
 }
 
@@ -508,6 +526,42 @@ function toggleOwnedFilterGroup(button) {
 function updateOwnedFilterGroupsState() {
     document.querySelectorAll('[data-filter-group]').forEach((group) => {
         updateOwnedFilterGroupSummary(group);
+    });
+}
+
+function normalizeSearchText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\s+/g, '');
+}
+
+function filterCustomSelectOptions(selectId, query) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const normalized = normalizeSearchText(query);
+    const options = Array.from(select.options);
+
+    options.forEach((option) => {
+        if (option.value === '') return;
+        const searchText = option.getAttribute('data-search') || option.text || option.value;
+        const match = !normalized || normalizeSearchText(searchText).includes(normalized);
+        option.hidden = !match;
+        option.disabled = !match;
+    });
+
+    const container = select.closest('.custom-select-container');
+    if (!container) return;
+
+    const optionEls = container.querySelectorAll('.custom-select-option');
+    optionEls.forEach((optEl) => {
+        if (optEl.dataset.value === '') {
+            optEl.style.display = '';
+            return;
+        }
+        const searchText = optEl.dataset.search || optEl.textContent || '';
+        const match = !normalized || normalizeSearchText(searchText).includes(normalized);
+        optEl.style.display = match ? '' : 'none';
     });
 }
 
@@ -807,7 +861,7 @@ function switchTab(tabName, options = {}) {
             const hash = initialHash;
             let targetBtn = null;
             // 检查 hash 是否为 management 子项
-            if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
+            if (hash && ['accounts', 'plans', 'tasks', 'metadata'].includes(hash)) {
                 targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
             }
 
@@ -838,7 +892,7 @@ function restoreTab() {
     if (hash === 'records' || hash === 'management' || hash === 'owned-cards') {
         // Hash 直接指向 Tab
         tabName = hash;
-    } else if (['accounts', 'plans', 'metadata'].includes(hash)) {
+    } else if (['accounts', 'plans', 'tasks', 'metadata'].includes(hash)) {
         // Hash 指向 management 子项
         tabName = 'management';
     } else {
@@ -847,7 +901,7 @@ function restoreTab() {
     }
 
     if (tabName) {
-        if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
+        if (hash && ['accounts', 'plans', 'tasks', 'metadata'].includes(hash)) {
             switchTab('management', { preserveHash: true, preferHash: hash });
         } else {
             const btn = document.getElementById(`tab-btn-${tabName}`);
@@ -938,6 +992,77 @@ function updateIntervalSeconds(inputEl) {
     if (hidden) {
         hidden.value = String(Math.max(0, total));
     }
+}
+
+function getRelativeLabels(container) {
+    return {
+        locale: container.dataset.relativeLocale || 'en',
+        justNow: container.dataset.relativeJustNow || 'just now',
+        soon: container.dataset.relativeSoon || 'soon',
+        minutes: container.dataset.relativeMinutes || 'min',
+        hours: container.dataset.relativeHours || 'hr',
+        days: container.dataset.relativeDays || 'day',
+        ago: container.dataset.relativeAgo || 'ago',
+        in: container.dataset.relativeIn || 'in'
+    };
+}
+
+function formatRelativeTime(target, labels) {
+    const diffMs = target.getTime() - Date.now();
+    const future = diffMs > 0;
+    const absSec = Math.abs(diffMs) / 1000;
+
+    if (absSec < 60) {
+        return future ? labels.soon : labels.justNow;
+    }
+
+    let value = 0;
+    let unit = labels.minutes;
+    if (absSec < 3600) {
+        value = Math.round(absSec / 60);
+        unit = labels.minutes;
+    } else if (absSec < 86400) {
+        value = Math.round(absSec / 3600);
+        unit = labels.hours;
+    } else {
+        value = Math.round(absSec / 86400);
+        unit = labels.days;
+    }
+
+    if (labels.locale.startsWith('en')) {
+        return future ? `${labels.in} ${value} ${unit}` : `${value} ${unit} ${labels.ago}`;
+    }
+
+    return `${value}${unit}${future ? labels.in : labels.ago}`;
+}
+
+function updateRelativeTimes(root = document) {
+    const containers = [];
+    if (root && root.nodeType === 1 && root.matches && root.matches('[data-relative-locale]')) {
+        containers.push(root);
+    }
+    if (root && root.nodeType === 1 && root.closest) {
+        const closestContainer = root.closest('[data-relative-locale]');
+        if (closestContainer && !containers.includes(closestContainer)) {
+            containers.push(closestContainer);
+        }
+    }
+    if (root && root.querySelectorAll) {
+        containers.push(...root.querySelectorAll('[data-relative-locale]'));
+    }
+    containers.forEach((container) => {
+        const labels = getRelativeLabels(container);
+        container.querySelectorAll('.relative-time').forEach((el) => {
+            const iso = el.dataset.iso;
+            if (!iso) return;
+            const date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return;
+            el.textContent = formatRelativeTime(date, labels);
+            if (el.dataset.tooltip) {
+                el.setAttribute('data-tooltip', el.dataset.tooltip);
+            }
+        });
+    });
 }
 
 function getPlansMessages(list) {
@@ -1160,6 +1285,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Auto-init on HTMX load
     document.body.addEventListener('htmx:load', function(evt) {
         initCustomSelects(evt.detail.elt);
+        updateRelativeTimes(evt.detail.elt);
+        restoreTasksFilters(evt.detail.elt);
     });
 
     document.body.addEventListener('change', (event) => {
@@ -1194,6 +1321,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (evt.detail && evt.detail.target && evt.detail.target.id === 'modal-content') {
             getModal().openFromSwap();
         }
+        if (evt.detail && evt.detail.target) {
+            updateRelativeTimes(evt.detail.target);
+        }
     });
 
     // Modal 打开时自动初始化内部组件
@@ -1216,6 +1346,35 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+
+    updateRelativeTimes(document);
+    if (!window.relativeTimeTimer) {
+        window.relativeTimeTimer = setInterval(() => {
+            updateRelativeTimes(document);
+        }, 60000);
+    }
+
+    if (!window.customSelectObserver) {
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                mutation.addedNodes.forEach((node) => {
+                    if (!(node instanceof Element)) return;
+                    if (node.matches && node.matches('select.js-custom-select')) {
+                        initCustomSelects(node.parentNode || node);
+                        return;
+                    }
+                    if (node.querySelector) {
+                        const select = node.querySelector('select.js-custom-select:not(.custom-select-initialized)');
+                        if (select) {
+                            initCustomSelects(node);
+                        }
+                    }
+                });
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        window.customSelectObserver = observer;
+    }
 });
 
 // --- Custom Select Logic ---
@@ -1302,6 +1461,8 @@ function initCustomSelects(context = document) {
             if (option.selected) optDiv.classList.add('selected');
             optDiv.textContent = option.text;
             optDiv.dataset.value = option.value;
+            const searchValue = option.getAttribute('data-search') || option.text || option.value;
+            optDiv.dataset.search = String(searchValue).toLowerCase();
             
             // Copy text size classes to options too if needed for consistency? 
             // Usually options can stay default size, but let's see. 
@@ -1312,7 +1473,7 @@ function initCustomSelects(context = document) {
                 
                 // Update Select
                 select.value = option.value;
-                select.dispatchEvent(new Event('change')); // Notify listeners
+                select.dispatchEvent(new Event('change', { bubbles: true })); // Notify listeners
                 
                 // Update UI
                 trigger.querySelector('span').textContent = option.text;
@@ -1326,10 +1487,76 @@ function initCustomSelects(context = document) {
             
             optionsList.appendChild(optDiv);
         });
-        
+
         container.appendChild(optionsList);
+
+        if (select.dataset.searchable === 'true') {
+            const searchInput = document.createElement('input');
+            const placeholder = select.dataset.searchPlaceholder || 'Search';
+            searchInput.type = 'text';
+            searchInput.className = 'custom-select-search brutal-input text-xs w-full';
+            searchInput.placeholder = placeholder;
+            searchInput.addEventListener('input', () => {
+                filterCustomSelectOptions(select.id, searchInput.value);
+            });
+            searchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                }
+            });
+            searchInput.addEventListener('click', (e) => e.stopPropagation());
+            optionsList.insertAdjacentElement('afterbegin', searchInput);
+        }
         
         // Toggle Logic with Smart Positioning
+        const getVisibleOptions = () => {
+            return Array.from(optionsList.querySelectorAll('.custom-select-option'))
+                .filter((el) => el.style.display !== 'none');
+        };
+
+        const updateFocusedOption = (nextIndex) => {
+            const visible = getVisibleOptions();
+            if (visible.length === 0) return null;
+            const bounded = Math.max(0, Math.min(nextIndex, visible.length - 1));
+            optionsList.querySelectorAll('.custom-select-option').forEach((el) => {
+                el.classList.remove('focused');
+            });
+            const focused = visible[bounded];
+            focused.classList.add('focused');
+            focused.scrollIntoView({ block: 'nearest' });
+            return focused;
+        };
+
+        const handleKeyNavigation = (event) => {
+            const visible = getVisibleOptions();
+            if (!visible.length) return;
+            const currentIndex = visible.findIndex((el) => el.classList.contains('focused'));
+
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                updateFocusedOption(currentIndex < 0 ? 0 : currentIndex + 1);
+            }
+
+            if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                updateFocusedOption(currentIndex < 0 ? 0 : currentIndex - 1);
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const focused = currentIndex >= 0 ? visible[currentIndex] : visible[0];
+                if (focused) {
+                    focused.click();
+                }
+            }
+
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                container.classList.remove('open');
+                container.classList.remove('open-up');
+            }
+        };
+
         trigger.addEventListener('click', (e) => {
             e.stopPropagation();
             
@@ -1362,8 +1589,26 @@ function initCustomSelects(context = document) {
                 }
                 
                 container.classList.add('open');
+                if (select.dataset.searchable === 'true') {
+                    const searchInput = container.querySelector('.custom-select-search');
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.select();
+                    }
+                } else {
+                    updateFocusedOption(0);
+                }
             }
         });
+
+        trigger.addEventListener('keydown', handleKeyNavigation);
+        optionsList.addEventListener('keydown', handleKeyNavigation);
+        if (select.dataset.searchable === 'true') {
+            const searchInput = optionsList.querySelector('.custom-select-search');
+            if (searchInput) {
+                searchInput.addEventListener('keydown', handleKeyNavigation);
+            }
+        }
 
         // Listen for external updates to the original select (e.g. reset form)
         select.addEventListener('change', () => {
@@ -1399,6 +1644,8 @@ window.setLang = setLang;
 window.setTheme = setTheme;
 window.saveFilters = saveFilters;
 window.saveOwnedFilters = saveOwnedFilters;
+window.saveFormFilters = saveFormFilters;
+window.saveTasksFilters = saveTasksFilters;
 window.clearFilters = clearFilters;
 window.clearOwnedFilters = clearOwnedFilters;
 window.refreshRecords = refreshRecords;
@@ -1419,5 +1666,6 @@ window.updateIntervalSeconds = updateIntervalSeconds;
 window.addPlan = addPlan;
 window.removePlan = removePlan;
 window.savePlans = savePlans;
+window.filterCustomSelectOptions = filterCustomSelectOptions;
 // 以下函数从 modules/utils.js 导入，已自动注册到全局
 // window.showToast

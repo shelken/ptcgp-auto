@@ -117,9 +117,20 @@ src/ptcgp_auto_v2/web/
 - **Modal 交互一致性**：必须复用 `modal.html` 宏与 `modules/modal.js` 逻辑；遮罩点击关闭、关闭按钮可见性与滚动锁定要一致。
 - **滚动锁定**：打开 Modal 时同时锁定 `body` 与 `html` 的滚动，避免滚轮影响主页面。
 - **自定义 Select**：`hx-on` 里调用的函数需挂到 `window`；恢复选择时需要 `reinitCustomSelect` 刷新 UI。
+- **自定义 Select 事件**：触发 `change` 必须冒泡（`new Event('change', { bubbles: true })`），否则 HTMX 表单不刷新；搜索框回车需 `preventDefault()` 防止整页刷新。
+- **自定义 Select 键盘**：需要支持上下键/回车/ESC 的统一行为，避免各处单独实现导致体验不一致。
 - **筛选恢复与作用域**：恢复筛选时必须在对应表单内查找元素，避免命中其他 Tab 的同名输入。
+- **筛选参数合法性**：筛选参数可能为空字符串（如 `account_id=`），后端需容错解析，避免 422。
 - **HTMX 请求去重**：不要在恢复状态时触发多次 `change`；避免写回带参数的 `data-url`，使用 `data-base-url` 构建请求。
+- **HTMX 局部替换**：表格分页/滚动加载时避免重复渲染表头；只替换 `tbody` 行或使用哨兵行。
 - **排序参数传递**：排序控件若不在表单内部，需要在 `hx-include` 明确包含该控件，否则请求丢参。
 - **Tab 恢复**：根据 hash 恢复时仍需触发切换动作，避免停留在默认 Tab。
 - **元素值归一化**：属性/元素字段注意大小写归一，避免出现重复选项与筛选失效。
+- **时间展示一致性**：列表中的时间字段建议统一为“相对时间 + 悬浮具体时间”；HTMX swap 后需要重新调用 `updateRelativeTimes`，且根节点本身也可能是 `data-relative-locale` 容器。
+- **Tooltip**：优先使用 `data-tooltip` + 自定义样式，避免依赖浏览器原生 title 在主题/样式下不可见。
+- **筛选条件缓存**：所有列表页面的筛选条件必须缓存（如 localStorage），避免刷新/切换后需要重新选择；恢复时注意不要触发重复请求。
+- **筛选统一策略**：所有带筛选的列表页面必须使用统一的序列化/恢复逻辑（`serializeFormFilters`/`applyFormFilters`/`buildQueryParts`），避免各页面各写一套。
+- **自定义 Select 初始化兜底**：HTMX/动态插入 DOM 后需确保自定义 Select 被自动初始化（可使用 MutationObserver 兜底），防止退回浏览器默认样式。
+- **相对时间更新**：筛选/分页追加后要重新更新相对时间；`updateRelativeTimes` 需要能处理根节点与其最近容器。
+- **相对时间展示一致**：所有列表中的时间字段统一使用“相对时间 + 悬浮具体时间”，并在 HTMX 替换后重算，避免筛选后回退成绝对时间。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
