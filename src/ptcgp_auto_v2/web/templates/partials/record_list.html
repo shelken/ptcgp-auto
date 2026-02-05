@@ -21,11 +21,19 @@
             <div class="mt-6 font-mono text-sm brutal-border p-3 shadow-[4px_4px_0px_0px_var(--shadow-color)]" style="background-color: var(--bg-color); box-shadow: 4px 4px 0px var(--shadow-color);">
                 <div class="flex justify-between border-b pb-1 mb-1" style="border-color: var(--border-color);">
                     <span class="text-muted">{{ t.date_label }}</span>
-                    <span class="font-bold">{{ item.opened_at.strftime('%Y-%m-%d') }}</span>
+                    <span class="font-bold tooltip-text relative-time"
+                          data-iso="{{ item.opened_at.isoformat(timespec='seconds') }}"
+                          data-tooltip="{{ item.opened_at|datetime }}">
+                        {{ item.opened_at|datetime }}
+                    </span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-muted">{{ t.time_label }}</span>
-                    <span class="font-bold">{{ item.opened_at.strftime('%H:%M:%S') }}</span>
+                    <span class="font-bold tooltip-text relative-time"
+                          data-iso="{{ item.opened_at.isoformat(timespec='seconds') }}"
+                          data-tooltip="{{ item.opened_at|datetime }}">
+                        {{ item.opened_at|datetime }}
+                    </span>
                 </div>
             </div>
         </div>
