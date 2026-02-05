@@ -4,9 +4,36 @@
 
 ```
 src/ptcgp_auto_v2/web/
-├── app.py                      # FastAPI 主应用入口
+├── app.py                      # FastAPI 主应用入口（初始化与路由挂载）
+├── routers/                    # 路由层（参数解析/响应拼装）
+│   ├── index.py
+│   ├── records.py
+│   ├── owned_cards.py
+│   ├── tasks.py
+│   ├── management.py
+│   ├── plans.py
+│   ├── metadata.py
+│   └── pack_config.py
+├── services/                   # 业务层（视图模型/业务组合）
+│   ├── index_service.py
+│   ├── record_service.py
+│   ├── owned_card_service.py
+│   ├── task_service.py
+│   ├── plan_service.py
+│   ├── metadata_service.py
+│   ├── pack_config_service.py
+│   └── account_service.py
+├── queries/                    # 查询层（SQL 构造/分页过滤）
+│   ├── record_queries.py
+│   ├── owned_card_queries.py
+│   ├── task_queries.py
+│   └── metadata_queries.py
 ├── utils/                      # 工具模块
-│   └── form_utils.py          # 表单处理工具函数
+│   ├── form_utils.py          # 表单处理工具函数
+│   ├── element_utils.py       # 元素归一化工具
+│   ├── i18n.py                # 多语言加载与校验
+│   ├── template_env.py        # 模板初始化
+│   └── view_helpers.py        # 视图辅助方法
 ├── templates/                  # Jinja2 模板
 │   ├── index.html             # 主页面（单页应用，包含所有 Tab）
 │   └── partials/              # 局部模板（用于 HTMX 动态加载）
@@ -28,8 +55,16 @@ src/ptcgp_auto_v2/web/
 │   ├── css/
 │   │   └── main.css           # 主样式文件（CSS 变量 + 工具类）
 │   └── js/
-│       ├── main.js            # 主 JS 文件
+│       ├── main.js            # 主 JS 入口
 │       └── modules/           # ES6 模块
+│           ├── bootstrap.js   # 初始化与事件绑定
+│           ├── card_preview.js # 卡牌预览
+│           ├── filters.js     # 筛选/持久化
+│           ├── tabs.js        # Tab 切换
+│           ├── custom_select.js # 自定义下拉
+│           ├── plans.js       # 计划列表
+│           ├── tasks.js       # 任务排序与间隔
+│           ├── owned_cards.js # 已拥有卡牌
 │           ├── modal.js       # 模态框处理
 │           └── utils.js       # 工具函数（toast、throttle、debounce 等）
 ├── locales/                    # 国际化文件
@@ -42,11 +77,14 @@ src/ptcgp_auto_v2/web/
 
 ### 后端 (FastAPI)
 
-- **app.py**: 主应用，包含所有 API 路由
+- **app.py**: 主应用入口，仅负责初始化与路由挂载
   - 路由采用 RESTful 风格，返回 HTML 片段供 HTMX 使用
   - 依赖注入 `get_fastapi_session` 获取数据库会话
-  - 使用 `get_translations()` 支持多语言
+  - i18n 与模板初始化在 `utils/` 中集中管理
   - Jinja2 过滤器：`datetime` 用于格式化日期
+- **routers/**: 路由层，仅处理参数解析与响应拼装
+- **services/**: 业务层，负责视图模型与业务拼装
+- **queries/**: 查询层，负责 SQL 构造与分页过滤
 
 ### 前端 (HTMX + ES6 Modules)
 
@@ -103,7 +141,7 @@ src/ptcgp_auto_v2/web/
 
 ### 新增功能流程
 
-1. **后端 API**: 在 `app.py` 添加新的路由
+1. **后端 API**: 在 `routers/` 添加新路由，并在 `services/`/`queries/` 补齐逻辑
 2. **模板**: 在 `templates/partials/` 添加局部模板（如需要）
 3. **宏组件**: 通用组件请添加到 `templates/partials/macros/`
 4. **本地化**: 在 `locales/*.json` 添加翻译键
