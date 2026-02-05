@@ -104,7 +104,10 @@ def restart_bluestacks_instance_for_device(
     logger.info("准备重启 BlueStacks 实例: %s (PID=%s)", instance, pid)
 
     subprocess.run(["kill", str(pid)], check=False)
-    time.sleep(1.5)
+    time.sleep(1.0)
+    subprocess.run(["kill", "-9", str(pid)], check=False)
+    _wait_for_port_closed(device_address, timeout_seconds=10, interval_seconds=1.0)
+    time.sleep(1.0)
 
     subprocess.Popen(
         [bin_path, "--instance", instance],
@@ -113,7 +116,54 @@ def restart_bluestacks_instance_for_device(
         stderr=subprocess.DEVNULL,
     )
     logger.info("已启动 BlueStacks 实例: %s", instance)
-    return True
+    return wait_for_bluestacks_port(
+        device_address, timeout_seconds=90, interval_seconds=2
+    )
+
+
+def _wait_for_port_closed(
+    device_address: str,
+    timeout_seconds: int = 10,
+    interval_seconds: float = 1.0,
+) -> bool:
+    """等待 BlueStacks 端口关闭。"""
+    port = _extract_port_from_address(device_address)
+    if port is None:
+        logger.warning("无法解析设备端口: %s", device_address)
+        return False
+
+    start_time = time.time()
+    while time.time() - start_time < timeout_seconds:
+        pid = find_bluestacks_pid_by_port(port)
+        if pid is None:
+            return True
+        time.sleep(interval_seconds)
+
+    logger.warning("等待端口关闭超时: %s", device_address)
+    return False
+
+
+def wait_for_bluestacks_port(
+    device_address: str,
+    timeout_seconds: int = 60,
+    interval_seconds: float = 2.0,
+) -> bool:
+    """等待 BlueStacks 端口就绪。"""
+    port = _extract_port_from_address(device_address)
+    if port is None:
+        logger.warning("无法解析设备端口: %s", device_address)
+        return False
+
+    start_time = time.time()
+    while time.time() - start_time < timeout_seconds:
+        pid = find_bluestacks_pid_by_port(port)
+        if pid is not None:
+            logger.info("BlueStacks 端口已就绪: %s", device_address)
+            return True
+        time.sleep(interval_seconds)
+
+    logger.warning("等待 BlueStacks 端口就绪超时: %s", device_address)
+    return False
 
 
 def discover_bluestacks_devices() -> List[str]:
@@ -156,5 +206,6 @@ __all__ = [
     "find_bluestacks_pid_by_port",
     "find_bluestacks_instance_by_port",
     "restart_bluestacks_instance_for_device",
+    "wait_for_bluestacks_port",
     "discover_bluestacks_devices",
 ]
