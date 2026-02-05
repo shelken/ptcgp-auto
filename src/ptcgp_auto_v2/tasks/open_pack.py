@@ -12,6 +12,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.constants import (
+    PACK_SERIES_CODES,
     PACK_TEMPLATE_THRESHOLD,
     SWIPE_DURATION_OPEN,
     SWIPE_DURATION_REGISTER,
@@ -74,6 +75,7 @@ BASE_POPUP_CLOSE_TAP_Y = 1820  # 1920 * 0.95
 
 # 主页无免费包检查次数阈值
 HOME_CHECK_THRESHOLD = 3
+
 
 # 跳过原因常量
 SKIP_REASON_NO_ACCOUNT_ID = "账号 ID 为空"
@@ -190,7 +192,6 @@ class OpenPackTask(Task):
 
         # 目标卡包配置
         self.target_pack: dict[str, str] | None = None
-        self._boosters_list: list[str] = []
 
         # 数据仓储（延迟加载）
         self._pack_config_repo: "AccountPackConfigRepository | None" = None
@@ -275,9 +276,7 @@ class OpenPackTask(Task):
         # 准备图片资源
         self._prepare_image_resources()
 
-        # 加载子包列表
         pack_code = self.target_pack.get("pack_code") if self.target_pack else None
-        self._boosters_list = self._load_boosters_list(pack_code) if pack_code else []
 
         # 预加载目标系列 Hash（后台线程，不阻塞任务启动）
         if pack_code:
@@ -313,9 +312,6 @@ class OpenPackTask(Task):
                     template_matcher.load_template(
                         f"packs_auto/{safe_booster_name}.png", is_pack_template=False
                     )
-
-                    # 2. 加载该系列所有卡牌图片（cards/{pack_code}）
-                    template_matcher.load_pack_templates(pack_code)
 
                     logger.debug(
                         f"已加载卡包封面: {safe_booster_name}.png, 卡牌系列: {pack_code}"
@@ -380,14 +376,6 @@ class OpenPackTask(Task):
 
         if result.success and not result.skipped and self._packs_opened_count > 0:
             logger.info(f"本次共开 {self._packs_opened_count} 包")
-
-        # 清理卡包模板资源
-        if self.recognizer:
-            try:
-                _, template_matcher = self.recognizer
-                template_matcher.unload_pack_templates()
-            except Exception as e:
-                logger.warning(f"卸载卡包模板失败: {e}")
 
     # ============================================================
     # 页面处理方法
@@ -517,7 +505,7 @@ class OpenPackTask(Task):
         if not match:
             from ptcgp_auto_v2.utils.gesture import tap_right_side
 
-            for attempt in range(len(self._boosters_list)):
+            for attempt in range(len(PACK_SERIES_CODES)):
                 logger.info(f"  -> 第 {attempt + 1} 次切换子包")
                 tap_right_side(self.page_detector.adb, wait=1.0)
                 screenshot, ocr_results = self.page_detector.capture()
@@ -787,14 +775,6 @@ class OpenPackTask(Task):
     def _save_high_rarity_cards(self, cards: list[dict]) -> None:
         """记录高稀有度卡牌到账号卡牌表"""
         save_high_rarity_cards(self._account_card_repo, self.account.id, cards)
-
-    def _load_boosters_list(self, pack_code: str) -> list[str]:
-        """从 packs.json 加载子包列表"""
-        from ptcgp_auto_v2.utils.packs import get_boosters
-
-        boosters = get_boosters(pack_code)
-        logger.debug(f"系列 {pack_code} 有 {len(boosters)} 个子包: {boosters}")
-        return boosters
 
     def _get_target_series(self) -> Optional[str]:
         """根据 pack_code 获取目标系列（A/B）"""

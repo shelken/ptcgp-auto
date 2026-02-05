@@ -212,8 +212,7 @@ def _interactive_set_config(account_id: int) -> int | str:
 
     # 选择子包（方向键）
     # 从数据库获取子包列表
-    pack_data = repo.get_packs_by_set(pack_code)
-    boosters = pack_data.get(pack_code, {}).get("boosters", [])
+    boosters = repo.get_pack_names_by_set(pack_code)
 
     if not boosters:
         print(f"扩充包 {pack_code} 没有子包数据")
