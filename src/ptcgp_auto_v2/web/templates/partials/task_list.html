@@ -19,6 +19,11 @@
         {% endset %}
         {% set task_cell %}
             <div>{{ t['task_' + item.task_type] or item.task_type }}</div>
+            {% if item.task_type == 'open_pack' and item.target_pack_label %}
+                <div class="text-xs text-muted">
+                    {{ item.target_pack_label }}{% if item.target_pack_auto %} ({{ t.label_auto or 'Auto' }}){% endif %}
+                </div>
+            {% endif %}
         {% endset %}
         {% set status_cell %}
             {{ status_badge(item.status, t) }}

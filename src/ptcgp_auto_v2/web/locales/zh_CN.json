@@ -90,6 +90,7 @@
     "label_nickname": "昵称",
     "btn_refresh": "刷新",
     "btn_reset_completed": "重置已完成",
+    "label_auto": "自动",
     "btn_new_plan": "+ 新建计划",
     "col_id": "ID",
     "col_game_id": "游戏 ID",
