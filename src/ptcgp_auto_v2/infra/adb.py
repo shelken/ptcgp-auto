@@ -15,11 +15,16 @@ from adbutils import adb, AdbDevice
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import (
+    ADB_CONNECT_FAIL_RESTART_THRESHOLD,
     DEFAULT_ADB_PORT,
     DEFAULT_LONG_PRESS_DURATION,
     DEFAULT_SCROLL_DURATION,
     DEFAULT_SCROLL_RATIO,
     DEFAULT_SWIPE_DURATION,
+)
+from ptcgp_auto_v2.utils.bluestacks_manager import (
+    restart_bluestacks_instance_for_device,
+    wait_for_bluestacks_port,
 )
 from ptcgp_auto_v2.config.settings import get_settings
 
@@ -32,6 +37,8 @@ class AdbController:
 
     封装与 Android 模拟器的交互操作。
     """
+
+    _connect_failures: dict[str, int] = {}
 
     def __init__(self, address: str):
         """
@@ -117,16 +124,25 @@ class AdbController:
             output = adb.connect(self.address)
             logger.debug(f"ADB 连接: {output}")
 
+            if isinstance(output, str) and "failed to connect" in output:
+                logger.error(f"ADB 连接失败: {output}")
+                if self._register_connect_failure():
+                    return self._retry_connect_after_restart()
+                return False
+
             self.device = adb.device(serial=self.address)
             logger.info(f"已连接设备: {self.device.serial}")
 
             # 自动获取屏幕分辨率
             self._update_screen_size()
+            self._reset_connect_failures()
 
             return True
 
         except (RuntimeError, ConnectionError) as e:
             logger.error(f"ADB 连接失败: {e}")
+            if self._register_connect_failure():
+                return self._retry_connect_after_restart()
             return False
 
     def disconnect(self):
@@ -137,6 +153,54 @@ class AdbController:
                 logger.info("ADB 已断开")
             except (RuntimeError, OSError) as e:
                 logger.error(f"断开失败: {e}")
+
+    def _register_connect_failure(self) -> bool:
+        """记录连接失败并在必要时重启模拟器。"""
+        failures = self._connect_failures.get(self.address, 0) + 1
+        self._connect_failures[self.address] = failures
+        logger.warning(
+            "ADB 连续失败次数: %s/%s (%s)",
+            failures,
+            ADB_CONNECT_FAIL_RESTART_THRESHOLD,
+            self.address,
+        )
+        if failures >= ADB_CONNECT_FAIL_RESTART_THRESHOLD:
+            logger.warning("超过连接失败阈值，尝试重启模拟器: %s", self.address)
+            restart_bluestacks_instance_for_device(self.address)
+            self._connect_failures[self.address] = 0
+            return True
+        return False
+
+    def _retry_connect_after_restart(self) -> bool:
+        """重启后等待端口就绪并重试连接。"""
+        if not wait_for_bluestacks_port(self.address, timeout_seconds=90):
+            return False
+
+        for attempt in range(1, 6):
+            try:
+                output = adb.connect(self.address)
+                logger.debug(f"ADB 重试连接: {output}")
+                if isinstance(output, str) and "failed to connect" in output:
+                    time.sleep(2.0)
+                    continue
+                self.device = adb.device(serial=self.address)
+                if not self.is_connected():
+                    time.sleep(2.0)
+                    continue
+                logger.info(f"已连接设备: {self.device.serial}")
+                self._update_screen_size()
+                self._reset_connect_failures()
+                return True
+            except (RuntimeError, ConnectionError) as e:
+                logger.error(f"ADB 重试连接失败: {e}")
+                time.sleep(2.0)
+
+        return False
+
+    def _reset_connect_failures(self):
+        """重置连接失败计数。"""
+        if self.address in self._connect_failures:
+            self._connect_failures[self.address] = 0
 
     def _update_screen_size(self):
         """获取并更新屏幕分辨率"""
@@ -283,7 +347,9 @@ class AdbController:
         except (RuntimeError, OSError) as e:
             logger.error(f"长按失败: {e}")
 
-    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: int = DEFAULT_SWIPE_DURATION):
+    def swipe(
+        self, x1: int, y1: int, x2: int, y2: int, duration: int = DEFAULT_SWIPE_DURATION
+    ):
         """
         滑动屏幕
 
@@ -304,7 +370,11 @@ class AdbController:
         except (RuntimeError, OSError) as e:
             logger.error(f"滑动失败: {e}")
 
-    def swipe_up(self, ratio: float = DEFAULT_SCROLL_RATIO, duration: int = DEFAULT_SCROLL_DURATION):
+    def swipe_up(
+        self,
+        ratio: float = DEFAULT_SCROLL_RATIO,
+        duration: int = DEFAULT_SCROLL_DURATION,
+    ):
         """
         向上滑动
 
@@ -318,7 +388,11 @@ class AdbController:
         end_y = self.screen_height // 2 - distance // 2
         self.swipe(center_x, start_y, center_x, end_y, duration)
 
-    def swipe_down(self, ratio: float = DEFAULT_SCROLL_RATIO, duration: int = DEFAULT_SCROLL_DURATION):
+    def swipe_down(
+        self,
+        ratio: float = DEFAULT_SCROLL_RATIO,
+        duration: int = DEFAULT_SCROLL_DURATION,
+    ):
         """
         向下滑动
 
@@ -453,7 +527,9 @@ class AdbController:
         except (RuntimeError, OSError) as e:
             logger.error(f"启动应用失败: {e}")
 
-    def restart_app(self, package_name: str, activity: str = None, wait_time: float = 2.0):
+    def restart_app(
+        self, package_name: str, activity: str = None, wait_time: float = 2.0
+    ):
         """
         重启应用
 
