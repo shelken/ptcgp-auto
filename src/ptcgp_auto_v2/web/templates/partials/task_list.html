@@ -119,17 +119,35 @@
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
-              onchange="saveTasksFilters()"
+              onchange="saveTasksFilters(); updateTaskResetButtonState(this)"
               data-restore-trigger="true">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
-                <button class="brutal-btn"
-                        type="button"
-                        hx-get="/management/tasks?lang={{ current_lang }}"
-                        hx-target="#management-content"
-                        hx-include="#task-filter-form">
-                    {{ t.btn_refresh or 'Refresh' }}
-                </button>
+                <div class="flex flex-wrap gap-3">
+                    {% set reset_disabled = (selected_status|length > 0) and ('completed' not in selected_status) %}
+                    <span id="task-reset-completed-wrapper"
+                          class="tooltip-text"
+                          data-disabled-tooltip="{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}"
+                          data-tooltip="{% if reset_disabled %}{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}{% endif %}">
+                    <button id="task-reset-completed-btn"
+                            class="brutal-btn {% if reset_disabled %}opacity-50 cursor-not-allowed{% endif %}"
+                            type="button"
+                            {% if reset_disabled %}disabled aria-disabled="true"{% endif %}
+                            hx-get="/management/tasks/reset-completed-modal?lang={{ current_lang }}"
+                            hx-target="#modal-content"
+                            hx-swap="innerHTML"
+                            hx-include="#task-filter-form">
+                        {{ t.btn_reset_completed or 'Reset Completed' }}
+                    </button>
+                    </span>
+                    <button class="brutal-btn"
+                            type="button"
+                            hx-get="/management/tasks?lang={{ current_lang }}"
+                            hx-target="#management-content"
+                            hx-include="#task-filter-form">
+                        {{ t.btn_refresh or 'Refresh' }}
+                    </button>
+                </div>
             </div>
 
             <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'last_completed_at' }}">
