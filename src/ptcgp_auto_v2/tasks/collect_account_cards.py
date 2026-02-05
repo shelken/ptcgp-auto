@@ -130,8 +130,8 @@ class CollectAccountCardsTask(Task):
         self._phase = CollectPhase.ENTER
         self._last_signature: Optional[str] = None
         self._last_detect_signature: Optional[str] = None
-        self._pending_cards: list[tuple[int, float, float]] = []
-        self._pending_seen: set[int] = set()
+        self._pending_cards: dict[int, tuple[float, float]] = {}
+        self._pending_order: list[int] = []
         self._consecutive_all_owned = 0
 
         self._account_card_repo = None
@@ -159,8 +159,8 @@ class CollectAccountCardsTask(Task):
         self._phase = CollectPhase.ENTER
         self._last_signature = None
         self._last_detect_signature = None
-        self._pending_cards = []
-        self._pending_seen = set()
+        self._pending_cards = {}
+        self._pending_order = []
         self._consecutive_all_owned = 0
 
         if self.account.id is None:
@@ -449,12 +449,16 @@ class CollectAccountCardsTask(Task):
                 continue
             if self._account_card_repo.get(self.account.id, card.id) is None:
                 all_in_db = False
-            if card.id in self._pending_seen:
-                continue
-            self._pending_seen.add(card.id)
-            self._pending_cards.append(
-                (card.id, float(item.confidence), float(item.similarity))
-            )
+            conf = float(item.confidence)
+            sim = float(item.similarity)
+            if card.id not in self._pending_cards:
+                self._pending_order.append(card.id)
+                self._pending_cards[card.id] = (conf, sim)
+            else:
+                prev_conf, prev_sim = self._pending_cards[card.id]
+                # 以最高相似度为准，同时保留对应置信度
+                if sim > prev_sim:
+                    self._pending_cards[card.id] = (conf, sim)
             written += 1
 
         # 注意：该逻辑依赖“按获得顺序最新到旧”的排序，若变更排序需重新评估
@@ -483,7 +487,8 @@ class CollectAccountCardsTask(Task):
             return
 
         logger.info("开始批量写入卡牌，共 %s 张", len(self._pending_cards))
-        for card_id, conf, sim in reversed(self._pending_cards):
+        for card_id in reversed(self._pending_order):
+            conf, sim = self._pending_cards[card_id]
             self._account_card_repo.upsert(
                 account_id=self.account.id,
                 card_id=card_id,
