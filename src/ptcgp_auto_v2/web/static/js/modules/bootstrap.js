@@ -95,7 +95,7 @@ export function restoreTheme() {
 function autoRefreshList(container) {
     if (!container) return;
     if (!isElementInActiveTab(container)) return;
-    if (container.dataset.loaded === 'false') return;
+    if (container.dataset.loaded && container.dataset.loaded !== 'true') return;
 
     const baseUrl = container.dataset.autoRefresh;
     const includeSelector = container.dataset.refreshInclude;
@@ -361,6 +361,10 @@ export function initApp() {
             const target = event.detail && event.detail.target;
             if (target && target.dataset) {
                 target.dataset.refreshing = '0';
+                if (target.id === 'records-container' || target.id === 'owned-cards-container') {
+                    target.dataset.loaded = 'true';
+                    target.dataset.loading = 'false';
+                }
             }
         });
 

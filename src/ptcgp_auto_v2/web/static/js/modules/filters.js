@@ -132,9 +132,10 @@ export function restoreFilters() {
         if (!isElementInActiveTab(container)) {
             return;
         }
-        if (container.dataset.loaded === 'true') {
+        if (container.dataset.loaded === 'true' || container.dataset.loading === 'true') {
             return;
         }
+        container.dataset.loading = 'true';
         const baseAttr = container.getAttribute('data-base-url') || container.getAttribute('data-url');
         let finalUrl = baseAttr;
 
@@ -143,7 +144,6 @@ export function restoreFilters() {
         }
 
         htmx.ajax('GET', finalUrl, {target: '#records-container', swap: 'innerHTML'});
-        container.dataset.loaded = 'true';
     }
 }
 
@@ -172,9 +172,10 @@ export function restoreOwnedFilters() {
         if (!isElementInActiveTab(container)) {
             return;
         }
-        if (container.dataset.loaded === 'true') {
+        if (container.dataset.loaded === 'true' || container.dataset.loading === 'true') {
             return;
         }
+        container.dataset.loading = 'true';
         const baseAttr = container.getAttribute('data-base-url') || container.getAttribute('data-url');
         let finalUrl = baseAttr;
 
@@ -183,7 +184,6 @@ export function restoreOwnedFilters() {
         }
 
         htmx.ajax('GET', finalUrl, {target: '#owned-cards-container', swap: 'innerHTML'});
-        container.dataset.loaded = 'true';
     }
 }
 
@@ -196,6 +196,11 @@ export function restoreTasksFilters(context = document) {
     if (!filters) return;
     initCustomSelects(form);
     applyFormFilters(form, filters);
+
+    if (form.dataset.restoreTrigger === 'true' && form.dataset.restoreApplied !== 'true') {
+        form.dataset.restoreApplied = 'true';
+        form.dispatchEvent(new Event('change', { bubbles: true }));
+    }
 }
 
 // --- 初始化任务排序控件 ---
