@@ -354,6 +354,7 @@ def scroll_until_template(
     for attempt in range(max_attempts):
         logger.info(f"  -> 第 {attempt + 1} 次上滑查找模板: {template_name}")
         swipe_up(page_detector.adb, ratio=swipe_ratio, wait=wait)
+        time.sleep(wait)
         screenshot, ocr_results = page_detector.capture()
         if not screenshot:
             continue
