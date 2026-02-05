@@ -1,7 +1,8 @@
 from typing import Any, cast
 
-from typing import Any, cast
+from datetime import datetime
 
+from sqlalchemy import update
 from sqlmodel import Session, select, col
 from sqlalchemy.orm import selectinload
 
@@ -57,3 +58,38 @@ def fetch_task_instances(
     if has_more:
         instances = instances[:page_size]
     return instances, has_more
+
+
+def reset_completed_task_instances(
+    session: Session,
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+) -> int:
+    """按筛选条件重置已完成任务为待执行。"""
+    normalized_status = [item for item in status if item]
+    normalized_task_type = [item for item in task_type if item]
+
+    if normalized_status and "completed" not in normalized_status:
+        return 0
+
+    filtered_task_types = [
+        item for item in normalized_task_type if item != "init_account"
+    ]
+    if normalized_task_type and not filtered_task_types:
+        return 0
+
+    statement = update(TaskInstance).where(TaskInstance.status == "completed")
+    if filtered_task_types:
+        statement = statement.where(
+            col(TaskInstance.task_type).in_(filtered_task_types)
+        )
+    else:
+        statement = statement.where(TaskInstance.task_type != "init_account")
+    if account_id is not None:
+        statement = statement.where(TaskInstance.account_id == account_id)
+
+    statement = statement.values(status="pending", updated_at=datetime.now())
+    result = session.exec(statement)
+    session.commit()
+    return result.rowcount or 0

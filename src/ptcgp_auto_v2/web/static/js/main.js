@@ -4,6 +4,7 @@ import {
     saveOwnedFilters,
     saveFormFilters,
     saveTasksFilters,
+    updateTaskResetButtonState,
     clearFilters,
     clearOwnedFilters,
     refreshRecords,
@@ -28,6 +29,7 @@ window.saveFilters = saveFilters;
 window.saveOwnedFilters = saveOwnedFilters;
 window.saveFormFilters = saveFormFilters;
 window.saveTasksFilters = saveTasksFilters;
+window.updateTaskResetButtonState = updateTaskResetButtonState;
 window.clearFilters = clearFilters;
 window.clearOwnedFilters = clearOwnedFilters;
 window.refreshRecords = refreshRecords;

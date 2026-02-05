@@ -15,10 +15,7 @@ def list_card_sets() -> list[dict]:
 def list_set_boosters(set_code: str) -> list:
     """获取指定系列的补充包列表。"""
     repo = CardRepository()
-    data = repo.get_packs_by_set(set_code)
-    if not data or set_code not in data:
-        return []
-    return data[set_code]["boosters"]
+    return repo.get_pack_names_by_set(set_code)
 
 
 def build_pack_config_context(account_id: int, lang: str) -> dict:
@@ -36,9 +33,7 @@ def build_pack_config_context(account_id: int, lang: str) -> dict:
         config.pack_code if config else (card_sets[0].code if card_sets else None)
     )
     if target_set:
-        data = card_repo.get_packs_by_set(target_set)
-        if data and target_set in data:
-            current_boosters = data[target_set]["boosters"]
+        current_boosters = card_repo.get_pack_names_by_set(target_set)
 
     return {
         "account_id": account_id,
