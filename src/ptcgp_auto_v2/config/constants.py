@@ -67,8 +67,24 @@ SCALE_PACK_DETAIL = 5.05  # 旧值: 1.0
 YOLO_OBB_THRESHOLD = 0.55
 # Hash匹配相似度阈值（来自 test_massive_matching.py 实测验证）
 HASH_SIMILARITY_THRESHOLD = 0.75
-# Hash匹配相似度最小差距（用于排除相近候选）
-HASH_SIMILARITY_GAP_MIN = 0.02
+# Hash匹配相似度最小差距（用于排除相近候选，低于此值拒绝模糊匹配）
+HASH_SIMILARITY_GAP_MIN = 0.005
+
+# 两阶段匹配配置
+TOPK_CANDIDATES = 3  # 第一阶段候选数（原为20，优化为3）
+SECOND_STAGE_STAGE1_WEIGHT = 0.4  # 第二阶段加权：stage1分数权重
+SECOND_STAGE_STAGE2_WEIGHT = 0.6  # 第二阶段加权：stage2分数权重
+
+# OBB检测优化
+OBB_INSET_RATIO = 0.04  # OBB角点收缩比例（向内缩4%去除边缘噪声）
+
+# 哈希裁剪比例（非对称裁剪，去除卡名等区域）
+HASH_CROP_TOP_RATIO = 0.08  # 顶部裁剪8%（去除卡牌名称区域）
+HASH_CROP_BOTTOM_RATIO = 0.03  # 底部裁剪3%
+HASH_CROP_SIDE_RATIO = 0.03  # 左右各裁剪3%
+
+# 多视角哈希变体（第二阶段使用不同顶部裁剪比例生成多个哈希）
+DETECT_HASH_VARIANT_TOP_TRIMS = [0.0, 0.04, 0.08, 0.12]
 
 # 高稀有度卡牌范围（用于记录账号卡牌）
 HIGH_RARITY_TARGETS = ["RR", "AR", "SR", "SAR", "IM", "UR", "S", "SSR"]
