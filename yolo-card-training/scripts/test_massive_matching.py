@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-大规模匹配测试
-扫描当前游戏截图，与 A1 数据库匹配，统计相似度 >= 0.8 的卡牌
+大规模匹配测试 - 优化版本
+扫描当前游戏截图，与数据库匹配，统计相似度 >= 0.75 的卡牌
 """
 
-import io
+import heapq
 import json
 import subprocess
 import sys
@@ -39,11 +39,9 @@ from test_yolo_hash_match import (
 # 引入终端预览工具
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 try:
-    from ptcgp_auto_v2.utils.terminal_preview import (
-        preview_image_inline,  # type: ignore
-    )
+    from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline  # type: ignore
 except ImportError:
-    # 如果导入失败，定义一个空函数避免报错
+
     def preview_image_inline(image, **kwargs):
         return False
 
@@ -64,104 +62,148 @@ class MatchResult:
     card_id: str
     similarity: float
     confidence: float
-    bbox: Optional[Tuple[int, int, int, int]] = None  # (x1, y1, x2, y2) 边框坐标
+    bbox: Optional[Tuple[int, int, int, int]] = None
 
 
+# 配置常量
 HASH_SIMILARITY_THRESHOLD = 0.75
+HASH_SIMILARITY_GAP_MIN = 0.005
 YOLO_OBB_THRESHOLD = 0.55
+TOPK_CANDIDATES = 3
+SECOND_STAGE_STAGE1_WEIGHT = 0.4
+SECOND_STAGE_STAGE2_WEIGHT = 0.6
+OBB_INSET_RATIO = 0.04
+HASH_CROP_TOP_RATIO = 0.08
+HASH_CROP_BOTTOM_RATIO = 0.03
+HASH_CROP_SIDE_RATIO = 0.03
+DETECT_HASH_VARIANT_TOP_TRIMS = [0.0, 0.04, 0.08, 0.12]
+BYPASS_SECOND_STAGE_WHEN_STAGE1_PASS = True
+
+
+def order_obb_corners(corners: np.ndarray) -> np.ndarray:
+    """将 OBB 四点统一为 [左上, 右上, 右下, 左下] 顺序"""
+    y_sorted = corners[np.argsort(corners[:, 1])]
+    top_two = y_sorted[:2]
+    bottom_two = y_sorted[2:]
+    top_two = top_two[np.argsort(top_two[:, 0])]
+    bottom_two = bottom_two[np.argsort(bottom_two[:, 0])]
+    tl, tr = top_two[0], top_two[1]
+    bl, br = bottom_two[0], bottom_two[1]
+    return np.array([tl, tr, br, bl], dtype=np.float32)
+
+
+def inset_obb_corners(corners: np.ndarray, ratio: float) -> np.ndarray:
+    """按中心点将 OBB 四点向内收缩"""
+    center = corners.mean(axis=0)
+    return center + (corners - center) * (1.0 - ratio)
+
+
+def trim_for_hash(
+    image_bgr: np.ndarray,
+    top_ratio: float = HASH_CROP_TOP_RATIO,
+    bottom_ratio: float = HASH_CROP_BOTTOM_RATIO,
+    side_ratio: float = HASH_CROP_SIDE_RATIO,
+) -> np.ndarray:
+    """哈希前对卡图做非对称裁剪"""
+    if image_bgr.size == 0:
+        return image_bgr
+    h, w = image_bgr.shape[:2]
+    x1 = int(w * side_ratio)
+    x2 = int(w * (1.0 - side_ratio))
+    y1 = int(h * top_ratio)
+    y2 = int(h * (1.0 - bottom_ratio))
+    x1 = max(0, min(x1, w - 1))
+    x2 = max(x1 + 1, min(x2, w))
+    y1 = max(0, min(y1, h - 1))
+    y2 = max(y1 + 1, min(y2, h))
+    return image_bgr[y1:y2, x1:x2]
+
+
+def compute_hash_from_bgr(image_bgr: np.ndarray) -> Optional[np.ndarray]:
+    """从 BGR 图像计算感知哈希"""
+    if image_bgr.size == 0:
+        return None
+    pil_img = Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+    color_pixels = pil_to_color_pixels(pil_img)
+    return calculate_perceptual_hash(color_pixels)
+
+
+def build_detect_hash_variants(image_bgr: np.ndarray) -> List[np.ndarray]:
+    """构建检测卡图的多视角哈希"""
+    variants: List[np.ndarray] = []
+    seen: set[bytes] = set()
+    for top_trim in DETECT_HASH_VARIANT_TOP_TRIMS:
+        trimmed = trim_for_hash(
+            image_bgr,
+            top_ratio=top_trim,
+            bottom_ratio=HASH_CROP_BOTTOM_RATIO,
+            side_ratio=HASH_CROP_SIDE_RATIO,
+        )
+        hash_arr = compute_hash_from_bgr(trimmed)
+        if hash_arr is None:
+            continue
+        key = hash_arr.tobytes()
+        if key in seen:
+            continue
+        seen.add(key)
+        variants.append(hash_arr)
+    return variants
 
 
 def load_hash_database(db_path: Path) -> Dict[str, np.ndarray]:
     """加载哈希数据库"""
     print(f"📂 加载哈希数据库: {db_path}")
-
     with open(db_path, "r", encoding="utf-8") as f:
         db_raw = json.load(f)
-
-    # 数据库格式: {hash_str: card_id}
-    # 需要转换为: {card_id: hash_arr}
     db_decoded: Dict[str, np.ndarray] = {}
     for hash_str, card_id in db_raw.items():
         hash_arr = decode_hash_from_base64(hash_str)
         db_decoded[card_id] = hash_arr
-
     print(f"✅ 已加载 {len(db_decoded)} 张卡牌")
-    print(
-        f"   示例: {list(db_decoded.keys())[0]} = {list(db_decoded.values())[0][:3]}..."
-    )
     return db_decoded
 
 
 def detect_cards(
     model_path: str, pil_image: Image.Image, conf_threshold: float = YOLO_OBB_THRESHOLD
 ):
-    """YOLO 检测卡牌，返回检测结果和带绿色框的可视化图片"""
-    # 检查 YOLO 是否可用（已在全局导入）
-    if not ULTRALYTICS_AVAILABLE:
+    """YOLO 检测卡牌"""
+    if not ULTRALYTICS_AVAILABLE or YOLO is None:
         raise ImportError("ultralytics not installed")
-    if YOLO is None:
-        raise ImportError("ultralytics YOLO not available")
 
-    print("     [1/7] 检查 YOLO 可用性...", end=" ")
-    t1 = time.perf_counter()
-    t0 = t1
-    print(f"✅ ({(time.perf_counter() - t1) * 1000:.1f}ms)")
-
-    print("     [2/7] 加载 YOLO 模型...", end=" ")
-    t2 = time.perf_counter()
+    t0 = time.perf_counter()
     model = YOLO(model_path, task="obb")
-    print(f"✅ ({(time.perf_counter() - t2) * 1000:.1f}ms)")
 
-    print("     [3/7] PIL 转 numpy...", end=" ")
-    t3 = time.perf_counter()
-    # PIL -> BGR
     img_array = np.array(pil_image)
     if len(img_array.shape) == 3 and img_array.shape[2] == 4:
         img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
     img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    print(f"✅ ({(time.perf_counter() - t3) * 1000:.1f}ms)")
-
-    print("     [4/7] 创建可视化副本...", end=" ")
-    t4 = time.perf_counter()
-    # 创建可视化副本（用于绘制框）
     vis_img = img_bgr.copy()
-    print(f"✅ ({(time.perf_counter() - t4) * 1000:.1f}ms)")
 
-    print("     [5/7] YOLO 推理...", end=" ")
-    t5 = time.perf_counter()
-    # 检测
     results = model(img_bgr, verbose=False)
     result = results[0]
-    print(f"✅ ({(time.perf_counter() - t5) * 1000:.1f}ms)")
 
     if result.obb is None or len(result.obb) == 0:
-        total_time = (time.perf_counter() - t0) * 1000
-        print(f"\n     ❌ 未检测到卡牌 (总耗时: {total_time:.1f}ms)")
         return [], img_bgr, vis_img
 
-    print("     [6/7] 处理检测框...", end=" ")
-    t6 = time.perf_counter()
     cropped_cards = []
     for i, obb in enumerate(result.obb):
         conf = float(obb.conf[0].item())
-
         if conf < conf_threshold:
             continue
 
-        # 方法1：直接裁剪矩形框（对标原项目，推荐）
+        # 优先使用矩形框裁剪（YOLO已经过NMS，重复少）
         if hasattr(obb, "xyxy") and obb.xyxy is not None:
-            # 使用普通矩形框
             x1, y1, x2, y2 = map(int, obb.xyxy[0])
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(img_bgr.shape[1], x2), min(img_bgr.shape[0], y2)
             cropped = img_bgr[y1:y2, x1:x2]
-            # 计算中心点坐标（用于排序：从左到右，从上到下）
             center_x = (x1 + x2) / 2
             center_y = (y1 + y2) / 2
-        else:
-            # 备用：使用旋转框（透视变换）
+        elif hasattr(obb, "xyxyxyxy") and obb.xyxyxyxy is not None:
+            # 备用：使用旋转框透视变换
             xyxyxyxy = obb.xyxyxyxy[0].cpu().numpy().reshape(-1, 2)
-            corners = xyxyxyxy.astype(np.float32)
+            corners = order_obb_corners(xyxyxyxy.astype(np.float32))
+            corners = inset_obb_corners(corners, OBB_INSET_RATIO)
             target_w, target_h = 480, 670
             dst = np.array(
                 [[0, 0], [target_w, 0], [target_w, target_h], [0, target_h]],
@@ -169,25 +211,48 @@ def detect_cards(
             )
             matrix = cv2.getPerspectiveTransform(corners, dst)
             cropped = cv2.warpPerspective(img_bgr, matrix, (target_w, target_h))
-            # 旋转框：使用边界框中心
             center_x = corners[:, 0].mean()
             center_y = corners[:, 1].mean()
-            # 对于旋转框，使用外接矩形坐标
             x1, y1 = int(corners[:, 0].min()), int(corners[:, 1].min())
             x2, y2 = int(corners[:, 0].max()), int(corners[:, 1].max())
+        else:
+            continue
 
-        # 绘制绿色外框（置信度阈值以上）
-        cv2.rectangle(vis_img, (x1, y1), (x2, y2), (0, 255, 0), 3)  # 绿色，线宽3
+        if hasattr(obb, "xyxyxyxy") and obb.xyxyxyxy is not None:
+            xyxyxyxy = obb.xyxyxyxy[0].cpu().numpy().reshape(-1, 2)
+            corners = order_obb_corners(xyxyxyxy.astype(np.float32))
+            corners = inset_obb_corners(corners, OBB_INSET_RATIO)
+            target_w, target_h = 480, 670
+            dst = np.array(
+                [[0, 0], [target_w, 0], [target_w, target_h], [0, target_h]],
+                dtype=np.float32,
+            )
+            matrix = cv2.getPerspectiveTransform(corners, dst)
+            cropped = cv2.warpPerspective(img_bgr, matrix, (target_w, target_h))
+            center_x = corners[:, 0].mean()
+            center_y = corners[:, 1].mean()
+            x1, y1 = int(corners[:, 0].min()), int(corners[:, 1].min())
+            x2, y2 = int(corners[:, 0].max()), int(corners[:, 1].max())
+        elif hasattr(obb, "xyxy") and obb.xyxy is not None:
+            x1, y1, x2, y2 = map(int, obb.xyxy[0])
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(img_bgr.shape[1], x2), min(img_bgr.shape[0], y2)
+            cropped = img_bgr[y1:y2, x1:x2]
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+        else:
+            continue
 
-        # 标注置信度（框上方）
+        if cropped.size == 0:
+            continue
+
+        cv2.rectangle(vis_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
         conf_text = f"{conf:.2f}"
-        text_size = cv2.getTextSize(conf_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
-        text_x = x1
         text_y = y1 - 5 if y1 > 20 else y1 + 20
         cv2.putText(
             vis_img,
             conf_text,
-            (text_x, text_y),
+            (x1, text_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             (0, 255, 0),
@@ -196,19 +261,14 @@ def detect_cards(
 
         cropped_cards.append(
             {
-                "index": i + 1,  # 临时编号，后续会重新排序
+                "index": i + 1,
                 "confidence": conf,
                 "cropped": cropped,
                 "center_x": center_x,
                 "center_y": center_y,
-                "bbox": (x1, y1, x2, y2),  # 保存原始坐标用于绘制红色框
+                "bbox": (x1, y1, x2, y2),
             }
         )
-    process_time = (time.perf_counter() - t6) * 1000
-    print(f"✅ ({process_time:.1f}ms, {len(cropped_cards)}张卡牌)")
-
-    total_time = (time.perf_counter() - t0) * 1000
-    print(f"     [7/7] 检测完成 (总耗时: {total_time:.1f}ms)")
 
     return cropped_cards, img_bgr, vis_img
 
@@ -219,114 +279,128 @@ def match_against_database(
     vis_img: np.ndarray,
     similarity_threshold: float = HASH_SIMILARITY_THRESHOLD,
 ) -> Tuple[List[MatchResult], int, int, np.ndarray]:
-    """
-    将检测到的卡牌与数据库匹配，并在匹配成功时绘制红色内框
-
-    Returns:
-        (matches, total_checked, above_threshold_count, updated_vis_img)
-    """
+    """将检测到的卡牌与数据库匹配"""
     matches: List[MatchResult] = []
     total_checked = len(cropped_cards) * len(hash_db)
     above_threshold_count = 0
 
     print(f"\n🔍 开始匹配 ({len(cropped_cards)} 张检测 × {len(hash_db)} 张数据库)")
-    print(f"   阈值: {HASH_SIMILARITY_THRESHOLD}")
+    print(f"   阈值: {HASH_SIMILARITY_THRESHOLD}, 最小差值: {HASH_SIMILARITY_GAP_MIN}")
     print("-" * 70)
 
     start_time = time.perf_counter()
 
-    # 保存裁剪图片供检查
-    output_dir = Path("output/test_crops")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     for card in cropped_cards:
-        # 保存裁剪图片（新命名：card_1.jpg, card_2.jpg...）
-        crop_path = output_dir / f"card_{card['index']}.jpg"
-        cv2.imwrite(str(crop_path), card["cropped"])
+        base_hash = compute_hash_from_bgr(card["cropped"])
+        if base_hash is None:
+            continue
 
-        # 计算检测卡牌的哈希（统一使用 PIL 处理流程）
-        pil_img = Image.fromarray(cv2.cvtColor(card["cropped"], cv2.COLOR_BGR2RGB))
-        color_pixels = pil_to_color_pixels(pil_img)
-        card_hash = calculate_perceptual_hash(color_pixels)
+        detect_hash_variants = build_detect_hash_variants(card["cropped"])
+        if not detect_hash_variants:
+            detect_hash_variants = [base_hash]
 
-        # 与数据库中所有卡牌比对
-        best_match: Optional[MatchResult] = None
-        above_threshold_for_card = 0
+        # 使用 heapq.nlargest 优化性能 (O(N log K) vs O(N log N))
+        all_similarities = (
+            (card_id, calculate_similarity(base_hash, db_hash))
+            for card_id, db_hash in hash_db.items()
+        )
+        topk_stage1 = heapq.nlargest(
+            TOPK_CANDIDATES, all_similarities, key=lambda x: x[1]
+        )
+        above_threshold_count += sum(
+            1 for _, sim in topk_stage1 if sim >= similarity_threshold
+        )
 
-        for card_id, db_hash in hash_db.items():
-            similarity = calculate_similarity(card_hash, db_hash)
+        # 快速路径
+        if BYPASS_SECOND_STAGE_WHEN_STAGE1_PASS and topk_stage1:
+            stage1_best_score = topk_stage1[0][1]
+            if stage1_best_score >= similarity_threshold:
+                reranked = [(cid, s1, s1, s1) for cid, s1 in topk_stage1]
+                top3 = reranked[:3]
+            else:
+                top3 = []
+        else:
+            top3 = []
 
-            if similarity >= similarity_threshold:
-                above_threshold_count += 1
-                above_threshold_for_card += 1
+        # 二阶段
+        if not top3:
+            reranked = []
+            for candidate_id, stage1_score in topk_stage1:
+                candidate_hash = hash_db[candidate_id]
+                stage2_score = max(
+                    calculate_similarity(variant_hash, candidate_hash)
+                    for variant_hash in detect_hash_variants
+                )
+                final_score = (
+                    SECOND_STAGE_STAGE1_WEIGHT * stage1_score
+                    + SECOND_STAGE_STAGE2_WEIGHT * stage2_score
+                )
+                reranked.append((candidate_id, final_score, stage1_score, stage2_score))
+            reranked.sort(key=lambda x: x[1], reverse=True)
+            top3 = reranked[:3]
 
-            # 记录最佳匹配（无论是否超过阈值）
-            if best_match is None or similarity > best_match.similarity:
-                best_match = MatchResult(
+        if not top3:
+            print(f"   卡牌 #{card['index']}: ❌ 无匹配")
+            continue
+
+        best_id, best_score, _, _ = top3[0]
+        second_score = top3[1][1] if len(top3) > 1 else 0.0
+        similarity_gap = best_score - second_score
+
+        status = "✅" if best_score >= similarity_threshold else "❌"
+        x1, y1, x2, y2 = card["bbox"]
+        print(
+            f"   卡牌 #{card['index']}: {status} 最佳匹配: {best_id} "
+            f"(相似度: {best_score:.4f}, 边框置信度: {card['confidence']:.3f}, "
+            f"候选差值: {similarity_gap:.4f})"
+        )
+
+        for i, (cid, final_score, stage1_score, stage2_score) in enumerate(top3, 1):
+            mark = "👑" if final_score >= similarity_threshold else "  "
+            print(
+                f"      {mark} 候选{i}: {cid} = {final_score:.4f} "
+                f"(stage1={stage1_score:.4f}, stage2={stage2_score:.4f})"
+            )
+
+        if (
+            best_score >= similarity_threshold
+            and similarity_gap >= HASH_SIMILARITY_GAP_MIN
+        ):
+            matches.append(
+                MatchResult(
                     detected_index=card["index"],
-                    card_id=card_id,
-                    similarity=similarity,
+                    card_id=best_id,
+                    similarity=best_score,
                     confidence=card["confidence"],
                     bbox=card["bbox"],
                 )
-
-        # 输出当前卡牌的最佳匹配（显示前3）
-        if best_match:
-            # 找出所有匹配，按相似度排序
-            all_similarities = []
-            for card_id, db_hash in hash_db.items():
-                sim = calculate_similarity(card_hash, db_hash)
-                all_similarities.append((card_id, sim))
-
-            all_similarities.sort(key=lambda x: x[1], reverse=True)
-            top3 = all_similarities[:3]
-
-            status = "✅" if best_match.similarity >= similarity_threshold else "❌"
-            x1, y1, x2, y2 = card["bbox"]
-            print(
-                f"   卡牌 #{card['index']}: {status} 最佳匹配: {best_match.card_id} "
-                f"(相似度: {best_match.similarity:.4f}, 边框置信度: {best_match.confidence:.3f}, "
-                f"坐标: ({x1},{y1},{x2},{y2}))"
             )
 
-            # 显示前3候选
-            for i, (cid, sim) in enumerate(top3, 1):
-                mark = "👑" if sim >= similarity_threshold else "  "
-                print(f"      {mark} 候选{i}: {cid} = {sim:.4f}")
+            # 绘制红色内框
+            inner_x1, inner_y1 = x1 + 5, y1 + 5
+            inner_x2, inner_y2 = x2 - 5, y2 - 5
+            cv2.rectangle(
+                vis_img, (inner_x1, inner_y1), (inner_x2, inner_y2), (0, 0, 255), 2
+            )
 
-            if best_match.similarity >= similarity_threshold:
-                matches.append(best_match)
-
-                # 绘制红色内框（嵌套在绿色框内）
-                x1, y1, x2, y2 = card["bbox"]
-                # 内缩 5 像素绘制红色框
-                inner_x1, inner_y1 = x1 + 5, y1 + 5
-                inner_x2, inner_y2 = x2 - 5, y2 - 5
-                cv2.rectangle(
-                    vis_img, (inner_x1, inner_y1), (inner_x2, inner_y2), (0, 0, 255), 2
-                )  # 红色，线宽2
-
-                # 框内居中标注卡牌ID
-                card_id = best_match.card_id
-                text_size = cv2.getTextSize(card_id, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[
-                    0
-                ]
-                text_x = (inner_x1 + inner_x2 - text_size[0]) // 2
-                text_y = (inner_y1 + inner_y2 + text_size[1]) // 2
-                cv2.putText(
-                    vis_img,
-                    card_id,
-                    (text_x, text_y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 0, 255),
-                    2,
-                )
-        else:
-            print(f"   卡牌 #{card['index']}: ❌ 无匹配")
+            text_size = cv2.getTextSize(best_id, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+            text_x = (inner_x1 + inner_x2 - text_size[0]) // 2
+            text_y = (inner_y1 + inner_y2 + text_size[1]) // 2
+            cv2.putText(
+                vis_img,
+                best_id,
+                (text_x, text_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 0, 255),
+                2,
+            )
+        elif best_score >= similarity_threshold:
+            print(
+                f"      ⚠️ 差值不足，放弃匹配: gap={similarity_gap:.4f} < {HASH_SIMILARITY_GAP_MIN:.4f}"
+            )
 
     elapsed = time.perf_counter() - start_time
-
     return matches, total_checked, above_threshold_count, vis_img
 
 
@@ -339,20 +413,15 @@ def run_matching_test_with_db(
     source: str = "ADB",
     conf_threshold: float = 0.9,
 ):
-    """核心匹配测试逻辑（接受已加载的数据库字典）"""
+    """核心匹配测试逻辑"""
     print("=" * 70)
     print(f"大规模匹配测试（{source} 模式）")
     print("=" * 70)
-
-    # 数据库已在外部加载
-    db_load_time = 0
     print(f"📂 使用数据库: {hash_db_path}")
     print(f"   已加载 {len(hash_db)} 张卡牌")
-
-    # 2. 显示截图信息
     print(f"\n✅ 截图: {screenshot.width}x{screenshot.height}")
 
-    # 3. YOLO 检测
+    # YOLO 检测
     print(f"\n🚀 加载模型并检测: {model_path}")
     print(f"   置信度阈值: {conf_threshold}")
     start_time = time.perf_counter()
@@ -369,62 +438,20 @@ def run_matching_test_with_db(
         f"✅ 检测到 {len(cropped_cards)} 张卡牌 (检测耗时: {detect_time * 1000:.1f}ms)"
     )
 
-    # 4. 按阅读顺序排序（先行后列：从上到下，从左到右）
-    # 使用行分组策略：y坐标相近的（<10像素）视为同一行
+    # 按阅读顺序排序
     start_time = time.perf_counter()
-
-    def sort_by_rows(cards):
-        """按行分组排序：先从上到下分行，每行内从左到右"""
-        if not cards:
-            return cards
-
-        # 按y坐标排序
-        sorted_by_y = sorted(cards, key=lambda c: c["center_y"])
-
-        rows = []
-        current_row = [sorted_by_y[0]]
-        row_threshold = 10  # y坐标相差小于10像素视为同一行
-
-        for card in sorted_by_y[1:]:
-            if abs(card["center_y"] - current_row[0]["center_y"]) < row_threshold:
-                current_row.append(card)
-            else:
-                # 当前行结束，按x坐标排序并保存
-                current_row.sort(key=lambda c: c["center_x"])
-                rows.append(current_row)
-                current_row = [card]
-
-        # 处理最后一行
-        if current_row:
-            current_row.sort(key=lambda c: c["center_x"])
-            rows.append(current_row)
-
-        # 合并所有行
-        result = []
-        for row in rows:
-            result.extend(row)
-        return result
-
-    cropped_cards = sort_by_rows(cropped_cards)
-
-    # 重新编号
+    cropped_cards.sort(key=lambda c: (c["center_y"], c["center_x"]))
     for i, card in enumerate(cropped_cards, 1):
         card["index"] = i
     sort_time = time.perf_counter() - start_time
-    print(f"   已按从左到右、从上到下排序 (排序耗时: {sort_time * 1000:.1f}ms)")
+    print(f"   已排序 (排序耗时: {sort_time * 1000:.1f}ms)")
 
-    # 5. 大规模匹配（同时绘制红色内框）
-    print(f"\n🔍 开始匹配 ({len(cropped_cards)} 张检测 × {len(hash_db)} 张数据库)")
-    start_time = time.perf_counter()
+    # 匹配
     matches, total_checked, above_threshold, vis_img = match_against_database(
         cropped_cards, hash_db, vis_img, similarity_threshold
     )
-    match_time = time.perf_counter() - start_time
-    print(
-        f"   匹配完成 (耗时: {match_time * 1000:.1f}ms, 平均每张: {match_time / len(cropped_cards) * 1000:.1f}ms)"
-    )
 
-    # 6. 结果汇总
+    # 结果汇总
     print("\n" + "=" * 70)
     print("📊 测试结果汇总")
     print("=" * 70)
@@ -439,58 +466,16 @@ def run_matching_test_with_db(
         print(f"\n   ✅ 匹配详情:")
         avg_sim = sum(m.similarity for m in matches) / len(matches)
         print(f"      平均相似度: {avg_sim:.4f}")
-
-        # 按相似度排序显示
         sorted_matches = sorted(matches, key=lambda x: x.similarity, reverse=True)
-        for i, m in enumerate(sorted_matches[:10], 1):  # 显示前10
+        for i, m in enumerate(sorted_matches[:10], 1):
             print(
                 f"      {i}. {m.card_id}: {m.similarity:.4f} (检测# {m.detected_index})"
             )
-
         if len(sorted_matches) > 10:
             print(f"      ... 还有 {len(sorted_matches) - 10} 张")
 
-    # 7. 未匹配的卡牌
     matched_indices = {m.detected_index for m in matches}
     unmatched = [c for c in cropped_cards if c["index"] not in matched_indices]
-
-    if unmatched:
-        print(f"\n   ⚠️  未匹配的卡牌 ({len(unmatched)} 张):")
-        for c in unmatched:
-            print(f"      卡牌 #{c['index']}: 置信度 {c['confidence']:.3f}")
-
-    # 6. 结果汇总
-    print("\n" + "=" * 70)
-    print("📊 测试结果汇总")
-    print("=" * 70)
-    start_time = time.perf_counter()
-    print(f"   检测到的卡牌: {len(cropped_cards)} 张")
-    print(f"   数据库卡牌数: {len(hash_db)} 张")
-    print(f"   总比对次数: {total_checked:,} 次")
-    print(f"   阈值以上次数: {above_threshold} 次")
-    print(f"   成功匹配: {len(matches)} 张")
-    print(f"   匹配率: {len(matches) / len(cropped_cards) * 100:.1f}%")
-
-    if matches:
-        print(f"\n   ✅ 匹配详情:")
-        avg_sim = sum(m.similarity for m in matches) / len(matches)
-        print(f"      平均相似度: {avg_sim:.4f}")
-
-        # 按相似度排序显示
-        sorted_matches = sorted(matches, key=lambda x: x.similarity, reverse=True)
-        for i, m in enumerate(sorted_matches[:10], 1):  # 显示前10
-            print(
-                f"      {i}. {m.card_id}: {m.similarity:.4f} (检测# {m.detected_index})"
-            )
-
-        if len(sorted_matches) > 10:
-            print(f"      ... 还有 {len(sorted_matches) - 10} 张")
-    summary_time = time.perf_counter() - start_time
-
-    # 7. 未匹配的卡牌
-    matched_indices = {m.detected_index for m in matches}
-    unmatched = [c for c in cropped_cards if c["index"] not in matched_indices]
-
     if unmatched:
         print(f"\n   ⚠️  未匹配的卡牌 ({len(unmatched)} 张):")
         for c in unmatched:
@@ -501,59 +486,22 @@ def run_matching_test_with_db(
 
     print("\n" + "=" * 70)
     print("结论:")
-    if len(matches) >= len(cropped_cards) * 0.8:  # 80% 匹配率
+    if len(matches) >= len(cropped_cards) * 0.8:
         print("   🎉 表现优秀！建议使用当前模型")
-    elif len(matches) >= len(cropped_cards) * 0.5:  # 50% 匹配率
+    elif len(matches) >= len(cropped_cards) * 0.5:
         print("   ⚠️  表现一般，建议检查图片质量或调整阈值")
     else:
         print("   ❌ 表现不佳，可能需要优化模型或数据库")
     print("=" * 70)
 
-    # 8. 准备可视化（但不立即显示，等所有文字输出完成后再显示）
+    # 保存可视化
     print(f"\n📸 生成检测结果可视化...")
-    start_time = time.perf_counter()
-    # 缩放至高度 1000px（在终端中显示更大）
-    current_height = vis_img.shape[0]
-    if current_height > 1000:
-        scale = 1000 / current_height
-        new_width = int(vis_img.shape[1] * scale)
-        vis_img_resized = cv2.resize(
-            vis_img, (new_width, 1000), interpolation=cv2.INTER_AREA
-        )
-    else:
-        vis_img_resized = vis_img
-
-    # 转换为 PIL Image
-    vis_pil = Image.fromarray(cv2.cvtColor(vis_img_resized, cv2.COLOR_BGR2RGB))
-    vis_time = time.perf_counter() - start_time
-    print(f"   图片处理耗时: {vis_time * 1000:.1f}ms")
-
-    # 总耗时统计
-    total_time = (
-        db_load_time + detect_time + sort_time + match_time + summary_time + vis_time
-    )
-    print(f"\n⏱️  各阶段耗时统计:")
-    print(f"   数据库加载: {db_load_time * 1000:.1f}ms")
-    print(f"   YOLO 检测:  {detect_time * 1000:.1f}ms")
-    print(f"   排序:       {sort_time * 1000:.1f}ms")
-    print(
-        f"   哈希匹配:   {match_time * 1000:.1f}ms (平均每张: {match_time / len(cropped_cards) * 1000:.1f}ms)"
-    )
-    print(f"   结果汇总:   {summary_time * 1000:.1f}ms")
-    print(f"   可视化:     {vis_time * 1000:.1f}ms")
-    print(f"   ─────────────────────────")
-    print(f"   总计:       {total_time * 1000:.1f}ms ({total_time:.2f}s)")
-
-    # 最后显示图片（确保不会被后续输出覆盖）
-    print(f"\n🖼️  正在显示检测结果...")
-
-    # 先保存到持久化文件（不用临时文件，避免被提前删除）
     vis_path = Path("output/detection_result.jpg")
-    vis_pil.save(vis_path)
+    vis_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(vis_path), vis_img)
     print(f"   💾 已保存到: {vis_path}")
 
-    # 用文件路径调用预览（避免创建临时文件）
-    time.sleep(0.1)  # 短暂延迟确保文件写入完成
+    time.sleep(0.1)
     if preview_image_inline(vis_path):
         print(f"✅ 可视化已显示在终端")
     else:
@@ -565,13 +513,9 @@ def discover_all_card_sets(cards_dir: Path) -> List[str]:
     sets = []
     if not cards_dir.exists():
         return sets
-
     for subdir in sorted(cards_dir.iterdir()):
-        if subdir.is_dir():
-            hash_db = subdir / "hash_database.json"
-            if hash_db.exists():
-                sets.append(subdir.name)
-
+        if subdir.is_dir() and (subdir / "hash_database.json").exists():
+            sets.append(subdir.name)
     return sets
 
 
@@ -580,82 +524,94 @@ def load_multiple_hash_databases(
 ) -> Dict[str, np.ndarray]:
     """加载多个系列的哈希数据库并合并"""
     combined_db: Dict[str, np.ndarray] = {}
-
     print(f"\n📂 加载 {len(sets)} 个系列的哈希数据库...")
-
     for card_set in sets:
         db_path = cards_dir / card_set / "hash_database.json"
         if not db_path.exists():
             print(f"   ⚠️  跳过 {card_set}: 数据库不存在")
             continue
-
         with open(db_path, "r", encoding="utf-8") as f:
             db_raw = json.load(f)
-
-        set_count = 0
         for hash_str, card_id in db_raw.items():
-            # 添加系列前缀，避免不同系列的相同ID冲突
             prefixed_id = f"{card_set}/{card_id}"
-            hash_arr = decode_hash_from_base64(hash_str)
-            combined_db[prefixed_id] = hash_arr
-            set_count += 1
-
-        print(f"   ✅ {card_set}: {set_count} 张卡牌")
-
-    print(f"\n📊 总计加载: {len(combined_db)} 张卡牌（来自 {len(sets)} 个系列）")
+            combined_db[prefixed_id] = decode_hash_from_base64(hash_str)
+        print(f"   ✅ {card_set}: {len(db_raw)} 张卡牌")
+    print(f"\n📊 总计加载: {len(combined_db)} 张卡牌")
     return combined_db
+
+
+def list_available_models(models_dir: Path) -> None:
+    """列出 data/models 下可用模型"""
+    print(f"📂 扫描模型目录: {models_dir}")
+    if not models_dir.exists():
+        print("❌ 模型目录不存在")
+        return
+    model_dirs = sorted(
+        [d for d in models_dir.iterdir() if d.is_dir()], key=lambda d: d.name
+    )
+    if not model_dirs:
+        print("⚠️  未发现任何模型目录")
+        return
+    found = 0
+    for model_dir in model_dirs:
+        pt_path = model_dir / "best.pt"
+        mlpackage_path = model_dir / "best.mlpackage"
+        has_pt = pt_path.exists()
+        has_mlpackage = mlpackage_path.exists()
+        if not has_pt and not has_mlpackage:
+            continue
+        found += 1
+        print(f"\n- {model_dir.name}")
+        if has_pt:
+            print(f"  PT:      {pt_path}")
+        if has_mlpackage:
+            print(f"  CoreML:  {mlpackage_path}")
+    if found == 0:
+        print("⚠️  未发现可用模型文件")
+    else:
+        print(f"\n✅ 共发现 {found} 个可用模型目录")
 
 
 def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="大规模匹配测试")
+    parser.add_argument("--set", default="A1", help="要匹配的卡牌系列，默认 A1")
+    parser.add_argument("--all", action="store_true", help="匹配所有可用的卡牌系列")
+    parser.add_argument("--image", help="从指定图片文件加载截图（不使用 ADB）")
     parser.add_argument(
-        "--set",
-        default="A1",
-        help="要匹配的卡牌系列（如 A1, A2 等），默认 A1",
+        "--conf", type=float, default=YOLO_OBB_THRESHOLD, help="YOLO 检测置信度阈值"
     )
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="匹配所有可用的卡牌系列",
-    )
-    parser.add_argument(
-        "--image",
-        help="从指定图片文件加载截图（不使用 ADB）",
-    )
-    parser.add_argument(
-        "--conf",
-        type=float,
-        default=YOLO_OBB_THRESHOLD,
-        help="YOLO 检测置信度阈值",
-    )
-    parser.add_argument(
-        "--coreml",
-        action="store_true",
-        help="使用 CoreML 模型（best.mlpackage）",
-    )
+    parser.add_argument("--coreml", action="store_true", help="使用 CoreML 模型")
+    parser.add_argument("--model", help="手动指定模型路径")
+    parser.add_argument("--list-models", action="store_true", help="列出可用模型并退出")
     args = parser.parse_args()
 
-    # 配置（基于脚本所在目录，避免运行路径影响）
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent.parent
-    if args.coreml:
+    models_dir = (repo_root / "data/models").resolve()
+
+    if args.list_models:
+        list_available_models(models_dir)
+        return
+
+    if args.model:
+        model_path = Path(args.model).expanduser().resolve()
+    elif args.coreml:
         model_path = (
-            repo_root / "data/models/yolo11n-5k-25-2026.02.02/best.mlpackage"
+            repo_root / "data/models/yolo26n-10k-50-2026.02.06/best.mlpackage"
         ).resolve()
     else:
         model_path = (
-            repo_root / "data/models/yolo11n-5k-25-2026.02.02/best.pt"
+            repo_root / "data/models/yolo26n-10k-50-2026.02.06/best.pt"
         ).resolve()
+
     cards_dir = (script_dir.parent / "data/raw/cards").resolve()
 
-    # 检查模型文件
     if not model_path.exists():
         print(f"❌ 模型不存在: {model_path}")
         sys.exit(1)
 
-    # 获取截图
     if args.image:
         screenshot_path = Path(args.image)
         if not screenshot_path.exists():
@@ -665,20 +621,15 @@ def main():
         screenshot = Image.open(screenshot_path)
         source = "文件"
     else:
-        # 自动发现设备（ADB 模式）
         print("🔍 自动发现ADB设备...")
         devices = discover_devices_simple()
         if not devices:
             print("❌ 未发现ADB设备")
-            print("💡 使用方法: python test_massive_matching.py --image <截图文件路径>")
             sys.exit(1)
-
         device_address = devices[0]
         print(f"✅ 发现设备: {device_address}")
-
-        # ADB 截图
-        print(f"\n📱 连接设备: {device_address}")
         adb = SimpleAdbController(device_address)
+        print(f"\n📱 连接设备: {device_address}")
         print("📸 正在截图...")
         screenshot = adb.screenshot()
         if not screenshot:
@@ -686,81 +637,31 @@ def main():
             sys.exit(1)
         source = "ADB"
 
-    # 处理 --all 参数或单个系列
     if args.all:
-        # 发现所有可用的系列
         available_sets = discover_all_card_sets(cards_dir)
         if not available_sets:
             print(f"❌ 未在 {cards_dir} 下发现任何卡牌系列")
-            print("💡 请确保目录结构为: data/raw/cards/A1/hash_database.json")
             sys.exit(1)
-
         print(
             f"\n🔍 发现 {len(available_sets)} 个卡牌系列: {', '.join(available_sets)}"
         )
-
-        # 检查并自动生缺失的数据库
-        missing_sets = []
-        for card_set in available_sets:
-            db_path = cards_dir / card_set / "hash_database.json"
-            if not db_path.exists():
-                missing_sets.append(card_set)
-
-        if missing_sets:
-            print(
-                f"\n⚠️  以下系列缺少哈希数据库，尝试自动生成: {', '.join(missing_sets)}"
-            )
-            for card_set in missing_sets:
-                result = subprocess.run(
-                    [sys.executable, "scripts/generate_hash_db.py", "--set", card_set],
-                    capture_output=True,
-                    text=True,
-                )
-                if result.returncode != 0:
-                    print(f"   ❌ {card_set} 生成失败: {result.stderr}")
-                    available_sets.remove(card_set)
-                else:
-                    print(f"   ✅ {card_set} 生成成功")
-
-        if not available_sets:
-            print("❌ 没有可用的卡牌系列")
-            sys.exit(1)
-
-        # 加载所有系列的哈希数据库
-        print(f"\n📂 准备加载以下系列: {', '.join(available_sets)}")
         hash_db = load_multiple_hash_databases(available_sets, cards_dir)
-        hash_db_path = cards_dir / "combined_all_sets"  # 虚拟路径用于显示
+        hash_db_path = cards_dir / "combined_all_sets"
     else:
-        # 单个系列模式
         hash_db_path = cards_dir / args.set / "hash_database.json"
         print(f"📂 使用系列: {args.set}")
-        print(f"   数据库: {hash_db_path}")
-
-        # 检查并自动生成数据库
         if not hash_db_path.exists():
-            print(f"⚠️  哈希数据库不存在: {hash_db_path}")
-            print("💡 尝试自动生成...")
-
+            print(f"⚠️  哈希数据库不存在，尝试自动生成...")
             result = subprocess.run(
                 [sys.executable, "scripts/generate_hash_db.py", "--set", args.set],
                 capture_output=True,
                 text=True,
             )
-
             if result.returncode != 0:
                 print(f"❌ 生成失败: {result.stderr}")
                 sys.exit(1)
-
-            print(result.stdout)
-
-            if not hash_db_path.exists():
-                print(f"❌ 生成后数据库仍不存在")
-                sys.exit(1)
-
-        # 加载单个数据库
         hash_db = load_hash_database(hash_db_path)
 
-    # 执行匹配测试
     run_matching_test_with_db(
         model_path=str(model_path),
         hash_db=hash_db,
