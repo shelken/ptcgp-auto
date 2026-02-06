@@ -5,6 +5,7 @@
 管理内存中的Hash索引，负责确保系列Hash就绪，提供匹配接口。
 """
 
+import heapq
 import logging
 import threading
 from typing import Dict, List, Optional, Set, Tuple
@@ -12,6 +13,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 from PIL import Image
 
+from ptcgp_auto_v2.config.constants import TOPK_CANDIDATES
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.utils.perceptual_hash import (
     pil_to_color_pixels,
@@ -28,7 +30,7 @@ logger = logging.getLogger(__name__)
 class CardHashManager:
     """卡牌Hash管理器"""
 
-    def __init__(self):
+    def __init__(self, enable_download: bool = True):
         # 按系列索引（开包识别用）
         self._series_cache: Dict[str, Dict[int, np.ndarray]] = {}
         # 全局索引（跨系列检测用）
@@ -38,7 +40,8 @@ class CardHashManager:
         # 内存缓存：记录下载失败的卡牌，避免重复尝试（按卡牌粒度）
         self._failed_downloads: Set[str] = set()  # 格式: "{set_code}/{number:03d}"
         self._repo = CardRepository()
-        self._downloader = ImageResourceManager()
+        self._downloader = ImageResourceManager() if enable_download else None
+        self._enable_download = enable_download
 
     def ensure_series_ready(self, set_code: str) -> bool:
         """确保某系列所有卡牌都有Hash值（下载缺失卡牌并计算）"""
@@ -57,30 +60,48 @@ class CardHashManager:
             logger.debug(f"系列 {set_code} 跳过 {skipped_count} 张已知下载失败的卡牌")
 
         if missing_cards:
-            logger.info(
-                f"系列 {set_code} 有 {len(missing_cards)} 张卡牌缺少Hash，开始处理..."
-            )
+            if not self._enable_download:
+                # 下载被禁用，仅记录警告
+                logger.warning(
+                    f"系列 {set_code} 有 {len(missing_cards)} 张卡牌缺少Hash，"
+                    f"但下载功能已禁用，跳过处理"
+                )
+            else:
+                logger.info(
+                    f"系列 {set_code} 有 {len(missing_cards)} 张卡牌缺少Hash，开始处理..."
+                )
 
-            # 3. 下载缺失卡牌的图片
-            card_numbers = [card.number for card in missing_cards]
-            downloaded = self._downloader.download_cards_batch(set_code, card_numbers)
+                # 3. 下载缺失卡牌的图片
+                card_numbers = [card.number for card in missing_cards]
+                downloaded = self._downloader.download_cards_batch(  # type: ignore
+                    set_code, card_numbers
+                )
+                downloaded = self._downloader.download_cards_batch(
+                    set_code, card_numbers
+                )
 
-            # 4. 计算Hash并更新数据库
-            success_count = 0
-            for card in missing_cards:
-                if card.number in downloaded:
-                    if self._compute_and_save_hash(card.id, downloaded[card.number]):
-                        success_count += 1
-                else:
-                    # 下载失败，记录到内存缓存，本次运行不再尝试
-                    self._failed_downloads.add(f"{set_code}/{card.number:03d}")
-                    logger.warning(
-                        f"卡牌 {set_code}/{card.number:03d} 下载失败，已标记为失败（本次运行不再尝试）"
-                    )
+                # 4. 计算Hash并更新数据库
+                success_count = 0
+                for card in missing_cards:
+                    if card.number in downloaded:
+                        # 类型断言：从数据库查询的card一定有id
+                        assert card.id is not None, (
+                            "Card ID should not be None for existing card"
+                        )
+                        if self._compute_and_save_hash(
+                            card.id, downloaded[card.number]
+                        ):
+                            success_count += 1
+                    else:
+                        # 下载失败，记录到内存缓存，本次运行不再尝试
+                        self._failed_downloads.add(f"{set_code}/{card.number:03d}")
+                        logger.warning(
+                            f"卡牌 {set_code}/{card.number:03d} 下载失败，已标记为失败（本次运行不再尝试）"
+                        )
 
-            logger.info(
-                f"系列 {set_code} Hash计算完成: {success_count}/{len(missing_cards)} 张成功"
-            )
+                logger.info(
+                    f"系列 {set_code} Hash计算完成: {success_count}/{len(missing_cards)} 张成功"
+                )
 
         # 5. 加载系列Hash到内存
         self._load_series_hash(set_code)
@@ -220,6 +241,55 @@ class CardHashManager:
             return (set_code, card_number, best_similarity)
 
         return None
+
+    def find_topk_candidates(
+        self,
+        target_hash: np.ndarray,
+        set_code: Optional[str] = None,
+        topk: int = TOPK_CANDIDATES,
+    ) -> List[Tuple[str, int, float, np.ndarray]]:
+        """
+        查找TopK最佳匹配候选（用于两阶段匹配的第一阶段）
+
+        Args:
+            target_hash: 目标Hash值
+            set_code: 指定系列代码，为None则全局搜索
+            topk: 返回候选数量（默认从 constants 导入）
+
+        Returns:
+            List[(set_code, card_number, similarity, hash_array), ...]
+            按相似度降序排列的候选列表，包含完整hash用于第二阶段
+        """
+        # 获取待匹配的hash集合
+        if set_code is None:
+            # 全局模式
+            if not self._all_loaded:
+                self.load_all_hashes()
+            source = self._global_cache
+            # 转换格式: "A1/001" -> (set_code, number, hash)
+            items = [
+                (key.split("/")[0], int(key.split("/")[1]), hash_arr)
+                for key, hash_arr in source.items()
+            ]
+        else:
+            # 系列模式
+            if set_code not in self._series_cache:
+                self._load_series_hash(set_code)
+            series_data = self._series_cache.get(set_code, {})
+            items = [
+                (set_code, number, hash_arr) for number, hash_arr in series_data.items()
+            ]
+
+        if not items:
+            return []
+
+        # 计算所有相似度并使用 heapq.nlargest 高效获取TopK (O(N log K))
+        scored_items = [
+            (sc, num, calculate_similarity(target_hash, hash_arr), hash_arr)
+            for sc, num, hash_arr in items
+        ]
+
+        return heapq.nlargest(topk, scored_items, key=lambda x: x[2])
 
     def get_loaded_sets(self) -> Set[str]:
         """获取已加载的系列列表"""
