@@ -58,6 +58,11 @@ def tap(adb, x: int, y: int, wait: float = 1.0) -> ActionResult:
     return ActionResult.ok(wait=wait)
 
 
+def perform_tap(adb, x: int, y: int, wait: float = 1.0) -> ActionResult:
+    """执行点击动作并返回结果"""
+    return tap(adb, x, y, wait=wait)
+
+
 def tap_box(adb, box: Box, wait: float = 1.0) -> ActionResult:
     """点击边界框中心"""
     adb.tap_center(box)
@@ -66,7 +71,7 @@ def tap_box(adb, box: Box, wait: float = 1.0) -> ActionResult:
 
 def tap_center(adb, wait: float = 1.0) -> ActionResult:
     """点击屏幕中心"""
-    return tap(adb, center_x(adb), center_y(adb), wait=wait)
+    return tap(adb, adb.center_x(), adb.center_y(), wait=wait)
 
 
 def quick_tap(
@@ -87,9 +92,9 @@ def quick_tap(
         wait: 点击后等待时间（默认 0.5 秒）
     """
     if x is None:
-        x = center_x(adb)
+        x = adb.center_x()
     if y is None:
-        y = center_y(adb)
+        y = adb.center_y()
 
     for i in range(times):
         adb.tap(x, y)
@@ -105,8 +110,8 @@ def quick_tap(
 
 def tap_right_side(adb, ratio: float = 0.75, wait: float = 1.0) -> ActionResult:
     """点击屏幕右侧区域"""
-    tap_x = int(screen_width(adb) * ratio)
-    tap_y = center_y(adb)
+    tap_x = int(adb.screen_width * ratio)
+    tap_y = adb.center_y()
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
@@ -340,8 +345,8 @@ def tap_above_point(
 
 def tap_top_center(adb, base_y: int, wait: float = 1.0) -> ActionResult:
     """点击屏幕中上方（基准像素 + 缩放）"""
-    tap_x = center_x(adb)
-    tap_y = scaled_y(adb, base_y)
+    tap_x = adb.center_x()
+    tap_y = adb.scaled_y(base_y)
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
@@ -422,8 +427,8 @@ def tap_bottom_close(
     ratio_x: float = 0.1,
 ) -> ActionResult:
     """点击底部关闭区域（基准像素 + 缩放）"""
-    tap_x = int(screen_width(adb) * ratio_x)
-    tap_y = scaled_y(adb, base_y)
+    tap_x = int(adb.screen_width * ratio_x)
+    tap_y = adb.scaled_y(base_y)
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
@@ -492,12 +497,23 @@ def swipe(
     adb,
     start: Tuple[int, int],
     end: Tuple[int, int],
-    duration: int = 300,
+    duration: int = DEFAULT_SCROLL_DURATION,
     wait: float = 1.0,
 ) -> ActionResult:
     """执行自定义滑动"""
     adb.swipe(*start, *end, duration)
     return ActionResult.ok(wait=wait)
+
+
+def perform_swipe(
+    adb,
+    start: Tuple[int, int],
+    end: Tuple[int, int],
+    duration: int = DEFAULT_SCROLL_DURATION,
+    wait: float = 1.0,
+) -> ActionResult:
+    """执行滑动动作并返回结果"""
+    return swipe(adb, start, end, duration=duration, wait=wait)
 
 
 def swipe_scaled(
@@ -506,7 +522,7 @@ def swipe_scaled(
     start_y: int,
     end_x: int,
     end_y: int,
-    duration: int = 300,
+    duration: int = DEFAULT_SCROLL_DURATION,
     wait: float = 1.0,
 ) -> ActionResult:
     """基于基准像素执行滑动"""
@@ -550,58 +566,23 @@ def long_press_text(
 
 def center_point(adb) -> Tuple[int, int]:
     """获取屏幕中心坐标"""
-    return center_x(adb), center_y(adb)
+    return adb.center_x(), adb.center_y()
 
 
 def swipe_pack_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取开包滑动坐标（从左到右）"""
-    start_x = scaled_x(adb, BASE_SWIPE_PACK_START_X)
-    end_x = scaled_x(adb, BASE_SWIPE_PACK_END_X)
-    y = scaled_y(adb, BASE_SWIPE_PACK_END_Y)
+    start_x = adb.scaled_x(BASE_SWIPE_PACK_START_X)
+    end_x = adb.scaled_x(BASE_SWIPE_PACK_END_X)
+    y = adb.scaled_y(BASE_SWIPE_PACK_END_Y)
     return (start_x, y), (end_x, y)
 
 
 def swipe_card_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取卡牌上滑坐标（从下到上）"""
-    x = center_x(adb)
-    start_y = scaled_y(adb, BASE_SWIPE_CARD_START_Y)
-    end_y = scaled_y(adb, BASE_SWIPE_CARD_END_Y)
+    x = adb.center_x()
+    start_y = adb.scaled_y(BASE_SWIPE_CARD_START_Y)
+    end_y = adb.scaled_y(BASE_SWIPE_CARD_END_Y)
     return (x, start_y), (x, end_y)
-
-
-def screen_width(adb) -> int:
-    """获取屏幕宽度"""
-    return adb.screen_width
-
-
-def screen_height(adb) -> int:
-    """获取屏幕高度"""
-    return adb.screen_height
-
-
-def center_x(adb) -> int:
-    """获取屏幕中心 X 坐标"""
-    return adb.screen_width // 2
-
-
-def center_y(adb) -> int:
-    """获取屏幕中心 Y 坐标"""
-    return adb.screen_height // 2
-
-
-def scaled_x(adb, x: int) -> int:
-    """按基准宽度缩放 X 坐标"""
-    return adb.scaled_x(x)
-
-
-def scaled_y(adb, y: int) -> int:
-    """按基准高度缩放 Y 坐标"""
-    return adb.scaled_y(y)
-
-
-def scaled_point(adb, x: int, y: int) -> tuple[int, int]:
-    """缩放坐标点"""
-    return scaled_x(adb, x), scaled_y(adb, y)
 
 
 def scroll_points(
@@ -610,9 +591,9 @@ def scroll_points(
     direction: str = "up",
 ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """根据基准距离生成垂直滑动起止点"""
-    distance = scaled_y(adb, base_distance_y)
-    cx = center_x(adb)
-    cy = center_y(adb)
+    distance = adb.scaled_y(base_distance_y)
+    cx = adb.center_x()
+    cy = adb.center_y()
     start_y = cy + distance // 2
     end_y = cy - distance // 2
     if direction == "down":
