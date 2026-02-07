@@ -4,6 +4,7 @@
 """
 
 import logging
+import math
 import time
 from typing import Callable, Optional, Tuple
 
@@ -12,8 +13,13 @@ from src.ptcgp_auto_v2.infra.adb import AdbController
 Box = tuple[int, int, int, int]
 
 from ptcgp_auto_v2.config.constants import (
-    DEFAULT_SCROLL_DURATION,
+    DEFAULT_LONG_PRESS_STEPS,
     DEFAULT_TEMPLATE_THRESHOLD,
+    SWIPE_STEPS_BASE_RATIO,
+    SWIPE_STEPS_BASE_VALUE,
+    SWIPE_STEPS_MAX,
+    SWIPE_STEPS_MIN,
+    SWIPE_STEPS_SCROLL,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.action_result import ActionResult
@@ -362,8 +368,8 @@ def scroll_until_template(
     scale: float,
     max_attempts: int,
     base_distance_y: int,
-    duration: int,
-    wait: float,
+    steps: Optional[int] = None,
+    wait: float = 1.0,
     threshold: Optional[float] = None,
 ) -> Optional[ActionResult]:
     """循环上滑直到命中模板或达到上限"""
@@ -378,7 +384,7 @@ def scroll_until_template(
         start, end = scroll_points(
             page_detector.adb, base_distance_y=base_distance_y, direction="up"
         )
-        swipe(page_detector.adb, start, end, duration=duration, wait=wait)
+        swipe(page_detector.adb, start, end, steps=steps, wait=wait)
         time.sleep(wait)
         screenshot, ocr_results = page_detector.capture()
         if not screenshot:
@@ -480,34 +486,59 @@ def navigate_back(
 def swipe_up(
     adb: AdbController,
     base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
-    duration: int = DEFAULT_SCROLL_DURATION,
+    steps: Optional[int] = SWIPE_STEPS_SCROLL,
     wait: float = 1.0,
 ) -> ActionResult:
-    """向上滑动（基准距离 + 持续时间）"""
+    """向上滑动（基准距离 + 步数）"""
     start, end = scroll_points(adb, base_distance_y, direction="up")
-    return swipe(adb, start, end, duration=duration, wait=wait)
+    return swipe(adb, start, end, steps=steps, wait=wait)
 
 
 def swipe_down(
     adb: AdbController,
     base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
-    duration: int = DEFAULT_SCROLL_DURATION,
+    steps: Optional[int] = SWIPE_STEPS_SCROLL,
     wait: float = 1.0,
 ) -> ActionResult:
-    """向下滑动（基准距离 + 持续时间）"""
+    """向下滑动（基准距离 + 步数）"""
     start, end = scroll_points(adb, base_distance_y, direction="down")
-    return swipe(adb, start, end, duration=duration, wait=wait)
+    return swipe(adb, start, end, steps=steps, wait=wait)
+
+
+def _clamp_steps(value: float, min_steps: int, max_steps: int) -> int:
+    """限制步数范围"""
+    return max(min_steps, min(max_steps, int(round(value))))
+
+
+def calculate_swipe_steps(
+    adb: AdbController,
+    start: Tuple[int, int],
+    end: Tuple[int, int],
+    base_ratio: float = SWIPE_STEPS_BASE_RATIO,
+    base_steps: int = SWIPE_STEPS_BASE_VALUE,
+    min_steps: int = SWIPE_STEPS_MIN,
+    max_steps: int = SWIPE_STEPS_MAX,
+) -> int:
+    """根据距离与屏幕高度计算相对滑动步数"""
+    distance_px = math.hypot(end[0] - start[0], end[1] - start[1])
+    screen_height = max(1, int(adb.screen_height))
+    distance_ratio = distance_px / screen_height
+    if base_ratio <= 0:
+        return _clamp_steps(base_steps, min_steps, max_steps)
+    raw_steps = base_steps * (distance_ratio / base_ratio)
+    return _clamp_steps(raw_steps, min_steps, max_steps)
 
 
 def swipe(
     adb: AdbController,
     start: Tuple[int, int],
     end: Tuple[int, int],
-    duration: int = DEFAULT_SCROLL_DURATION,
+    steps: Optional[int] = None,
     wait: float = 1.0,
 ) -> ActionResult:
     """执行自定义滑动"""
-    adb.swipe(*start, *end, duration)
+    resolved_steps = calculate_swipe_steps(adb, start, end) if steps is None else steps
+    adb.swipe(*start, *end, resolved_steps)
     return ActionResult.ok(wait=wait)
 
 
@@ -515,11 +546,11 @@ def perform_swipe(
     adb: AdbController,
     start: Tuple[int, int],
     end: Tuple[int, int],
-    duration: int = DEFAULT_SCROLL_DURATION,
+    steps: Optional[int] = None,
     wait: float = 1.0,
 ) -> ActionResult:
     """执行滑动动作并返回结果"""
-    return swipe(adb, start, end, duration=duration, wait=wait)
+    return swipe(adb, start, end, steps=steps, wait=wait)
 
 
 def swipe_scaled(
@@ -528,7 +559,7 @@ def swipe_scaled(
     start_y: int,
     end_x: int,
     end_y: int,
-    duration: int = DEFAULT_SCROLL_DURATION,
+    steps: Optional[int] = None,
     wait: float = 1.0,
 ) -> ActionResult:
     """基于基准像素执行滑动"""
@@ -536,16 +567,19 @@ def swipe_scaled(
         adb,
         (adb.scaled_x(start_x), adb.scaled_y(start_y)),
         (adb.scaled_x(end_x), adb.scaled_y(end_y)),
-        duration=duration,
+        steps=steps,
         wait=wait,
     )
 
 
 def long_press(
-    adb: AdbController, point: Tuple[int, int], duration: int = 3000, wait: float = 1.0
+    adb: AdbController,
+    point: Tuple[int, int],
+    steps: int = DEFAULT_LONG_PRESS_STEPS,
+    wait: float = 1.0,
 ) -> ActionResult:
-    """长按指定位置"""
-    adb.long_press(point[0], point[1], duration)
+    """长按指定位置（按步数控制时长）"""
+    adb.long_press(point[0], point[1], steps)
     return ActionResult.ok(wait=wait)
 
 
@@ -553,10 +587,10 @@ def long_press_text(
     adb: AdbController,
     ocr_results: list[dict],
     patterns: list[str],
-    duration: int = 3000,
+    steps: int = DEFAULT_LONG_PRESS_STEPS,
     wait: float = 1.0,
 ) -> Optional[ActionResult]:
-    """按文本列表匹配长按"""
+    """按文本列表匹配长按（按步数控制时长）"""
     for pattern in patterns:
         for item in ocr_results:
             text = "".join(item["text"].lower().split())
@@ -564,7 +598,7 @@ def long_press_text(
                 box = item["box"]
                 cx = (box[0] + box[2]) // 2
                 cy = (box[1] + box[3]) // 2
-                adb.long_press(cx, cy, duration)
+                adb.long_press(cx, cy, steps)
                 logger.debug(f"长按文字: {pattern} @ ({cx}, {cy})")
                 return ActionResult.ok(wait=wait)
     return None

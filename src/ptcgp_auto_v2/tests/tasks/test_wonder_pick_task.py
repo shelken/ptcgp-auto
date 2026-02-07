@@ -19,6 +19,7 @@ from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_RARITY_COSTS,
 )
 from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 
 
 class TestChallengeRarityConfig(unittest.TestCase):
@@ -177,17 +178,6 @@ class TestWonderPickScanLogic(unittest.TestCase):
 
         count = task._update_scan_signature([{"text": "丙"}])
         self.assertEqual(count, 1)
-
-
-class FakeAdb:
-    def __init__(self):
-        self.back_count = 0
-
-    def press_back(self):
-        self.back_count += 1
-
-    def swipe_up(self, ratio=0.26, duration=300):
-        return None
 
 
 class FakePageDetector:

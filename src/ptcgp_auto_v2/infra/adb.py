@@ -2,7 +2,7 @@
 """
 ADB 控制器模块
 
-封装 ADB 操作（截图、点击、滑动等）。
+封装 uiautomator2 操作（截图、点击、滑动等）。
 """
 
 import io
@@ -11,14 +11,14 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
-from adbutils import adb, AdbDevice
+import uiautomator2 as u2
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import (
     ADB_CONNECT_FAIL_RESTART_THRESHOLD,
     DEFAULT_ADB_PORT,
-    DEFAULT_LONG_PRESS_DURATION,
-    DEFAULT_SWIPE_DURATION,
+    DEFAULT_LONG_PRESS_STEPS,
+    DEFAULT_SWIPE_STEPS,
 )
 from ptcgp_auto_v2.utils.bluestacks_manager import (
     restart_bluestacks_instance_for_device,
@@ -56,13 +56,13 @@ class AdbController:
         # 从 settings 获取配置
         settings = get_settings()
 
-        self.device: Optional[AdbDevice] = None
+        self.device: Optional[u2.Device] = None
 
         # 基准分辨率（用于坐标比例计算）
         self.base_width = settings.base_screen_width
         self.base_height = settings.base_screen_height
 
-        # 当前分辨率（连接后通过 wm size 更新）
+        # 当前分辨率（连接后通过 window_size 更新）
         self.screen_width = settings.base_screen_width
         self.screen_height = settings.base_screen_height
 
@@ -119,17 +119,14 @@ class AdbController:
             True 表示连接成功
         """
         try:
-            output = adb.connect(self.address)
-            logger.debug(f"ADB 连接: {output}")
-
-            if isinstance(output, str) and "failed to connect" in output:
-                logger.error(f"ADB 连接失败: {output}")
+            self.device = u2.connect(self.address)
+            if not self.is_connected():
+                logger.error(f"u2 连接失败: {self.address}")
                 if self._register_connect_failure():
                     return self._retry_connect_after_restart()
                 return False
 
-            self.device = adb.device(serial=self.address)
-            logger.info(f"已连接设备: {self.device.serial}")
+            logger.info(f"已连接设备: {self.address}")
 
             # 自动获取屏幕分辨率
             self._update_screen_size()
@@ -137,8 +134,8 @@ class AdbController:
 
             return True
 
-        except (RuntimeError, ConnectionError) as e:
-            logger.error(f"ADB 连接失败: {e}")
+        except (RuntimeError, ConnectionError, OSError) as e:
+            logger.error(f"u2 连接失败: {e}")
             if self._register_connect_failure():
                 return self._retry_connect_after_restart()
             return False
@@ -146,11 +143,8 @@ class AdbController:
     def disconnect(self):
         """断开 ADB 连接"""
         if self.device:
-            try:
-                adb.disconnect(self.address)
-                logger.info("ADB 已断开")
-            except (RuntimeError, OSError) as e:
-                logger.error(f"断开失败: {e}")
+            self.device = None
+            logger.info("设备连接已断开")
 
     def _register_connect_failure(self) -> bool:
         """记录连接失败并在必要时重启模拟器。"""
@@ -176,21 +170,16 @@ class AdbController:
 
         for attempt in range(1, 6):
             try:
-                output = adb.connect(self.address)
-                logger.debug(f"ADB 重试连接: {output}")
-                if isinstance(output, str) and "failed to connect" in output:
-                    time.sleep(2.0)
-                    continue
-                self.device = adb.device(serial=self.address)
+                self.device = u2.connect(self.address)
                 if not self.is_connected():
                     time.sleep(2.0)
                     continue
-                logger.info(f"已连接设备: {self.device.serial}")
+                logger.info(f"已连接设备: {self.address}")
                 self._update_screen_size()
                 self._reset_connect_failures()
                 return True
-            except (RuntimeError, ConnectionError) as e:
-                logger.error(f"ADB 重试连接失败: {e}")
+            except (RuntimeError, ConnectionError, OSError) as e:
+                logger.error(f"u2 重试连接失败: {e}")
                 time.sleep(2.0)
 
         return False
@@ -206,28 +195,11 @@ class AdbController:
             return
 
         try:
-            output = self.device.shell("wm size")
-            lines = output.strip().split("\n")
-            size_str = None
-
-            # 优先使用 Override size
-            for line in lines:
-                if "Override size:" in line:
-                    size_str = line.split(":")[1].strip()
-                    break
-            if not size_str:
-                for line in lines:
-                    if "Physical size:" in line:
-                        size_str = line.split(":")[1].strip()
-                        break
-
-            if size_str:
-                width, height = map(int, size_str.split("x"))
-                self.screen_width = width
-                self.screen_height = height
-                logger.info(f"屏幕分辨率: {width}x{height}")
-
-        except (RuntimeError, ValueError) as e:
+            width, height = self.device.window_size()
+            self.screen_width = int(width)
+            self.screen_height = int(height)
+            logger.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"获取屏幕分辨率失败，使用基准值: {e}")
 
     @property
@@ -283,15 +255,11 @@ class AdbController:
 
         try:
             result = self.device.screenshot()
-
             if isinstance(result, Image.Image):
                 return result
-            elif isinstance(result, bytes):
-                return Image.open(io.BytesIO(result))
-            else:
-                return Image.open(io.BytesIO(bytes(result)))
-
-        except (RuntimeError, OSError) as e:
+            logger.error("截图返回类型异常")
+            return None
+        except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"截图失败: {e}")
             return None
 
@@ -325,28 +293,30 @@ class AdbController:
         y = (box[1] + box[3]) // 2
         self.tap(x, y)
 
-    def long_press(self, x: int, y: int, duration: int = DEFAULT_LONG_PRESS_DURATION):
+    def long_press(self, x: int, y: int, steps: int = DEFAULT_LONG_PRESS_STEPS):
         """
         长按屏幕指定位置
 
         Args:
             x, y: 坐标
-            duration: 按住时间（毫秒）
+            steps: 按住步数（步数越多越久）
         """
         if not self.device:
             logger.error("设备未连接")
             return
 
         try:
-            self.device.swipe(x, y, x, y, duration / 1000)
-            logger.debug(f"长按: ({x}, {y}) 持续 {duration}ms")
+            resolved_steps = max(1, int(steps))
+            duration_seconds = self._steps_to_duration_seconds(resolved_steps)
+            self.device.long_click(x, y, duration=duration_seconds)
+            logger.debug("长按: (%s, %s) steps=%s", x, y, resolved_steps)
             time.sleep(self.wait_after_click)
 
         except (RuntimeError, OSError) as e:
             logger.error(f"长按失败: {e}")
 
     def swipe(
-        self, x1: int, y1: int, x2: int, y2: int, duration: int = DEFAULT_SWIPE_DURATION
+        self, x1: int, y1: int, x2: int, y2: int, steps: int = DEFAULT_SWIPE_STEPS
     ):
         """
         滑动屏幕
@@ -354,19 +324,137 @@ class AdbController:
         Args:
             x1, y1: 起始坐标
             x2, y2: 结束坐标
-            duration: 滑动持续时间（毫秒）
+            steps: 滑动步数（步数越少越快）
         """
         if not self.device:
             logger.error("设备未连接")
             return
 
         try:
-            self.device.swipe(x1, y1, x2, y2, duration / 1000)
-            logger.debug(f"滑动: ({x1}, {y1}) -> ({x2}, {y2})")
+            resolved_steps = max(1, int(steps))
+            self.device.swipe(x1, y1, x2, y2, steps=resolved_steps)
+            logger.debug(
+                "滑动: (%s, %s) -> (%s, %s) steps=%s",
+                x1,
+                y1,
+                x2,
+                y2,
+                resolved_steps,
+            )
             time.sleep(self.wait_after_click)
 
         except (RuntimeError, OSError) as e:
             logger.error(f"滑动失败: {e}")
+
+    def pinch_in(self, center: Tuple[int, int], scale: float, steps: int):
+        """
+        双指捏合缩小
+
+        Args:
+            center: 中心点坐标（当前分辨率）
+            scale: 捏合幅度比例（相对屏幕短边）
+            steps: 手势步数（步数越少越快）
+        """
+        self._perform_pinch(center=center, scale=scale, steps=steps, direction="in")
+
+    def pinch_out(self, center: Tuple[int, int], scale: float, steps: int):
+        """
+        双指放大
+
+        Args:
+            center: 中心点坐标（当前分辨率）
+            scale: 放大幅度比例（相对屏幕短边）
+            steps: 手势步数（步数越少越快）
+        """
+        self._perform_pinch(center=center, scale=scale, steps=steps, direction="out")
+
+    def _perform_pinch(
+        self, center: Tuple[int, int], scale: float, steps: int, direction: str
+    ):
+        """
+        执行双指缩放手势
+
+        流程：
+        1. 根据中心点与比例计算双指起止坐标
+        2. 通过 u2 gesture 注入双指手势
+        """
+        if not self.device:
+            logger.error("设备未连接")
+            return
+
+        try:
+            resolved_steps = max(2, int(steps))
+            left_start, right_start, left_end, right_end = self._build_pinch_points(
+                center=center, scale=scale, direction=direction
+            )
+            self.device.gesture(  # type: ignore[attr-defined]  # u2 动态方法无类型声明
+                left_start,
+                right_start,
+                left_end,
+                right_end,
+                steps=resolved_steps,
+            )
+            logger.debug(
+                "双指%s: center=%s scale=%s steps=%s",
+                "缩小" if direction == "in" else "放大",
+                center,
+                scale,
+                resolved_steps,
+            )
+            time.sleep(self.wait_after_click)
+        except Exception as e:
+            logger.error(f"双指手势失败: {e}")
+
+    def _build_pinch_points(
+        self, center: Tuple[int, int], scale: float, direction: str
+    ) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
+        """
+        构建双指手势起止坐标
+
+        Args:
+            center: 中心点坐标
+            scale: 捏合/放大比例（相对短边）
+            direction: in 或 out
+
+        Returns:
+            左起点、右起点、左终点、右终点
+        """
+        center_x = int(center[0])
+        center_y = int(center[1])
+        short_edge = max(1, min(self.screen_width, self.screen_height))
+        resolved_scale = max(0.05, min(1.0, float(scale)))
+        span = max(2, int(short_edge * resolved_scale))
+        end_offset = max(1, span // 2)
+        start_offset = max(1, int(end_offset * 0.3))
+
+        if direction == "in":
+            outer, inner = end_offset, start_offset
+        else:
+            outer, inner = start_offset, end_offset
+
+        left_start = self._clamp_point(center_x - outer, center_y)
+        left_end = self._clamp_point(center_x - inner, center_y)
+        right_start = self._clamp_point(center_x + outer, center_y)
+        right_end = self._clamp_point(center_x + inner, center_y)
+        return left_start, right_start, left_end, right_end
+
+    def _clamp_point(self, x: int, y: int) -> Tuple[int, int]:
+        """将坐标限制在屏幕范围内"""
+        max_x = max(0, self.screen_width - 1)
+        max_y = max(0, self.screen_height - 1)
+        return max(0, min(max_x, x)), max(0, min(max_y, y))
+
+    def _steps_to_duration_seconds(self, steps: int) -> float:
+        """
+        将滑动步数换算为 u2 期望的滑动耗时
+
+        Args:
+            steps: 滑动步数
+
+        Returns:
+            估算的滑动耗时（秒）
+        """
+        return max(1, steps) * 0.005
 
     def press_back(self):
         """按返回键"""
@@ -375,7 +463,7 @@ class AdbController:
             return
 
         try:
-            self.device.keyevent(4)  # KEYCODE_BACK
+            self.device.press("back")
             logger.debug("按下返回键")
             time.sleep(self.wait_after_click)
 
@@ -397,7 +485,12 @@ class AdbController:
             return None
 
         try:
-            return self.device.shell(command)
+            result = self.device.shell(command)
+            if hasattr(result, "output"):
+                return result.output
+            if result is None:
+                return None
+            return str(result)
         except (RuntimeError, OSError) as e:
             logger.error(f"执行 shell 失败: {e}")
             return None
@@ -441,10 +534,10 @@ class AdbController:
             return False
 
         try:
-            self.device.sync.pull(remote_path, local_path, exist_ok=True)
+            self.device.pull(remote_path, local_path)
             logger.debug(f"拉取文件: {remote_path} -> {local_path}")
             return True
-        except (RuntimeError, OSError) as e:
+        except (RuntimeError, OSError, FileNotFoundError) as e:
             logger.error(f"拉取文件失败: {e}")
             return False
 
@@ -460,12 +553,12 @@ class AdbController:
             return
 
         try:
-            self.device.shell(f"am force-stop {package_name}")
+            self.device.app_stop(package_name)
             logger.debug(f"已强制停止应用: {package_name}")
         except (RuntimeError, OSError) as e:
             logger.error(f"停止应用失败: {e}")
 
-    def start_app(self, package_name: str, activity: str = None):
+    def start_app(self, package_name: str, activity: Optional[str] = None):
         """
         启动应用
 
@@ -479,18 +572,18 @@ class AdbController:
 
         try:
             if activity:
-                self.device.shell(f"am start -n {package_name}/{activity}")
+                self.device.app_start(package_name, activity)
             else:
-                # 使用 monkey 启动主 Activity
-                self.device.shell(
-                    f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
-                )
+                self.device.app_start(package_name, use_monkey=True)
             logger.debug(f"已启动应用: {package_name}")
         except (RuntimeError, OSError) as e:
             logger.error(f"启动应用失败: {e}")
 
     def restart_app(
-        self, package_name: str, activity: str = None, wait_time: float = 2.0
+        self,
+        package_name: str,
+        activity: Optional[str] = None,
+        wait_time: float = 2.0,
     ):
         """
         重启应用

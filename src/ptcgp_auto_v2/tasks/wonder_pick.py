@@ -7,10 +7,7 @@ import logging
 import random
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import (
-    DEFAULT_SCROLL_DURATION,
-    SWIPE_DURATION_REGISTER,
-)
+from ptcgp_auto_v2.config.constants import SWIPE_STEPS_REGISTER, SWIPE_STEPS_SCROLL
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -376,7 +373,7 @@ class WonderPickTask(Task):
                     base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
                     direction="up",
                 )
-            swipe(self.adb, start, end, duration=DEFAULT_SCROLL_DURATION, wait=0.8)
+            swipe(self.adb, start, end, steps=SWIPE_STEPS_SCROLL, wait=0.8)
             return ActionResult.ok(wait=0.5)
 
         if self.has_end_marker(ocr_results):
@@ -387,7 +384,7 @@ class WonderPickTask(Task):
         start, end = scroll_points(
             self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
         )
-        swipe(self.adb, start, end, duration=DEFAULT_SCROLL_DURATION, wait=0.8)
+        swipe(self.adb, start, end, steps=SWIPE_STEPS_SCROLL, wait=0.8)
         return ActionResult.ok(wait=0.5)
 
     def _handle_popup(self, page_info: dict) -> ActionResult:
@@ -431,7 +428,7 @@ class WonderPickTask(Task):
         """向上滑动卡牌登录图鉴（精英牌组奖励）"""
         logger.debug("  -> 向上滑动卡牌登录图鉴")
         start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, duration=SWIPE_DURATION_REGISTER)
+        return swipe(self.adb, start, end, steps=SWIPE_STEPS_REGISTER)
 
     def _handle_get_card(self, page_info: dict) -> ActionResult:
         if self._is_action_done("get_card_saved"):
@@ -536,7 +533,6 @@ class WonderPickTask(Task):
                     self.adb,
                     start,
                     end,
-                    duration=DEFAULT_SCROLL_DURATION,
                     wait=0.8,
                 )
             start, end = scroll_points(
@@ -546,7 +542,6 @@ class WonderPickTask(Task):
                 self.adb,
                 start,
                 end,
-                duration=DEFAULT_SCROLL_DURATION,
                 wait=0.8,
             )
 
