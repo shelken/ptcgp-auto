@@ -92,6 +92,7 @@ TEXT_PATTERNS = {
     "rewards_tab_premium": ["特級"],
     "rewards_tab_elite_deck": ["精英牌組"],
     "rewards_tab_convenient_cards": ["便利卡牌"],
+    "rewards_tab_reward_week": ["獎勵週"],
     # 可点击的领取按钮（按优先级排序：全部領取 > 領取 > 達成）
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     # 需要颜色检查的"全部領取"按钮（用于避免点击置灰按钮）
