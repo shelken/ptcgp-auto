@@ -18,6 +18,7 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
+from ptcgp_auto_v2.config.constants import DEFAULT_SCROLL_DURATION
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -27,12 +28,16 @@ from ptcgp_auto_v2.core.task_base import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
+    center_x,
     clear_text,
     click_close,
+    input_text,
     is_text_visible,
     quick_tap,
+    scaled_x,
+    scaled_y,
+    scroll_points,
     swipe,
-    swipe_up,
     tap,
     tap_box,
     tap_center,
@@ -73,6 +78,9 @@ INPUT_BOX_Y = 860
 # 国家/地区按钮兜底点击位置（当 OCR 无法识别时使用）
 # 位置：屏幕中央水平，Y 坐标 745（基于 1920 高度）
 BASE_COUNTRY_BTN_Y = 745
+
+# 国家/地区列表滚动距离（基于 1920 高度）
+BASE_COUNTRY_SCROLL_DISTANCE_Y = 576  # 1920 * 0.30
 
 
 class InitAccountPhase(Enum):
@@ -399,8 +407,8 @@ class InitAccountTask(Task):
 
                 # 兜底方案：OCR 失败时直接点击固定坐标
                 logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
-                tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
-                result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
+                tap_y = scaled_y(self.adb, BASE_COUNTRY_BTN_Y)
+                result = tap(self.adb, center_x(self.adb), tap_y, wait=1.0)
                 self._mark_action_done("select_country_list_opened")
                 return result
 
@@ -417,7 +425,18 @@ class InitAccountTask(Task):
                     return result
             else:
                 logger.info("  -> 滑动查找目标国家")
-                return swipe_up(self.adb, ratio=0.3, wait=2.0)
+                start, end = scroll_points(
+                    self.adb,
+                    base_distance_y=BASE_COUNTRY_SCROLL_DISTANCE_Y,
+                    direction="up",
+                )
+                return swipe(
+                    self.adb,
+                    start,
+                    end,
+                    duration=DEFAULT_SCROLL_DURATION,
+                    wait=2.0,
+                )
 
         # 步骤 3: 点击「年」打开年份选择列表
         if not self._is_action_done("select_country_year_clicked"):
@@ -443,9 +462,9 @@ class InitAccountTask(Task):
                     return result
             else:
                 logger.info("  -> 上滑查找目标年份")
-                start_x = self.adb.scaled_x(300)
-                start_y = self.adb.scaled_y(1400)
-                end_y = self.adb.scaled_y(900)
+                start_x = scaled_x(self.adb, 300)
+                start_y = scaled_y(self.adb, 1400)
+                end_y = scaled_y(self.adb, 900)
                 return swipe(
                     self.adb,
                     (start_x, end_y),
@@ -489,7 +508,7 @@ class InitAccountTask(Task):
         )
         if matches:
             for match in matches:
-                if match.box[0] < self.adb.center_x():
+                if match.box[0] < center_x(self.adb):
                     logger.debug(
                         f"  -> 跳过勾选图标位置: {match.box[0]} x {match.box[1]}"
                     )
@@ -634,12 +653,12 @@ class InitAccountTask(Task):
             return tap_box(self.adb, match.box, wait=1.0)
 
         # 步骤 4: 点击输入框并输入昵称（首次输入）
-        result = tap(self.adb, self.adb.center_x(), INPUT_BOX_Y, wait=1.0)
+        result = tap(self.adb, center_x(self.adb), INPUT_BOX_Y, wait=1.0)
         if result:
             logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
             # 等待键盘弹出
             time.sleep(1.0)
-            self.adb.device.send_keys(target_nickname)
+            input_text(self.adb, target_nickname, wait=0.5)
             time.sleep(0.5)
 
         # 步骤 5: 点击 OK

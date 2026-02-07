@@ -9,6 +9,7 @@ sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.open_pack import HOME_CHECK_THRESHOLD, OpenPackTask
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
+from ptcgp_auto_v2.config.constants import DEFAULT_SCROLL_DURATION
 from ptcgp_auto_v2.utils.gesture import scroll_until_template
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 
@@ -141,7 +142,8 @@ class TestGestureTemplateFlows(unittest.TestCase):
             template_name="target",
             scale=1.0,
             max_attempts=3,
-            swipe_ratio=0.2,
+            base_distance_y=384,
+            duration=DEFAULT_SCROLL_DURATION,
             wait=0.1,
         )
 
@@ -162,7 +164,8 @@ class TestGestureTemplateFlows(unittest.TestCase):
             template_name="target",
             scale=1.0,
             max_attempts=3,
-            swipe_ratio=0.2,
+            base_distance_y=384,
+            duration=DEFAULT_SCROLL_DURATION,
             wait=0.1,
         )
 

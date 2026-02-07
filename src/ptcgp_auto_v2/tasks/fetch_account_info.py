@@ -21,6 +21,7 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
+    scaled_y,
     tap_above_point,
     tap_community_icon,
     tap_home_icon,
@@ -317,7 +318,7 @@ class FetchAccountInfoTask(Task):
             return None
 
         exclude = get_text_patterns("profile_exclude")
-        search_range = self.adb.scaled_y(300)
+        search_range = scaled_y(self.adb, 300)
         candidates = []
 
         for item in ocr:

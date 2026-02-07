@@ -12,6 +12,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.constants import (
+    DEFAULT_SCROLL_DURATION,
     PACK_AUTO_EXCLUDE_SET_CODES,
     PACK_SERIES_CODES,
     PACK_TEMPLATE_THRESHOLD,
@@ -33,10 +34,12 @@ from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
+    center_x,
     click_close,
     long_press_text,
     navigate_back,
     quick_tap,
+    scaled_y,
     scroll_until_template,
     swipe,
     swipe_card_coords,
@@ -47,6 +50,7 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_continue,
     tap_home_icon,
     tap_matched_element,
+    tap_right_side,
     tap_template_or_text,
     tap_template_with_scale,
 )
@@ -73,6 +77,9 @@ _open_pack_task = None
 
 # 沙漏弹窗关闭点击位置（屏幕底部区域）
 BASE_POPUP_CLOSE_TAP_Y = 1820  # 1920 * 0.95
+
+# 系列选择页面滚动步进
+BASE_PACK_SERIES_SCROLL_DISTANCE_Y = 307  # 1920 * 0.16
 
 
 # 主页无免费包检查次数阈值
@@ -386,7 +393,7 @@ class OpenPackTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("未知页面，点击屏幕上方兜底")
-        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.5)
+        return quick_tap(self.adb, center_x(self.adb), scaled_y(self.adb, 10), wait=0.5)
 
     def _handle_speed_up(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
@@ -498,7 +505,8 @@ class OpenPackTask(Task):
             template_name,
             scale=settings.scale_pack_series_select,
             max_attempts=max_attempts,
-            swipe_ratio=0.16,  # 步进调小，避免跳过
+            base_distance_y=BASE_PACK_SERIES_SCROLL_DISTANCE_Y,  # 步进调小，避免跳过
+            duration=DEFAULT_SCROLL_DURATION,
             wait=1,
         )
         if result:
@@ -530,11 +538,9 @@ class OpenPackTask(Task):
 
         # 如果不匹配，尝试切换子包
         if not match:
-            from ptcgp_auto_v2.utils.gesture import tap_right_side
-
             for attempt in range(len(PACK_SERIES_CODES)):
                 logger.info(f"  -> 第 {attempt + 1} 次切换子包")
-                tap_right_side(self.page_detector.adb, wait=1.0)
+                tap_right_side(self.adb, wait=1.0)
                 screenshot, ocr_results = self.page_detector.capture()
                 if not screenshot:
                     continue
@@ -562,7 +568,7 @@ class OpenPackTask(Task):
         # 点击进入详情
         logger.debug("  -> 找到目标子包，点击进入详情")
         self._reset_action_cache()
-        return tap_box(self.page_detector.adb, match.box, wait=1.0)
+        return tap_box(self.adb, match.box, wait=1.0)
 
     def _extract_pack_points(self, ocr_results: list[dict]) -> None:
         """从 OCR 结果中提取并保存开包点数"""
