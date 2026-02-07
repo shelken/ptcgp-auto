@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, List, Optional, cast
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, func, select
+from sqlmodel import Session, col, func, nulls_first, select
 
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskInstance
@@ -152,13 +152,17 @@ class TaskInstanceRepository:
             return result or 0
 
     def get_accounts_with_pending_tasks(self) -> List[int]:
-        """获取所有有待执行任务的账号 ID 列表"""
+        """
+        获取所有有待执行任务的账号 ID 列表
+
+        按上次完成时间排序（最久没执行的优先，从未执行过的最优先）
+        """
         with Session(get_engine()) as session:
             statement = (
                 select(TaskInstance.account_id)
                 .where(TaskInstance.status == "pending")
                 .distinct()
-                .order_by(col(TaskInstance.account_id))
+                .order_by(nulls_first(col(TaskInstance.last_completed_at).asc()))
             )
             return list(session.exec(statement).all())
 

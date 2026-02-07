@@ -343,10 +343,10 @@ class Scheduler:
         Returns:
             (Account, task_instances_list) 或 None
         """
-        # 获取所有有待执行任务的账号
+        # 获取所有有待执行任务的账号（已按 last_completed_at 排序，最久没执行的优先）
         account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
 
-        # 分离有 init_account 任务的账号和其他账号
+        # 分离有 init_account 任务的账号和其他账号，保持各自的排序
         init_account_ids = []
         other_account_ids = []
         for account_id in account_ids:
@@ -361,7 +361,7 @@ class Scheduler:
             else:
                 other_account_ids.append(account_id)
 
-        # 优先处理有 init_account 的账号
+        # 优先处理有 init_account 的账号（各自内部保持 last_completed_at 排序）
         ordered_account_ids = init_account_ids + other_account_ids
 
         for account_id in ordered_account_ids:
