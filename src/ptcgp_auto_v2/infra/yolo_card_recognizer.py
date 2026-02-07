@@ -624,7 +624,7 @@ class YoloCardRecognizer:
             )
 
         # 去重：相同坐标的检测（YOLO重复检测），保留置信度最高的
-        detected = self._remove_duplicates(detected)
+        # detected = self._remove_duplicates(detected)
 
         return detected
 
