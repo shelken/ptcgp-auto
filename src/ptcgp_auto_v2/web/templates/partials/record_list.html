@@ -70,17 +70,19 @@
                      data-card-rarity="{{ card.rarity }}"
                      data-card-set="{{ card.card.set_code if card.card else '' }}"
                      data-card-number="{{ card.card.number if card.card else '' }}"
-                     data-card-image="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&output=png{% else %}/static/card_back.png{% endif %}"
-                     data-card-image-hd="{% if card.card and card.card.image_url %}{{ image_cdn_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png{% else %}/static/card_back.png{% endif %}">
+                      data-card-image="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&output=png{% else %}/static/card_back.png{% endif %}"
+                      data-card-image-webp="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.webp&output=webp{% else %}/static/card_back.png{% endif %}"
+                      data-card-image-hd="{% if card.card and card.card.image_url %}{{ image_cdn_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png{% else %}/static/card_back.png{% endif %}"
+                      data-card-image-hd-webp="{% if card.card and card.card.image_url %}{{ image_cdn_url }}/{{ card.card.set_code }}/{{ card.card.number }}.webp{% else %}/static/card_back.png{% endif %}">
 
                 <!-- Card Image -->
                 {% if card.card and card.card.image_url %}
                      <img src="{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&w=400&output=png"
-                         alt="{{ card.card_name }}"
-                         class="w-full h-full object-cover"
-                         loading="lazy"
-                         decoding="async"
-                         onerror="this.src='/static/card_back.png'">
+                          alt="{{ card.card_name }}"
+                          class="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.webp&w=400&output=webp';}else{this.src='/static/card_back.png';}">
                 {% else %}
                     <div class="w-full h-full flex items-center justify-center font-bold rotate-45 border-dashed border-2 m-2"
                          style="color: var(--text-color); border-color: var(--border-color);">
