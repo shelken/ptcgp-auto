@@ -82,7 +82,7 @@ class ImageResourceManager:
 
     def download_card(self, set_code: str, card_number: int) -> Optional[Path]:
         """
-        下载单张卡牌图片
+        下载单张卡牌图片，支持格式回退（png -> webp）
 
         Args:
             set_code: 系列代码（如 A1）
@@ -91,31 +91,39 @@ class ImageResourceManager:
         Returns:
             下载成功返回图片路径，失败返回None
         """
-        url = f"{ASSETS_BASE_URL}/{set_code}/{card_number:03d}.png"
-
         # 确保目录存在
         save_dir = self.cards_dir / set_code
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        save_path = save_dir / f"{card_number:03d}.png"
+        # 按优先级尝试不同格式：png优先，webp备用
+        formats = [
+            ("png", f"{card_number}.png"),
+            ("webp", f"{card_number}.webp"),
+        ]
 
-        # 如果已存在，直接返回
-        if save_path.exists():
-            return save_path
+        for ext, filename in formats:
+            url = f"{ASSETS_BASE_URL}/{set_code}/{filename}"
+            save_path = save_dir / filename
 
-        try:
-            resp = self.session.get(url, timeout=30)
-            if resp.status_code == 200:
-                save_path.write_bytes(resp.content)
-                logger.debug(f"下载成功: {set_code}/{card_number:03d}.png")
+            # 如果已存在，直接返回
+            if save_path.exists():
                 return save_path
-            elif resp.status_code == 404:
-                logger.warning(f"图片不存在(404): {url}")
-            else:
-                logger.warning(f"下载失败({resp.status_code}): {url}")
-        except Exception as e:
-            logger.warning(f"下载异常: {url} - {e}")
 
+            try:
+                resp = self.session.get(url, timeout=30)
+                if resp.status_code == 200:
+                    save_path.write_bytes(resp.content)
+                    logger.debug(f"下载成功: {set_code}/{filename}")
+                    return save_path
+                elif resp.status_code == 404:
+                    logger.debug(f"图片不存在(404): {url}")
+                    continue  # 尝试下一个格式
+                else:
+                    logger.warning(f"下载失败({resp.status_code}): {url}")
+            except Exception as e:
+                logger.warning(f"下载异常: {url} - {e}")
+
+        logger.warning(f"所有格式尝试失败: {set_code}/{card_number}")
         return None
 
     def download_cards_batch(
@@ -204,11 +212,12 @@ class ImageResourceManager:
         logger.info(f"处理完成: {completed} 成功, {failed} 失败")
 
     def _is_resource_valid(self, card: Card) -> bool:
-        """检查卡牌资源是否有效（DB有路径且文件存在）"""
+        """检查卡牌资源是否有效（DB有路径且文件存在，支持png/webp）"""
         if not card.local_image_path:
-            # 检查默认路径是否存在
-            default_path = self.cards_dir / card.set_code / f"{card.number:03d}.png"
-            return default_path.exists()
+            # 检查默认路径是否存在（支持png和webp）
+            png_path = self.cards_dir / card.set_code / f"{card.number}.png"
+            webp_path = self.cards_dir / card.set_code / f"{card.number}.webp"
+            return png_path.exists() or webp_path.exists()
 
         # 假设 local_image_path 是相对于项目根目录的路径
         return Path(card.local_image_path).exists()
