@@ -32,10 +32,6 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
-    scaled_x,
-    scaled_y,
-    screen_height,
-    screen_width,
     scroll_points,
     swipe,
     tap,
@@ -336,8 +332,8 @@ class CollectAccountCardsTask(Task):
         return ActionResult.ok(wait=0.8)
 
     def _tap_sort_button(self) -> ActionResult:
-        tap_x = scaled_x(self.adb, BASE_SORT_BTN_X)
-        tap_y = scaled_y(self.adb, BASE_SORT_BTN_Y)
+        tap_x = self.adb.scaled_x(BASE_SORT_BTN_X)
+        tap_y = self.adb.scaled_y(BASE_SORT_BTN_Y)
         return tap(self.adb, tap_x, tap_y, wait=1.0)
 
     def _select_high_rarities(self, page_info: dict) -> Optional[ActionResult]:
@@ -353,11 +349,11 @@ class CollectAccountCardsTask(Task):
         if not title_box:
             return None
 
-        roi_x1 = scaled_x(self.adb, BASE_FILTER_ROI_X1)
-        roi_x2 = scaled_x(self.adb, BASE_FILTER_ROI_X2)
+        roi_x1 = self.adb.scaled_x(BASE_FILTER_ROI_X1)
+        roi_x2 = self.adb.scaled_x(BASE_FILTER_ROI_X2)
         roi_y1 = title_box[1]
-        roi_y2 = title_box[3] + scaled_y(self.adb, BASE_FILTER_ROI_HEIGHT)
-        roi = (roi_x1, roi_y1, roi_x2, min(roi_y2, screen_height(self.adb)))
+        roi_y2 = title_box[3] + self.adb.scaled_y(BASE_FILTER_ROI_HEIGHT)
+        roi = (roi_x1, roi_y1, roi_x2, min(roi_y2, self.adb.screen_height))
 
         hits = self.icon_detector.detect_icons(
             screenshot=screenshot,
@@ -365,11 +361,11 @@ class CollectAccountCardsTask(Task):
             roi=roi,
             threshold=RARITY_GROUP_DEFAULTS["threshold"],
             nms_iou=RARITY_GROUP_DEFAULTS["nms_iou"],
-            screen_width=screen_width(self.adb),
+            screen_width=self.adb.screen_width,
         )
 
-        row_tol = scaled_y(self.adb, RARITY_GROUP_DEFAULTS["row_tol_px"])
-        gap = scaled_x(self.adb, RARITY_GROUP_DEFAULTS["gap_px"])
+        row_tol = self.adb.scaled_y(RARITY_GROUP_DEFAULTS["row_tol_px"])
+        gap = self.adb.scaled_x(RARITY_GROUP_DEFAULTS["gap_px"])
         groups = self.icon_detector.group_hits(
             hits,
             row_tol=row_tol,
@@ -565,7 +561,7 @@ class CollectAccountCardsTask(Task):
     ) -> bool:
         target_cy = (target_box[1] + target_box[3]) / 2
         arrow_cy = (arrow_box[1] + arrow_box[3]) / 2
-        row_tol = scaled_y(self.adb, BASE_SORT_ROW_TOL)
+        row_tol = self.adb.scaled_y(BASE_SORT_ROW_TOL)
         if abs(target_cy - arrow_cy) > row_tol:
             return False
         return arrow_box[0] >= target_box[2]

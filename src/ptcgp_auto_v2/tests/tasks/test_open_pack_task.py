@@ -27,7 +27,19 @@ class FakeAdb:
     def tap(self, x, y):
         self.tap_points.append((x, y))
 
+    def scaled_y(self, y):
+        return y
+
+    def center_x(self):
+        return self.screen_width // 2
+
+    def center_y(self):
+        return self.screen_height // 2
+
     def swipe_up(self, ratio=0.26):
+        return None
+
+    def swipe(self, start_x, start_y, end_x, end_y, duration):
         return None
 
 

@@ -28,14 +28,11 @@ from ptcgp_auto_v2.core.task_base import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
-    center_x,
     clear_text,
     click_close,
     input_text,
     is_text_visible,
     quick_tap,
-    scaled_x,
-    scaled_y,
     scroll_points,
     swipe,
     tap,
@@ -407,8 +404,8 @@ class InitAccountTask(Task):
 
                 # 兜底方案：OCR 失败时直接点击固定坐标
                 logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
-                tap_y = scaled_y(self.adb, BASE_COUNTRY_BTN_Y)
-                result = tap(self.adb, center_x(self.adb), tap_y, wait=1.0)
+                tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
+                result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
                 self._mark_action_done("select_country_list_opened")
                 return result
 
@@ -462,9 +459,9 @@ class InitAccountTask(Task):
                     return result
             else:
                 logger.info("  -> 上滑查找目标年份")
-                start_x = scaled_x(self.adb, 300)
-                start_y = scaled_y(self.adb, 1400)
-                end_y = scaled_y(self.adb, 900)
+                start_x = self.adb.scaled_x(300)
+                start_y = self.adb.scaled_y(1400)
+                end_y = self.adb.scaled_y(900)
                 return swipe(
                     self.adb,
                     (start_x, end_y),
@@ -508,7 +505,7 @@ class InitAccountTask(Task):
         )
         if matches:
             for match in matches:
-                if match.box[0] < center_x(self.adb):
+                if match.box[0] < self.adb.center_x():
                     logger.debug(
                         f"  -> 跳过勾选图标位置: {match.box[0]} x {match.box[1]}"
                     )
@@ -653,7 +650,7 @@ class InitAccountTask(Task):
             return tap_box(self.adb, match.box, wait=1.0)
 
         # 步骤 4: 点击输入框并输入昵称（首次输入）
-        result = tap(self.adb, center_x(self.adb), INPUT_BOX_Y, wait=1.0)
+        result = tap(self.adb, self.adb.center_x(), INPUT_BOX_Y, wait=1.0)
         if result:
             logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
             # 等待键盘弹出

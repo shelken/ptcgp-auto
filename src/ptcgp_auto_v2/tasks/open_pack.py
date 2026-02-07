@@ -34,12 +34,10 @@ from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
-    center_x,
     click_close,
     long_press_text,
     navigate_back,
     quick_tap,
-    scaled_y,
     scroll_until_template,
     swipe,
     swipe_card_coords,
@@ -393,7 +391,7 @@ class OpenPackTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("未知页面，点击屏幕上方兜底")
-        return quick_tap(self.adb, center_x(self.adb), scaled_y(self.adb, 10), wait=0.5)
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.5)
 
     def _handle_speed_up(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
