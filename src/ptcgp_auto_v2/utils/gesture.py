@@ -9,7 +9,10 @@ from typing import Callable, Optional, Tuple
 
 Box = tuple[int, int, int, int]
 
-from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
+from ptcgp_auto_v2.config.constants import (
+    DEFAULT_SCROLL_DURATION,
+    DEFAULT_TEMPLATE_THRESHOLD,
+)
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
 
@@ -28,6 +31,9 @@ BASE_SWIPE_PACK_END_Y = 1190  # 1920 * 0.62
 # 卡牌上滑坐标（从下到上）
 BASE_SWIPE_CARD_START_Y = 1152  # 1920 * 0.6
 BASE_SWIPE_CARD_END_Y = 384  # 1920 * 0.2
+
+# 通用列表滚动距离（基于 1920 高度）
+BASE_SCROLL_DISTANCE_DEFAULT = 500
 
 
 def tap_template(
@@ -60,11 +66,15 @@ def tap_box(adb, box: Box, wait: float = 1.0) -> ActionResult:
 
 def tap_center(adb, wait: float = 1.0) -> ActionResult:
     """点击屏幕中心"""
-    return tap(adb, adb.screen_width // 2, adb.screen_height // 2, wait=wait)
+    return tap(adb, center_x(adb), center_y(adb), wait=wait)
 
 
 def quick_tap(
-    adb, x: int = None, y: int = None, times: int = 3, wait: float = 0.5
+    adb,
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+    times: int = 3,
+    wait: float = 0.5,
 ) -> ActionResult:
     """
     快速点击指定位置多次
@@ -77,9 +87,9 @@ def quick_tap(
         wait: 点击后等待时间（默认 0.5 秒）
     """
     if x is None:
-        x = adb.screen_width // 2
+        x = center_x(adb)
     if y is None:
-        y = adb.screen_height // 2
+        y = center_y(adb)
 
     for i in range(times):
         adb.tap(x, y)
@@ -95,8 +105,8 @@ def quick_tap(
 
 def tap_right_side(adb, ratio: float = 0.75, wait: float = 1.0) -> ActionResult:
     """点击屏幕右侧区域"""
-    tap_x = int(adb.screen_width * ratio)
-    tap_y = adb.screen_height // 2
+    tap_x = int(screen_width(adb) * ratio)
+    tap_y = center_y(adb)
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
@@ -330,8 +340,8 @@ def tap_above_point(
 
 def tap_top_center(adb, base_y: int, wait: float = 1.0) -> ActionResult:
     """点击屏幕中上方（基准像素 + 缩放）"""
-    tap_x = adb.screen_width // 2
-    tap_y = adb.scaled_y(base_y)
+    tap_x = center_x(adb)
+    tap_y = scaled_y(adb, base_y)
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
@@ -340,7 +350,8 @@ def scroll_until_template(
     template_name: str,
     scale: float,
     max_attempts: int,
-    swipe_ratio: float,
+    base_distance_y: int,
+    duration: int,
     wait: float,
     threshold: Optional[float] = None,
 ) -> Optional[ActionResult]:
@@ -353,7 +364,10 @@ def scroll_until_template(
     last_signature = "|".join(sorted([item["text"] for item in ocr_results]))
     for attempt in range(max_attempts):
         logger.info(f"  -> 第 {attempt + 1} 次上滑查找模板: {template_name}")
-        swipe_up(page_detector.adb, ratio=swipe_ratio, wait=wait)
+        start, end = scroll_points(
+            page_detector.adb, base_distance_y=base_distance_y, direction="up"
+        )
+        swipe(page_detector.adb, start, end, duration=duration, wait=wait)
         time.sleep(wait)
         screenshot, ocr_results = page_detector.capture()
         if not screenshot:
@@ -362,8 +376,7 @@ def scroll_until_template(
             template_name, scale=scale, threshold=threshold, screenshot=screenshot
         )
         if match:
-            page_detector.adb.tap_center(match.box)
-            return ActionResult.ok(wait=1.0)
+            return tap_box(page_detector.adb, match.box, wait=1.0)
         current_signature = "|".join(sorted([item["text"] for item in ocr_results]))
         if current_signature == last_signature:
             logger.warning("  -> 滑动到底部，未找到目标模板")
@@ -409,8 +422,8 @@ def tap_bottom_close(
     ratio_x: float = 0.1,
 ) -> ActionResult:
     """点击底部关闭区域（基准像素 + 缩放）"""
-    tap_x = int(adb.screen_width * ratio_x)
-    tap_y = adb.scaled_y(base_y)
+    tap_x = int(screen_width(adb) * ratio_x)
+    tap_y = scaled_y(adb, base_y)
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
@@ -453,16 +466,26 @@ def navigate_back(
     return press_back(adb, wait=1.0)
 
 
-def swipe_up(adb, ratio: float = 0.26, wait: float = 1.0) -> ActionResult:
-    """向上滑动"""
-    adb.swipe_up(ratio=ratio)
-    return ActionResult.ok(wait=wait)
+def swipe_up(
+    adb,
+    base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
+    duration: int = DEFAULT_SCROLL_DURATION,
+    wait: float = 1.0,
+) -> ActionResult:
+    """向上滑动（基准距离 + 持续时间）"""
+    start, end = scroll_points(adb, base_distance_y, direction="up")
+    return swipe(adb, start, end, duration=duration, wait=wait)
 
 
-def swipe_down(adb, ratio: float = 0.26, wait: float = 1.0) -> ActionResult:
-    """向下滑动"""
-    adb.swipe_down(ratio=ratio)
-    return ActionResult.ok(wait=wait)
+def swipe_down(
+    adb,
+    base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
+    duration: int = DEFAULT_SCROLL_DURATION,
+    wait: float = 1.0,
+) -> ActionResult:
+    """向下滑动（基准距离 + 持续时间）"""
+    start, end = scroll_points(adb, base_distance_y, direction="down")
+    return swipe(adb, start, end, duration=duration, wait=wait)
 
 
 def swipe(
@@ -527,20 +550,81 @@ def long_press_text(
 
 def center_point(adb) -> Tuple[int, int]:
     """获取屏幕中心坐标"""
-    return adb.screen_width // 2, adb.screen_height // 2
+    return center_x(adb), center_y(adb)
 
 
 def swipe_pack_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取开包滑动坐标（从左到右）"""
-    start_x = adb.scaled_x(BASE_SWIPE_PACK_START_X)
-    end_x = adb.scaled_x(BASE_SWIPE_PACK_END_X)
-    y = adb.scaled_y(BASE_SWIPE_PACK_END_Y)
+    start_x = scaled_x(adb, BASE_SWIPE_PACK_START_X)
+    end_x = scaled_x(adb, BASE_SWIPE_PACK_END_X)
+    y = scaled_y(adb, BASE_SWIPE_PACK_END_Y)
     return (start_x, y), (end_x, y)
 
 
 def swipe_card_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取卡牌上滑坐标（从下到上）"""
-    x = adb.screen_width // 2
-    start_y = adb.scaled_y(BASE_SWIPE_CARD_START_Y)
-    end_y = adb.scaled_y(BASE_SWIPE_CARD_END_Y)
+    x = center_x(adb)
+    start_y = scaled_y(adb, BASE_SWIPE_CARD_START_Y)
+    end_y = scaled_y(adb, BASE_SWIPE_CARD_END_Y)
     return (x, start_y), (x, end_y)
+
+
+def screen_width(adb) -> int:
+    """获取屏幕宽度"""
+    return adb.screen_width
+
+
+def screen_height(adb) -> int:
+    """获取屏幕高度"""
+    return adb.screen_height
+
+
+def center_x(adb) -> int:
+    """获取屏幕中心 X 坐标"""
+    return adb.screen_width // 2
+
+
+def center_y(adb) -> int:
+    """获取屏幕中心 Y 坐标"""
+    return adb.screen_height // 2
+
+
+def scaled_x(adb, x: int) -> int:
+    """按基准宽度缩放 X 坐标"""
+    return adb.scaled_x(x)
+
+
+def scaled_y(adb, y: int) -> int:
+    """按基准高度缩放 Y 坐标"""
+    return adb.scaled_y(y)
+
+
+def scaled_point(adb, x: int, y: int) -> tuple[int, int]:
+    """缩放坐标点"""
+    return scaled_x(adb, x), scaled_y(adb, y)
+
+
+def scroll_points(
+    adb,
+    base_distance_y: int,
+    direction: str = "up",
+) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    """根据基准距离生成垂直滑动起止点"""
+    distance = scaled_y(adb, base_distance_y)
+    cx = center_x(adb)
+    cy = center_y(adb)
+    start_y = cy + distance // 2
+    end_y = cy - distance // 2
+    if direction == "down":
+        return (cx, end_y), (cx, start_y)
+    return (cx, start_y), (cx, end_y)
+
+
+def input_text(adb, text: str, wait: float = 0.5) -> ActionResult:
+    """输入文本（直接调用设备输入能力）"""
+    try:
+        adb.device.send_keys(text)
+        return ActionResult.ok(wait=wait)
+    except Exception as exc:
+        logger.error(f"输入文本失败: {exc}")
+        return ActionResult.ok(wait=wait)

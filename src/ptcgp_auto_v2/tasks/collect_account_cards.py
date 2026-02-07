@@ -9,7 +9,7 @@ import logging
 from enum import Enum, auto
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS
+from ptcgp_auto_v2.config.constants import DEFAULT_SCROLL_DURATION, HIGH_RARITY_TARGETS
 from ptcgp_auto_v2.config.rarity_icons import (
     RARITY_CODE_REVERSE,
     RARITY_GROUP_DEFAULTS,
@@ -32,8 +32,14 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
-    quick_tap,
-    swipe_up,
+    scaled_x,
+    scaled_y,
+    screen_height,
+    screen_width,
+    scroll_points,
+    swipe,
+    tap,
+    tap_box,
     tap_ok,
     tap_template,
     tap_text,
@@ -50,7 +56,9 @@ logger = logging.getLogger(__name__)
 BASE_FILTER_ROI_X1 = 80
 BASE_FILTER_ROI_X2 = 1000
 BASE_FILTER_ROI_HEIGHT = 520
-BASE_FILTER_SCROLL_RATIO = 0.1
+BASE_FILTER_SCROLL_DISTANCE_Y = 192  # 1920 * 0.10
+BASE_FILTER_OK_SCROLL_DISTANCE_Y = 154  # 1920 * 0.08
+BASE_SCAN_SCROLL_DISTANCE_Y = 500  # 1920 * 0.26
 FILTER_SCROLL_WAIT = 1.2
 BASE_SORT_ROW_TOL = 30
 BASE_SORT_BTN_X = 965
@@ -210,8 +218,7 @@ class CollectAccountCardsTask(Task):
                 return result
             fallback = self.page_detector.find_template("icon_search", threshold=0.6)
             if fallback:
-                self.adb.tap_center(fallback)
-                return ActionResult.ok(wait=1.0)
+                return tap_box(self.adb, fallback, wait=1.0)
             return ActionResult.ok(wait=1.0)
 
         if not self._is_action_done("sort_ready"):
@@ -245,7 +252,16 @@ class CollectAccountCardsTask(Task):
             return ActionResult.ok(wait=0.5)
 
         if not self._is_action_done("filter_scrolled"):
-            swipe_up(self.adb, ratio=BASE_FILTER_SCROLL_RATIO, wait=FILTER_SCROLL_WAIT)
+            start, end = scroll_points(
+                self.adb, base_distance_y=BASE_FILTER_SCROLL_DISTANCE_Y, direction="up"
+            )
+            swipe(
+                self.adb,
+                start,
+                end,
+                duration=DEFAULT_SCROLL_DURATION,
+                wait=FILTER_SCROLL_WAIT,
+            )
             self._mark_action_done("filter_scrolled")
             return ActionResult.ok(wait=FILTER_SCROLL_WAIT)
 
@@ -257,7 +273,18 @@ class CollectAccountCardsTask(Task):
                 if ok_result:
                     return self._mark_filter_applied(ok_result)
                 if not self._is_action_done("filter_ok_scrolled"):
-                    self.adb.swipe_down(ratio=0.08)
+                    start, end = scroll_points(
+                        self.adb,
+                        base_distance_y=BASE_FILTER_OK_SCROLL_DISTANCE_Y,
+                        direction="down",
+                    )
+                    swipe(
+                        self.adb,
+                        start,
+                        end,
+                        duration=DEFAULT_SCROLL_DURATION,
+                        wait=0.8,
+                    )
                     self._mark_action_done("filter_ok_scrolled")
                     return ActionResult.ok(wait=0.8)
                 return result
@@ -309,10 +336,9 @@ class CollectAccountCardsTask(Task):
         return ActionResult.ok(wait=0.8)
 
     def _tap_sort_button(self) -> ActionResult:
-        tap_x = self.adb.scaled_x(BASE_SORT_BTN_X)
-        tap_y = self.adb.scaled_y(BASE_SORT_BTN_Y)
-        self.adb.tap(tap_x, tap_y)
-        return ActionResult.ok(wait=1.0)
+        tap_x = scaled_x(self.adb, BASE_SORT_BTN_X)
+        tap_y = scaled_y(self.adb, BASE_SORT_BTN_Y)
+        return tap(self.adb, tap_x, tap_y, wait=1.0)
 
     def _select_high_rarities(self, page_info: dict) -> Optional[ActionResult]:
         screenshot, ocr_results = self.page_detector.get_last_page_context()
@@ -327,11 +353,11 @@ class CollectAccountCardsTask(Task):
         if not title_box:
             return None
 
-        roi_x1 = self.adb.scaled_x(BASE_FILTER_ROI_X1)
-        roi_x2 = self.adb.scaled_x(BASE_FILTER_ROI_X2)
+        roi_x1 = scaled_x(self.adb, BASE_FILTER_ROI_X1)
+        roi_x2 = scaled_x(self.adb, BASE_FILTER_ROI_X2)
         roi_y1 = title_box[1]
-        roi_y2 = title_box[3] + self.adb.scaled_y(BASE_FILTER_ROI_HEIGHT)
-        roi = (roi_x1, roi_y1, roi_x2, min(roi_y2, self.adb.screen_height))
+        roi_y2 = title_box[3] + scaled_y(self.adb, BASE_FILTER_ROI_HEIGHT)
+        roi = (roi_x1, roi_y1, roi_x2, min(roi_y2, screen_height(self.adb)))
 
         hits = self.icon_detector.detect_icons(
             screenshot=screenshot,
@@ -339,11 +365,11 @@ class CollectAccountCardsTask(Task):
             roi=roi,
             threshold=RARITY_GROUP_DEFAULTS["threshold"],
             nms_iou=RARITY_GROUP_DEFAULTS["nms_iou"],
-            screen_width=self.adb.screen_width,
+            screen_width=screen_width(self.adb),
         )
 
-        row_tol = self.adb.scaled_y(RARITY_GROUP_DEFAULTS["row_tol_px"])
-        gap = self.adb.scaled_x(RARITY_GROUP_DEFAULTS["gap_px"])
+        row_tol = scaled_y(self.adb, RARITY_GROUP_DEFAULTS["row_tol_px"])
+        gap = scaled_x(self.adb, RARITY_GROUP_DEFAULTS["gap_px"])
         groups = self.icon_detector.group_hits(
             hits,
             row_tol=row_tol,
@@ -364,7 +390,7 @@ class CollectAccountCardsTask(Task):
             if not group:
                 logger.debug("未找到稀有度分组: %s", rarity_code)
                 continue
-            self.adb.tap(int(group.center[0]), int(group.center[1]))
+            tap(self.adb, int(group.center[0]), int(group.center[1]), wait=0.0)
             logger.info("已选择稀有度: %s", rarity_code)
             clicked = True
 
@@ -392,7 +418,10 @@ class CollectAccountCardsTask(Task):
                 self._completed = True
                 return ActionResult.ok(wait=1.0)
             self._last_detect_signature = detect_signature
-        swipe_up(self.adb, ratio=0.26, wait=0.8)
+        start, end = scroll_points(
+            self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
+        )
+        swipe(self.adb, start, end, duration=DEFAULT_SCROLL_DURATION, wait=0.8)
         _, next_ocr = self.page_detector.capture()
         next_signature = self._build_signature(next_ocr)
 
@@ -536,7 +565,7 @@ class CollectAccountCardsTask(Task):
     ) -> bool:
         target_cy = (target_box[1] + target_box[3]) / 2
         arrow_cy = (arrow_box[1] + arrow_box[3]) / 2
-        row_tol = self.adb.scaled_y(BASE_SORT_ROW_TOL)
+        row_tol = scaled_y(self.adb, BASE_SORT_ROW_TOL)
         if abs(target_cy - arrow_cy) > row_tol:
             return False
         return arrow_box[0] >= target_box[2]
