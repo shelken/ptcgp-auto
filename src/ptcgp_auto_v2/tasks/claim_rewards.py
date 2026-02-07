@@ -20,11 +20,9 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.color import is_button_clickable
 from ptcgp_auto_v2.utils.gesture import (
-    center_x,
     click_close,
     navigate_back,
     quick_tap,
-    scaled_y,
     swipe,
     swipe_card_coords,
     tap_box,
@@ -203,7 +201,7 @@ class ClaimRewardsTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("未知页面，点击屏幕上方兜底")
-        return quick_tap(self.adb, center_x(self.adb), scaled_y(self.adb, 10), wait=0.3)
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.3)
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""

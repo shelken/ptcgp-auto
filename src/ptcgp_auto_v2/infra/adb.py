@@ -18,8 +18,6 @@ from ptcgp_auto_v2.config.constants import (
     ADB_CONNECT_FAIL_RESTART_THRESHOLD,
     DEFAULT_ADB_PORT,
     DEFAULT_LONG_PRESS_DURATION,
-    DEFAULT_SCROLL_DURATION,
-    DEFAULT_SCROLL_RATIO,
     DEFAULT_SWIPE_DURATION,
 )
 from ptcgp_auto_v2.utils.bluestacks_manager import (
@@ -369,42 +367,6 @@ class AdbController:
 
         except (RuntimeError, OSError) as e:
             logger.error(f"滑动失败: {e}")
-
-    def swipe_up(
-        self,
-        ratio: float = DEFAULT_SCROLL_RATIO,
-        duration: int = DEFAULT_SCROLL_DURATION,
-    ):
-        """
-        向上滑动
-
-        Args:
-            ratio: 滑动距离占屏幕高度的比例
-            duration: 滑动持续时间（毫秒）
-        """
-        distance = int(self.screen_height * ratio)
-        center_x = self.screen_width // 2
-        start_y = self.screen_height // 2 + distance // 2
-        end_y = self.screen_height // 2 - distance // 2
-        self.swipe(center_x, start_y, center_x, end_y, duration)
-
-    def swipe_down(
-        self,
-        ratio: float = DEFAULT_SCROLL_RATIO,
-        duration: int = DEFAULT_SCROLL_DURATION,
-    ):
-        """
-        向下滑动
-
-        Args:
-            ratio: 滑动距离占屏幕高度的比例
-            duration: 滑动持续时间（毫秒）
-        """
-        distance = int(self.screen_height * ratio)
-        center_x = self.screen_width // 2
-        start_y = self.screen_height // 2 - distance // 2
-        end_y = self.screen_height // 2 + distance // 2
-        self.swipe(center_x, start_y, center_x, end_y, duration)
 
     def press_back(self):
         """按返回键"""

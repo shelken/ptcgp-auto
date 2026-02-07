@@ -30,9 +30,6 @@ from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
     navigate_back,
-    scaled_x,
-    scaled_y,
-    screen_width,
     scroll_points,
     swipe,
     swipe_card_coords,
@@ -618,7 +615,7 @@ class WonderPickTask(Task):
         position = WONDER_PICK_POSITIONS.get(chosen)
         if not position:
             return None
-        return scaled_x(self.adb, position[0]), scaled_y(self.adb, position[1])
+        return self.adb.scaled_x(position[0]), self.adb.scaled_y(position[1])
 
     @staticmethod
     def _build_cost_groups(
@@ -697,7 +694,7 @@ class WonderPickTask(Task):
             template_paths={"icon_wonder_stamina": WONDER_STAMINA_TEMPLATE},
             threshold=0.8,
             nms_iou=0.3,
-            screen_width=screen_width(self.adb),
+            screen_width=self.adb.screen_width,
         )
         return count_icons("icon_wonder_stamina", hits)
 
