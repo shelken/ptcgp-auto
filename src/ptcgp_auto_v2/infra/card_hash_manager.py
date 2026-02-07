@@ -13,7 +13,10 @@ from typing import Dict, List, Optional, Set, Tuple
 import numpy as np
 from PIL import Image
 
-from ptcgp_auto_v2.config.constants import TOPK_CANDIDATES
+from ptcgp_auto_v2.config.constants import (
+    TOPK_CANDIDATES,
+    HASH_SIMILARITY_TIE_THRESHOLD,
+)
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.utils.perceptual_hash import (
     pil_to_color_pixels,
@@ -74,9 +77,6 @@ class CardHashManager:
                 # 3. 下载缺失卡牌的图片
                 card_numbers = [card.number for card in missing_cards]
                 downloaded = self._downloader.download_cards_batch(  # type: ignore
-                    set_code, card_numbers
-                )
-                downloaded = self._downloader.download_cards_batch(
                     set_code, card_numbers
                 )
 
@@ -198,25 +198,79 @@ class CardHashManager:
         if not series_hashes:
             return None
 
-        best_match = None
-        best_similarity = 0.0
+        # 计算所有相似度，并按 (相似度降序, card_number升序) 排序
+        # 确保相同卡面时优先选择编号较小的卡牌
+        scored_items = [
+            (card_number, calculate_similarity(target_hash, card_hash))
+            for card_number, card_hash in series_hashes.items()
+        ]
 
-        for card_number, card_hash in series_hashes.items():
-            similarity = calculate_similarity(target_hash, card_hash)
+        # 排序规则：1. 相似度降序 2. 卡牌编号升序
+        scored_items.sort(key=lambda x: (-x[1], x[0]))
 
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = card_number
-
-        if best_match and best_similarity >= threshold:
-            return (best_match, best_similarity)
+        if scored_items and scored_items[0][1] >= threshold:
+            return scored_items[0]
 
         return None
+
+    def _apply_series_priority_sort(
+        self,
+        scored_items: List[Tuple],
+        set_code_index: int = 0,
+        similarity_index: int = 1,
+    ) -> List[Tuple]:
+        """
+        应用系列优先级排序
+
+        先按相似度降序排序，然后对于相似度差距小于 HASH_SIMILARITY_TIE_THRESHOLD 的候选，
+        按系列号升序重新排序，确保相同卡面时优先选择系列号小的（如 A1 优先于 A4b）
+
+        Args:
+            scored_items: [(set_code, similarity, ...), ...] 或 [(similarity, set_code, ...), ...]
+            set_code_index: set_code 在 tuple 中的索引位置
+            similarity_index: similarity 在 tuple 中的索引位置
+
+        Returns:
+            排序后的列表
+        """
+        if not scored_items:
+            return scored_items
+
+        # 按相似度降序排序
+        scored_items.sort(key=lambda x: -x[similarity_index])
+
+        if len(scored_items) <= 1:
+            return scored_items
+
+        # 找出所有与最佳匹配差距在阈值内的候选
+        best_sim = scored_items[0][similarity_index]
+        tie_indices = [
+            i
+            for i, item in enumerate(scored_items)
+            if best_sim - item[similarity_index] < HASH_SIMILARITY_TIE_THRESHOLD
+        ]
+
+        if len(tie_indices) <= 1:
+            return scored_items
+
+        # 对这些候选按 set_code 排序（提取、排序、替换）
+        tie_candidates = [scored_items[i] for i in tie_indices]
+        tie_candidates.sort(key=lambda x: x[set_code_index])
+
+        # 替换回原位置
+        for idx, tie_idx in enumerate(tie_indices):
+            scored_items[tie_idx] = tie_candidates[idx]
+
+        return scored_items
 
     def _find_best_match_globally(
         self, target_hash: np.ndarray, threshold: float
     ) -> Optional[Tuple[str, int, float]]:
-        """在所有已加载系列中查找最佳匹配（跨系列检测）"""
+        """在所有已加载系列中查找最佳匹配（跨系列检测）
+
+        当多张卡牌相似度相同时，优先返回 set_code 较小的（字母序）
+        当最佳与次佳匹配差距小于 HASH_SIMILARITY_TIE_THRESHOLD 时，优先选择系列号小的
+        """
         # 确保全局索引已加载
         if not self._all_loaded:
             self.load_all_hashes()
@@ -224,23 +278,25 @@ class CardHashManager:
         if not self._global_cache:
             return None
 
-        best_match = None
-        best_similarity = 0.0
+        # 计算所有相似度: (similarity, key)
+        scored_items = [
+            (calculate_similarity(target_hash, card_hash), key)
+            for key, card_hash in self._global_cache.items()
+        ]
 
-        for key, card_hash in self._global_cache.items():
-            similarity = calculate_similarity(target_hash, card_hash)
+        # 应用系列优先级排序
+        scored_items = self._apply_series_priority_sort(
+            scored_items, set_code_index=1, similarity_index=0
+        )
 
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = key
+        if not scored_items or scored_items[0][0] < threshold:
+            return None
 
-        if best_match and best_similarity >= threshold:
-            # 解析 key: "A1/001"
-            set_code, card_number_str = best_match.split("/")
-            card_number = int(card_number_str)
-            return (set_code, card_number, best_similarity)
-
-        return None
+        best_similarity, best_key = scored_items[0]
+        # 解析 key: "A1/001"
+        set_code, card_number_str = best_key.split("/")
+        card_number = int(card_number_str)
+        return (set_code, card_number, best_similarity)
 
     def find_topk_candidates(
         self,
@@ -283,13 +339,18 @@ class CardHashManager:
         if not items:
             return []
 
-        # 计算所有相似度并使用 heapq.nlargest 高效获取TopK (O(N log K))
+        # 计算所有相似度: (set_code, number, similarity, hash)
         scored_items = [
             (sc, num, calculate_similarity(target_hash, hash_arr), hash_arr)
             for sc, num, hash_arr in items
         ]
 
-        return heapq.nlargest(topk, scored_items, key=lambda x: x[2])
+        # 应用系列优先级排序
+        scored_items = self._apply_series_priority_sort(
+            scored_items, set_code_index=0, similarity_index=2
+        )
+
+        return scored_items[:topk]
 
     def get_loaded_sets(self) -> Set[str]:
         """获取已加载的系列列表"""

@@ -68,7 +68,9 @@ YOLO_OBB_THRESHOLD = 0.55
 # Hash匹配相似度阈值（来自 test_massive_matching.py 实测验证）
 HASH_SIMILARITY_THRESHOLD = 0.75
 # Hash匹配相似度最小差距（用于排除相近候选，低于此值拒绝模糊匹配）
-HASH_SIMILARITY_GAP_MIN = 0.005
+HASH_SIMILARITY_GAP_MIN = 0.02
+# 系列优先级阈值：当最佳与次佳匹配差距小于此值时，优先选择系列号小的（如 A1 优先于 A4b）
+HASH_SIMILARITY_TIE_THRESHOLD = 0.01
 
 # 两阶段匹配配置
 TOPK_CANDIDATES = 3  # 第一阶段候选数（原为20，优化为3）
