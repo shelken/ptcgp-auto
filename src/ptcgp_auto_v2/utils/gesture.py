@@ -7,14 +7,16 @@ import logging
 import time
 from typing import Callable, Optional, Tuple
 
+from src.ptcgp_auto_v2.infra.adb import AdbController
+
 Box = tuple[int, int, int, int]
 
 from ptcgp_auto_v2.config.constants import (
     DEFAULT_SCROLL_DURATION,
     DEFAULT_TEMPLATE_THRESHOLD,
 )
-from ptcgp_auto_v2.utils.action_result import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.utils.action_result import ActionResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ BASE_SCROLL_DISTANCE_DEFAULT = 500
 
 
 def tap_template(
-    adb,
+    adb: AdbController,
     page_detector,
     template_name: str,
     threshold=DEFAULT_TEMPLATE_THRESHOLD,
@@ -52,30 +54,30 @@ def tap_template(
     return ActionResult.ok(wait=wait)
 
 
-def tap(adb, x: int, y: int, wait: float = 1.0) -> ActionResult:
+def tap(adb: AdbController, x: int, y: int, wait: float = 1.0) -> ActionResult:
     """点击指定坐标"""
     adb.tap(x, y)
     return ActionResult.ok(wait=wait)
 
 
-def perform_tap(adb, x: int, y: int, wait: float = 1.0) -> ActionResult:
+def perform_tap(adb: AdbController, x: int, y: int, wait: float = 1.0) -> ActionResult:
     """执行点击动作并返回结果"""
     return tap(adb, x, y, wait=wait)
 
 
-def tap_box(adb, box: Box, wait: float = 1.0) -> ActionResult:
+def tap_box(adb: AdbController, box: Box, wait: float = 1.0) -> ActionResult:
     """点击边界框中心"""
     adb.tap_center(box)
     return ActionResult.ok(wait=wait)
 
 
-def tap_center(adb, wait: float = 1.0) -> ActionResult:
+def tap_center(adb: AdbController, wait: float = 1.0) -> ActionResult:
     """点击屏幕中心"""
     return tap(adb, adb.center_x(), adb.center_y(), wait=wait)
 
 
 def quick_tap(
-    adb,
+    adb: AdbController,
     x: Optional[int] = None,
     y: Optional[int] = None,
     times: int = 3,
@@ -108,14 +110,16 @@ def quick_tap(
     return ActionResult.ok(wait=wait)
 
 
-def tap_right_side(adb, ratio: float = 0.75, wait: float = 1.0) -> ActionResult:
+def tap_right_side(
+    adb: AdbController, ratio: float = 0.75, wait: float = 1.0
+) -> ActionResult:
     """点击屏幕右侧区域"""
     tap_x = int(adb.screen_width * ratio)
     tap_y = adb.center_y()
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
-def press_back(adb, wait: float = 1.0) -> ActionResult:
+def press_back(adb: AdbController, wait: float = 1.0) -> ActionResult:
     """按返回键"""
     adb.press_back()
     return ActionResult.wait(wait)
@@ -146,7 +150,7 @@ def is_text_visible(
 
 
 def tap_text(
-    adb,
+    adb: AdbController,
     ocr_results: list[dict],
     patterns: list[str],
     wait: float = 1.0,
@@ -169,7 +173,7 @@ def tap_text(
 
 
 def tap_text_exact(
-    adb,
+    adb: AdbController,
     ocr_results: list[dict],
     patterns: list[str],
     wait: float = 1.0,
@@ -179,13 +183,15 @@ def tap_text_exact(
     )
 
 
-def tap_ok(adb, ocr_results: list[dict], wait: float = 1.0) -> Optional[ActionResult]:
+def tap_ok(
+    adb: AdbController, ocr_results: list[dict], wait: float = 1.0
+) -> Optional[ActionResult]:
     """点击 OK 按钮（通用弹窗确认按钮）"""
     return tap_text_exact(adb, ocr_results, get_text_patterns("popup_ok"), wait=wait)
 
 
 def clear_text(
-    adb, x: int, y: int, max_chars: int = 20, wait: float = 0.5
+    adb: AdbController, x: int, y: int, max_chars: int = 20, wait: float = 0.5
 ) -> ActionResult:
     """
     清空输入框文本
@@ -215,7 +221,7 @@ def clear_text(
 
 
 def tap_by_priority(
-    adb,
+    adb: AdbController,
     page_detector,
     ocr_results: Optional[list[dict]] = None,
     patterns: Optional[list[str]] = None,
@@ -239,7 +245,7 @@ def tap_by_priority(
 
 
 def tap_template_or_text(
-    adb,
+    adb: AdbController,
     page_detector,
     ocr_results: list[dict],
     template_name: Optional[str],
@@ -264,7 +270,7 @@ def tap_template_or_text(
 
 
 def tap_template_or_fallback(
-    adb,
+    adb: AdbController,
     page_detector,
     template_name: str,
     fallback_action: Callable[[], ActionResult],
@@ -278,7 +284,7 @@ def tap_template_or_fallback(
 
 
 def tap_matched_element(
-    adb, page_info: dict, wait: float = 1.0
+    adb: AdbController, page_info: dict, wait: float = 1.0
 ) -> Optional[ActionResult]:
     """
     点击匹配到的页面元素（模板或文字）
@@ -330,7 +336,7 @@ def tap_template_box(
 
 
 def tap_above_point(
-    adb,
+    adb: AdbController,
     point: Tuple[int, int],
     base_offset_y: int,
     min_y: int = 0,
@@ -343,7 +349,7 @@ def tap_above_point(
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
-def tap_top_center(adb, base_y: int, wait: float = 1.0) -> ActionResult:
+def tap_top_center(adb: AdbController, base_y: int, wait: float = 1.0) -> ActionResult:
     """点击屏幕中上方（基准像素 + 缩放）"""
     tap_x = adb.center_x()
     tap_y = adb.scaled_y(base_y)
@@ -392,7 +398,7 @@ def scroll_until_template(
 
 # 点继续文字
 def tap_continue(
-    adb,
+    adb: AdbController,
     ocr_results: list[dict],
     patterns: Optional[list[str]] = None,
     wait: float = 1.0,
@@ -407,7 +413,7 @@ def tap_continue(
 
 
 def click_close(
-    adb, page_detector, ocr_results: list[dict], patterns: list[str]
+    adb: AdbController, page_detector, ocr_results: list[dict], patterns: list[str]
 ) -> Optional[ActionResult]:
     """点击关闭按钮（模板优先）"""
     return tap_by_priority(
@@ -421,7 +427,7 @@ def click_close(
 
 
 def tap_bottom_close(
-    adb,
+    adb: AdbController,
     base_y: int,
     wait: float = 1.0,
     ratio_x: float = 0.1,
@@ -432,7 +438,7 @@ def tap_bottom_close(
     return tap(adb, tap_x, tap_y, wait=wait)
 
 
-def tap_home_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
+def tap_home_icon(adb: AdbController, page_detector, wait: float = 1.0) -> ActionResult:
     """点击主页图标"""
     return tap_bottom_icon(adb, page_detector, "icon_home", wait)
 
@@ -442,7 +448,7 @@ def tap_community_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
 
 
 def tap_bottom_icon(
-    adb, page_detector, template_name, wait: float = 1.0
+    adb: AdbController, page_detector, template_name, wait: float = 1.0
 ) -> ActionResult:
     result = tap_template(adb, page_detector, template_name=template_name, wait=wait)
     if result:
@@ -451,7 +457,7 @@ def tap_bottom_icon(
 
 
 def navigate_back(
-    adb,
+    adb: AdbController,
     page_detector,
     ocr_results: list[dict],
     patterns: list[str],
@@ -472,7 +478,7 @@ def navigate_back(
 
 
 def swipe_up(
-    adb,
+    adb: AdbController,
     base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
     duration: int = DEFAULT_SCROLL_DURATION,
     wait: float = 1.0,
@@ -483,7 +489,7 @@ def swipe_up(
 
 
 def swipe_down(
-    adb,
+    adb: AdbController,
     base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
     duration: int = DEFAULT_SCROLL_DURATION,
     wait: float = 1.0,
@@ -494,7 +500,7 @@ def swipe_down(
 
 
 def swipe(
-    adb,
+    adb: AdbController,
     start: Tuple[int, int],
     end: Tuple[int, int],
     duration: int = DEFAULT_SCROLL_DURATION,
@@ -506,7 +512,7 @@ def swipe(
 
 
 def perform_swipe(
-    adb,
+    adb: AdbController,
     start: Tuple[int, int],
     end: Tuple[int, int],
     duration: int = DEFAULT_SCROLL_DURATION,
@@ -517,7 +523,7 @@ def perform_swipe(
 
 
 def swipe_scaled(
-    adb,
+    adb: AdbController,
     start_x: int,
     start_y: int,
     end_x: int,
@@ -536,7 +542,7 @@ def swipe_scaled(
 
 
 def long_press(
-    adb, point: Tuple[int, int], duration: int = 3000, wait: float = 1.0
+    adb: AdbController, point: Tuple[int, int], duration: int = 3000, wait: float = 1.0
 ) -> ActionResult:
     """长按指定位置"""
     adb.long_press(point[0], point[1], duration)
@@ -544,7 +550,7 @@ def long_press(
 
 
 def long_press_text(
-    adb,
+    adb: AdbController,
     ocr_results: list[dict],
     patterns: list[str],
     duration: int = 3000,
@@ -586,7 +592,7 @@ def swipe_card_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
 
 
 def scroll_points(
-    adb,
+    adb: AdbController,
     base_distance_y: int,
     direction: str = "up",
 ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
@@ -601,7 +607,7 @@ def scroll_points(
     return (cx, start_y), (cx, end_y)
 
 
-def input_text(adb, text: str, wait: float = 0.5) -> ActionResult:
+def input_text(adb: AdbController, text: str, wait: float = 0.5) -> ActionResult:
     """输入文本（直接调用设备输入能力）"""
     try:
         adb.device.send_keys(text)
