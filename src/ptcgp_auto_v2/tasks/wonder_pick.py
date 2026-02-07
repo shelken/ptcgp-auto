@@ -7,7 +7,10 @@ import logging
 import random
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import SWIPE_DURATION_REGISTER
+from ptcgp_auto_v2.config.constants import (
+    DEFAULT_SCROLL_DURATION,
+    SWIPE_DURATION_REGISTER,
+)
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -27,10 +30,12 @@ from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
     navigate_back,
+    scaled_x,
+    scaled_y,
+    screen_width,
+    scroll_points,
     swipe,
     swipe_card_coords,
-    swipe_down,
-    swipe_up,
     tap,
     tap_ok,
     tap_text_exact,
@@ -42,7 +47,7 @@ logger = logging.getLogger(__name__)
 # 常量定义（基于 1080x1920 基准分辨率）
 # ============================================================
 
-SCAN_SWIPE_RATIO = 0.26
+BASE_SCAN_SCROLL_DISTANCE_Y = 500  # 1920 * 0.26
 
 WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"
 
@@ -363,9 +368,18 @@ class WonderPickTask(Task):
             direction = "向上" if self._switching_scroll_up else "向下"
             logger.info("切换目标中，继续%s滚动", direction)
             if self._switching_scroll_up:
-                swipe_down(self.adb, ratio=SCAN_SWIPE_RATIO, wait=0.8)
+                start, end = scroll_points(
+                    self.adb,
+                    base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
+                    direction="down",
+                )
             else:
-                swipe_up(self.adb, ratio=SCAN_SWIPE_RATIO, wait=0.8)
+                start, end = scroll_points(
+                    self.adb,
+                    base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
+                    direction="up",
+                )
+            swipe(self.adb, start, end, duration=DEFAULT_SCROLL_DURATION, wait=0.8)
             return ActionResult.ok(wait=0.5)
 
         if self.has_end_marker(ocr_results):
@@ -373,7 +387,10 @@ class WonderPickTask(Task):
             # 若后续改动导致“已结束”不再触发任务结束，可能引发循环。
             return self._handle_end_of_list("已出现结束标志")
 
-        swipe_up(self.adb, ratio=SCAN_SWIPE_RATIO, wait=0.8)
+        start, end = scroll_points(
+            self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
+        )
+        swipe(self.adb, start, end, duration=DEFAULT_SCROLL_DURATION, wait=0.8)
         return ActionResult.ok(wait=0.5)
 
     def _handle_popup(self, page_info: dict) -> ActionResult:
@@ -513,8 +530,28 @@ class WonderPickTask(Task):
             self._same_signature_count = 0
             self._switching_targets = True
             if self._switching_scroll_up:
-                return swipe_down(self.adb, ratio=SCAN_SWIPE_RATIO, wait=0.8)
-            return swipe_up(self.adb, ratio=SCAN_SWIPE_RATIO, wait=0.8)
+                start, end = scroll_points(
+                    self.adb,
+                    base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
+                    direction="down",
+                )
+                return swipe(
+                    self.adb,
+                    start,
+                    end,
+                    duration=DEFAULT_SCROLL_DURATION,
+                    wait=0.8,
+                )
+            start, end = scroll_points(
+                self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
+            )
+            return swipe(
+                self.adb,
+                start,
+                end,
+                duration=DEFAULT_SCROLL_DURATION,
+                wait=0.8,
+            )
 
         logger.info("结束得卡挑战扫描: %s", reason)
         self._completed = True
@@ -581,7 +618,7 @@ class WonderPickTask(Task):
         position = WONDER_PICK_POSITIONS.get(chosen)
         if not position:
             return None
-        return self.adb.scaled_x(position[0]), self.adb.scaled_y(position[1])
+        return scaled_x(self.adb, position[0]), scaled_y(self.adb, position[1])
 
     @staticmethod
     def _build_cost_groups(
@@ -660,7 +697,7 @@ class WonderPickTask(Task):
             template_paths={"icon_wonder_stamina": WONDER_STAMINA_TEMPLATE},
             threshold=0.8,
             nms_iou=0.3,
-            screen_width=self.adb.screen_width,
+            screen_width=screen_width(self.adb),
         )
         return count_icons("icon_wonder_stamina", hits)
 
