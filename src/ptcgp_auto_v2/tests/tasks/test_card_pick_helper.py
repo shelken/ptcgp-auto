@@ -12,32 +12,7 @@ sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
-
-
-class FakeAdb:
-    """模拟 ADB 控制器"""
-
-    def __init__(self):
-        self.taps = []
-        self._screen_width = 1080
-        self._screen_height = 1920
-
-    @property
-    def screen_width(self):
-        return self._screen_width
-
-    @property
-    def screen_height(self):
-        return self._screen_height
-
-    def tap(self, x, y):
-        self.taps.append((x, y))
-
-    def scaled_y(self, y):
-        return int(y * self._screen_height / 1920)
-
-    def center_x(self):
-        return self._screen_width // 2
+from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 
 
 class TestCardPickHelper(unittest.TestCase):
@@ -50,9 +25,9 @@ class TestCardPickHelper(unittest.TestCase):
         result = tap_favorite_card(adb)
 
         self.assertIsInstance(result, ActionResult)
-        self.assertEqual(len(adb.taps), 1)
-        self.assertEqual(adb.taps[0][0], adb.center_x())
-        self.assertEqual(adb.taps[0][1], adb.scaled_y(740))
+        self.assertEqual(len(adb.tap_points), 1)
+        self.assertEqual(adb.tap_points[0][0], adb.center_x())
+        self.assertEqual(adb.tap_points[0][1], adb.scaled_y(740))
 
 
 if __name__ == "__main__":

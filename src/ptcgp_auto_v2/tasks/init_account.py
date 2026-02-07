@@ -18,7 +18,6 @@ from datetime import datetime
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
-from ptcgp_auto_v2.config.constants import DEFAULT_SCROLL_DURATION
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -431,7 +430,6 @@ class InitAccountTask(Task):
                     self.adb,
                     start,
                     end,
-                    duration=DEFAULT_SCROLL_DURATION,
                     wait=2.0,
                 )
 
@@ -466,7 +464,6 @@ class InitAccountTask(Task):
                     self.adb,
                     (start_x, end_y),
                     (start_x, start_y),
-                    duration=300,
                     wait=1.0,
                 )
 

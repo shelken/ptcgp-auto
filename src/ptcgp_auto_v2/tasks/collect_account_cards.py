@@ -9,7 +9,7 @@ import logging
 from enum import Enum, auto
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import DEFAULT_SCROLL_DURATION, HIGH_RARITY_TARGETS
+from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS, SWIPE_STEPS_SCROLL
 from ptcgp_auto_v2.config.rarity_icons import (
     RARITY_CODE_REVERSE,
     RARITY_GROUP_DEFAULTS,
@@ -255,7 +255,7 @@ class CollectAccountCardsTask(Task):
                 self.adb,
                 start,
                 end,
-                duration=DEFAULT_SCROLL_DURATION,
+                steps=SWIPE_STEPS_SCROLL,
                 wait=FILTER_SCROLL_WAIT,
             )
             self._mark_action_done("filter_scrolled")
@@ -278,7 +278,7 @@ class CollectAccountCardsTask(Task):
                         self.adb,
                         start,
                         end,
-                        duration=DEFAULT_SCROLL_DURATION,
+                        steps=SWIPE_STEPS_SCROLL,
                         wait=0.8,
                     )
                     self._mark_action_done("filter_ok_scrolled")
@@ -417,7 +417,7 @@ class CollectAccountCardsTask(Task):
         start, end = scroll_points(
             self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
         )
-        swipe(self.adb, start, end, duration=DEFAULT_SCROLL_DURATION, wait=0.8)
+        swipe(self.adb, start, end, steps=SWIPE_STEPS_SCROLL, wait=0.8)
         _, next_ocr = self.page_detector.capture()
         next_signature = self._build_signature(next_ocr)
 
