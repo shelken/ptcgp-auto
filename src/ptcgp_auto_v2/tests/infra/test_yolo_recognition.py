@@ -5,6 +5,7 @@ from PIL import Image
 
 from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
+from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 from ptcgp_auto_v2.utils.perceptual_hash import (
     calculate_perceptual_hash,
     calculate_similarity,
@@ -134,18 +135,9 @@ def test_yolo_card_recognizer_scan_pack_result_sorts_by_row():
         def find_best_match(self, target_hash, set_code=None, threshold=0.8):
             return self._matches.pop(0)
 
-    class FakeAdb:
-        def screenshot(self):
-            return Image.fromarray(np.zeros((120, 120, 3), dtype=np.uint8))
-
-        def scaled_x(self, value):
-            return value
-
-        def scaled_y(self, value):
-            return value
-
+    screenshot = Image.fromarray(np.zeros((120, 120, 3), dtype=np.uint8))
     recognizer = YoloCardRecognizer(
-        adb=FakeAdb(),
+        adb=FakeAdb(screenshot_image=screenshot),
         model_manager=FakeModelManager(),
         hash_manager=FakeHashManager(),
     )

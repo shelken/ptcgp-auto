@@ -79,6 +79,10 @@ uiautomator2中关于滑动的概念有些和当前不一样，他那个是匀�
 3) 更新调用点与测试桩。
 4) 增加 pinch 接口并试点验证。
 
+## 当前进度
+
+- 2026-02-07：已完成 pinch 接口；试点调用按用户要求移除（待确认是否需要指定试点页面）。
+
 ## 本次流程中出现的问题与经验
 
 - 全量 pytest 存在跨目录重复测试文件名导致收集冲突（`tests/test_account_card_repository.py` 与 `src/ptcgp_auto_v2/tests/db/test_account_card_repository.py`）。

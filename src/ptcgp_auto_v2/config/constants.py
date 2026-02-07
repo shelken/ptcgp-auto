@@ -37,7 +37,7 @@ DEFAULT_TASK_GENERATION_INTERVAL = 60.0  # 默认任务生成间隔 (秒)
 DEFAULT_MAX_RETRIES = 3  # 默认最大重试次数
 DEFAULT_RETRY_DELAY = 30.0  # 默认重试延迟 (秒)
 DEFAULT_WAIT_AFTER_CLICK = 0.3  # 默认点击后等待时间 (秒)
-DEFAULT_LONG_PRESS_DURATION = 3000  # 默认长按持续时间 (毫秒)
+DEFAULT_LONG_PRESS_STEPS = 600  # 默认长按步数（约 3 秒，0.005s/step）
 DEFAULT_SWIPE_DURATION = 300  # 默认滑动持续时间 (毫秒)
 SWIPE_DURATION_OPEN = 500  # 开包滑动持续时间 (毫秒)（1x速度）
 # SWIPE_DURATION_OPEN = 300  # 开包滑动持续时间 (毫秒)（3x速度）
@@ -45,6 +45,16 @@ SWIPE_DURATION_REGISTER = 100  # 卡牌登录图鉴滑动持续时间 (毫秒)
 DEFAULT_SCROLL_DURATION = 500  # 默认滚动持续时间 (毫秒)
 DEFAULT_SCROLL_RATIO = 0.26  # 默认滚动距离占屏幕高度比例
 DEFAULT_MAX_SCROLL_ATTEMPTS = 10  # 默认最大滚动尝试次数
+
+# 滑动步数配置（相对 steps 模型）
+SWIPE_STEPS_BASE_RATIO = 0.25  # 基准距离占屏幕高度比例
+SWIPE_STEPS_BASE_VALUE = 8  # 基准距离对应步数
+DEFAULT_SWIPE_STEPS = SWIPE_STEPS_BASE_VALUE  # 默认滑动步数（与 steps 语义一致）
+SWIPE_STEPS_MIN = 6  # 步数下限
+SWIPE_STEPS_MAX = 24  # 步数上限
+SWIPE_STEPS_SCROLL = 10  # 通用列表滚动步数（对齐旧默认 500ms）
+SWIPE_STEPS_OPEN = 10  # 开包滑动步数（对齐旧 500ms）
+SWIPE_STEPS_REGISTER = 3  # 卡牌登录图鉴滑动步数（对齐旧 100ms）
 
 # 数据库配置
 DEFAULT_DB_NAME = "ptcgp_v2.db"  # 默认数据库文件名

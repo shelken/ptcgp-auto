@@ -9,38 +9,9 @@ sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.open_pack import HOME_CHECK_THRESHOLD, OpenPackTask
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
-from ptcgp_auto_v2.config.constants import DEFAULT_SCROLL_DURATION
 from ptcgp_auto_v2.utils.gesture import scroll_until_template
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
-
-
-class FakeAdb:
-    def __init__(self):
-        self.taps = []
-        self.tap_points = []
-        self.screen_width = 1080
-        self.screen_height = 1920
-
-    def tap_center(self, box):
-        self.taps.append(box)
-
-    def tap(self, x, y):
-        self.tap_points.append((x, y))
-
-    def scaled_y(self, y):
-        return y
-
-    def center_x(self):
-        return self.screen_width // 2
-
-    def center_y(self):
-        return self.screen_height // 2
-
-    def swipe_up(self, ratio=0.26):
-        return None
-
-    def swipe(self, start_x, start_y, end_x, end_y, duration):
-        return None
+from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 
 
 class FakePageDetector:
@@ -155,7 +126,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
             scale=1.0,
             max_attempts=3,
             base_distance_y=384,
-            duration=DEFAULT_SCROLL_DURATION,
             wait=0.1,
         )
 
@@ -177,7 +147,6 @@ class TestGestureTemplateFlows(unittest.TestCase):
             scale=1.0,
             max_attempts=3,
             base_distance_y=384,
-            duration=DEFAULT_SCROLL_DURATION,
             wait=0.1,
         )
 

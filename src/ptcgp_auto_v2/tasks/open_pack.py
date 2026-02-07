@@ -12,12 +12,12 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.constants import (
-    DEFAULT_SCROLL_DURATION,
     PACK_AUTO_EXCLUDE_SET_CODES,
     PACK_SERIES_CODES,
     PACK_TEMPLATE_THRESHOLD,
-    SWIPE_DURATION_OPEN,
-    SWIPE_DURATION_REGISTER,
+    SWIPE_STEPS_OPEN,
+    SWIPE_STEPS_REGISTER,
+    SWIPE_STEPS_SCROLL,
 )
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
@@ -424,7 +424,7 @@ class OpenPackTask(Task):
 
         # 检查是否有免费包图标
         free_pack_box = self.page_detector.find_template_with_scale(
-            "icon_free_pack_available", screenshot=screenshot
+            "icon_free_pack_available", screenshot=screenshot, threshold=0.68
         )
 
         if free_pack_box:
@@ -504,7 +504,7 @@ class OpenPackTask(Task):
             scale=settings.scale_pack_series_select,
             max_attempts=max_attempts,
             base_distance_y=BASE_PACK_SERIES_SCROLL_DISTANCE_Y,  # 步进调小，避免跳过
-            duration=DEFAULT_SCROLL_DURATION,
+            steps=SWIPE_STEPS_SCROLL,
             wait=1,
         )
         if result:
@@ -667,7 +667,7 @@ class OpenPackTask(Task):
         self._packs_opened_count += 1
         self._result_recognized = False
         start, end = swipe_pack_coords(self.adb)
-        return swipe(self.adb, start, end, duration=SWIPE_DURATION_OPEN)
+        return swipe(self.adb, start, end, steps=SWIPE_STEPS_OPEN)
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """长按跳过卡牌展示"""
@@ -692,7 +692,7 @@ class OpenPackTask(Task):
         """向上滑动卡牌登录图鉴"""
         logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, duration=SWIPE_DURATION_REGISTER)
+        return swipe(self.adb, start, end, steps=SWIPE_STEPS_REGISTER)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页：识别卡牌并点击继续"""

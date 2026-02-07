@@ -7,23 +7,7 @@ src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.claim_gifts import ClaimGiftsTask
-
-
-class FakeAdb:
-    def __init__(self):
-        self.taps = []
-        self.tap_points = []
-        self.screen_width = 1080
-        self.screen_height = 1920
-
-    def tap_center(self, box):
-        self.taps.append(box)
-
-    def tap(self, x, y):
-        self.tap_points.append((x, y))
-
-    def swipe_up(self, ratio=0.26):
-        return None
+from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 
 
 class FakePageDetector:
