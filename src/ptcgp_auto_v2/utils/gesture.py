@@ -604,6 +604,30 @@ def long_press_text(
     return None
 
 
+def pinch_in(
+    adb: AdbController,
+    center: Tuple[int, int],
+    scale: float,
+    steps: int,
+    wait: float = 0.5,
+) -> ActionResult:
+    """双指缩小（通用手势封装）"""
+    adb.pinch_in(center=center, scale=scale, steps=steps)
+    return ActionResult.ok(wait=wait)
+
+
+def pinch_out(
+    adb: AdbController,
+    center: Tuple[int, int],
+    scale: float,
+    steps: int,
+    wait: float = 0.5,
+) -> ActionResult:
+    """双指放大（通用手势封装）"""
+    adb.pinch_out(center=center, scale=scale, steps=steps)
+    return ActionResult.ok(wait=wait)
+
+
 def center_point(adb) -> Tuple[int, int]:
     """获取屏幕中心坐标"""
     return adb.center_x(), adb.center_y()
