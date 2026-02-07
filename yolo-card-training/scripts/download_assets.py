@@ -51,36 +51,43 @@ API_RATE_LIMIT_DELAY = 0.0 if GITHUB_TOKEN else 0.5
 
 def download_single_card(args: Tuple[str, int]) -> Tuple[str, int, bool]:
     """
-    下载单张卡牌（中文 PNG 版本）
-    保存到 data/cards/[set]/[number].png
+    下载单张卡牌，支持格式回退（png -> webp）
+    保存到 data/cards/[set]/[number].[ext]
     返回: (set_name, card_num, success)
     """
     set_name, card_num = args
-    # 文件名不再带 set 前缀，直接是 001.png 格式
-    filename = f"{card_num}.png"
-    url = f"{CARDS_BASE_URL}/{set_name}/{card_num}.png"
 
     # 创建 set 子目录
     set_dir = CARDS_DIR / set_name
     set_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = set_dir / filename
+    # 按优先级尝试不同格式：png优先，webp备用
+    formats = [
+        ("png", f"{card_num}.png"),
+        ("webp", f"{card_num}.webp"),
+    ]
 
-    # 已存在则跳过
-    if output_path.exists():
-        return set_name, card_num, True
+    for ext, filename in formats:
+        url = f"{CARDS_BASE_URL}/{set_name}/{filename}"
+        output_path = set_dir / filename
 
-    try:
-        response = session.get(url, timeout=30)
-        if response.status_code == 200:
-            output_path.write_bytes(response.content)
+        # 已存在则跳过
+        if output_path.exists():
             return set_name, card_num, True
-        elif response.status_code == 404:
-            return set_name, card_num, False  # 编号不存在
-        else:
+
+        try:
+            response = session.get(url, timeout=30)
+            if response.status_code == 200:
+                output_path.write_bytes(response.content)
+                return set_name, card_num, True
+            elif response.status_code == 404:
+                continue  # 尝试下一个格式
+            else:
+                return set_name, card_num, False
+        except Exception:
             return set_name, card_num, False
-    except Exception:
-        return set_name, card_num, False
+
+    return set_name, card_num, False
 
 
 def discover_all_sets() -> List[str]:
@@ -133,16 +140,20 @@ def discover_cards_in_set(set_name: str) -> List[int]:
         response.raise_for_status()
         files = response.json()
 
-        # 提取 PNG 文件的编号
+        # 提取 PNG 或 WEBP 文件的编号
         card_numbers = []
         for file in files:
-            if file["type"] == "file" and file["name"].endswith(".png"):
-                # 文件名格式: 001.png -> 提取 1
+            if file["type"] == "file" and (
+                file["name"].endswith(".png") or file["name"].endswith(".webp")
+            ):
+                # 文件名格式: 001.png 或 001.webp -> 提取 1
                 try:
-                    num = int(file["name"].replace(".png", ""))
+                    num = int(file["name"].rsplit(".", 1)[0])
                     card_numbers.append(num)
                 except ValueError:
                     continue
+        # 去重（同一编号可能有多种格式）
+        card_numbers = list(set(card_numbers))
 
         card_numbers.sort()
         print(f"✅ 发现 {len(card_numbers)} 张卡牌")

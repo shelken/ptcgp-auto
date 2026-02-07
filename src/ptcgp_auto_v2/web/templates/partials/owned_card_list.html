@@ -20,7 +20,7 @@
                 class="owned-card-image"
                 loading="lazy"
                 decoding="async"
-                onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.webp&w=400&output=webp';}else{this.style.display='none'; this.nextElementSibling.classList.remove('hidden');}">
             <div class="owned-card-placeholder hidden">
                 {{ t.no_image }}
             </div>
