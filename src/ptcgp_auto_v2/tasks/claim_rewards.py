@@ -64,6 +64,7 @@ def _build_rewards_page_tabs_patterns() -> list[str]:
         "elite_deck",
         "convenient_cards",
         "reward_week",
+        "medal",
         "premium",
     ]
     patterns = []
