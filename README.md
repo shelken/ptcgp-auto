@@ -117,6 +117,7 @@ ptcgp-auto/
 │   │   ├── web/                # Web UI (FastAPI/HTMX)
 │   │   ├── config/             # 配置文件
 │   │   └── utils/              # 工具函数
+│   │       └── action_result.py # 动作结果数据结构
 │   └── ptcgp_auto/             # v1 旧版代码 (Legacy)
 └── docs/                       # 文档
 ```

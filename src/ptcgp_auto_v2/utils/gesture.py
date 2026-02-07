@@ -13,7 +13,7 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_SCROLL_DURATION,
     DEFAULT_TEMPLATE_THRESHOLD,
 )
-from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.utils.action_result import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
 
 logger = logging.getLogger(__name__)

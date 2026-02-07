@@ -16,6 +16,7 @@ from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.infra.ocr import OcrEngine
 from ptcgp_auto_v2.infra.page_detector import PageDetector
 from ptcgp_auto_v2.infra.template import TemplateMatcher
+from ptcgp_auto_v2.utils.action_result import ActionResult
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account
@@ -45,37 +46,8 @@ class TaskStatus(Enum):
     SKIPPED = "skipped"  # 跳过（不更新 last_completed_at，等待下次重置）
 
 
-DEFAULT_WAIT_SECONDS = 1.0  # 默认等待时间(秒)
 MAX_TASK_ITERATIONS = 100  # 最大执行迭代次数
 MAX_UNKNOWN_PAGES = 30  # 连续未知页面上限
-
-
-@dataclass
-class ActionResult:
-    """
-    单次动作执行结果
-
-    用于 handle_page 方法返回执行状态。
-    """
-
-    success: bool = True
-    error: Optional[str] = None
-    should_wait: float = DEFAULT_WAIT_SECONDS  # 建议等待时间（秒）
-
-    @classmethod
-    def ok(cls, wait: float = DEFAULT_WAIT_SECONDS) -> "ActionResult":
-        """创建成功结果"""
-        return cls(success=True, should_wait=wait)
-
-    @classmethod
-    def fail(cls, error: str) -> "ActionResult":
-        """创建失败结果"""
-        return cls(success=False, error=error)
-
-    @classmethod
-    def wait(cls, seconds: float) -> "ActionResult":
-        """创建需要等待的结果"""
-        return cls(success=True, should_wait=seconds)
 
 
 @dataclass

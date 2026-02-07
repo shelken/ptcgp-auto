@@ -116,6 +116,7 @@ ptcgp-auto/
 │   │   │   └── yolo_card_recognizer.py # [新增] YOLO识别
 │   │   ├── config/             # 配置
 │   │   └── utils/              # 工具
+│   │       ├── action_result.py    # 动作结果数据结构
 │   │       └── perceptual_hash.py    # [新增] 哈希计算
 │   └── ptcgp_auto/             # [v1] 旧版代码
 └── docs/                       # 文档
