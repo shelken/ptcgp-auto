@@ -84,7 +84,8 @@ class CardRepository:
     ) -> List[Pack]:
         """按系列前缀获取子包列表并排除指定系列。"""
         normalized_prefixes = [item for item in prefixes if item]
-        exclude_set = {code.upper() for code in exclude_set_codes}
+        # 注意：不要转换大小写，系列代码是大小写敏感的（如 A4b 不是 A4B）
+        exclude_set = {code for code in exclude_set_codes if code}
         with Session(get_engine()) as session:
             statement = select(Pack)
             if normalized_prefixes:
@@ -333,8 +334,10 @@ class CardRepository:
     def get_cards_with_hash_by_set(self, set_code: str) -> Dict[int, str]:
         """获取某系列所有有hash的卡牌 {number: hash}"""
         with Session(get_engine()) as session:
-            statement = select(Card).where(
-                Card.set_code == set_code, Card.perceptual_hash.is_not(None)
+            statement = (
+                select(Card)
+                .where(Card.set_code == set_code, Card.perceptual_hash.is_not(None))
+                .order_by(Card.number)
             )
             cards = session.exec(statement).all()
             return {card.number: card.perceptual_hash for card in cards}
