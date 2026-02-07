@@ -6,6 +6,7 @@
 """
 
 import logging
+import time
 from enum import Enum, auto
 from typing import Optional
 
@@ -32,6 +33,7 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
+    pinch_in,
     scroll_points,
     swipe,
     tap,
@@ -301,12 +303,17 @@ class CollectAccountCardsTask(Task):
         arrow_up = self.page_detector.find_template("icon_arrow_up", threshold=0.8)
         if target_box and arrow_up and self._is_arrow_up_for_sort(target_box, arrow_up):
             self._mark_action_done("sort_ready")
-            return click_close(
+            close_result = click_close(
                 self.adb,
                 self.page_detector,
                 ocr_results,
                 get_text_patterns("text_x"),
             ) or ActionResult.ok(wait=0.5)
+            time.sleep(0.5)
+            center = (self.adb.center_x(), self.adb.center_y())
+            pinch_in(self.adb, center=center, scale=0.12, steps=8, wait=0.5)
+            logger.info("关闭排序面板后执行一次缩小")
+            return close_result
 
         if target_box is None:
             logger.debug("未识别到排序目标文本，等待重试")

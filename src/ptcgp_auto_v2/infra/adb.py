@@ -375,8 +375,7 @@ class AdbController:
         执行双指缩放手势
 
         流程：
-        1. 根据中心点与比例计算双指起止坐标
-        2. 通过 u2 gesture 注入双指手势
+        1. 使用 u2 官方 pinch 接口执行缩放
         """
         if not self.device:
             logger.error("设备未连接")
@@ -384,65 +383,23 @@ class AdbController:
 
         try:
             resolved_steps = max(2, int(steps))
-            left_start, right_start, left_end, right_end = self._build_pinch_points(
-                center=center, scale=scale, direction=direction
-            )
-            self.device.gesture(  # type: ignore[attr-defined]  # u2 动态方法无类型声明
-                left_start,
-                right_start,
-                left_end,
-                right_end,
-                steps=resolved_steps,
-            )
+            resolved_scale = max(0.05, min(1.0, float(scale)))
+            percent = int(round(resolved_scale * 100))
+            ui_object = self.device() if callable(self.device) else self.device
+            if direction == "in":
+                ui_object.pinch_in(percent=percent, steps=resolved_steps)
+            else:
+                ui_object.pinch_out(percent=percent, steps=resolved_steps)
             logger.debug(
                 "双指%s: center=%s scale=%s steps=%s",
                 "缩小" if direction == "in" else "放大",
                 center,
-                scale,
+                resolved_scale,
                 resolved_steps,
             )
             time.sleep(self.wait_after_click)
         except Exception as e:
             logger.error(f"双指手势失败: {e}")
-
-    def _build_pinch_points(
-        self, center: Tuple[int, int], scale: float, direction: str
-    ) -> Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
-        """
-        构建双指手势起止坐标
-
-        Args:
-            center: 中心点坐标
-            scale: 捏合/放大比例（相对短边）
-            direction: in 或 out
-
-        Returns:
-            左起点、右起点、左终点、右终点
-        """
-        center_x = int(center[0])
-        center_y = int(center[1])
-        short_edge = max(1, min(self.screen_width, self.screen_height))
-        resolved_scale = max(0.05, min(1.0, float(scale)))
-        span = max(2, int(short_edge * resolved_scale))
-        end_offset = max(1, span // 2)
-        start_offset = max(1, int(end_offset * 0.3))
-
-        if direction == "in":
-            outer, inner = end_offset, start_offset
-        else:
-            outer, inner = start_offset, end_offset
-
-        left_start = self._clamp_point(center_x - outer, center_y)
-        left_end = self._clamp_point(center_x - inner, center_y)
-        right_start = self._clamp_point(center_x + outer, center_y)
-        right_end = self._clamp_point(center_x + inner, center_y)
-        return left_start, right_start, left_end, right_end
-
-    def _clamp_point(self, x: int, y: int) -> Tuple[int, int]:
-        """将坐标限制在屏幕范围内"""
-        max_x = max(0, self.screen_width - 1)
-        max_y = max(0, self.screen_height - 1)
-        return max(0, min(max_x, x)), max(0, min(max_y, y))
 
     def _steps_to_duration_seconds(self, steps: int) -> float:
         """
