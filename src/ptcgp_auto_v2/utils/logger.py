@@ -129,7 +129,7 @@ def setup_logging(level: str = "INFO") -> None:
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("adbutils").setLevel(logging.WARNING)
+    logging.getLogger("uiautomator2").setLevel(logging.WARNING)
 
 
 def set_context(
