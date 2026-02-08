@@ -29,6 +29,7 @@
 - 在执行复杂计划前，把本次计划持久化文档到目录`docs/plans/`下，并在阶段性完成后更新进度，文档中要把用户最开始的诉求写明，原文保存（简单的小改动可以不需要）
 - 出现`No module named 'xxx'`时要设置`PYTHONPATH=src`
 - 长时间的任务不应该自己执行而是请求人工接管，除非自身支持后台运行
+- 不允许随便 checkout 某个代码文件，你自己改了哪些内容，回退时必须使用编辑工具回退自己增加的部分，不允许使用checkout
 
 ## 知识获取与整理原则
 
@@ -115,6 +116,13 @@ ptcgp-auto/
 │   │   │   ├── card_hash_manager.py   # [新增] Hash管理
 │   │   │   └── yolo_card_recognizer.py # [新增] YOLO识别
 │   │   ├── config/             # 配置
+│   │   ├── web/                # Web UI (FastAPI/HTMX)
+│   │   │   ├── app.py           # Web 入口（初始化与路由挂载）
+│   │   │   ├── routers/         # 路由层
+│   │   │   ├── services/        # 业务层
+│   │   │   ├── queries/         # 查询层
+│   │   │   ├── utils/           # i18n/模板/视图辅助
+│   │   │   └── static/js/       # 前端模块化入口
 │   │   └── utils/              # 工具
 │   │       ├── action_result.py    # 动作结果数据结构
 │   │       └── perceptual_hash.py    # [新增] 哈希计算
