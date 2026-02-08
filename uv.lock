@@ -1153,7 +1153,6 @@ name = "ptcgp-auto"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "adbutils" },
     { name = "coremltools" },
     { name = "fastapi" },
     { name = "jinja2" },
@@ -1178,7 +1177,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "adbutils", specifier = ">=2.0.0" },
     { name = "coremltools", specifier = ">=9.0" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
