@@ -17,39 +17,25 @@ PTCGP Auto
 
 ---
 
-Automation script for Pokemon TCG Pocket solo battles, supporting any Android device or emulator connected via ADB.
+Pokemon TCG Pocket automation assistant based on ADB and image recognition.
+**v2 architecture**: task queue + multi-device scheduler designed for multi-account daily automation.
 
-## Features
+## ✨ Core Features (v2)
 
-- Automated solo battles (ranked battles)
-- Auto-traverse levels and card packs by priority
-- Multi-device support
-- **Daily Pack Mode** (in development) - Auto-rotate accounts for free packs
+- **Multi-account management**: auto-rotate accounts, supports dozens of accounts
+- **Task queue architecture**: atomic tasks like `daily pack`, `claim rewards`, `claim gifts`, `wonder pick`
+- **Smart scheduling**: dispatches tasks by priority and device availability
+- **Data persistence**: SQLite stores account info, task status, and pack history
+- **Web UI**: modern Web UI with pack history, advanced filters (rarity/type), multiple views, and mobile support
+- **Resume on failure**: auto retry and resume after process restarts
+- **YOLO + perceptual-hash card recognition**: replaces template matching for pack results
+- **Account card collection**: filters high-rarity cards on list pages and writes to account-card table
 
-## Run Modes
+## 🚀 Quick Start
 
-| Mode | Command | Description |
-|------|---------|-------------|
-| Battle Mode | `python main.py` | Default mode, automated solo battles |
-| Tutorial Mode | `python main.py -t` | Unlock solo battle tutorial flow |
-| Daily Pack | `python main.py --daily` | Rotate accounts for free packs (requires root) |
+### 1. Environment
 
-## Tech Stack
-
-- **ADB Control**: adbutils
-- **OCR**: Apple Vision Framework (GPU accelerated)
-- **Template Matching**: OpenCV
-- **State Management**: JSON
-
-## Prerequisites
-
-- ADB debugging enabled on device
-- Game language set to **Traditional Chinese** (or configure accordingly)
-- **Manually navigate to the battle menu before starting** (the screen showing "單人對戰" button)
-
-## Installation
-
-### Using Nix (Recommended)
+Recommended: manage environment with [Nix](https://nixos.org/) (optional):
 
 ```bash
 nix develop
@@ -57,123 +43,103 @@ nix develop
 direnv allow
 ```
 
-### Manual Installation
-
+Manual dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-Dependencies:
-- Python 3.10+
-- adbutils
-- opencv-python
-- Pillow
-- pyobjc-framework-Vision (macOS)
-
-## Usage
+### 2. Start v2 daemon
 
 ```bash
-# Default connection to 127.0.0.1:5555
-python main.py
-
-# Specify ADB address
-python main.py -a 5556
-python main.py -a 192.168.1.100:5555
-
-# v2: auto-discover BlueStacks devices when -d omitted
+# Auto-discover BlueStacks and run daemon mode
 python main_v2.py --daemon
 
-# v2: switch account manually (port shorthand, avoid --task/--daemon)
-python main_v2.py --switch-account 4 -d 5715
-
-# Debug tool
-python debug_tool.py
-python debug_tool.py -a 5556
+# Run with a specific device
+python main_v2.py --daemon -d 127.0.0.1:5555
 ```
 
-## Configuration
+## 📦 Model Auto-Download
 
-Edit `config.py` to view and modify all settings, including:
-- `LANGUAGE` - Language setting (options: "zh_Hant", "en_US")
-- `WAIT_BATTLE_CHECK_INTERVAL` - Battle check interval
-- `DEBUG` - Debug mode
+On first launch, models are downloaded from `shelken/ptcgp-assets`:
+- **macOS**: CoreML model (`best.mlpackage`)
+- **Other platforms**: PyTorch model (`best.pt`)
 
-## Multi-Device
+Models are stored under `data/models/` and loaded into memory automatically.
 
-Each device uses an independent temp directory:
+### 3. Common Commands
 
-```
-/tmp/ptcgp_auto_5555/state.json
-/tmp/ptcgp_auto_5556/state.json
-```
-
-Reset progress:
 ```bash
-rm /tmp/ptcgp_auto_5555/state.json
+# Help
+python main_v2.py --help
+
+# List accounts
+python main_v2.py --list-accounts
+
+# List supported tasks
+python main_v2.py --list-tasks
+
+# Run a single task (debug)
+python main_v2.py --task open_pack --account 1
+
+# Sync currently logged-in account into DB
+python main_v2.py --sync-account
 ```
 
-## File Structure
+## 🏗️ Architecture
+
+v2 uses a `Scheduler` + `Executor` architecture:
+
+- **Scheduler**: generates tasks, monitors devices, dispatches work.
+- **Executor**: runs inside device threads, executes atomic task logic (OCR, taps).
+- **Database**: SQLite (`data/ptcgp_v2.db`) for durable state.
+
+## 📂 File Structure
 
 ```
 ptcgp-auto/
-├── main.py                 # Main entry point
-├── debug_tool.py           # Debug tool entry
+├── main_v2.py                  # v2 entry (recommended)
+├── main.py                     # v1 entry (legacy battles, migrating to v2)
+├── debug_tool.py               # Debug tool
 ├── src/
-│   └── ptcgp_auto/
-│       ├── __init__.py
-│       ├── runner.py       # Main automation loop
-│       ├── actions/        # Action handler module
-│       │   ├── __init__.py     # Exports ActionHandler
-│       │   ├── handler.py      # Facade class
-│       │   ├── base.py         # Base actions
-│       │   ├── battle.py       # Battle actions
-│       │   ├── level.py        # Level selection
-│       │   ├── deck.py         # Deck list
-│       │   ├── expansion.py    # Expansion selection
-│       │   ├── home.py         # Home actions
-│       │   └── utils/          # Utility modules
-│       │       ├── scroll.py       # Scroll helper
-│       │       ├── ocr_helpers.py  # OCR utilities
-│       │       └── navigation.py   # Navigation utilities
-│       ├── adb_controller.py   # ADB controller
-│       ├── config.py           # Configuration (with mode loading)
-│       ├── daily/              # Daily pack module
-│       │   ├── __init__.py
-│       │   ├── runner.py       # Daily mode runner
-│       │   └── pack_opener.py  # Pack opening logic
-│       ├── db/                 # Database module
-│       │   ├── __init__.py
-│       │   └── account_db.py   # Account database
-│       ├── debug_tools/        # Debug tool modules
-│       ├── device_discovery.py # Device discovery
-│       ├── locales/            # Multi-language configs
-│       │   ├── zh_Hant.py          # Traditional Chinese main config
-│       │   ├── zh_Hant_pages/      # Traditional Chinese page configs
-│       │   │   ├── __init__.py     # Exports all page groups
-│       │   │   ├── common.py       # Common pages
-│       │   │   ├── user_info.py    # User info pages
-│       │   │   ├── battle.py       # Battle mode pages
-│       │   │   ├── tutorial.py     # Tutorial mode pages
-│       │   │   └── daily.py        # Daily pack mode pages
-│       │   └── en_US.py            # English config
-│       ├── logger.py           # Logging
-│       ├── notifier.py         # Notifications
-│       ├── page_detector.py    # Page detector
-│       ├── recognizer.py       # OCR + template matching
-│       ├── recognizer_parts/   # Recognizer components
-│       ├── settings.py         # Runtime settings
-│       ├── state_manager.py    # State management
-│       └── utils.py            # Utilities
-├── templates/              # Template images
-└── docs/                   # Documentation
+│   ├── ptcgp_auto_v2/          # v2 core
+│   │   ├── core/               # scheduler core (Scheduler, Executor, TaskSchedule)
+│   │   ├── tasks/              # task implementations (OpenPack, CollectAccountCards...)
+│   │   ├── db/                 # database layer (SQLAlchemy/SQLite)
+│   │   ├── infra/              # infra layer
+│   │   │   ├── adb.py          # ADB controller wrapper
+│   │   │   ├── ocr.py          # OCR wrapper
+│   │   │   ├── model_manager.py    # [new] YOLO model manager
+│   │   │   ├── card_hash_manager.py # [new] hash index manager
+│   │   │   ├── yolo_card_recognizer.py # [new] YOLO+hash recognizer
+│   │   │   └── icon_group_detector.py # rarity icon grouping
+│   │   │   ├── page_detector.py  # page detector
+│   │   │   └── account_switcher.py # account switching
+│   │   ├── web/                # Web UI (FastAPI/HTMX)
+│   │   │   ├── app.py           # Web entry (init + routes)
+│   │   │   ├── routers/         # routes
+│   │   │   ├── services/        # services
+│   │   │   ├── queries/         # queries
+│   │   │   ├── utils/           # i18n/templates/view helpers
+│   │   │   └── static/js/       # frontend entry
+│   │   ├── config/             # config files
+│   │   └── utils/              # utilities
+│   │       └── action_result.py # action result struct
+│   └── ptcgp_auto/             # v1 legacy
+└── docs/                       # docs
 ```
 
-## Notes
+## ⚠️ v1 Legacy
 
-- Currently macOS only (depends on Apple Vision Framework), other platforms planned
-- Game language must match `LANGUAGE` setting in `config.py`
-- Make sure the game is on the battle menu before starting the script
-- **Template images must be captured at 1080p resolution** (the script auto-scales templates based on actual resolution)
+v1 focuses on solo battle grinding and remains as a legacy module. It will be migrated into v2's task system.
+
+```bash
+# Start v1 automated battles
+python main.py
+```
+
+## Development
+
+See [AGENTS.md](AGENTS.md) for detailed development and coding guidelines.
 
 ## License
 

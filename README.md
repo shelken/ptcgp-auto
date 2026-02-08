@@ -115,6 +115,12 @@ ptcgp-auto/
 │   │   │   ├── page_detector.py  # 页面检测器
 │   │   │   └── account_switcher.py # 账号切换逻辑
 │   │   ├── web/                # Web UI (FastAPI/HTMX)
+│   │   │   ├── app.py           # Web 入口（初始化与路由挂载）
+│   │   │   ├── routers/         # 路由层
+│   │   │   ├── services/        # 业务层
+│   │   │   ├── queries/         # 查询层
+│   │   │   ├── utils/           # i18n/模板/视图辅助
+│   │   │   └── static/js/       # 前端模块化入口
 │   │   ├── config/             # 配置文件
 │   │   └── utils/              # 工具函数
 │   │       └── action_result.py # 动作结果数据结构
