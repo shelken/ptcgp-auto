@@ -110,7 +110,9 @@ class Settings:
 
     # 未配置开包目标时的自动选包策略
     # 可选值: latest / hash_balance / least_used
-    pack_auto_strategy: str = "hash_balance"
+    # latest 自动选最新包
+    # hash_balance 一致性hash均衡所有包的选择
+    pack_auto_strategy: str = "latest"
 
     # 调度配置
     poll_interval: float = DEFAULT_POLL_INTERVAL
