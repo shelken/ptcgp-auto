@@ -119,6 +119,15 @@ class Settings:
     max_workers: int = DEFAULT_MAX_WORKERS
     task_generation_interval: float = DEFAULT_TASK_GENERATION_INTERVAL
 
+    # 自动扩缩容配置
+    auto_scale_emulators: bool = False
+    auto_scale_instance_prefix: str = "auto-"
+    auto_scale_min_idle_devices: int = 1
+    auto_scale_max_devices: int = 2
+    auto_scale_pending_step: int = 10
+    auto_scale_eval_interval_seconds: int = 60
+    auto_scale_idle_seconds: int = 180
+
     # 执行配置
     max_retries: int = DEFAULT_MAX_RETRIES
     retry_delay: float = DEFAULT_RETRY_DELAY
