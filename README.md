@@ -93,6 +93,27 @@ v2 版本采用 `Scheduler` (调度器) + `Executor` (执行器) 架构：
 - **Executor**: 运行在具体设备线程中，负责执行原子任务逻辑（如 OCR 识别、点击操作）。
 - **Database**: SQLite (`data/ptcgp_v2.db`) 存储所有状态，确保数据安全。
 
+## ⚙️ 自动扩缩容（BlueStacks）
+
+系统支持根据任务积压自动启动/关闭 BlueStacks 实例，仅管理配置文件中以 `auto-` 开头的实例：
+
+- 实例来源：`/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf`
+- 实例筛选：仅 `auto-` 前缀
+- 扩容逻辑：`pending` 达到阶梯阈值后按需启动实例
+- 缩容逻辑：空闲设备数超过最小值且空闲时间超过阈值时关闭实例
+
+可在 `Settings` 中配置：
+
+```
+auto_scale_emulators = False
+auto_scale_instance_prefix = "auto-"
+auto_scale_min_idle_devices = 1
+auto_scale_max_devices = 2
+auto_scale_pending_step = 10
+auto_scale_eval_interval_seconds = 60
+auto_scale_idle_seconds = 180
+```
+
 ## 📂 文件结构
 
 ```
