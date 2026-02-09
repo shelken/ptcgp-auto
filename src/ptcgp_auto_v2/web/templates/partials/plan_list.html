@@ -27,8 +27,29 @@
     ], t) %}
         {% for plan in plans %}
             {% set config_cell %}
-                <div class="truncate max-w-[200px]" title="{{ plan.configuration }}">
-                    {{ plan.configuration }}
+                <div class="space-y-1 max-w-[300px]">
+                    {% for task_type in plan.task_types_list %}
+                        {% set task_config = plan.config_dict.get(task_type, {}) %}
+                        {% set reset_type = task_config.get('reset_type', 'daily') %}
+                        {% set interval_seconds = task_config.get('interval_seconds', 3600) %}
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="font-medium">{{ t['task_' + task_type] or task_type }}</span>
+                            <span class="text-muted">|</span>
+                            <span class="text-muted">{{ t['reset_' + reset_type] or reset_type }}</span>
+                            {% if reset_type == 'interval' %}
+                                <span class="text-muted">
+                                    {% set days = interval_seconds // 86400 %}
+                                    {% set hours = (interval_seconds % 86400) // 3600 %}
+                                    {% set minutes = (interval_seconds % 3600) // 60 %}
+                                    {% if days > 0 %}{{ days }}d{% endif %}
+                                    {% if hours > 0 %}{{ hours }}h{% endif %}
+                                    {% if minutes > 0 %}{{ minutes }}m{% endif %}
+                                </span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <span class="text-muted text-xs">{{ t.msg_no_tasks or 'No tasks configured' }}</span>
+                    {% endfor %}
                 </div>
             {% endset %}
             {% set actions_cell %}
