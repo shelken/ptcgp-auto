@@ -516,12 +516,8 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
 
     logger.info("启动守护模式...")
 
-    # 配置自动创建账号参数
-    auto_create = getattr(args, "auto_create_accounts", False)
-    max_accounts = getattr(args, "max_accounts", 100)
-
-    if auto_create:
-        logger.info(f"已启用自动账号创建，最大数量: {max_accounts}")
+    if settings.auto_create_accounts:
+        logger.info(f"已启用自动账号创建，最大数量: {settings.max_accounts}")
 
     scheduler = Scheduler(
         device_addresses=settings.device_addresses,
@@ -542,8 +538,6 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
                 app_package=settings.app_package,
             ),
         ),
-        auto_create_accounts=auto_create,
-        max_accounts=max_accounts,
     )
 
     try:
@@ -581,6 +575,9 @@ def main():
         debug=args.debug,
         log_level="DEBUG" if args.debug else "INFO",
     )
+    if args.auto_create_accounts:
+        settings.auto_create_accounts = True
+    settings.max_accounts = args.max_accounts
     set_settings(settings)
     settings.configure_logging()
     if discovered_devices and device_addresses:

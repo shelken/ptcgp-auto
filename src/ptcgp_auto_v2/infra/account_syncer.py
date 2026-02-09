@@ -106,8 +106,11 @@ class AccountSyncer:
             f"创建新账号: {device_account_id} (ID: {account.id}) [未分配计划，等待初始化]"
         )
 
-        # 为新账号生成 init_account 任务
-        self._create_init_task(account)
+        # 仅在启用自动创建账号时生成 init_account 任务
+        if self._settings.auto_create_accounts:
+            self._create_init_task(account)
+        else:
+            logger.info("自动创建账号未启用，跳过 init_account 任务")
 
         return account
 

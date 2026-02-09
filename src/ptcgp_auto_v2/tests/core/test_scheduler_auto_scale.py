@@ -26,12 +26,15 @@ def test_auto_scale_evaluate_expansion(monkeypatch):
     calls: list[str] = []
 
     monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 10)
-    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda: None)
+    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda *args, **kwargs: None)
     monkeypatch.setattr(scheduler_module, "discover_devices", lambda: [])
     monkeypatch.setattr(
         scheduler_module,
         "list_manageable_instances",
-        lambda prefix="auto-": ["auto-1", "auto-2"],
+        lambda prefix="auto-": {
+            5755: ("Tiramisu64_20", "auto-1"),
+            5775: ("Tiramisu64_22", "auto-2"),
+        },
     )
     monkeypatch.setattr(
         scheduler_module,
@@ -40,7 +43,7 @@ def test_auto_scale_evaluate_expansion(monkeypatch):
     )
 
     scheduler._auto_scale_evaluate()
-    assert calls == ["auto-1", "auto-2"]
+    assert calls == ["Tiramisu64_20", "Tiramisu64_22"]
 
 
 def test_auto_scale_evaluate_scale_down(monkeypatch):
@@ -63,7 +66,7 @@ def test_auto_scale_evaluate_scale_down(monkeypatch):
     stop_calls: list[str] = []
 
     monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)
-    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda: None)
+    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         scheduler_module,
         "discover_devices",
