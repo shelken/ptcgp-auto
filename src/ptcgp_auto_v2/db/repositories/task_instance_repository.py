@@ -155,16 +155,32 @@ class TaskInstanceRepository:
         """
         获取所有有待执行任务的账号 ID 列表
 
-        按上次完成时间排序（最久没执行的优先，从未执行过的最优先）
+        按 pending 任务实例的 next_run_at 和 last_completed_at 排序后去重：
+        1. 先按 (next_run_at ASC, last_completed_at ASC) 对任务实例排序
+        2. 然后按任务实例顺序提取账号 ID，保持首次出现的顺序去重
+        NULL 值视为"最旧"，排在前面
         """
         with Session(get_engine()) as session:
+            # 先查询所有 pending 任务实例并按时间字段排序
             statement = (
-                select(TaskInstance.account_id)
+                select(TaskInstance)
                 .where(TaskInstance.status == "pending")
-                .distinct()
-                .order_by(nulls_first(col(TaskInstance.last_completed_at).asc()))
+                .order_by(
+                    nulls_first(col(TaskInstance.next_run_at).asc()),
+                    nulls_first(col(TaskInstance.last_completed_at).asc()),
+                )
             )
-            return list(session.exec(statement).all())
+            instances = session.exec(statement).all()
+
+            # 按首次出现顺序去重
+            seen = set()
+            ordered_account_ids = []
+            for instance in instances:
+                if instance.account_id not in seen:
+                    seen.add(instance.account_id)
+                    ordered_account_ids.append(instance.account_id)
+
+            return ordered_account_ids
 
     def has_running_tasks(self, account_id: int) -> bool:
         """检查账号是否有正在执行的任务"""
