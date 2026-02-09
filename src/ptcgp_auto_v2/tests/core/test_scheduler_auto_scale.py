@@ -1,0 +1,90 @@
+# -*- coding: utf-8 -*-
+"""
+调度器自动扩缩容单元测试
+"""
+
+from datetime import datetime, timedelta
+
+import ptcgp_auto_v2.core.scheduler as scheduler_module
+from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
+
+
+def test_auto_scale_evaluate_expansion(monkeypatch):
+    """pending 达到阶梯时触发扩容"""
+    config = SchedulerConfig(
+        auto_scale_emulators=True,
+        auto_scale_eval_interval_seconds=0,
+        auto_scale_pending_step=10,
+        auto_scale_max_devices=2,
+        auto_scale_min_idle_devices=1,
+    )
+    scheduler = Scheduler(["127.0.0.1:5555"], config=config)
+    device = scheduler.device_pool.get_device("127.0.0.1:5555")
+    assert device is not None
+    device.mark_busy()
+
+    calls: list[str] = []
+
+    monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 10)
+    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda: None)
+    monkeypatch.setattr(scheduler_module, "discover_devices", lambda: [])
+    monkeypatch.setattr(
+        scheduler_module,
+        "list_manageable_instances",
+        lambda prefix="auto-": ["auto-1", "auto-2"],
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "start_bluestacks_instance",
+        lambda name: calls.append(name) or True,
+    )
+
+    scheduler._auto_scale_evaluate()
+    assert calls == ["auto-1", "auto-2"]
+
+
+def test_auto_scale_evaluate_scale_down(monkeypatch):
+    """空闲时间达到阈值触发缩容"""
+    config = SchedulerConfig(
+        auto_scale_emulators=True,
+        auto_scale_eval_interval_seconds=0,
+        auto_scale_pending_step=10,
+        auto_scale_max_devices=2,
+        auto_scale_min_idle_devices=1,
+        auto_scale_idle_seconds=0,
+    )
+    scheduler = Scheduler(["127.0.0.1:5555", "127.0.0.1:5556"], config=config)
+    now = datetime.now()
+    for device in scheduler.device_pool.get_all_devices():
+        device.mark_available()
+        device.became_idle_at = now - timedelta(seconds=200)
+
+    removed: list[str] = []
+    stop_calls: list[str] = []
+
+    monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)
+    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda: None)
+    monkeypatch.setattr(
+        scheduler_module,
+        "discover_devices",
+        lambda: ["127.0.0.1:5555", "127.0.0.1:5556"],
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "find_bluestacks_instance_by_port",
+        lambda port: (1234, "auto-1"),
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "stop_bluestacks_instance",
+        lambda name: stop_calls.append(name) or True,
+    )
+    monkeypatch.setattr(
+        scheduler.device_pool,
+        "remove_device",
+        lambda address: removed.append(address) or True,
+    )
+
+    scheduler._auto_scale_evaluate()
+    assert stop_calls
+    assert removed
