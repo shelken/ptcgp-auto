@@ -21,6 +21,7 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
+    quick_tap,
     tap_above_point,
     tap_community_icon,
     tap_home_icon,
@@ -187,6 +188,11 @@ class FetchAccountInfoTask(Task):
     # ============================================================
     # 页面处理方法
     # ============================================================
+
+    def handle_unknown_page(self, page_info) -> ActionResult:
+        """处理未知页面"""
+        logger.debug("点击屏幕中心兜底")
+        return quick_tap(self.adb, wait=0.5)
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页：根据进度决定下一步"""
