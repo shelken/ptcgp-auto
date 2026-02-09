@@ -185,11 +185,16 @@ class Scheduler:
 
     def _count_pending_tasks(self) -> int:
         """统计 pending 任务数量"""
-        return self._task_instance_repo.count_by_status(TaskStatus.PENDING.value)
+        pending_count = self._task_instance_repo.count_by_status(
+            TaskStatus.PENDING.value
+        )
+        logger.debug("当前 pending 任务数量: %s", pending_count)
+        return pending_count
 
-    def _refresh_device_pool(self):
+    def _refresh_device_pool(self, addresses: Optional[list[str]] = None):
         """刷新设备池（发现新增/移除的设备）"""
-        addresses = discover_devices()
+        if addresses is None:
+            addresses = discover_devices()
         current_addresses = {d.address for d in self.device_pool.get_all_devices()}
         new_addresses = set(addresses) - current_addresses
         removed_addresses = current_addresses - set(addresses)
@@ -228,11 +233,21 @@ class Scheduler:
         if idle_count < self.config.auto_scale_min_idle_devices:
             desired = min(self.config.auto_scale_max_devices, desired + 1)
 
+        manageable_map = list_manageable_instances(
+            prefix=self.config.auto_scale_instance_prefix,
+        )
+
+        logger.debug(
+            "扩缩容评估: pending=%s idle=%s running=%s desired=%s manageable=%s",
+            pending_count,
+            idle_count,
+            running_count,
+            desired,
+            len(manageable_map),
+        )
+
         to_start = max(0, desired - running_count)
         if to_start > 0:
-            manageable = list_manageable_instances(
-                prefix=self.config.auto_scale_instance_prefix,
-            )
             running_instances = set()
             for address in running_devices:
                 port_str = address.rsplit(":", 1)[-1]
@@ -243,7 +258,13 @@ class Scheduler:
                     _, instance = resolved
                     running_instances.add(instance)
 
-            candidates = [name for name in manageable if name not in running_instances]
+            candidates = [
+                instance_name
+                for instance_name, _ in manageable_map.values()
+                if instance_name not in running_instances
+            ]
+            if not candidates:
+                logger.warning("没有可启动的 auto 实例，请检查 conf 配置")
             for instance_name in candidates[:to_start]:
                 start_bluestacks_instance(instance_name)
 
@@ -261,10 +282,18 @@ class Scheduler:
                 if not resolved:
                     continue
                 _, instance = resolved
+                auto_info = manageable_map.get(int(port_str))
+                auto_name = auto_info[1] if auto_info else "-"
+                logger.info(
+                    "准备关闭 BlueStacks 实例: %s (auto: %s, 设备: %s)",
+                    instance,
+                    auto_name,
+                    device.address,
+                )
                 if stop_bluestacks_instance(instance):
                     self.device_pool.remove_device(device.address)
 
-        self._refresh_device_pool()
+        self._refresh_device_pool(running_devices)
 
     def _generate_pending_tasks(self):
         """
