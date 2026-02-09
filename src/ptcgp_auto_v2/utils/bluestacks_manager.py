@@ -206,30 +206,49 @@ def discover_bluestacks_devices() -> List[str]:
 def list_manageable_instances(
     conf_path: str = DEFAULT_BLUESTACKS_CONF,
     prefix: str = "auto-",
-) -> List[str]:
+) -> dict[int, tuple[str, str]]:
     """
-    从配置文件中解析可管理的实例名称
+    从配置文件中解析可管理的实例名、显示名与端口映射
 
-    仅返回以指定前缀开头的实例名，用于自动扩缩容。
+    仅返回 display_name 以指定前缀开头的实例。
     """
     try:
         with open(conf_path, "r", encoding="utf-8") as file:
             lines = file.readlines()
     except FileNotFoundError:
         logger.warning("未找到 BlueStacks 配置文件: %s", conf_path)
-        return []
+        return {}
 
-    pattern = re.compile(r"^bst\.instance\.(?P<name>[^.]+)\.")
-    instances = set()
+    port_pattern = re.compile(
+        r"^bst\.instance\.(?P<name>[^.]+)\.adb_port=\"?(?P<port>\d+)\"?"
+    )
+    display_pattern = re.compile(
+        r"^bst\.instance\.(?P<name>[^.]+)\.display_name=\"(?P<display>[^\"]+)\""
+    )
+
+    name_to_port: dict[str, int] = {}
+    name_to_display: dict[str, str] = {}
+
     for line in lines:
-        match = pattern.match(line.strip())
-        if not match:
+        stripped = line.strip()
+        port_match = port_pattern.match(stripped)
+        if port_match:
+            name_to_port[port_match.group("name")] = int(port_match.group("port"))
             continue
-        name = match.group("name")
-        if name.startswith(prefix):
-            instances.add(name)
+        display_match = display_pattern.match(stripped)
+        if display_match:
+            name_to_display[display_match.group("name")] = display_match.group(
+                "display"
+            )
 
-    return sorted(instances)
+    instances: dict[int, tuple[str, str]] = {}
+    for name, port in name_to_port.items():
+        display = name_to_display.get(name)
+        if not display or not display.startswith(prefix):
+            continue
+        instances[port] = (name, display)
+
+    return instances
 
 
 def start_bluestacks_instance(

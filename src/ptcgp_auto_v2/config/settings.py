@@ -119,6 +119,10 @@ class Settings:
     max_workers: int = DEFAULT_MAX_WORKERS
     task_generation_interval: float = DEFAULT_TASK_GENERATION_INTERVAL
 
+    # 自动创建账号
+    auto_create_accounts: bool = False
+    max_accounts: int = 100  # 自动创建账号的最大数量上限
+
     # 自动扩缩容配置
     auto_scale_emulators: bool = False
     auto_scale_instance_prefix: str = "auto-"
