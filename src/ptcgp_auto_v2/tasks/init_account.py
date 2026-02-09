@@ -26,6 +26,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     click_close,
@@ -43,7 +44,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_text,
     tap_text_exact,
 )
-from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 
 if TYPE_CHECKING:
     pass
@@ -220,7 +220,7 @@ class InitAccountTask(Task):
     pages = _build_init_pages()
 
     # 可接受的国家/地区列表（匹配到任一即可）
-    ALLOWED_COUNTRIES = ["香港", "台湾", "日本", "新加坡"]
+    ALLOWED_COUNTRIES = ["香港", "台湾", "日本", "新加坡", "美國"]
     # 默认目标国家（向后兼容）
     TARGET_COUNTRY = "香港"
     # 昵称前缀

@@ -85,6 +85,7 @@ def _build_claim_rewards_pages() -> list[dict]:
         },
         {
             # 任务奖励页面：底部有 Tab 栏
+            # 有些要精确，有些不应该精确。
             "name": "rewards_page",
             "identifiers": _build_rewards_page_tabs_patterns(),
             "exact_match": True,
