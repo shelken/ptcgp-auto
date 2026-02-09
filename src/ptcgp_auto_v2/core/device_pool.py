@@ -33,6 +33,7 @@ class Device:
     current_account_id: Optional[int] = None  # 当前登录的账号 ID
     last_used_at: Optional[datetime] = None
     is_creating_account: bool = False  # 是否正在创建新账号
+    became_idle_at: Optional[datetime] = None  # 进入空闲状态的时间
 
     @property
     def is_available(self) -> bool:
@@ -55,10 +56,12 @@ class Device:
         """
         self.status = DeviceStatus.BUSY
         self.last_used_at = datetime.now()
+        self.became_idle_at = None
 
     def mark_available(self):
         """标记设备为空闲状态"""
         self.status = DeviceStatus.AVAILABLE
+        self.became_idle_at = datetime.now()
         # 【修复】清空当前账号ID，允许创建流程占用设备
         self.current_account_id = None
 
@@ -85,6 +88,9 @@ class DevicePool:
         self._devices: dict[str, Device] = {
             addr: Device(address=addr) for addr in addresses
         }
+        now = datetime.now()
+        for device in self._devices.values():
+            device.became_idle_at = now
         self._lock = threading.Lock()
 
     @property
@@ -189,6 +195,68 @@ class DevicePool:
         """获取所有可用设备列表"""
         with self._lock:
             return [d for d in self._devices.values() if d.is_available]
+
+    def get_idle_devices(self) -> list[Device]:
+        """获取所有空闲设备列表"""
+        return self.get_available_devices()
+
+    def pick_idle_devices_for_shutdown(
+        self,
+        count: int,
+        min_idle_seconds: int,
+    ) -> list[Device]:
+        """
+        选择需要关闭的空闲设备
+
+        仅返回空闲时间大于等于阈值的设备，按空闲时间从久到新排序。
+        """
+        if count <= 0:
+            return []
+        now = datetime.now()
+        with self._lock:
+            candidates = [
+                d
+                for d in self._devices.values()
+                if d.is_available and d.became_idle_at is not None
+            ]
+        filtered: list[Device] = []
+        for device in candidates:
+            idle_at = device.became_idle_at
+            if not idle_at:
+                continue
+            if (now - idle_at).total_seconds() >= min_idle_seconds:
+                filtered.append(device)
+        candidates = filtered
+        candidates.sort(
+            key=lambda d: d.became_idle_at or datetime.min,
+        )
+        return candidates[:count]
+
+    def add_device(self, address: str) -> bool:
+        """
+        添加设备到设备池
+
+        Returns:
+            True 表示新增成功，False 表示已存在
+        """
+        with self._lock:
+            if address in self._devices:
+                return False
+            self._devices[address] = Device(address=address)
+            return True
+
+    def remove_device(self, address: str) -> bool:
+        """
+        从设备池移除设备
+
+        Returns:
+            True 表示移除成功，False 表示不存在
+        """
+        with self._lock:
+            if address not in self._devices:
+                return False
+            self._devices.pop(address, None)
+            return True
 
     def get_creating_count(self) -> int:
         """获取正在创建账号的设备数"""
