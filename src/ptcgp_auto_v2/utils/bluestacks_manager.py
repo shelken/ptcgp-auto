@@ -14,6 +14,9 @@ from typing import List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 DEFAULT_BLUESTACKS_BIN = "/Applications/BlueStacks.app/Contents/MacOS/BlueStacks"
+DEFAULT_BLUESTACKS_CONF = (
+    "/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf"
+)
 
 
 def parse_bluestacks_instance(command: str) -> Optional[str]:
@@ -200,12 +203,85 @@ def discover_bluestacks_devices() -> List[str]:
     return devices
 
 
+def list_manageable_instances(
+    conf_path: str = DEFAULT_BLUESTACKS_CONF,
+    prefix: str = "auto-",
+) -> List[str]:
+    """
+    从配置文件中解析可管理的实例名称
+
+    仅返回以指定前缀开头的实例名，用于自动扩缩容。
+    """
+    try:
+        with open(conf_path, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+    except FileNotFoundError:
+        logger.warning("未找到 BlueStacks 配置文件: %s", conf_path)
+        return []
+
+    pattern = re.compile(r"^bst\.instance\.(?P<name>[^.]+)\.")
+    instances = set()
+    for line in lines:
+        match = pattern.match(line.strip())
+        if not match:
+            continue
+        name = match.group("name")
+        if name.startswith(prefix):
+            instances.add(name)
+
+    return sorted(instances)
+
+
+def start_bluestacks_instance(
+    instance_name: str,
+    bin_path: str = DEFAULT_BLUESTACKS_BIN,
+) -> bool:
+    """启动指定的 BlueStacks 实例"""
+    if not instance_name:
+        logger.warning("实例名为空，无法启动")
+        return False
+    try:
+        subprocess.Popen(
+            [bin_path, "--instance", instance_name],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("已启动 BlueStacks 实例: %s", instance_name)
+        return True
+    except Exception as e:
+        logger.exception("启动 BlueStacks 实例失败: %s", e)
+        return False
+
+
+def stop_bluestacks_instance(instance_name: str) -> bool:
+    """关闭指定的 BlueStacks 实例"""
+    if not instance_name:
+        logger.warning("实例名为空，无法关闭")
+        return False
+    result = subprocess.run(
+        ["pkill", "-f", f"BlueStacks.*--instance {instance_name}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        logger.warning("关闭 BlueStacks 实例失败或未找到: %s", instance_name)
+        return False
+    logger.info("已关闭 BlueStacks 实例: %s", instance_name)
+    return True
+
+
 __all__ = [
     "DEFAULT_BLUESTACKS_BIN",
+    "DEFAULT_BLUESTACKS_CONF",
     "parse_bluestacks_instance",
     "find_bluestacks_pid_by_port",
     "find_bluestacks_instance_by_port",
     "restart_bluestacks_instance_for_device",
     "wait_for_bluestacks_port",
     "discover_bluestacks_devices",
+    "list_manageable_instances",
+    "start_bluestacks_instance",
+    "stop_bluestacks_instance",
 ]
