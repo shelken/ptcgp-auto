@@ -122,17 +122,22 @@ def test_list_manageable_instances_from_conf(tmp_path):
     """解析 conf 中的 auto 实例"""
     conf_path = tmp_path / "bluestacks.conf"
     conf_path.write_text(
-        "bst.instance.auto-1.adb_port=5555\n"
-        "bst.instance.auto-2.adb_port=5655\n"
+        "bst.instance.Tiramisu64_20.adb_port=5555\n"
+        'bst.instance.Tiramisu64_20.display_name="auto-1"\n'
+        "bst.instance.Tiramisu64_22.adb_port=5655\n"
+        'bst.instance.Tiramisu64_22.display_name="auto-2"\n'
         "bst.instance.Tiramisu64.adb_port=5755\n"
-        "bst.instance.auto-1.status.adb_port=5555\n",
+        'bst.instance.Tiramisu64.display_name="main"\n',
         encoding="utf-8",
     )
 
     instances = bluestacks_manager.list_manageable_instances(
         str(conf_path), prefix="auto-"
     )
-    assert instances == ["auto-1", "auto-2"]
+    assert instances == {
+        5555: ("Tiramisu64_20", "auto-1"),
+        5655: ("Tiramisu64_22", "auto-2"),
+    }
 
 
 def test_start_bluestacks_instance(monkeypatch):

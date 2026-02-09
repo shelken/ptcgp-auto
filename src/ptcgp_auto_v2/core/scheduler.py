@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
     ExecutorConfig,
@@ -61,9 +62,6 @@ class SchedulerConfig:
     skipped_reset_timeout: float = DEFAULT_SKIPPED_RESET_TIMEOUT
     stale_task_check_interval: float = DEFAULT_STALE_CHECK_INTERVAL
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
-    # 自动创建账号配置
-    auto_create_accounts: bool = False  # 是否启用自动创建账号
-    max_accounts: int = 100  # 最大账号数量上限
     # 自动扩缩容配置
     auto_scale_emulators: bool = False
     auto_scale_instance_prefix: str = "auto-"
@@ -89,8 +87,6 @@ class Scheduler:
         self,
         device_addresses: list[str],
         config: Optional[SchedulerConfig] = None,
-        auto_create_accounts: bool = False,
-        max_accounts: int = 100,
     ):
         """
         初始化调度器
@@ -98,15 +94,9 @@ class Scheduler:
         Args:
             device_addresses: ADB 设备地址列表
             config: 调度器配置
-            auto_create_accounts: 是否启用自动创建账号
-            max_accounts: 最大账号数量上限
         """
         self.config = config or SchedulerConfig()
-        # 如果传入了自动创建参数，覆盖配置中的默认值
-        if auto_create_accounts:
-            self.config.auto_create_accounts = auto_create_accounts
-        if max_accounts != 100:  # 只有当不是默认值时才覆盖
-            self.config.max_accounts = max_accounts
+        self._settings = get_settings()
 
         self.device_pool = DevicePool(device_addresses)
         self._running = False
@@ -135,6 +125,11 @@ class Scheduler:
         reset_count = self._task_instance_repo.reset_all_pending()
         if reset_count > 0:
             logger.info(f"已重置 {reset_count} 个异常状态的任务为待执行")
+
+    @property
+    def settings(self):
+        """全局配置"""
+        return self._settings
 
     @property
     def is_running(self) -> bool:
@@ -738,10 +733,10 @@ class Scheduler:
 
         # 计算还可以创建多少账号
         current_count = self._account_repo.count_all()
-        remaining = self.config.max_accounts - current_count
+        remaining = self._settings.max_accounts - current_count
         if remaining <= 0:
             logger.debug(
-                f"账号数量 ({current_count}) 已达上限 ({self.config.max_accounts})"
+                f"账号数量 ({current_count}) 已达上限 ({self._settings.max_accounts})"
             )
             return
 
@@ -853,7 +848,7 @@ class Scheduler:
                     # 有待执行任务，优先执行
                     account, task_instances = batch
                     self._dispatch_account_batch(account, task_instances)
-                elif self.config.auto_create_accounts:
+                elif self._settings.auto_create_accounts:
                     # 没有待执行任务，且启用自动创建，为每个空闲设备创建新账号
                     self._trigger_multi_device_creation()
                     time.sleep(self.config.poll_interval)

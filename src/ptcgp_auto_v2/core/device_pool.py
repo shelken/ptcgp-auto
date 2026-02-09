@@ -242,7 +242,9 @@ class DevicePool:
         with self._lock:
             if address in self._devices:
                 return False
-            self._devices[address] = Device(address=address)
+            device = Device(address=address)
+            device.became_idle_at = datetime.now()
+            self._devices[address] = device
             return True
 
     def remove_device(self, address: str) -> bool:

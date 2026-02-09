@@ -35,7 +35,7 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         True 如果触发了创建，False 否则
     """
     # 1. 检查是否启用自动创建
-    if not scheduler.config.auto_create_accounts:
+    if not scheduler.settings.auto_create_accounts:
         return False
 
     # 2. 检查账号数是否达上限
@@ -43,9 +43,9 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         return False
 
     current_count = scheduler._account_repo.count_all()
-    if current_count >= scheduler.config.max_accounts:
+    if current_count >= scheduler.settings.max_accounts:
         logger.debug(
-            f"账号数量 ({current_count}) 已达上限 ({scheduler.config.max_accounts})，跳过创建"
+            f"账号数量 ({current_count}) 已达上限 ({scheduler.settings.max_accounts})，跳过创建"
         )
         return False
 
