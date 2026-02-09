@@ -8,6 +8,7 @@
 import logging
 import threading
 import time
+from math import ceil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -23,6 +24,13 @@ from ptcgp_auto_v2.core.task_base import TaskRegistry, TaskStatus, ResetType
 from ptcgp_auto_v2.core.task_schedule import (
     get_effective_reset_type,
     should_reset_task,
+)
+from ptcgp_auto_v2.utils.device_discovery import discover_devices
+from ptcgp_auto_v2.utils.bluestacks_manager import (
+    list_manageable_instances,
+    start_bluestacks_instance,
+    stop_bluestacks_instance,
+    find_bluestacks_instance_by_port,
 )
 
 if TYPE_CHECKING:
@@ -56,6 +64,14 @@ class SchedulerConfig:
     # 自动创建账号配置
     auto_create_accounts: bool = False  # 是否启用自动创建账号
     max_accounts: int = 100  # 最大账号数量上限
+    # 自动扩缩容配置
+    auto_scale_emulators: bool = False
+    auto_scale_instance_prefix: str = "auto-"
+    auto_scale_min_idle_devices: int = 1
+    auto_scale_max_devices: int = 2
+    auto_scale_pending_step: int = 10
+    auto_scale_eval_interval_seconds: int = 60
+    auto_scale_idle_seconds: int = 180
 
 
 class Scheduler:
@@ -98,6 +114,7 @@ class Scheduler:
         self._executor_pool: Optional[ThreadPoolExecutor] = None
         self._last_task_generation = datetime.min
         self._last_stale_check = datetime.min  # 上次异常任务检查时间
+        self._last_auto_scale_check = datetime.min  # 上次扩缩容检查时间
         self._lock = threading.Lock()
 
         # 延迟初始化的仓库
@@ -134,6 +151,11 @@ class Scheduler:
         elapsed = (datetime.now() - self._last_stale_check).total_seconds()
         return elapsed >= self.config.stale_task_check_interval
 
+    def _should_auto_scale(self) -> bool:
+        """检查是否应该执行扩缩容评估"""
+        elapsed = (datetime.now() - self._last_auto_scale_check).total_seconds()
+        return elapsed >= self.config.auto_scale_eval_interval_seconds
+
     def _has_creating_account(self) -> bool:
         """检查是否已有账号正在创建中（存在 pending init_account 任务）"""
         if not self._task_instance_repo:
@@ -165,6 +187,89 @@ class Scheduler:
         )
         if reset_count > 0:
             logger.info(f"已重置 {reset_count} 个超时/异常状态的任务为待执行")
+
+    def _count_pending_tasks(self) -> int:
+        """统计 pending 任务数量"""
+        return self._task_instance_repo.count_by_status(TaskStatus.PENDING.value)
+
+    def _refresh_device_pool(self):
+        """刷新设备池（发现新增/移除的设备）"""
+        addresses = discover_devices()
+        current_addresses = {d.address for d in self.device_pool.get_all_devices()}
+        new_addresses = set(addresses) - current_addresses
+        removed_addresses = current_addresses - set(addresses)
+
+        for address in new_addresses:
+            self.device_pool.add_device(address)
+
+        for address in removed_addresses:
+            self.device_pool.remove_device(address)
+
+    def _auto_scale_evaluate(self):
+        """执行自动扩缩容评估"""
+        if not self.config.auto_scale_emulators:
+            return
+        if not self._should_auto_scale():
+            return
+
+        self._last_auto_scale_check = datetime.now()
+
+        pending_count = self._count_pending_tasks()
+        idle_count = self.device_pool.available_count
+        running_devices = discover_devices()
+        running_count = len(running_devices)
+
+        if self.config.auto_scale_pending_step <= 0:
+            logger.warning(
+                "自动扩缩容 pending_step 配置非法: %s",
+                self.config.auto_scale_pending_step,
+            )
+            return
+
+        desired = min(
+            self.config.auto_scale_max_devices,
+            ceil(pending_count / self.config.auto_scale_pending_step),
+        )
+        if idle_count < self.config.auto_scale_min_idle_devices:
+            desired = min(self.config.auto_scale_max_devices, desired + 1)
+
+        to_start = max(0, desired - running_count)
+        if to_start > 0:
+            manageable = list_manageable_instances(
+                prefix=self.config.auto_scale_instance_prefix,
+            )
+            running_instances = set()
+            for address in running_devices:
+                port_str = address.rsplit(":", 1)[-1]
+                if not port_str.isdigit():
+                    continue
+                resolved = find_bluestacks_instance_by_port(int(port_str))
+                if resolved:
+                    _, instance = resolved
+                    running_instances.add(instance)
+
+            candidates = [name for name in manageable if name not in running_instances]
+            for instance_name in candidates[:to_start]:
+                start_bluestacks_instance(instance_name)
+
+        to_stop = max(0, idle_count - self.config.auto_scale_min_idle_devices)
+        if to_stop > 0:
+            idle_devices = self.device_pool.pick_idle_devices_for_shutdown(
+                to_stop,
+                self.config.auto_scale_idle_seconds,
+            )
+            for device in idle_devices:
+                port_str = device.address.rsplit(":", 1)[-1]
+                if not port_str.isdigit():
+                    continue
+                resolved = find_bluestacks_instance_by_port(int(port_str))
+                if not resolved:
+                    continue
+                _, instance = resolved
+                if stop_bluestacks_instance(instance):
+                    self.device_pool.remove_device(device.address)
+
+        self._refresh_device_pool()
 
     def _generate_pending_tasks(self):
         """
@@ -732,6 +837,9 @@ class Scheduler:
 
                 # 检查并重置超时的异常任务
                 self._check_and_reset_stale_tasks()
+
+                # 自动扩缩容评估
+                self._auto_scale_evaluate()
 
                 # 检查是否有空闲设备
                 if self.device_pool.available_count == 0:
