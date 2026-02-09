@@ -1,9 +1,11 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
+from ptcgp_auto_v2.config.settings import Settings
 from ptcgp_auto_v2.core.scheduler import Scheduler
 from ptcgp_auto_v2.core.task_base import ResetType, TaskStatus
 from ptcgp_auto_v2.db.models import Account, TaskPlan, TaskInstance, AccountTaskPlan
+
 
 @pytest.fixture
 def mock_scheduler():
@@ -12,10 +14,11 @@ def mock_scheduler():
     scheduler._account_repo = MagicMock()
     return scheduler
 
+
 def test_should_reset_interval_task(mock_scheduler):
     # Setup
     now = datetime.now()
-    last_completed = now - timedelta(minutes=61) # 61 分钟前完成
+    last_completed = now - timedelta(minutes=61)  # 61 分钟前完成
 
     instance = TaskInstance(
         id=1,
@@ -23,22 +26,25 @@ def test_should_reset_interval_task(mock_scheduler):
         task_type="open_pack",
         status=TaskStatus.COMPLETED.value,
         last_completed_at=last_completed,
-        reset_type=ResetType.INTERVAL.value
+        reset_type=ResetType.INTERVAL.value,
     )
 
     config = {
         "reset_type": "interval",
-        "interval_seconds": 3600 # 1小时
+        "interval_seconds": 3600,  # 1小时
     }
 
     # Test: Should reset because 61 min > 60 min
-    should_reset = mock_scheduler._should_reset_task(instance, ResetType.INTERVAL, config)
+    should_reset = mock_scheduler._should_reset_task(
+        instance, ResetType.INTERVAL, config
+    )
     assert should_reset is True
+
 
 def test_should_not_reset_interval_task_too_soon(mock_scheduler):
     # Setup
     now = datetime.now()
-    last_completed = now - timedelta(minutes=30) # 30 分钟前完成
+    last_completed = now - timedelta(minutes=30)  # 30 分钟前完成
 
     instance = TaskInstance(
         id=1,
@@ -46,31 +52,31 @@ def test_should_not_reset_interval_task_too_soon(mock_scheduler):
         task_type="open_pack",
         status=TaskStatus.COMPLETED.value,
         last_completed_at=last_completed,
-        reset_type=ResetType.INTERVAL.value
+        reset_type=ResetType.INTERVAL.value,
     )
 
-    config = {
-        "reset_type": "interval",
-        "interval_seconds": 3600
-    }
+    config = {"reset_type": "interval", "interval_seconds": 3600}
 
     # Test: Should NOT reset because 30 min < 60 min
-    should_reset = mock_scheduler._should_reset_task(instance, ResetType.INTERVAL, config)
+    should_reset = mock_scheduler._should_reset_task(
+        instance, ResetType.INTERVAL, config
+    )
     assert should_reset is False
+
 
 def test_aggregation_logic(mock_scheduler):
     # 模拟一个账号有两个 Plan
     account = Account(id=1, nickname="TestUser")
 
     # Plan 1: Daily (默认)
-    plan1 = TaskPlan(id=1, name="daily", configuration='{}', task_types='["open_pack"]')
+    plan1 = TaskPlan(id=1, name="daily", configuration="{}", task_types='["open_pack"]')
 
     # Plan 2: Hourly (High Priority)
     plan2 = TaskPlan(
         id=2,
         name="hourly",
         configuration='{"open_pack": {"reset_type": "interval", "interval_seconds": 3600}}',
-        task_types='["open_pack"]'
+        task_types='["open_pack"]',
     )
 
     # 关联
@@ -96,3 +102,14 @@ def test_aggregation_logic(mock_scheduler):
 
     assert config["reset_type"] == "interval"
     assert config["interval_seconds"] == 3600
+
+
+def test_settings_auto_scale_defaults():
+    settings = Settings()
+    assert settings.auto_scale_emulators is False
+    assert settings.auto_scale_instance_prefix == "auto-"
+    assert settings.auto_scale_min_idle_devices == 1
+    assert settings.auto_scale_max_devices == 2
+    assert settings.auto_scale_pending_step == 10
+    assert settings.auto_scale_eval_interval_seconds == 60
+    assert settings.auto_scale_idle_seconds == 180
