@@ -27,8 +27,9 @@ MODELS_BASE_URL = f"https://cdn.jsdelivr.net/gh/{ASSETS_REPO}@main/models"
 GITHUB_API_URL = f"https://api.github.com/repos/{ASSETS_REPO}/contents"
 
 # 模型配置
-MODEL_SUBDIR = "yolo11n-5k-25-2026.02.02"
-# MODEL_SUBDIR = "yolo26s-10k-50-2026.02.06"
+MODEL_SUBDIR = "yolo11n-10k-100-2026.02.08"
+# MODEL_SUBDIR = "yolo11n-5k-25-2026.02.02"
+# MODEL_SUBDIR = "yolo26s-10k-50-2026.02.06" # 识别降低
 MODEL_NAME = "best"  # best.pt 或 best.mlpackage
 
 
