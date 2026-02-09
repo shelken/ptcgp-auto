@@ -57,6 +57,11 @@ def test_restart_bluestacks_instance_for_device(monkeypatch):
         "find_bluestacks_instance_by_port",
         lambda port: (1234, "Tiramisu64_20"),
     )
+    monkeypatch.setattr(
+        bluestacks_manager,
+        "wait_for_bluestacks_port",
+        lambda *args, **kwargs: True,
+    )
 
     def fake_run(args, **kwargs):
         calls.append(("run", args))
@@ -111,3 +116,49 @@ def test_discover_bluestacks_devices(monkeypatch):
 
     devices = bluestacks_manager.discover_bluestacks_devices()
     assert devices == ["127.0.0.1:5555", "127.0.0.1:5557"]
+
+
+def test_list_manageable_instances_from_conf(tmp_path):
+    """解析 conf 中的 auto 实例"""
+    conf_path = tmp_path / "bluestacks.conf"
+    conf_path.write_text(
+        "bst.instance.auto-1.adb_port=5555\n"
+        "bst.instance.auto-2.adb_port=5655\n"
+        "bst.instance.Tiramisu64.adb_port=5755\n"
+        "bst.instance.auto-1.status.adb_port=5555\n",
+        encoding="utf-8",
+    )
+
+    instances = bluestacks_manager.list_manageable_instances(
+        str(conf_path), prefix="auto-"
+    )
+    assert instances == ["auto-1", "auto-2"]
+
+
+def test_start_bluestacks_instance(monkeypatch):
+    """启动 BlueStacks 实例"""
+    calls = []
+
+    def fake_popen(args, **kwargs):
+        calls.append(args)
+        return SimpleNamespace(pid=1234)
+
+    monkeypatch.setattr(bluestacks_manager.subprocess, "Popen", fake_popen)
+
+    assert bluestacks_manager.start_bluestacks_instance("auto-1") is True
+    assert calls[0][0].endswith("BlueStacks")
+    assert calls[0][1:] == ["--instance", "auto-1"]
+
+
+def test_stop_bluestacks_instance(monkeypatch):
+    """关闭 BlueStacks 实例"""
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(bluestacks_manager.subprocess, "run", fake_run)
+
+    assert bluestacks_manager.stop_bluestacks_instance("auto-1") is True
+    assert calls[0][:2] == ["pkill", "-f"]
