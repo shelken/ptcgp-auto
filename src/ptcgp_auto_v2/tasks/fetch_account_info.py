@@ -192,7 +192,7 @@ class FetchAccountInfoTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("点击屏幕中心兜底")
-        return quick_tap(self.adb, wait=0.5)
+        return quick_tap(self.adb, y=self.adb.center_y() + 50)
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页：根据进度决定下一步"""

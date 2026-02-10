@@ -87,7 +87,7 @@ def quick_tap(
     x: Optional[int] = None,
     y: Optional[int] = None,
     times: int = 3,
-    wait: float = 0.5,
+    wait: float = 0.1,
 ) -> ActionResult:
     """
     快速点击指定位置多次
@@ -96,8 +96,8 @@ def quick_tap(
         adb: ADB 控制器
         x: 点击 X 坐标（默认屏幕中心）
         y: 点击 Y 坐标（默认屏幕中心）
-        times: 点击次数（默认 3 次）
-        wait: 点击后等待时间（默认 0.5 秒）
+        times: 点击次数
+        wait: 点击后等待时间
     """
     if x is None:
         x = adb.center_x()
@@ -108,11 +108,9 @@ def quick_tap(
         adb.tap(x, y)
         if i < times - 1:
             # 快速点击之间短暂等待
-            import time
-
             time.sleep(0.05)
 
-    logger.debug(f"快速点击 {times} 次: ({x}, {y})")
+    # logger.debug(f"快速点击 {times} 次: ({x}, {y})")
     return ActionResult.ok(wait=wait)
 
 
