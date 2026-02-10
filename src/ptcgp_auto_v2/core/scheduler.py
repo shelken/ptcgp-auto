@@ -232,7 +232,8 @@ class Scheduler:
             self.config.auto_scale_max_devices,
             ceil(pending_count / self.config.auto_scale_pending_step),
         )
-        if idle_count < self.config.auto_scale_min_idle_devices:
+        # 仅在无待执行任务时维持最小空闲设备，避免 pending 很小时频繁预热额外实例
+        if pending_count == 0 and idle_count < self.config.auto_scale_min_idle_devices:
             desired = min(self.config.auto_scale_max_devices, desired + 1)
 
         manageable_map = list_manageable_instances(
