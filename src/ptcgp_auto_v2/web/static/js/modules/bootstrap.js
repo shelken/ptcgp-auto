@@ -96,6 +96,13 @@ function autoRefreshList(container) {
     if (!container) return;
     if (!isElementInActiveTab(container)) return;
     if (container.dataset.loaded && container.dataset.loaded !== 'true') return;
+    if (
+        container.id === 'owned-cards-container'
+        && window.pauseOwnedCardsAutoRefreshUntil
+        && Date.now() < window.pauseOwnedCardsAutoRefreshUntil
+    ) {
+        return;
+    }
 
     const baseUrl = container.dataset.autoRefresh;
     const includeSelector = container.dataset.refreshInclude;
@@ -115,7 +122,6 @@ function autoRefreshList(container) {
     let url = baseUrl;
 
     if (includeSelector) {
-        const form = document.querySelector(includeSelector);
         const params = new URLSearchParams();
         params.set('page', '0');
 
@@ -123,12 +129,23 @@ function autoRefreshList(container) {
         const lang = urlParams.get('lang') || 'en';
         params.set('lang', lang);
 
-        if (form) {
-            const formData = new FormData(form);
-            formData.forEach((value, key) => {
-                params.append(key, value);
-            });
-        }
+        const selectors = includeSelector.split(',').map((item) => item.trim()).filter(Boolean);
+        selectors.forEach((selector) => {
+            const element = document.querySelector(selector);
+            if (!element) return;
+
+            if (element.tagName === 'FORM') {
+                const formData = new FormData(element);
+                formData.forEach((value, key) => {
+                    params.append(key, value);
+                });
+                return;
+            }
+
+            if (element.name) {
+                params.append(element.name, element.value || '');
+            }
+        });
 
         url = `${baseUrl}?${params.toString()}`;
     }

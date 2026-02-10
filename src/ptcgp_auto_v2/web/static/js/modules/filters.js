@@ -87,6 +87,7 @@ export function saveFilters() {
 
 // --- 保存已拥有卡牌筛选 ---
 export function saveOwnedFilters() {
+    if (window.suppressOwnedFilterSave) return;
     saveFormFilters('owned-filter-form', STORAGE_KEY_OWNED_FILTERS, ['#owned-sort-select']);
     updateOwnedFilterGroupsState();
 }
@@ -155,6 +156,14 @@ export function restoreOwnedFilters() {
     let queryParts = [];
     const form = document.getElementById('owned-filter-form');
     if (!form) return;
+    const sortSelect = document.getElementById('owned-sort-select');
+
+    if (sortSelect && !stored) {
+        sortSelect.value = 'acquired';
+        if (sortSelect.classList.contains('custom-select-initialized')) {
+            reinitCustomSelect(sortSelect);
+        }
+    }
 
     if (stored) {
         try {
@@ -241,7 +250,7 @@ export function initTaskSortControls(context = document) {
     if (!buttons.length) return;
 
     const updateArrows = () => {
-        const currentSort = sortInput.value || 'last_completed_at';
+        const currentSort = sortInput.value || 'dispatch_priority';
         const currentOrder = orderInput.value === 'asc' ? 'asc' : 'desc';
         buttons.forEach((button) => {
             const arrow = button.querySelector('.task-sort-arrow');
@@ -361,18 +370,23 @@ export function clearFilters() {
 
 // --- 清除已拥有卡牌筛选 ---
 export function clearOwnedFilters() {
+    window.pauseOwnedCardsAutoRefreshUntil = Date.now() + 1500;
+    window.suppressOwnedFilterSave = true;
+
+    const sortSelect = document.getElementById('owned-sort-select');
+    const currentSortBy = (sortSelect && sortSelect.value) ? sortSelect.value : 'acquired';
+
     document.querySelectorAll('.owned-filter-checkbox').forEach(el => el.checked = false);
     const accountInput = document.querySelector('#owned-filter-form input[name="account_id"]');
     if (accountInput) accountInput.value = '';
-    localStorage.removeItem(STORAGE_KEY_OWNED_FILTERS);
-
-    const sortSelect = document.getElementById('owned-sort-select');
     if (sortSelect) {
-        sortSelect.value = 'rarity';
+        sortSelect.value = currentSortBy;
         if (sortSelect.classList.contains('custom-select-initialized')) {
             reinitCustomSelect(sortSelect);
         }
     }
+
+    localStorage.setItem(STORAGE_KEY_OWNED_FILTERS, JSON.stringify({ sort_by: currentSortBy }));
 
     document.querySelectorAll('[data-filter-group]').forEach((group) => {
         updateOwnedFilterGroupSummary(group);
@@ -381,7 +395,11 @@ export function clearOwnedFilters() {
 
     const urlParams = new URLSearchParams(window.location.search);
     const lang = urlParams.get('lang') || 'en';
-    htmx.ajax('GET', `/api/owned-cards?page=0&lang=${lang}`, {target: '#owned-cards-container', swap: 'innerHTML'});
+    htmx.ajax('GET', `/api/owned-cards?page=0&lang=${lang}&sort_by=${encodeURIComponent(currentSortBy)}`, {target: '#owned-cards-container', swap: 'innerHTML'});
+
+    setTimeout(() => {
+        window.suppressOwnedFilterSave = false;
+    }, 0);
 }
 
 // --- 刷新记录列表 ---

@@ -9,6 +9,12 @@ function normalizeSearchText(value) {
 export function filterCustomSelectOptions(selectId, query) {
     const select = document.getElementById(selectId);
     if (!select) return;
+    filterCustomSelectOptionsByElement(select, query);
+}
+
+// --- 按元素筛选自定义下拉选项 ---
+function filterCustomSelectOptionsByElement(select, query) {
+    if (!select) return;
 
     const normalized = normalizeSearchText(query);
     const options = Array.from(select.options);
@@ -131,7 +137,7 @@ export function initCustomSelects(context = document) {
             searchInput.className = 'custom-select-search brutal-input text-xs w-full';
             searchInput.placeholder = placeholder;
             searchInput.addEventListener('input', () => {
-                filterCustomSelectOptions(select.id, searchInput.value);
+                filterCustomSelectOptionsByElement(select, searchInput.value);
             });
             searchInput.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter') {

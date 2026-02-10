@@ -7,6 +7,7 @@ import {
 } from './filters.js';
 
 const STORAGE_KEY_TAB = 'ptcgp_active_tab';
+const STORAGE_KEY_MANAGEMENT_HASH = 'ptcgp_management_hash';
 
 // --- 当前 Tab 状态 ---
 export let currentTabName = null;
@@ -18,7 +19,17 @@ export function switchTab(tabName, options = {}) {
         preferHash = null,
         skipAutoSelect = false
     } = options;
-    const initialHash = preferHash !== null ? preferHash : window.location.hash.replace('#', '');
+    const currentHash = window.location.hash.replace('#', '');
+    let initialHash = preferHash !== null ? preferHash : currentHash;
+    if (
+        tabName === 'management'
+        && !['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(initialHash)
+    ) {
+        const rememberedHash = localStorage.getItem(STORAGE_KEY_MANAGEMENT_HASH);
+        if (rememberedHash) {
+            initialHash = rememberedHash;
+        }
+    }
 
     document.querySelectorAll('.tab-content').forEach(el => {
         el.classList.add('hidden');
@@ -46,7 +57,12 @@ export function switchTab(tabName, options = {}) {
 
         const hash = activeBtn.getAttribute('data-hash');
         if (hash && !preserveHash) {
-            window.location.hash = hash;
+            if (tabName === 'management') {
+                const rememberedHash = localStorage.getItem(STORAGE_KEY_MANAGEMENT_HASH);
+                window.location.hash = rememberedHash || hash;
+            } else {
+                window.location.hash = hash;
+            }
         }
     }
 
@@ -103,7 +119,6 @@ function triggerAutoRefresh(container) {
     let url = baseUrl;
 
     if (includeSelector) {
-        const form = document.querySelector(includeSelector);
         const params = new URLSearchParams();
         params.set('page', '0');
 
@@ -111,12 +126,23 @@ function triggerAutoRefresh(container) {
         const lang = urlParams.get('lang') || 'en';
         params.set('lang', lang);
 
-        if (form) {
-            const formData = new FormData(form);
-            formData.forEach((value, key) => {
-                params.append(key, value);
-            });
-        }
+        const selectors = includeSelector.split(',').map((item) => item.trim()).filter(Boolean);
+        selectors.forEach((selector) => {
+            const element = document.querySelector(selector);
+            if (!element) return;
+
+            if (element.tagName === 'FORM') {
+                const formData = new FormData(element);
+                formData.forEach((value, key) => {
+                    params.append(key, value);
+                });
+                return;
+            }
+
+            if (element.name) {
+                params.append(element.name, element.value || '');
+            }
+        });
 
         url = `${baseUrl}?${params.toString()}`;
     }
@@ -136,6 +162,9 @@ export function updateSidebarState(btn) {
         applyTaskFiltersToSidebar(btn);
     }
     if (hash) {
+        if (['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(hash)) {
+            localStorage.setItem(STORAGE_KEY_MANAGEMENT_HASH, hash);
+        }
         window.location.hash = hash;
     }
 }
@@ -167,7 +196,13 @@ function applyTaskFiltersToSidebar(btn) {
 
 // --- 恢复 Tab ---
 export function restoreTab() {
-    const hash = window.location.hash.replace('#', '');
+    let hash = window.location.hash.replace('#', '');
+    if (hash === 'management') {
+        const rememberedHash = localStorage.getItem(STORAGE_KEY_MANAGEMENT_HASH);
+        if (rememberedHash) {
+            hash = rememberedHash;
+        }
+    }
     let tabName = null;
 
     if (hash === 'records' || hash === 'management' || hash === 'owned-cards') {
