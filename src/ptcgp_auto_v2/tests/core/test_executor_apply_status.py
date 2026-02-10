@@ -7,7 +7,7 @@ src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.core.executor import BaseExecutor
-from ptcgp_auto_v2.core.task_base import TaskStatus
+from ptcgp_auto_v2.core.task_status import TaskStatus
 
 
 class FakeTaskInstance:

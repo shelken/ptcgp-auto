@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, func, nulls_first, select
 
 from ptcgp_auto_v2.db.engine import get_engine
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskInstance
 
 
@@ -274,6 +275,28 @@ class TaskInstanceRepository:
                 count += 1
             session.commit()
             return count
+
+    def update_status_to_pending(self, account_id: int, task_type: str) -> bool:
+        """
+        将指定任务的 TaskInstance 状态更新为 pending
+
+        用于 Hook 触发任务调度。
+        """
+        with Session(get_engine()) as session:
+            statement = select(TaskInstance).where(
+                TaskInstance.account_id == account_id,
+                TaskInstance.task_type == task_type,
+            )
+            instance = session.exec(statement).first()
+
+            if not instance:
+                return False
+
+            instance.status = TaskStatus.PENDING.value
+            instance.updated_at = datetime.now()
+            session.add(instance)
+            session.commit()
+            return True
 
     def reset_stale_tasks(
         self, stale_timeout_seconds: int, skipped_timeout_seconds: int

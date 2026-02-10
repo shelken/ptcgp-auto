@@ -3,7 +3,8 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 from ptcgp_auto_v2.config.settings import Settings
 from ptcgp_auto_v2.core.scheduler import Scheduler
-from ptcgp_auto_v2.core.task_base import ResetType, TaskStatus
+from ptcgp_auto_v2.core.task_base import ResetType
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import Account, TaskPlan, TaskInstance, AccountTaskPlan
 
 

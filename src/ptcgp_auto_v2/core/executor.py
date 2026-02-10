@@ -15,7 +15,9 @@ from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
-from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult, TaskStatus
+from ptcgp_auto_v2.core.hooks import HookContext
+from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.core.task_plan_utils import (
     build_account_plan_cache,
     compute_next_run_for_instance,
@@ -129,9 +131,37 @@ class BaseExecutor(ABC):
         )
         task.register_handlers(build_common_handlers(self._adb, self._page_detector))
         task.bind_account(account)
+        task.set_hook_context(self._build_hook_context(task, account))
         if self.config.stop_event:
             task.set_stop_event(self.config.stop_event)
         return task
+
+    def _build_hook_context(self, task: Task, account: "Account") -> HookContext:
+        """构建 Hook 上下文"""
+        return HookContext(
+            device=self.device,
+            account=account,
+            task=task,
+            executor=self,
+        )
+
+    def _get_or_create_task_instance(
+        self, account_id: int, task_type: str
+    ) -> Optional["TaskInstance"]:
+        """获取或创建任务实例（用于 Hook 插入任务）"""
+        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
+
+        task_class = TaskRegistry.get_or_none(task_type)
+        if not task_class:
+            logger.warning(f"未知的任务类型: {task_type}")
+            return None
+
+        repo = TaskInstanceRepository()
+        return repo.get_or_create(
+            account_id=account_id,
+            task_type=task_type,
+            reset_type=task_class.reset_type.value,
+        )
 
     def _is_current_account(self, target_account: "Account") -> bool:
         """
@@ -374,6 +404,28 @@ class TaskExecutor(BaseExecutor):
                     result = task.execute()
 
                     if result.success:
+                        if result.skipped and result.data.get("pre_task_type"):
+                            pre_task_type = result.data.get("pre_task_type")
+                            if not pre_task_type or self.account.id is None:
+                                self._update_status(
+                                    TaskStatus.FAILED, "前置任务参数无效"
+                                )
+                                return
+                            pre_task_instance = self._get_or_create_task_instance(
+                                account_id=self.account.id,
+                                task_type=pre_task_type,
+                            )
+                            if pre_task_instance:
+                                if pre_task_instance.status != TaskStatus.PENDING.value:
+                                    pre_task_instance.status = TaskStatus.PENDING.value
+                                    pre_task_instance.save()
+                                self._update_status(
+                                    TaskStatus.BLOCKED,
+                                    error="等待前置任务",
+                                )
+                                return
+                            self._update_status(TaskStatus.FAILED, "前置任务创建失败")
+                            return
                         if result.skipped:
                             # 跳过的任务设为 skipped 状态，不会被重复调度
                             logger.info(
@@ -474,8 +526,9 @@ class AccountBatchExecutor(BaseExecutor):
         super().__init__(device, device_pool, config)
         self.account = account
         self.task_instances = task_instances
+        self.pending_tasks = list(task_instances)
 
-    def _execute_single_task(self, task_instance: "TaskInstance"):
+    def _execute_single_task(self, task_instance: "TaskInstance", index: int) -> bool:
         """
         执行单个任务
 
@@ -493,6 +546,40 @@ class AccountBatchExecutor(BaseExecutor):
             # 创建并执行任务
             task = self._build_task(task_instance, self.account)
             result = task.execute()
+
+            if result.skipped and result.data.get("pre_task_type"):
+                pre_task_type = result.data.get("pre_task_type")
+                if not pre_task_type or self.account.id is None:
+                    self._apply_task_status(
+                        task_instance=task_instance,
+                        account=self.account,
+                        status=TaskStatus.FAILED,
+                        error_message="前置任务参数无效",
+                        clear_error_on_success=False,
+                    )
+                    return True
+                pre_task_instance = self._get_or_create_task_instance(
+                    account_id=self.account.id,
+                    task_type=pre_task_type,
+                )
+                if pre_task_instance:
+                    if pre_task_instance.status != TaskStatus.PENDING.value:
+                        pre_task_instance.status = TaskStatus.PENDING.value
+                        pre_task_instance.save()
+                    self.pending_tasks.insert(index, pre_task_instance)
+                    logger.info(
+                        f"插入前置任务: {pre_task_type} (账号: {self.account.nickname})"
+                    )
+                    return False
+                logger.error(f"前置任务创建失败: {pre_task_type}")
+                self._apply_task_status(
+                    task_instance=task_instance,
+                    account=self.account,
+                    status=TaskStatus.FAILED,
+                    error_message="前置任务创建失败",
+                    clear_error_on_success=False,
+                )
+                return True
 
             # 更新任务状态
             if result.success:
@@ -534,6 +621,7 @@ class AccountBatchExecutor(BaseExecutor):
                 error_message=str(e),
                 clear_error_on_success=False,
             )
+        return True
 
     def run(self):
         """
@@ -580,16 +668,27 @@ class AccountBatchExecutor(BaseExecutor):
                     logger.error("账号切换失败，终止批量任务")
                     return
 
-            # 顺序执行所有任务
-            for task_instance in self.task_instances:
+            # 顺序执行所有任务（允许动态插入前置任务）
+            index = 0
+            while index < len(self.pending_tasks):
+                task_instance = self.pending_tasks[index]
                 # 检查停止信号
                 if self._should_stop():
                     logger.info("收到停止信号，中断任务执行")
                     # 剩余任务保持 running 状态，重启后会被重置为 pending
                     break
 
+                if task_instance.status == TaskStatus.BLOCKED.value:
+                    logger.info(
+                        f"跳过被阻塞任务: {task_instance.task_type} (账号: {self.account.nickname})"
+                    )
+                    index += 1
+                    continue
+
                 # 执行单个任务（失败继续执行后续任务）
-                self._execute_single_task(task_instance)
+                advance = self._execute_single_task(task_instance, index)
+                if advance:
+                    index += 1
 
             logger.info(f"批量任务执行完成 (账号: {self.account.nickname})")
 
