@@ -231,7 +231,7 @@ export function initApp() {
         initCustomSelects(document);
 
         const hash = window.location.hash.replace('#', '');
-        if (hash && ['accounts', 'plans', 'metadata'].includes(hash)) {
+        if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(hash)) {
             const activeBtn = document.querySelector(`.sidebar-btn.active[data-hash="${hash}"]`);
             if (!activeBtn) {
                 setTimeout(() => {

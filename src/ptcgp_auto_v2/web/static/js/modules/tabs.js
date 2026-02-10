@@ -83,7 +83,7 @@ export function switchTab(tabName, options = {}) {
         if (!hasContent) {
             const hash = initialHash;
             let targetBtn = null;
-            if (hash && ['accounts', 'plans', 'tasks', 'metadata'].includes(hash)) {
+            if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(hash)) {
                 targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
             }
             if (!targetBtn) {
@@ -172,7 +172,7 @@ export function restoreTab() {
 
     if (hash === 'records' || hash === 'management' || hash === 'owned-cards') {
         tabName = hash;
-    } else if (['accounts', 'plans', 'tasks', 'metadata'].includes(hash)) {
+    } else if (['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(hash)) {
         tabName = 'management';
     } else {
         tabName = localStorage.getItem(STORAGE_KEY_TAB);
@@ -181,7 +181,7 @@ export function restoreTab() {
     if (!tabName) {
         tabName = 'records';
     }
-    if (hash && ['accounts', 'plans', 'tasks', 'metadata'].includes(hash)) {
+    if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(hash)) {
         switchTab('management', { preserveHash: true, preferHash: hash });
         return;
     }

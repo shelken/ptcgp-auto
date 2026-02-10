@@ -22,6 +22,7 @@ from ptcgp_auto_v2.web.routers import (
     plans,
     metadata,
     pack_config,
+    friendship,
 )
 
 # 导入任务模块以触发注册
@@ -52,6 +53,7 @@ app.include_router(management.router)
 app.include_router(plans.router)
 app.include_router(metadata.router)
 app.include_router(pack_config.router)
+app.include_router(friendship.router)
 
 
 if __name__ == "__main__":

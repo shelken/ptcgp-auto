@@ -454,6 +454,18 @@
                                     {{ t.menu_metadata or 'METADATA' }}
                                 </button>
                             </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
+                                    hx-get="/management/friendships?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    data-hash="friendships"
+                                    onclick="updateSidebarState(this)"
+                                    aria-label="{{ t.menu_friendships or 'FRIENDSHIPS' }}">
+                                    {{ t.menu_friendships or 'FRIENDSHIPS' }}
+                                </button>
+                            </li>
                         </ul>
                     </nav>
                 </aside>
