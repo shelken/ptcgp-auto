@@ -519,7 +519,14 @@ class ManageFriendshipTask(Task):
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        if not self._is_action_done("cancel_request_clicked"):
+        cancel_visible = is_text_visible(
+            ocr_results,
+            get_text_patterns("friend_cancel_request"),
+            exact=True,
+        )
+
+        if cancel_visible:
+            # 按用户要求：只要看到取消交友邀请就立刻点击
             cancel_result = tap_text_exact(
                 self.adb,
                 ocr_results,
@@ -527,13 +534,23 @@ class ManageFriendshipTask(Task):
                 wait=0.8,
             )
             if cancel_result:
-                self._mark_action_done("cancel_request_clicked")
-                self._cancel_wait_rounds = 0
+                logger.debug("取消邀请流程: 检测到取消交友邀请，立即点击")
+                self._cancel_wait_rounds += 1
                 return cancel_result
 
+            self._cancel_wait_rounds += 1
+            if self._cancel_wait_rounds >= 12:
+                self._save_request(
+                    req, "failed", failed_reason="取消邀请按钮可见但点击失败"
+                )
+                self._refresh_requests()
+                return self._close_modal(wait=0.8)
+            return ActionResult.wait(0.6)
+
+        # 看不到取消按钮也没看到申请按钮，先等待一轮再判定
         self._cancel_wait_rounds += 1
-        if self._cancel_wait_rounds >= 6:
-            self._save_request(req, "failed", failed_reason="取消邀请后未出现申请按钮")
+        if self._cancel_wait_rounds >= 10:
+            self._save_request(req, "failed", failed_reason="取消邀请结果页状态不明确")
             self._refresh_requests()
             return self._close_modal(wait=0.8)
         return ActionResult.wait(0.8)
