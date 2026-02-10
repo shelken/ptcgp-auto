@@ -5,6 +5,8 @@ from .account_pack_point_repository import AccountPackPointRepository
 from .account_card_repository import AccountCardRepository
 from .account_repository import AccountRepository
 from .card_repository import CardRepository
+from .friend_request_repository import FriendRequestRepository
+from .friendship_repository import FriendshipRepository
 from .pack_record_repository import PackRecordRepository
 from .task_instance_repository import TaskInstanceRepository
 from .task_plan_repository import TaskPlanRepository
@@ -16,6 +18,8 @@ __all__ = [
     "AccountCardRepository",
     "AccountRepository",
     "CardRepository",
+    "FriendRequestRepository",
+    "FriendshipRepository",
     "PackRecordRepository",
     "TaskInstanceRepository",
     "TaskPlanRepository",
