@@ -20,11 +20,11 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_LONG_PRESS_STEPS,
     DEFAULT_SWIPE_STEPS,
 )
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.utils.bluestacks_manager import (
     restart_bluestacks_instance_for_device,
     wait_for_bluestacks_port,
 )
-from ptcgp_auto_v2.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -276,7 +276,7 @@ class AdbController:
 
         try:
             self.device.click(x, y)
-            logger.debug(f"点击: ({x}, {y})")
+            # logger.debug(f"点击: ({x}, {y})")
             time.sleep(self.wait_after_click)
 
         except (RuntimeError, OSError) as e:

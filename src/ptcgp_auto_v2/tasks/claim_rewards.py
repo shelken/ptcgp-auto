@@ -204,7 +204,7 @@ class ClaimRewardsTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("未知页面，点击屏幕上方兜底")
-        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), wait=0.3)
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10))
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
