@@ -683,7 +683,7 @@ class InitAccountTask(Task):
     def _handle_tap_to_flip(self, page_info: dict) -> ActionResult:
         """处理翻开卡牌页面"""
         logger.info("  -> 快速点击翻开卡牌")
-        return quick_tap(self.adb, wait=0.5)
+        return quick_tap(self.adb)
 
     def _handle_select_favorite_card(self, page_info: dict) -> ActionResult:
         """处理选择喜欢的卡牌页面"""
