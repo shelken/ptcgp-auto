@@ -4,6 +4,7 @@
     t.col_account or 'Account',
     t.col_task or 'Task',
     t.col_status or 'Status',
+    t.col_dispatch_priority or 'Dispatch Priority',
     t.col_last_completed or 'Last Completed',
     t.col_next_run or 'Next Run',
     t.col_reset_type or 'Reset Type',
@@ -27,6 +28,13 @@
         {% endset %}
         {% set status_cell %}
             {{ status_badge(item.status, t) }}
+        {% endset %}
+        {% set dispatch_cell %}
+            {% if item.reset_type == 'once' %}
+                <span class="brutal-tag text-xs">{{ t.label_dispatch_once_first or 'Once First' }}</span>
+            {% else %}
+                <span class="text-xs text-muted">{{ t.label_dispatch_time_order or 'By Time' }}</span>
+            {% endif %}
         {% endset %}
         {% set last_completed_cell %}
                 {% if item.last_completed_at %}
@@ -93,6 +101,7 @@
             account_cell,
             task_cell,
             status_cell,
+            dispatch_cell,
             last_completed_cell,
             next_run_cell,
             reset_cell,
@@ -155,8 +164,8 @@
                 </div>
             </div>
 
-            <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'last_completed_at' }}">
-            <input type="hidden" name="sort_order" id="task-sort-order" value="{{ selected_sort_order or 'desc' }}">
+            <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'dispatch_priority' }}">
+            <input type="hidden" name="sort_order" id="task-sort-order" value="{{ selected_sort_order or 'asc' }}">
 
             <div class="flex flex-col lg:flex-row flex-wrap gap-4 mb-6">
                 <div class="flex flex-col gap-1">
@@ -212,6 +221,15 @@
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_account or 'Account' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_task or 'Task' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_status or 'Status' }}</th>
+                        <th class="p-3 font-bold uppercase text-sm">
+                            <button type="button"
+                                    class="task-sort-btn flex items-center gap-1"
+                                    data-sort-by="dispatch_priority"
+                                    data-default-order="asc">
+                                <span>{{ t.col_dispatch_priority or 'Dispatch Priority' }}</span>
+                                <span class="task-sort-arrow" aria-hidden="true"></span>
+                            </button>
+                        </th>
                         <th class="p-3 font-bold uppercase text-sm">
                             <button type="button"
                                     class="task-sort-btn flex items-center gap-1"

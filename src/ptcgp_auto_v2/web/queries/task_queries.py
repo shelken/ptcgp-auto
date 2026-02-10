@@ -6,6 +6,7 @@ from sqlalchemy import update
 from sqlmodel import Session, select, col
 from sqlalchemy.orm import selectinload
 
+from ptcgp_auto_v2.core.task_ordering import build_task_instance_order_by
 from ptcgp_auto_v2.db.models.task_instance import TaskInstance
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
@@ -35,21 +36,7 @@ def fetch_task_instances(
     if account_id is not None:
         statement = statement.where(TaskInstance.account_id == account_id)
 
-    sort_field = "last_completed_at"
-    if sort_by in {"last_completed_at", "next_run_at"}:
-        sort_field = sort_by
-
-    order = "desc" if sort_order != "asc" else "asc"
-
-    if sort_field == "next_run_at":
-        sort_col = col(cast(Any, TaskInstance.next_run_at))
-    else:
-        sort_col = col(cast(Any, TaskInstance.last_completed_at))
-
-    if order == "asc":
-        statement = statement.order_by(sort_col.is_(None), sort_col.asc())
-    else:
-        statement = statement.order_by(sort_col.is_(None), sort_col.desc())
+    statement = statement.order_by(*build_task_instance_order_by(sort_by, sort_order))
     offset = page * page_size
     statement = statement.offset(offset).limit(page_size + 1)
     instances = list(session.exec(statement).all())
