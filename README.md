@@ -123,9 +123,11 @@ ptcgp-auto/
 ├── debug_tool.py               # 调试工具
 ├── src/
 │   ├── ptcgp_auto_v2/          # v2 核心代码
-│   │   ├── core/               # 调度核心 (Scheduler, Executor, TaskSchedule)
+│   │   ├── core/               # 调度核心 (Scheduler, Executor, TaskSchedule, Hooks)
+│   │   │   ├── task_status.py  # 任务状态定义
 │   │   ├── tasks/              # 任务实现 (OpenPack, CollectAccountCards...)
 │   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
+│   │   ├── hooks/              # Hook 实现
 │   │   ├── infra/              # 基础设施层
 │   │   │   ├── adb.py          # ADB 控制封装
 │   │   │   ├── ocr.py          # OCR 引擎封装
@@ -143,6 +145,7 @@ ptcgp-auto/
 │   │   │   ├── utils/           # i18n/模板/视图辅助
 │   │   │   └── static/js/       # 前端模块化入口
 │   │   ├── config/             # 配置文件
+│   │   ├── services/           # 业务服务层
 │   │   └── utils/              # 工具函数
 │   │       └── action_result.py # 动作结果数据结构
 │   └── ptcgp_auto/             # v1 旧版代码 (Legacy)

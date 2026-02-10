@@ -53,19 +53,21 @@
 源代码位于 `src/ptcgp_auto_v2/` 目录下：
 
 - `main_v2.py` - v2 入口文件
-- `src/ptcgp_auto_v2/`
-  - `core/` - 核心调度模块
-    - `scheduler.py` - 任务调度器 (Scheduler)
-    - `executor.py` - 任务执行器 (Executor)
-    - `task_base.py` - 任务基类 (Task) 和注册表
-    - `device_pool.py` - 设备池管理
-  - `tasks/` - 具体任务实现
-    - `open_pack.py` - 开包任务
+  - `src/ptcgp_auto_v2/`
+    - `core/` - 核心调度模块
+      - `scheduler.py` - 任务调度器 (Scheduler)
+      - `executor.py` - 任务执行器 (Executor)
+      - `task_base.py` - 任务基类 (Task) 和注册表
+      - `task_status.py` - 任务状态定义
+      - `hooks.py` - Hook 机制基础定义
+      - `device_pool.py` - 设备池管理
+    - `tasks/` - 具体任务实现
+      - `open_pack.py` - 开包任务
     - `claim_rewards.py` - 领取奖励任务
     - `fetch_account_info.py` - 账号信息同步任务
     - `collect_account_cards.py` - 账号高稀有度卡牌采集任务
     - `wonder_pick.py` - 得卡挑战任务
-  - `infra/` - 基础设施层
+    - `infra/` - 基础设施层
     - `adb.py` - ADB 控制封装
     - `ocr.py` - OCR 引擎封装
     - `model_manager.py` - [新增] YOLO模型管理（全局单例，异步加载）
@@ -78,9 +80,11 @@
     - `models/` - 数据模型 (Account, TaskInstance)
       - `account_card.py` - 账号卡牌关联表
     - `repositories.py` - 数据访问对象 (DAO)
-  - `config/` - 配置管理
-    - `rarity_icons.py` - 稀有度图标与映射配置
-  - `locales/` - 多语言配置
+    - `config/` - 配置管理
+      - `rarity_icons.py` - 稀有度图标与映射配置
+    - `locales/` - 多语言配置
+    - `hooks/` - Hook 实现
+    - `services/` - 业务服务层
 
 ### 调度流程
 

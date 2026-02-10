@@ -4,7 +4,112 @@
 > **创建日期**: 2026-02-08  
 > **关联 beads Feature**: beads-dq3 "处理好友关系功能"  
 > **作者**: AI Assistant  
-> **状态**: 待实施
+> **状态**: 实施中（Phase 1/2 已完成，Phase 3 进行中）
+
+---
+
+## 设计决策对话记录
+
+以下记录设计过程中的关键对话原文和决策变更：
+
+### 关键澄清
+
+**关于删除好友的逻辑（用户原话）：**
+> "并不是全量重置，而是需要检查好友关系表。我文档有写"
+
+**正确理解：** 不是"全量重置"，而是"与好友关系表同步"：
+1. 遍历游戏内的好友列表
+2. 获取每个好友的 `friend_id`
+3. 检查是否在 `account_friendship` 表中
+4. **如果不在表中** → 删除该好友
+5. **如果在表中** → 保留
+
+**关于删除范围（用户确认）：**
+> "只实现“同步删除”"
+
+**正确理解：** 首版只支持 `to_friend_id` 为空的同步删除，不实现“指定好友删除”。
+
+**关于Hook插入任务的机制（用户纠正）：**
+> "直接复用原来那个insert task"
+> "要有一个机制，让执行器转换任务"
+
+**正确理解：** Hook返回`INSERT_TASK`时，需要：
+1. Hook返回`(INSERT_TASK, {"task_type": "xxx", ...})`指定要插入的任务类型
+2. 执行器检测到`INSERT_TASK`后，在当前批次队列开头插入指定的前置任务
+3. 当前任务暂停（返回skip），等待前置任务完成后自动继续
+4. **不是**Hook自己创建TaskInstance或更新状态，而是执行器负责创建和调度
+
+**关于任务实现规范（用户要求）：**
+> "肯定不能直接调用adb，而是必须使用gesture。"
+
+**正确理解：** `ManageFriendshipTask` 页面处理必须遵循 `src/ptcgp_auto_v2/tasks/AGENTS.md`，使用 `gesture` 工具函数完成点击/输入，且页面内用 `action_cache` 记录已完成操作。
+
+**关于 Hook 动态注入（用户要求）：**
+> "pre 和 post 应该要根据任务执行状态来动态获取...每次执行器应该检查是否有pre和post，然后任务在流转执行过程中，往列表中插入。"
+
+**正确理解：** Hook 不是初始化时固定绑定；执行器每次执行任务前应动态获取 pre/post，
+并在任务流转过程中根据状态插入前置/后置任务。
+
+**关于测试计划（用户要求）：**
+> "测试计划也是需要跳过的，不要删除。"
+
+**正确理解：** 保留“测试计划暂时跳过”的说明与注释块，后续实现完成再补测试。
+
+**关于任务实现成熟度（用户补充）：**
+> "代码并不是实际最终的，后续需要大量页面调试和调整，具体页面我还没处理，目前的task仅仅是demo级别"
+
+**正确理解：** 设计文档中的 `ManageFriendshipTask` 代码仅为 Demo 级示例，后续需要结合真实页面进行大量调试与规则校准，当前页面识别与点击逻辑不视为最终实现。
+
+**关于删除流程回退（用户澄清）：**
+> "当点击ok之后，就会删除好友，之后页面会重新留在账号的详情页面，此时需要返回回到列表页面。"
+
+**正确理解：** 删除确认后要从好友详情页返回到好友列表页，才能继续后续同步删除流程。
+
+**关于 ManageFriendshipTask 目前阶段（用户确认）：**
+> "从现在开始ManageFriendshipTask全部todo"
+
+**正确理解：** `ManageFriendshipTask` 相关流程全部标注为 TODO，占位搭框架即可。
+
+### 架构决策
+
+**前置任务机制（用户确认）：**
+> "确认使用 Hook 机制"
+
+**具体实现方案（用户确认）：**
+> "posthook之后，应该更新对应账号的taskinstance的status为pending，让调度器自动调度"
+
+### 任务合并决策
+
+**初始错误设计：** 三个独立任务（发送、接受、删除）
+
+**最终决策：** 一个统一任务 `ManageFriendshipTask`，扫描表执行所有操作
+
+### 外部账号处理（用户补充）：
+
+> "当要加的好友不是系统账号id，而是仅有friendid时，发送方在发送之后直接将request改成完成状态，并维护好友关系表，因为外部账号，仅靠外部接受，我们默认视为完成好友关系。"
+
+### 其他关键决策
+
+| 决策项 | 用户原话/选择 | 说明 |
+|--------|--------------|------|
+| 唯一性约束 | "B 通过应用层检查当前是否已经有了相关的请求" | 应用层检查 + 数据库约束 |
+| 删除后状态 | "物理删除" | friendship 表记录物理删除 |
+| 错误重试 | "A" | 不重试，直接标记 failed |
+
+### beads 任务结构变更
+
+**初始错误结构（6个任务）：**
+- beads-cli, beads-skd, beads-ug0, beads-epe, beads-88n, beads-x4a
+
+**用户纠正后（3个任务）：**
+- beads-cli: 数据库模型设计
+- beads-x4a: Hook 机制实现（基础设施）
+- beads-ug0: 管理好友关系任务（合并发送/接受/删除）
+
+**删除的任务：**
+- beads-skd: 状态机实现（简化为 Task 内直接更新）
+- beads-epe: 接受好友请求任务（合并）
+- beads-88n: 删除好友任务（合并）
 
 ---
 
@@ -28,7 +133,7 @@
 |--------|------|------|
 | 任务合并 | **单一任务** | ManageFriendshipTask 统一处理发送、接受、删除 |
 | 触发机制 | **数据库记录 + Hook** | 外部通过 FriendshipService 创建记录，Hook 更新 TaskInstance 触发调度 |
-| 删除策略 | **与好友关系表同步** | 删除不在 friendship 表中的好友 |
+| 删除策略 | **仅同步删除（to_friend_id 为空）** | 首版仅支持按好友关系表同步 |
 | 状态管理 | **Task 内直接更新** | 无需独立状态机 |
 | 外部账号 | **发送后直接完成** | 外部账号无法感知接受状态，默认视为完成 |
 
@@ -51,10 +156,10 @@ class AccountFriendRequest(SQLModel, table=True):
     
     记录好友请求的完整生命周期。
     - add 类型: sending -> sended -> completed/failed
-    - delete 类型: deleting -> deleted/failed
+    - delete 类型: deleting -> completed/failed
     """
     
-    __tablename__ = "account_friend_requests"
+    __tablename__ = "account_friend_request"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     
@@ -77,7 +182,7 @@ class AccountFriendRequest(SQLModel, table=True):
     
     # 状态
     # add 类型: sending -> sended -> completed / failed
-    # delete 类型: deleting -> deleted / failed
+    # delete 类型: deleting -> completed / failed
     status: str = Field(default="sending", description="状态")
     
     # 失败原因
@@ -107,9 +212,9 @@ sending ──发送成功──► completed
             （外部账号无法感知接受状态，默认视为完成）
 ```
 
-**delete 类型请求:**
+**delete 类型请求（首版仅支持同步删除）:**
 ```
-deleting ──删除成功──► deleted
+deleting ──删除成功──► completed
      │
      ▼
    failed
@@ -188,7 +293,7 @@ class HookResult(Enum):
     """Hook 执行结果"""
     CONTINUE = "continue"      # 继续执行主任务
     ABORT = "abort"            # 中断执行
-    INSERT_TASK = "insert"     # 已插入前置任务，暂停当前任务
+    INSERT_TASK = "insert"     # 需要插入并执行前置任务，暂停当前任务
 
 
 @dataclass
@@ -208,7 +313,7 @@ class Hook(ABC):
     """Hook 基类"""
     
     @abstractmethod
-    def run(self, context: HookContext) -> HookResult:
+    def run(self, context: HookContext) -> tuple[HookResult, dict]:
         """
         执行 Hook 逻辑
         
@@ -216,27 +321,12 @@ class Hook(ABC):
             context: 执行上下文
             
         Returns:
-            HookResult 指示后续操作
+            (HookResult, data) 指示后续操作
+            - HookResult.CONTINUE: data 为空
+            - HookResult.ABORT: data 包含 error 信息
+            - HookResult.INSERT_TASK: data 包含 task_type, priority 等
         """
         pass
-    
-    def trigger_task(self, context: HookContext, task_type: str):
-        """
-        触发指定任务的调度
-        
-        将指定任务的 TaskInstance 状态更新为 pending，
-        让调度器在下次循环时自动调度。
-        
-        Args:
-            context: 执行上下文
-            task_type: 任务类型
-        """
-        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-        
-        TaskInstanceRepository().update_status_to_pending(
-            account_id=context.account.id,
-            task_type=task_type
-        )
 ```
 
 ### 3.2 Task 基类集成
@@ -247,9 +337,7 @@ class Hook(ABC):
 class Task(ABC):
     """任务基类"""
     
-    # 新增属性
-    pre_hooks: List["Hook"] = []
-    post_hooks: List["Hook"] = []
+    # 动态 Hook 由执行器/任务运行期获取，不在初始化时固定
     
     def execute(self) -> TaskResult:
         """执行任务主循环"""
@@ -257,30 +345,46 @@ class Task(ABC):
         
         self.on_start()
         
-        # 执行 pre_hooks
-        for hook in self.pre_hooks:
-            result = hook.run(self._hook_context)
+        # 动态获取 pre_hooks
+        pre_hooks = self.get_pre_hooks()
+        for hook in pre_hooks:
+            result, data = hook.run(self._hook_context)
             
             if result == HookResult.ABORT:
-                result = TaskResult.fail("PreHook aborted")
+                error_msg = data.get("error", "PreHook aborted")
+                result = TaskResult.fail(error_msg)
                 self.on_complete(result)
                 return result
             
             if result == HookResult.INSERT_TASK:
-                # 前置任务已插入，当前任务暂停
-                result = TaskResult.skip("Waiting for pre-task completion")
+                # 将任务类型等信息传递给执行器
+                self._pre_task_data = data
+                result = TaskResult.skip(
+                    reason="Waiting for pre-task",
+                    pre_task_type=data.get("task_type"),
+                    pre_task_priority=data.get("priority", "high")
+                )
                 self.on_complete(result)
                 return result
         
         # 执行主任务逻辑
         result = self._execute_main_loop()
         
-        # 执行 post_hooks（无论主任务成功失败）
-        for hook in self.post_hooks:
+        # 动态获取 post_hooks（无论主任务成功失败）
+        post_hooks = self.get_post_hooks()
+        for hook in post_hooks:
             hook.run(self._hook_context)
         
         self.on_complete(result)
         return result
+
+    def get_pre_hooks(self) -> list["Hook"]:
+        """动态获取前置 Hook（可基于任务/账号状态生成）"""
+        return []
+
+    def get_post_hooks(self) -> list["Hook"]:
+        """动态获取后置 Hook（可基于任务/账号状态生成）"""
+        return []
 ```
 
 ### 3.3 执行器支持
@@ -313,6 +417,41 @@ class AccountBatchExecutor(BaseExecutor):
         
         # 执行任务（内部会处理 pre/post hooks）
         result = task.execute()
+        
+        # 检查是否需要插入前置任务
+        if result.skipped and result.data.get("pre_task_type"):
+            pre_task_type = result.data.get("pre_task_type")
+            pre_task_priority = result.data.get("pre_task_priority", "high")
+            
+            # 获取或创建前置任务实例
+            pre_task_instance = self._get_or_create_task_instance(
+                account_id=self.account.id,
+                task_type=pre_task_type
+            )
+            
+            # 确保前置任务是 pending 状态
+            if pre_task_instance.status != TaskStatus.PENDING.value:
+                pre_task_instance.status = TaskStatus.PENDING.value
+                pre_task_instance.save()
+            
+            # 插入到当前批次队列开头（优先执行）
+            self.pending_tasks.insert(0, pre_task_instance)
+            
+            # 当前任务保持 running 状态，等待前置任务完成后自动继续
+            return
+
+        # 任务完成后，动态检查是否需要插入后置任务
+        post_task_type = result.data.get("post_task_type") if result.data else None
+        if post_task_type:
+            post_task_instance = self._get_or_create_task_instance(
+                account_id=self.account.id,
+                task_type=post_task_type
+            )
+            if post_task_instance.status != TaskStatus.PENDING.value:
+                post_task_instance.status = TaskStatus.PENDING.value
+                post_task_instance.save()
+            self.pending_tasks.insert(0, post_task_instance)
+            return
         
         # 更新任务状态...
 ```
@@ -378,29 +517,35 @@ class FriendshipService:
     @staticmethod
     def create_delete_request(
         account_id: int,
-        friend_id: Optional[str] = None
+        friend_id: str
     ) -> "AccountFriendRequest":
         """
         创建删除好友请求
         
         用于 DeleteFriendPostHook 或其他任务需要删除好友时调用。
+        PostHook 场景下应先更新 friendship 表记录，再触发同步删除任务。
         
         Args:
             account_id: 执行删除的账号ID
-            friend_id: 要删除的好友 friend_id（为 None 表示全量同步）
+            friend_id: 要删除的好友 friend_id
             
         Returns:
             创建的请求记录
         """
+        # 0. 先更新 friendship 表记录（双向删除）
+        FriendshipRepository().remove_friendship(
+            account_id=account_id,
+            friend_id=friend_id,
+        )
         # 1. 创建删除请求记录
         request = FriendRequestRepository().create(
             from_account_id=account_id,
-            to_friend_id=friend_id,  # 可能为 None
+            to_friend_id=None,
             request_type="delete",
             status="deleting"
         )
         
-        # 2. 触发 ManageFriendshipTask 调度
+        # 2. 触发 ManageFriendshipTask 调度（应优先执行）
         TaskInstanceRepository().update_status_to_pending(
             account_id=account_id,
             task_type="manage_friendship"
@@ -440,6 +585,14 @@ from ptcgp_auto_v2.db.repositories import (
     FriendRequestRepository,
     FriendshipRepository,
 )
+from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.utils.gesture import (
+    input_text,
+    navigate_back,
+    tap_ok,
+    tap_template_or_text,
+    tap_text_exact,
+)
 
 @TaskRegistry.register("manage_friendship")
 class ManageFriendshipTask(Task):
@@ -455,14 +608,34 @@ class ManageFriendshipTask(Task):
     
     # 任务专用页面
     pages = FRIEND_PAGES
+
+    # TODO: 本任务当前仅为框架占位，所有页面识别与交互流程需后续完善
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.current_request = None
+        self._action_cache: dict[str, bool] = {}
+        self._last_page_name: str | None = None
+
+    # TODO: 以下方法均为占位框架，具体逻辑需结合真实页面完善
+
+    def _is_action_done(self, key: str) -> bool:
+        """检查操作是否已完成"""
+        return self._action_cache.get(key, False)
+
+    def _mark_action_done(self, key: str):
+        """标记操作已完成"""
+        self._action_cache[key] = True
+
+    def _reset_action_cache(self):
+        """重置操作缓存（进入新页面时调用）"""
+        self._action_cache.clear()
     
     def on_start(self):
         """任务开始前的准备"""
         self.requests_to_process = []
+        self._action_cache.clear()
+        self._last_page_name = None
     
     def is_completed(self) -> bool:
         """检查是否所有请求都处理完成"""
@@ -470,6 +643,10 @@ class ManageFriendshipTask(Task):
     
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """页面响应逻辑"""
+        if page_name != self._last_page_name:
+            self._reset_action_cache()
+            self._last_page_name = page_name
+
         handlers = {
             "main_menu": self._open_friends,
             "friend_list": self._check_next_request,
@@ -548,23 +725,54 @@ class ManageFriendshipTask(Task):
     
     def _start_send_request(self) -> ActionResult:
         """开始发送好友请求流程"""
-        # 点击添加好友按钮
-        self.adb.click(800, 400)  # 根据实际位置调整
+        if self._is_action_done("add_clicked"):
+            return ActionResult.wait(1.0)
+
+        ocr_results = self.page_detector.get_last_page_context()[1]
+        add_patterns = get_text_patterns("friend_add")
+        result = tap_template_or_text(
+            self.adb,
+            self.page_detector,
+            ocr_results,
+            None,
+            add_patterns,
+            wait=1.0,
+        )
+        if result:
+            self._mark_action_done("add_clicked")
+            return result
         return ActionResult.wait(1.0)
     
     def _search_friend(self, page_info) -> ActionResult:
         """搜索好友"""
         friend_id = self.current_request.to_friend_id
-        
+
+        if self._is_action_done("friend_searched"):
+            return ActionResult.wait(1.0)
+
         # 输入 friend_id
-        self.adb.input_text(friend_id)
-        self.adb.click(900, 1200)  # 搜索按钮
-        return ActionResult.wait(2.0)
+        input_text(self.adb, friend_id, wait=0.5)
+        ocr_results = page_info.get("ocr_results", [])
+        search_patterns = get_text_patterns("friend_search")
+        result = tap_template_or_text(
+            self.adb,
+            self.page_detector,
+            ocr_results,
+            None,
+            search_patterns,
+            wait=1.5,
+        )
+        if result:
+            self._mark_action_done("friend_searched")
+            return result
+        return ActionResult.wait(1.0)
     
     def _confirm_send(self, page_info) -> ActionResult:
         """确认发送请求"""
-        self.adb.click(800, 1400)  # 确认按钮
-        return ActionResult.wait(1.0)
+        ocr_results = page_info.get("ocr_results", [])
+        confirm_patterns = get_text_patterns("send_friend_request_confirm")
+        result = tap_text_exact(self.adb, ocr_results, confirm_patterns, wait=1.0)
+        return result or ActionResult.wait(1.0)
     
     def _mark_sended(self, page_info) -> ActionResult:
         """标记为已发送"""
@@ -601,8 +809,22 @@ class ManageFriendshipTask(Task):
     
     def _start_accept_request(self) -> ActionResult:
         """开始接受好友请求流程"""
-        # 点击交友申请按钮
-        self.adb.click(600, 300)  # 根据实际位置调整
+        if self._is_action_done("request_list_opened"):
+            return ActionResult.wait(1.0)
+
+        ocr_results = self.page_detector.get_last_page_context()[1]
+        request_patterns = get_text_patterns("friend_requests")
+        result = tap_template_or_text(
+            self.adb,
+            self.page_detector,
+            ocr_results,
+            None,
+            request_patterns,
+            wait=1.0,
+        )
+        if result:
+            self._mark_action_done("request_list_opened")
+            return result
         return ActionResult.wait(1.0)
     
     def _accept_requests(self, page_info) -> ActionResult:
@@ -623,7 +845,11 @@ class ManageFriendshipTask(Task):
     
     def _confirm_accept(self, page_info) -> ActionResult:
         """确认接受请求"""
-        self.adb.click(800, 1400)  # 确认按钮
+        ocr_results = page_info.get("ocr_results", [])
+        accept_patterns = get_text_patterns("accept")
+        result = tap_text_exact(self.adb, ocr_results, accept_patterns, wait=1.0)
+        if not result:
+            return ActionResult.wait(1.0)
         
         req = self.current_request
         
@@ -651,17 +877,13 @@ class ManageFriendshipTask(Task):
     
     def _handle_delete_request(self) -> ActionResult:
         """处理删除好友请求"""
-        req = self.current_request
-        
-        if req.to_friend_id:
-            # 删除指定好友
-            return self._delete_specific_friend(req.to_friend_id)
-        else:
-            # 全量同步：删除不在 friendship 表中的所有好友
-            return self._sync_friend_list()
+        # 首版仅支持同步删除：删除不在 friendship 表中的所有好友
+        return self._sync_friend_list()
     
     def _sync_friend_list(self) -> ActionResult:
         """同步好友列表（删除不在表中的好友）"""
+        # TODO: 补充好友列表滚动策略、翻页终止条件
+        # TODO: 明确 friend_id OCR 提取规则与模板匹配
         # 获取当前好友列表中的所有 friend_id
         friend_ids_in_game = self._get_friend_ids_from_game()
         
@@ -675,7 +897,7 @@ class ManageFriendshipTask(Task):
         
         if not to_delete:
             # 没有需要删除的，标记请求完成
-            self.current_request.status = "deleted"
+            self.current_request.status = "completed"
             FriendRequestRepository().update(self.current_request)
             self.requests_to_process.pop(0)
             self.current_request = None
@@ -686,7 +908,8 @@ class ManageFriendshipTask(Task):
         return self._delete_specific_friend(friend_id)
     
     def _delete_specific_friend(self, friend_id: str) -> ActionResult:
-        """删除指定好友"""
+        """同步删除流程内部删除单个好友"""
+        # TODO: 删除流程仅为框架示意，后续需结合真实页面调试
         # 在好友列表中找到该好友并点击
         if self._find_and_click_friend(friend_id):
             return ActionResult.wait(1.0)
@@ -700,25 +923,24 @@ class ManageFriendshipTask(Task):
     
     def _click_remove(self, page_info) -> ActionResult:
         """点击移除好友按钮"""
-        # 点击"朋友"文字
-        self.adb.click(540, 1600)  # 根据实际位置调整
-        return ActionResult.wait(1.0)
+        # TODO: 仅为框架示意，后续需完善页面定位与点击策略
+        ocr_results = page_info.get("ocr_results", [])
+        friend_patterns = get_text_patterns("friend")
+        result = tap_text_exact(self.adb, ocr_results, friend_patterns, wait=1.0)
+        return result or ActionResult.wait(1.0)
     
     def _confirm_remove(self, page_info) -> ActionResult:
         """确认移除"""
-        self.adb.click(700, 1100)  # OK按钮
-        
-        # 检查是否还有更多需要删除的
-        if self.current_request.to_friend_id is None:
-            # 全量同步模式，继续处理
-            return ActionResult.wait(1.0)
-        else:
-            # 删除特定好友完成
-            self.current_request.status = "deleted"
-            FriendRequestRepository().update(self.current_request)
-            self.requests_to_process.pop(0)
-            self.current_request = None
-            return ActionResult.wait(1.0)
+        # TODO: 仅为框架示意，后续需完善页面定位与点击策略
+        ocr_results = page_info.get("ocr_results", [])
+        result = tap_ok(self.adb, ocr_results, wait=1.0)
+        if result:
+            # 删除完成后返回好友列表页
+            back_patterns = get_text_patterns("back_button")
+            return navigate_back(
+                self.adb, self.page_detector, ocr_results, back_patterns
+            )
+        return ActionResult.wait(1.0)
 ```
 
 ---
@@ -750,13 +972,13 @@ class FriendPreHook(Hook):
         self.target_friend_id = target_friend_id
         self.target_account_id = target_account_id
     
-    def run(self, context: HookContext) -> HookResult:
+    def run(self, context: HookContext) -> tuple[HookResult, dict]:
         """
         执行前置检查
         
         Returns:
-            CONTINUE: 已是好友，继续执行主任务
-            INSERT_TASK: 已创建好友请求，暂停主任务等待完成
+            (HookResult.CONTINUE, {}): 已是好友，继续执行主任务
+            (HookResult.INSERT_TASK, data): 需要插入 manage_friendship 任务，暂停主任务
         """
         # 检查是否已是好友
         is_friend = FriendshipService.is_friend(
@@ -765,7 +987,7 @@ class FriendPreHook(Hook):
         )
         
         if is_friend:
-            return HookResult.CONTINUE
+            return HookResult.CONTINUE, {}
         
         # 检查是否已有 pending 的请求
         existing = FriendRequestRepository().get_pending_request(
@@ -774,18 +996,27 @@ class FriendPreHook(Hook):
         )
         
         if existing:
-            # 已有请求，触发 ManageFriendshipTask 执行
-            self.trigger_task(context, "manage_friendship")
-            return HookResult.INSERT_TASK
+            # 已有请求，让执行器插入 manage_friendship 任务
+            # FriendshipService.create_add_request() 已自动触发，但这里确保执行
+            return HookResult.INSERT_TASK, {
+                "task_type": "manage_friendship",
+                "priority": "high",
+                "reason": "已有好友请求待处理"
+            }
         
-        # 创建新的好友请求
+        # 创建新的好友请求（FriendshipService 会自动触发 manage_friendship）
         FriendshipService.create_add_request(
             from_account_id=context.account.id,
             to_friend_id=self.target_friend_id,
             to_account_id=self.target_account_id
         )
         
-        return HookResult.INSERT_TASK
+        # 返回需要执行前置任务
+        return HookResult.INSERT_TASK, {
+            "task_type": "manage_friendship",
+            "priority": "high",
+            "reason": "需要建立好友关系"
+        }
 ```
 
 ### 6.2 DeleteFriendPostHook（后置删除）
@@ -801,29 +1032,39 @@ class DeleteFriendPostHook(Hook):
     用于送卡任务完成后清理好友关系。
     """
     
-    def __init__(self, target_friend_id: Optional[str] = None):
+    def __init__(self, target_friend_id: str):
         """
         Args:
             target_friend_id: 要删除的好友 friend_id
-                               为 None 表示全量同步（删除不在 friendship 表中的）
         """
         self.target_friend_id = target_friend_id
     
-    def run(self, context: HookContext) -> HookResult:
+    def run(self, context: HookContext) -> tuple[HookResult, dict]:
         """
         执行后置删除
         
-        创建删除请求并触发 ManageFriendshipTask。
+        通过 FriendshipService 更新好友关系表并创建删除请求，
+        同时触发 ManageFriendshipTask（优先执行）。
+        PostHook 不需要暂停主任务，所以返回 CONTINUE。
         """
-        # 创建删除请求
+        # 更新好友关系并创建删除请求（FriendshipService 会自动触发 manage_friendship）
         FriendshipService.create_delete_request(
             account_id=context.account.id,
             friend_id=self.target_friend_id
         )
         
-        # 注意：这里不需要等待删除完成，异步执行即可
-        return HookResult.CONTINUE
+        # PostHook 不需要等待，异步执行即可
+        return HookResult.CONTINUE, {}
 ```
+
+**后置任务优先级补充：** PostHook 触发 `manage_friendship` 后，
+执行器应将该任务插入当前账号批次队列的前部或标记高优先级，
+确保“后置任务优先执行”的需求落地。
+
+**具体落地建议：**
+1. `update_status_to_pending` 时写入高优先级字段（若已有 priority）。
+2. 执行器收到 `post_hook` 触发后，将任务插入 `pending_tasks` 队首。
+3. 若当前任务仍在执行，待其完成后优先调度该任务。
 
 ### 6.3 使用示例（送卡任务）
 
@@ -1032,6 +1273,26 @@ class FriendshipRepository:
             if friendship:
                 session.delete(friendship)
                 session.commit()
+
+    def remove_friendship(self, account_id: int, friend_id: str):
+        """删除双向好友关系（A→B 与 B→A）"""
+        with Session(get_engine()) as session:
+            forward = self._get_by_account_and_friend(
+                session, account_id, friend_id
+            )
+            if forward:
+                session.delete(forward)
+
+                if forward.friend_account_id:
+                    statement = select(AccountFriendship).where(
+                        AccountFriendship.account_id == forward.friend_account_id,
+                        AccountFriendship.friend_account_id == account_id,
+                    )
+                    reverse = session.exec(statement).first()
+                    if reverse:
+                        session.delete(reverse)
+
+            session.commit()
 ```
 
 ### 7.3 TaskInstanceRepository 扩展
@@ -1066,83 +1327,114 @@ class TaskInstanceRepository:
 
 ## 八、页面识别配置
 
-```python
-# src/ptcgp_auto_v2/config/pages/friend_pages.py
+页面规则在 Task 文件内部通过 `_build_manage_friendship_pages()` 函数定义，与 Task 类在一起。
 
-FRIEND_PAGES = [
-    {
-        "name": "friend_list",
-        "templates": ["friend_list_header"],
-        "texts": ["好友", "朋友"],
-    },
-    {
-        "name": "friend_search",
-        "templates": ["friend_search_input"],
-        "texts": ["搜索", "请输入ID"],
-    },
-    {
-        "name": "friend_request_confirm",
-        "templates": ["send_request_button"],
-        "texts": ["发送好友申请"],
-    },
-    {
-        "name": "friend_request_sent",
-        "templates": ["request_sent_success"],
-        "texts": ["已发送"],
-    },
-    {
-        "name": "friend_requests",
-        "templates": ["friend_requests_header"],
-        "texts": ["交友申请"],
-    },
-    {
-        "name": "friend_request_accept_confirm",
-        "templates": ["accept_request_button"],
-        "texts": ["接受"],
-    },
-    {
-        "name": "friend_profile",
-        "templates": ["friend_profile_card"],
-        "texts": ["朋友"],
-    },
-    {
-        "name": "friend_remove_confirm",
-        "templates": ["confirm_dialog"],
-        "texts": ["要移除好友吗", "OK"],
-    },
-]
+**TODO:** 页面规则与 locale key 需结合真实页面补齐，当前仅为框架占位。
+
+```python
+# src/ptcgp_auto_v2/tasks/manage_friendship.py
+
+def _build_manage_friendship_pages() -> list[dict]:
+    """构建好友管理任务页面规则"""
+    from ptcgp_auto_v2.locales import get_text_patterns
+    
+    return [
+        {
+            "name": "friend_list",
+            "templates": ["friend_list_header"],
+            "texts": get_text_patterns("friend_list"),
+        },
+        {
+            "name": "friend_search",
+            "templates": ["friend_search_input"],
+            "texts": get_text_patterns("friend_search"),
+        },
+        {
+            "name": "friend_request_confirm",
+            "templates": ["send_request_button"],
+            "texts": get_text_patterns("send_friend_request"),
+        },
+        {
+            "name": "friend_request_sent",
+            "templates": ["request_sent_success"],
+            "texts": get_text_patterns("request_sent"),
+        },
+        {
+            "name": "friend_requests",
+            "templates": ["friend_requests_header"],
+            "texts": get_text_patterns("friend_requests"),
+        },
+        {
+            "name": "friend_request_accept_confirm",
+            "templates": ["accept_request_button"],
+            "texts": get_text_patterns("accept"),
+        },
+        {
+            "name": "friend_profile",
+            "templates": ["friend_profile_card"],
+            "texts": get_text_patterns("friend"),
+        },
+        {
+            "name": "friend_remove_confirm",
+            "templates": ["confirm_dialog"],
+            "texts": get_text_patterns("remove_friend_confirm"),
+        },
+    ]
+
+
+@TaskRegistry.register("manage_friendship")
+class ManageFriendshipTask(Task):
+    """管理好友关系任务"""
+    
+    task_type = "manage_friendship"
+    reset_type = ResetType.ONCE
+    
+    # 页面规则与 Task 定义在一起
+    pages = _build_manage_friendship_pages()
+    max_unknown_pages = 20
+    
+    # ... 其他实现
 ```
+
+**注意：**
+- 页面文本必须通过 `get_text_patterns()` 获取，支持多语言
+- 所有硬编码文本必须在 locale 中定义，以 zh_Hant 为基准
+- 页面规则与 Task 类定义在同一个文件中
 
 ---
 
 ## 九、实施检查清单
 
 ### Phase 1: 数据库模型 (beads-cli)
-- [ ] 创建 `account_friend_request.py` 模型
-- [ ] 创建 `account_friendship.py` 模型
-- [ ] 更新 `models/__init__.py` 导出新模型
-- [ ] 创建 `FriendRequestRepository`
-- [ ] 创建 `FriendshipRepository`
-- [ ] 扩展 `TaskInstanceRepository.update_status_to_pending()`
+- [x] 创建 `account_friend_request.py` 模型
+- [x] 创建 `account_friendship.py` 模型
+- [x] 更新 `models/__init__.py` 导出新模型
+- [x] 创建 `FriendRequestRepository`
+- [x] 创建 `FriendshipRepository`
+- [x] 扩展 `TaskInstanceRepository.update_status_to_pending()`
 
 ### Phase 2: Hook 机制 (beads-x4a)
-- [ ] 创建 `core/hooks.py`（Hook 基类、HookContext、HookResult）
-- [ ] 修改 `core/task_base.py` 支持 pre/post hooks
-- [ ] 修改 `core/executor.py` 支持 HookContext 注入
+- [x] 创建 `core/hooks.py`（Hook 基类、HookContext、HookResult）
+- [x] 修改 `core/task_base.py` 支持 pre/post hooks
+- [x] 修改 `core/executor.py` 支持 HookContext 注入
 - [ ] 编写单元测试
 
 ### Phase 3: 业务实现 (beads-ug0)
-- [ ] 创建 `services/friendship_service.py`（开放接口）
-- [ ] 创建 `hooks/friend_hooks.py`（FriendPreHook、DeleteFriendPostHook）
-- [ ] 创建 `tasks/manage_friendship.py`（ManageFriendshipTask）
-- [ ] 创建 `config/pages/friend_pages.py`
-- [ ] 编写集成测试
+- [x] 创建 `services/friendship_service.py`（开放接口）
+- [x] 创建 `hooks/friend_hooks.py`（FriendPreHook、DeleteFriendPostHook）
+- [x] 创建 `tasks/manage_friendship.py`（ManageFriendshipTask，包含页面规则定义）
+- [x] 在 locale 中添加好友相关文本配置
 - [ ] 模拟器实测
 
 ---
 
 ## 十、测试计划
 
+> ⚠️ **备注：测试计划暂时跳过**
+> 
+> 待全部代码完成后，经审阅确认后再编写测试代码。
+
+<!--
 ### 10.1 单元测试
 - [ ] Repository 层 CRUD 测试
 - [ ] FriendshipService 接口测试
@@ -1151,13 +1443,15 @@ FRIEND_PAGES = [
 ### 10.2 集成测试
 - [ ] 系统内账号 A→B 完整流程（发送 → 接受 → friendship 表验证）
 - [ ] 外部账号 A→X 流程（发送后直接完成）
-- [ ] 删除好友流程（指定好友 + 全量同步）
+- [ ] 删除好友流程（仅同步删除）
 - [ ] Hook 触发 TaskInstance 调度测试
 
 ### 10.3 模拟器测试
 - [ ] 单账号好友操作
 - [ ] 多账号好友互动
 - [ ] 异常情况处理（网络断开、游戏崩溃）
+-->
+
 
 ---
 
@@ -1183,4 +1477,140 @@ FRIEND_PAGES = [
 
 ---
 
-*计划制定完成，等待实施指令。*
+## 十一、对话补充：页面实测流程原文归档（2026-02-10）
+
+> 本节保存开发者在对话中的关键流程描述原文，后续实现必须以此为准，禁止擅自泛化。
+
+### 11.1 入口与主页面
+
+- 首先进入游戏，匹配底部模板 `icon_community` 并点击。
+- 进入社群后，通过 OCR 点击「朋友」，这里要求精确点击。
+- 朋友页面有三个 tab：
+  - 左下「朋友」：当前好友列表
+  - 中间「申請中」：自己发出的好友申请（可取消）
+  - 右侧「需回覆」：收到的好友申请
+
+### 11.2 好友详情与返回
+
+- 点击朋友条目进入账号详情页（含朋友ID、昵称、等级等）。
+- 返回时点击 `btn_close`（X）回到列表页。
+
+### 11.3 添加好友流程（发送）
+
+1. 在朋友列表页点击模板 `icon_add_friends`。
+2. 出现底部弹层，匹配模板 `icon_search` 后，不点模板本体，先点击输入区域。
+3. 输入 friend_id（可参考 init_account/fetch_account_info 中输入文本处理方式）。
+4. 点击 `icon_search` 搜索。
+5. 搜索结果页判定：
+   - 若出现「取消交友邀請」表示已申请中（pending）。
+   - 若匹配 `icon_green_yes --scale 0.8`，表示已是好友。
+6. 结束后通过 `btn_close` 返回，必要时连续关闭两次回到好友列表。
+
+### 11.4 需回覆流程（接受/拒绝）
+
+- 在「需回覆」页可稳定匹配：
+  - `icon_green_yes`（接受）
+  - `icon_red_no`（拒绝）
+- 必须先点对应条目的 `Lv` 进入详情页，读取 friend_id 后再决策。
+- 每次处理一条后，该条消失，其余条目上移；通常始终处理第一条即可。
+- 没有下一页概念：页面不存在绿勾/红叉时即视为处理完成。
+
+### 11.5 删除好友流程
+
+- 列表页无法直接拿到 friend_id，需要依赖昵称定位候选并进入详情确认 friend_id。
+- 若确认需要删除，返回列表后点击绿色勾，出现「要移除朋友嗎？」弹窗，点击 OK 完成。
+
+---
+
+## 十二、对话补充：需求纠正与强约束
+
+### 12.1 用户纠正（原话）
+
+> “我上面的文字都是精确的，你不要画蛇添足，多补充其他类似的字样。”
+
+> “只要我说过用模板匹配的，那说明就不要使用文字，不要做兜底。”
+
+> “所有我给你的模板，都是足够稳定的，如果提供了scale，也是完全可靠的，你不要随便去除或者更改。”
+
+> “需回复页面必须进入详情页去判断是否我们需要接受的id，如果不是，直接取消。每次接收时，需要获取当前所有待接受的friendid，如果不在列表里的其他friendid，我们默认不接受。”
+
+### 12.2 强制实现规则
+
+1. 文案按用户提供精确值匹配，不扩展同义词。
+2. 指定模板场景仅使用模板，不加文字兜底。
+3. 指定 `scale` 的模板匹配必须固定使用该 scale。
+4. `需回覆` 必须“先详情取 friend_id，再决定 accept/reject”。
+5. 每轮接收前获取待接受白名单 friend_id；不在白名单默认拒绝。
+6. `需回覆` 无绿勾/红叉即结束，不实现翻页/滚动逻辑。
+7. 默认处理第一条，处理后继续下一轮直到结束。
+
+---
+
+## 十三、Web 管理页探索与设计补充
+
+### 13.1 目标
+
+新增 Friendship 管理入口，支持直接创建好友请求，减少手工改库成本，方便后续调试与运营。
+
+### 13.2 现状探索结论
+
+- 当前 Management 侧边栏仅有 Accounts / Plans / Tasks / Metadata。
+- 目前没有 Friendship 页面与创建请求入口。
+
+### 13.3 推荐实现落点
+
+- Router：`src/ptcgp_auto_v2/web/routers/friendship.py`
+- Service：`src/ptcgp_auto_v2/web/services/friendship_admin_service.py`
+- Template：`src/ptcgp_auto_v2/web/templates/partials/friendship_list.html`
+- i18n：`src/ptcgp_auto_v2/web/locales/zh_CN.json`、`src/ptcgp_auto_v2/web/locales/en.json`
+- App 挂载：`src/ptcgp_auto_v2/web/app.py`
+- 侧边栏 hash 与自动选择：
+  - `src/ptcgp_auto_v2/web/templates/index.html`
+  - `src/ptcgp_auto_v2/web/static/js/modules/tabs.js`
+  - `src/ptcgp_auto_v2/web/static/js/modules/bootstrap.js`
+
+### 13.4 一期交互设计（最小闭环）
+
+1. 侧边栏新增 Friendship 菜单。
+2. 页面提供“创建 add 请求”表单：
+   - 发送方账号（from_account_id）
+   - 目标类型（系统内账号 / 外部 friend_id）
+   - 目标账号（to_account_id）或外部 friend_id（to_friend_id）
+3. 提交后调用 `FriendshipService.create_add_request(...)`。
+4. 同页展示请求队列表格（id/from/to/status/failed_reason/updated_at），支持 HTMX 刷新。
+
+### 13.5 关键校验
+
+- from_account 必填
+- 系统内目标账号需存在且有 friend_id
+- 外部 friend_id 格式合法（允许连字符输入，入库归一化）
+- 禁止自己加自己
+- 已有 pending 请求时阻止重复创建
+
+---
+
+## 十四、下一步执行建议
+
+### Step 1（先做 Web 闭环）
+
+1. 新增 friendship Router/Service/Template 并挂载。
+2. 增加侧边栏入口与 i18n 文案。
+3. 完成“系统内账号 + 外部 friend_id”创建请求。
+4. 完成请求列表展示与刷新。
+
+### Step 2（联动任务验证）
+
+1. 通过 Web 创建一条系统内 add 请求、一条外部 add 请求。
+2. 运行：`PYTHONPATH=.:src python main_v2.py --task manage_friendship --account <id>`
+3. 重点验证需回覆详情判定与白名单拒绝策略。
+
+### Step 3（测试与回归）
+
+1. 补 web router/service 测试（参数校验、创建成功/失败、重复请求拦截）。
+2. 回归任务测试：
+   - `PYTHONPATH=.:src pytest -q src/ptcgp_auto_v2/tests/tasks/test_manage_friendship_task.py`
+3. 回填本计划完成状态与实机日志结论。
+
+---
+
+*本计划已根据 2026-02-10 对话补充更新，后续实现以本文件为准。*
