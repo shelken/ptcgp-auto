@@ -20,6 +20,7 @@ from ptcgp_auto_v2.utils.action_result import ActionResult
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account
+    from ptcgp_auto_v2.core.hooks import Hook, HookContext
 
 
 Recognizer = tuple[OcrEngine, TemplateMatcher]
@@ -33,17 +34,6 @@ class ResetType(Enum):
     WEEKLY = "weekly"  # 每周重置
     ONCE = "once"  # 一次性任务
     INTERVAL = "interval"  # 按时间间隔重置（需要配置 interval_seconds）
-
-
-class TaskStatus(Enum):
-    """任务实例状态"""
-
-    PENDING = "pending"  # 待执行
-    BLOCKED = "blocked"  # 被阻塞（等待前置任务完成）
-    RUNNING = "running"  # 执行中
-    COMPLETED = "completed"  # 已完成
-    FAILED = "failed"  # 失败
-    SKIPPED = "skipped"  # 跳过（不更新 last_completed_at，等待下次重置）
 
 
 MAX_TASK_ITERATIONS = 100  # 最大执行迭代次数
@@ -125,6 +115,7 @@ class Task(ABC):
         self._account: Optional["Account"] = None
         self._handlers: dict[str, Callable[[dict], ActionResult]] = {}
         self._stop_event: Optional[threading.Event] = None
+        self._hook_context: Optional["HookContext"] = None
 
     def set_stop_event(self, stop_event: threading.Event):
         """设置停止事件，用于响应外部中断信号"""
@@ -152,6 +143,10 @@ class Task(ABC):
     def bind_account(self, account: "Account"):
         """绑定执行账号"""
         self._account = account
+
+    def set_hook_context(self, context: "HookContext"):
+        """设置 Hook 上下文（由执行器注入）"""
+        self._hook_context = context
 
     @abstractmethod
     def is_completed(self) -> bool:
@@ -194,6 +189,50 @@ class Task(ABC):
         """
         pass
 
+    def get_pre_hooks(self) -> list["Hook"]:
+        """动态获取前置 Hook（可基于任务/账号状态生成）"""
+        return []
+
+    def get_post_hooks(self) -> list["Hook"]:
+        """动态获取后置 Hook（可基于任务/账号状态生成）"""
+        return []
+
+    def _run_pre_hooks(self) -> Optional[TaskResult]:
+        """执行前置 Hook，必要时返回中断结果"""
+        from ptcgp_auto_v2.core.hooks import HookResult
+
+        pre_hooks = self.get_pre_hooks()
+        if not pre_hooks:
+            return None
+
+        if self._hook_context is None:
+            return TaskResult.fail("Hook 上下文未初始化")
+
+        for hook in pre_hooks:
+            result, data = hook.run(self._hook_context)
+            if result == HookResult.ABORT:
+                error_msg = data.get("error", "PreHook aborted")
+                return TaskResult.fail(error_msg)
+            if result == HookResult.INSERT_TASK:
+                return TaskResult.skip(
+                    reason="等待前置任务",
+                    pre_task_type=data.get("task_type"),
+                    pre_task_priority=data.get("priority", "high"),
+                    pre_task_reason=data.get("reason"),
+                )
+
+        return None
+
+    def _run_post_hooks(self):
+        """执行后置 Hook（无论主任务成功失败）"""
+        post_hooks = self.get_post_hooks()
+        if not post_hooks:
+            return
+        if self._hook_context is None:
+            return
+        for hook in post_hooks:
+            hook.run(self._hook_context)
+
     def handle_unknown_page(self, page_info) -> ActionResult:
         """
         处理未知页面的钩子方法
@@ -222,27 +261,32 @@ class Task(ABC):
         import time
 
         self.on_start()
+        pre_result = self._run_pre_hooks()
+        if pre_result:
+            self.on_complete(pre_result)
+            return pre_result
+
         unknown_count = 0
+        result: Optional[TaskResult] = None
 
         for iteration in range(self.max_iterations):
             # 检查停止信号
             if self._should_stop():
                 result = TaskResult.fail("收到停止信号", iterations=iteration)
-                self.on_complete(result)
-                return result
+                break
 
             # 检查目标状态
             if self.is_completed():
                 # 检查是否是跳过的情况
-                if hasattr(self, "was_skipped") and self.was_skipped():
+                was_skipped = getattr(self, "was_skipped", None)  # type: ignore[attr-defined]
+                if callable(was_skipped) and was_skipped():
                     skip_reason = getattr(self, "_skip_reason", None)
                     result = TaskResult.skip(
                         reason=skip_reason or "未知原因", iterations=iteration
                     )
                 else:
                     result = TaskResult.ok(iterations=iteration)
-                self.on_complete(result)
-                return result
+                break
 
             # 识别当前页面
             page_name, page_info = self.page_detector.detect()
@@ -255,8 +299,7 @@ class Task(ABC):
                         f"连续 {self.max_unknown_pages} 次未识别页面",
                         iterations=iteration,
                     )
-                    self.on_complete(result)
-                    return result
+                    break
                 # 调用未知页面处理器（子类可覆盖）
                 action_result = self.handle_unknown_page(page_info)
                 if not action_result.success:
@@ -264,8 +307,7 @@ class Task(ABC):
                         action_result.error or "未知页面处理失败",
                         iterations=iteration,
                     )
-                    self.on_complete(result)
-                    return result
+                    break
                 time.sleep(action_result.should_wait)
                 continue
 
@@ -284,16 +326,19 @@ class Task(ABC):
                     iterations=iteration,
                     last_page=page_name,
                 )
-                self.on_complete(result)
-                return result
+                break
 
             # 等待
             time.sleep(action_result.should_wait)
 
         # 超过最大迭代次数
-        result = TaskResult.fail(
-            f"超过最大迭代次数 {self.max_iterations}", iterations=self.max_iterations
-        )
+        if result is None:
+            result = TaskResult.fail(
+                f"超过最大迭代次数 {self.max_iterations}",
+                iterations=self.max_iterations,
+            )
+
+        self._run_post_hooks()
         self.on_complete(result)
         return result
 

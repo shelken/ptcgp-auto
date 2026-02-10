@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from ptcgp_auto_v2.core.task_base import ResetType, TaskStatus
+from ptcgp_auto_v2.core.task_base import ResetType
+from ptcgp_auto_v2.core.task_status import TaskStatus
 
 
 def _normalize_reset_type(value: Any) -> Optional[ResetType]:
