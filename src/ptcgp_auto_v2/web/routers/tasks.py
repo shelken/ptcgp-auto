@@ -4,6 +4,10 @@ from fastapi import APIRouter, Depends, Request, Query
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
+from ptcgp_auto_v2.core.task_ordering import (
+    TASK_SORT_BY_DISPATCH_PRIORITY,
+    normalize_task_sort,
+)
 from ptcgp_auto_v2.core.task_base import TaskRegistry
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.engine import get_fastapi_session
@@ -28,8 +32,8 @@ async def get_management_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
-    sort_by: str = Query(default="last_completed_at"),
-    sort_order: str = Query(default="desc"),
+    sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
+    sort_order: str = Query(default="asc"),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染任务管理列表。"""
@@ -44,6 +48,7 @@ async def get_management_tasks(
     page_size = 50
     normalized_status = [item for item in status if item]
     normalized_task_type = [item for item in task_type if item]
+    sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
     parsed_account_id: int | None = None
     if account_id:
         account_id_str = str(account_id).strip()
@@ -102,8 +107,8 @@ async def get_reset_completed_modal(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
-    sort_by: str = Query(default="last_completed_at"),
-    sort_order: str = Query(default="desc"),
+    sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
+    sort_order: str = Query(default="asc"),
 ):
     """渲染重置完成任务确认弹窗。"""
     current_lang = detect_lang(request, lang)
@@ -111,6 +116,7 @@ async def get_reset_completed_modal(
 
     normalized_status = [item for item in status if item]
     normalized_task_type = [item for item in task_type if item]
+    sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
     parsed_account_id = parse_optional_int(account_id)
 
     templates = get_templates()
@@ -142,8 +148,9 @@ async def reset_completed_tasks(
         item for item in form.getlist("task_type") if isinstance(item, str) and item
     ]
     parsed_account_id = parse_optional_int(form.get("account_id"))
-    sort_by = str(form.get("sort_by") or "last_completed_at")
-    sort_order = str(form.get("sort_order") or "desc")
+    sort_by = str(form.get("sort_by") or TASK_SORT_BY_DISPATCH_PRIORITY)
+    sort_order = str(form.get("sort_order") or "asc")
+    sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
 
     reset_count = reset_completed_tasks_by_filters(
         session=session,
@@ -208,8 +215,8 @@ async def get_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
-    sort_by: str = Query(default="last_completed_at"),
-    sort_order: str = Query(default="desc"),
+    sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
+    sort_order: str = Query(default="asc"),
     lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
@@ -223,6 +230,7 @@ async def get_tasks(
 
     normalized_status = [item for item in status if item]
     normalized_task_type = [item for item in task_type if item]
+    sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
     parsed_account_id: int | None = None
     if account_id:
         account_id_str = str(account_id).strip()

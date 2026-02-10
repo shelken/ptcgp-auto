@@ -477,7 +477,7 @@ class Scheduler:
         Returns:
             (Account, task_instances_list) 或 None
         """
-        # 获取所有有待执行任务的账号（已按 next_run_at、last_completed_at 排序，时间越旧越优先）
+        # 获取所有有待执行任务的账号（once 优先，其余按 next_run_at、last_completed_at 排序）
         account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
 
         # 分离有 init_account 任务的账号和其他账号，保持各自的排序
