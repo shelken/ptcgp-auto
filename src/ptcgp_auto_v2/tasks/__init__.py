@@ -13,6 +13,7 @@ from ptcgp_auto_v2.tasks import claim_gifts
 from ptcgp_auto_v2.tasks import init_account
 from ptcgp_auto_v2.tasks import collect_account_cards
 from ptcgp_auto_v2.tasks import wonder_pick
+from ptcgp_auto_v2.tasks import manage_friendship
 
 # 导出任务注册表
 from ptcgp_auto_v2.core.task_base import TaskRegistry
