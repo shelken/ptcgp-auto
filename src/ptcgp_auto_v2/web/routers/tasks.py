@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Request, Query
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
-from ptcgp_auto_v2.core.task_base import TaskRegistry, TaskStatus
+from ptcgp_auto_v2.core.task_base import TaskRegistry
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.repositories import AccountRepository
 from ptcgp_auto_v2.web.services.task_service import (
