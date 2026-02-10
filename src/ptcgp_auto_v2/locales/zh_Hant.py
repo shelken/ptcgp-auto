@@ -164,4 +164,28 @@ TEXT_PATTERNS = {
     "init_enjoy": ["請好好享受", "隨意遊玩"],
     "init_tap_to_flip": ["點擊來翻開卡牌吧"],
     "init_select_favorite_card": ["選1張喜歡的卡牌吧"],
+    # ============================================================
+    # 好友关系管理相关
+    # ============================================================
+    "friend_list": ["朋友數", "朋友", "申請中", "需回覆"],
+    "friend_search": ["搜尋玩家"],
+    "friend_add": ["新增好友"],
+    "send_friend_request_confirm": ["送出好友申請"],
+    "request_sent": ["申請已送出"],
+    "friend_requests": ["交友申請"],
+    "accept": ["接受"],
+    "friend_profile": ["朋友ID", "戰績"],
+    "remove_friend_confirm": ["要移除朋友嗎？"],
+    "friend_page_list": ["朋友數", "朋友", "申請中", "需回覆"],
+    "friend_page_search_result": ["搜尋結果"],
+    "friend_page_profile": ["朋友ID", "戰績"],
+    "friend_tab_friends": ["朋友"],
+    "friend_tab_pending": ["申請中"],
+    "friend_tab_need_reply": ["需回覆"],
+    "friend_search_result": ["搜尋結果"],
+    "friend_cancel_request": ["取消交友邀請"],
+    "friend_request_sent_done": ["已送出交友邀請", "已送出交友邀請。"],
+    "friend_apply_button": ["申請"],
+    "friend_input_id": ["輸入朋友ID"],
+    "friend_remove_confirm_title": ["要移除朋友嗎？"],
 }

@@ -211,14 +211,18 @@ def clear_text(
         max_chars: 最多删除字符数（默认20）
         wait: 操作后等待时间
     """
+    device = adb.device
+    if device is None:
+        logger.error("设备未连接，无法清空输入框")
+        return ActionResult.ok(wait=wait)
+
     # 点击输入框获取焦点
     adb.tap(x, y)
     time.sleep(0.3)
 
-    # 发送退格键清空内容
-    for _ in range(max_chars):
-        adb.device.keyevent(67)  # KEYCODE_DEL
-        time.sleep(0.05)
+    # 速度优先：使用 uiautomator2 原生清空输入框能力
+    device.clear_text()
+    time.sleep(0.05)
 
     logger.debug(f"清空输入框 ({x}, {y})，删除 {max_chars} 个字符")
     return ActionResult.ok(wait=wait)
@@ -665,8 +669,13 @@ def scroll_points(
 
 def input_text(adb: AdbController, text: str, wait: float = 0.5) -> ActionResult:
     """输入文本（直接调用设备输入能力）"""
+    device = adb.device
+    if device is None:
+        logger.error("设备未连接，无法输入文本")
+        return ActionResult.ok(wait=wait)
+
     try:
-        adb.device.send_keys(text)
+        device.send_keys(text)
         return ActionResult.ok(wait=wait)
     except Exception as exc:
         logger.error(f"输入文本失败: {exc}")
