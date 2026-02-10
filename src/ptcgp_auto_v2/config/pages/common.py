@@ -72,8 +72,15 @@ COMMON_PAGES = [
         # 匹配各种手指图标并点击（模板匹配）
         # 目前可以看出，只要出现了这些按钮必定，优先点击
         "name": "icon_hand_tap",
-        "templates": ["hand_up_left", "hand_up_right", "hand_up"],
+        "templates": ["hand_up_left", "hand_up_right"],
         "priority": 10,
+        "action": "tap_matched",
+    },
+    {
+        # 目前可以看出，只要出现了这些按钮必定，优先点击
+        "name": "icon_hand_tap",
+        "templates": ["hand_up"],
+        "priority": 160,
         "action": "tap_matched",
     },
     {
