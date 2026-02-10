@@ -21,7 +21,8 @@ from ptcgp_auto_v2.core.executor import (
     run_executor,
     run_account_batch_executor,
 )
-from ptcgp_auto_v2.core.task_base import TaskRegistry, TaskStatus, ResetType
+from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.core.task_schedule import (
     get_effective_reset_type,
     should_reset_task,
