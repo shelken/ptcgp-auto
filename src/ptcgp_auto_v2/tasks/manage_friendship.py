@@ -18,7 +18,6 @@ from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     FriendRequestRepository,
     FriendshipRepository,
-    TaskInstanceRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
@@ -36,12 +35,20 @@ logger = logging.getLogger(__name__)
 FRIEND_ID_PATTERN = re.compile(r"\d{4}-\d{4}-\d{4}-\d{4}")
 
 if TYPE_CHECKING:
+    from ptcgp_auto_v2.core.hooks import Hook
     from ptcgp_auto_v2.db.models import AccountFriendRequest
 
 
 def _build_manage_friendship_pages() -> list[dict]:
     """构建好友任务页面规则。"""
     return [
+        {
+            # 优先使用底部社群图标识别可进入社群的页面，避免 OCR 漏识别导致误走通用返回。
+            # 点击后会进入社群页，该模板场景自然消失，不会持续命中。
+            "name": "home_with_community_icon",
+            "templates": ["icon_community"],
+            "priority": 10,
+        },
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),
@@ -97,6 +104,7 @@ class ManageFriendshipTask(Task):
         self._active_request_id: Optional[int] = None
         self._submitted_request_id: Optional[int] = None
         self._completed = False
+        self._wake_account_ids: set[int] = set()
 
         self._add_apply_wait_rounds = 0
         self._cancel_wait_rounds = 0
@@ -125,8 +133,10 @@ class ManageFriendshipTask(Task):
         self._cancel_wait_rounds = 0
         self._accept_wait_rounds = 0
         self._delete_wait_rounds = 0
+        self._wake_account_ids = set()
 
         self.requests_to_process = self._get_pending_requests()
+        self._log_pending_request_order("start")
         logger.info(
             "manage_friendship 待处理请求: sending=%s, sended=%s, deleting=%s",
             len(
@@ -159,6 +169,12 @@ class ManageFriendshipTask(Task):
         """返回任务是否完成。"""
         return self._completed
 
+    def get_post_hooks(self) -> list["Hook"]:
+        """任务结束后统一唤醒被影响账号的 manage_friendship。"""
+        from ptcgp_auto_v2.hooks import ManageFriendshipWakePostHook
+
+        return [ManageFriendshipWakePostHook()]
+
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """按页面分发处理。"""
         if page_name != self._last_page_name:
@@ -166,6 +182,7 @@ class ManageFriendshipTask(Task):
             self._last_page_name = page_name
 
         handlers = {
+            "home_with_community_icon": self._handle_home,
             "game_home_main": self._handle_home,
             "community_page": self._handle_community,
             "friend_list": self._handle_friend_list,
@@ -179,7 +196,7 @@ class ManageFriendshipTask(Task):
         return ActionResult.wait(0.8)
 
     def _get_pending_requests(self) -> list["AccountFriendRequest"]:
-        """读取当前账号待处理请求。"""
+        """读取当前账号待处理请求，并严格按创建时间升序排序。"""
         if self.account.id is None:
             return []
         repo = FriendRequestRepository()
@@ -191,16 +208,49 @@ class ManageFriendshipTask(Task):
         deleting = repo.get_by_from_account_and_type(
             self.account.id, "delete", "deleting"
         )
-        return list(sending) + list(sended) + list(canceling) + list(deleting)
+        pending_requests = (
+            list(sending) + list(sended) + list(canceling) + list(deleting)
+        )
+        pending_requests.sort(key=self._request_order_key)
+        return pending_requests
+
+    @staticmethod
+    def _request_order_key(req) -> tuple[datetime, int]:
+        """请求排序键：先按创建时间，再按ID，保证旧请求优先执行。"""
+        created_at = getattr(req, "created_at", None)
+        request_id = getattr(req, "id", None)
+
+        if not isinstance(created_at, datetime):
+            created_at = datetime.max
+        if not isinstance(request_id, int):
+            request_id = 2**31 - 1
+
+        return created_at, request_id
 
     def _refresh_requests(self):
         """刷新请求列表。"""
         self.requests_to_process = self._get_pending_requests()
+        self._log_pending_request_order("refresh")
         self.current_request = None
         self._active_request_id = None
         self._submitted_request_id = None
         if not self.requests_to_process:
             self._completed = True
+
+    def _log_pending_request_order(self, stage: str):
+        """输出当前待处理请求顺序，便于排查是否按创建时间执行。"""
+        if not self.requests_to_process:
+            logger.debug("[%s] 当前无待处理好友请求", stage)
+            return
+
+        order_text = " | ".join(
+            (
+                f"id={item.id},type={item.request_type},status={item.status},"
+                f"created_at={getattr(item, 'created_at', None)}"
+            )
+            for item in self.requests_to_process
+        )
+        logger.debug("[%s] 好友请求处理顺序(旧->新): %s", stage, order_text)
 
     def _pick_current_request(self) -> Optional["AccountFriendRequest"]:
         """获取当前处理请求。"""
@@ -460,15 +510,22 @@ class ManageFriendshipTask(Task):
         ):
             self._save_request(req, "sended")
             if req.to_account_id:
-                TaskInstanceRepository().update_status_to_pending(
-                    req.to_account_id, "manage_friendship"
-                )
+                self._wake_account_ids.add(req.to_account_id)
             else:
                 self._save_request(req, "completed")
                 if req.to_friend_id and self.account.id is not None:
                     FriendshipRepository().create(
                         self.account.id, req.to_friend_id, req.to_account_id
                     )
+            self._refresh_requests()
+            return self._close_modal(wait=0.8)
+
+        # 兜底场景：若结果页直接出现绿色勾，说明双方可能已是好友。
+        # 此时不再走发送流程，直接按“已完成加好友”处理，避免请求长期失败卡住。
+        green_match = self._find_green_yes_match()
+        if green_match:
+            logger.info("请求 %s 检测到绿色勾，按已是好友直接完成", req.id)
+            self._complete_add_already_friend_request(req)
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
@@ -485,6 +542,36 @@ class ManageFriendshipTask(Task):
             self._refresh_requests()
             return self._close_modal(wait=0.8)
         return ActionResult.wait(0.8)
+
+    def _complete_add_already_friend_request(self, req):
+        """处理发送侧检测到已是好友的完成逻辑，并补齐关系表。"""
+        current_account_id = self.account.id
+        if current_account_id is None:
+            self._save_request(req, "failed", failed_reason="当前账号ID为空")
+            return
+
+        # 请求完成
+        self._save_request(req, "completed")
+
+        # 优先补齐当前账号 -> 目标账号的关系
+        if req.to_friend_id:
+            FriendshipRepository().create(
+                current_account_id, req.to_friend_id, req.to_account_id
+            )
+
+        # 若有目标账号信息，尝试补齐双向关系
+        if req.to_account_id:
+            target = AccountRepository().get_by_id(req.to_account_id)
+            if target and target.friend_id:
+                FriendshipRepository().create(
+                    current_account_id, target.friend_id, target.id
+                )
+            if target and target.id and self.account.friend_id:
+                FriendshipRepository().create(
+                    target.id,
+                    self.account.friend_id,
+                    current_account_id,
+                )
 
     def _handle_add_sended_result(self, req, page_info: dict) -> ActionResult:
         """处理接受好友请求结果。"""

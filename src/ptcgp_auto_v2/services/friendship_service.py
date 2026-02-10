@@ -14,6 +14,7 @@ from ptcgp_auto_v2.db.repositories import (
     FriendshipRepository,
     TaskInstanceRepository,
 )
+from ptcgp_auto_v2.core.task_status import TaskStatus
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import AccountFriendRequest
@@ -88,10 +89,7 @@ class FriendshipService:
             status="sending",
         )
 
-        TaskInstanceRepository().update_status_to_pending(
-            account_id=from_account_id,
-            task_type="manage_friendship",
-        )
+        FriendshipService.ensure_manage_friendship_pending(account_id=from_account_id)
 
         return request
 
@@ -148,10 +146,7 @@ class FriendshipService:
             status="deleting",
         )
 
-        TaskInstanceRepository().update_status_to_pending(
-            account_id=account_id,
-            task_type="manage_friendship",
-        )
+        FriendshipService.ensure_manage_friendship_pending(account_id=account_id)
 
         return request
 
@@ -176,10 +171,28 @@ class FriendshipService:
             request.failed_reason = None
             request.updated_at = datetime.now()
             repo.update(request)
-            TaskInstanceRepository().update_status_to_pending(
-                account_id=request.from_account_id,
-                task_type="manage_friendship",
+            FriendshipService.ensure_manage_friendship_pending(
+                account_id=request.from_account_id
             )
             return True
 
         return repo.delete_pending(request_id=request_id)
+
+    @staticmethod
+    def ensure_manage_friendship_pending(account_id: int) -> bool:
+        """确保账号的 manage_friendship 任务处于 pending（不存在则创建）。"""
+        repo = TaskInstanceRepository()
+        instance = repo.get_by_account_and_type(account_id, "manage_friendship")
+
+        if instance is None:
+            instance = repo.get_or_create(
+                account_id=account_id,
+                task_type="manage_friendship",
+                reset_type="once",
+            )
+
+        if instance.status != TaskStatus.PENDING.value:
+            instance.status = TaskStatus.PENDING.value
+            instance.save()
+
+        return True

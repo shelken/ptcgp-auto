@@ -80,3 +80,14 @@ class DeleteFriendPostHook(Hook):
         )
 
         return HookResult.CONTINUE, {}
+
+
+class ManageFriendshipWakePostHook(Hook):
+    """好友任务后置唤醒 Hook。"""
+
+    def run(self, context: HookContext) -> tuple[HookResult, dict]:
+        """在任务结束后统一唤醒目标账号的 manage_friendship 任务。"""
+        wake_account_ids = getattr(context.task, "_wake_account_ids", set())
+        for account_id in wake_account_ids:
+            FriendshipService.ensure_manage_friendship_pending(account_id=account_id)
+        return HookResult.CONTINUE, {}
