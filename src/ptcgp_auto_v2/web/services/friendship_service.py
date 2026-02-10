@@ -17,7 +17,10 @@ from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
 
 def build_friendship_context(
-    session: Session, lang: str, account_id: int | None = None
+    session: Session,
+    lang: str,
+    account_id: int | None = None,
+    from_account_id: int | None = None,
 ) -> dict:
     """构建好友管理页面所需上下文数据。"""
     current_lang = normalize_lang(lang)
@@ -43,6 +46,7 @@ def build_friendship_context(
         "account_name_map": account_name_map,
         "account_friend_id_map": account_friend_id_map,
         "selected_account_id": account_id,
+        "selected_from_account_id": from_account_id,
         "t": t,
         "current_lang": current_lang,
     }

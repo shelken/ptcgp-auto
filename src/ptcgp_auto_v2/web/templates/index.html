@@ -363,7 +363,7 @@
                                     hx-target="#owned-cards-container"
                                     hx-include="#owned-filter-form,#owned-sort-select">
                                     <option value="rarity">{{ t.owned_sort_rarity }}</option>
-                                    <option value="acquired">{{ t.owned_sort_acquired }}</option>
+                                    <option value="acquired" selected>{{ t.owned_sort_acquired }}</option>
                                 </select>
                             </div>
                             <button type="button" onclick="refreshOwnedCards()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
@@ -490,7 +490,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.62"></script>
+    <script type="module" src="/static/js/main.js?v=4.64"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();
