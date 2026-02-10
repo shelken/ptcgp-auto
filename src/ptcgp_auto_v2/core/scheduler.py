@@ -215,8 +215,10 @@ class Scheduler:
         self._last_auto_scale_check = datetime.now()
 
         pending_count = self._count_pending_tasks()
-        idle_count = self.device_pool.available_count
         running_devices = discover_devices()
+        # 先用当前真实运行设备刷新池，避免使用过期设备快照导致 idle 统计虚高
+        self._refresh_device_pool(running_devices)
+        idle_count = self.device_pool.available_count
         running_count = len(running_devices)
 
         if self.config.auto_scale_pending_step <= 0:
@@ -293,7 +295,8 @@ class Scheduler:
                 if stop_bluestacks_instance(instance):
                     self.device_pool.remove_device(device.address)
 
-        self._refresh_device_pool(running_devices)
+        # 缩容后再次以实时状态刷新，防止已关闭设备被旧快照重新加入设备池
+        self._refresh_device_pool(discover_devices())
 
     def _generate_pending_tasks(self):
         """
