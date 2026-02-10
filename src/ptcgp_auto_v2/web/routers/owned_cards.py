@@ -25,7 +25,7 @@ async def get_owned_cards(
     set_code: list[str] = Query(default=[]),
     pack_name: list[str] = Query(default=[]),
     element: list[str] = Query(default=[]),
-    sort_by: str = Query(default="rarity"),
+    sort_by: str = Query(default="acquired"),
     lang: str | None = Query(default=None),
 ):
     """获取已拥有卡牌列表。"""
