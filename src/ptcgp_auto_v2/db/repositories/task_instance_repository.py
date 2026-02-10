@@ -3,8 +3,9 @@ from datetime import datetime
 from typing import Any, List, Optional, cast
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, func, nulls_first, select
+from sqlmodel import Session, col, func, select
 
+from ptcgp_auto_v2.core.task_ordering import build_task_instance_order_by
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskInstance
@@ -156,20 +157,18 @@ class TaskInstanceRepository:
         """
         获取所有有待执行任务的账号 ID 列表
 
-        按 pending 任务实例的 next_run_at 和 last_completed_at 排序后去重：
-        1. 先按 (next_run_at ASC, last_completed_at ASC) 对任务实例排序
-        2. 然后按任务实例顺序提取账号 ID，保持首次出现的顺序去重
+        按 pending 任务实例优先级排序后去重：
+        1. 先按 reset_type 优先级排序（once 优先）
+        2. 同优先级内按 (next_run_at ASC, last_completed_at ASC) 排序
+        3. 然后按任务实例顺序提取账号 ID，保持首次出现的顺序去重
         NULL 值视为"最旧"，排在前面
         """
         with Session(get_engine()) as session:
-            # 先查询所有 pending 任务实例并按时间字段排序
+            # 先查询所有 pending 任务实例并按统一调度优先级排序
             statement = (
                 select(TaskInstance)
                 .where(TaskInstance.status == "pending")
-                .order_by(
-                    nulls_first(col(TaskInstance.next_run_at).asc()),
-                    nulls_first(col(TaskInstance.last_completed_at).asc()),
-                )
+                .order_by(*build_task_instance_order_by("dispatch_priority", "asc"))
             )
             instances = session.exec(statement).all()
 
@@ -275,28 +274,6 @@ class TaskInstanceRepository:
                 count += 1
             session.commit()
             return count
-
-    def update_status_to_pending(self, account_id: int, task_type: str) -> bool:
-        """
-        将指定任务的 TaskInstance 状态更新为 pending
-
-        用于 Hook 触发任务调度。
-        """
-        with Session(get_engine()) as session:
-            statement = select(TaskInstance).where(
-                TaskInstance.account_id == account_id,
-                TaskInstance.task_type == task_type,
-            )
-            instance = session.exec(statement).first()
-
-            if not instance:
-                return False
-
-            instance.status = TaskStatus.PENDING.value
-            instance.updated_at = datetime.now()
-            session.add(instance)
-            session.commit()
-            return True
 
     def reset_stale_tasks(
         self, stale_timeout_seconds: int, skipped_timeout_seconds: int
