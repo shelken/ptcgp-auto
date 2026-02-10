@@ -1,8 +1,11 @@
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from ptcgp_auto_v2.core.task_base import ActionResult
 
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
@@ -74,6 +77,97 @@ class TestManageFriendshipTask(unittest.TestCase):
             "2785919909681661",
             self.task._extract_friend_id_from_ocr(ocr_results),
         )
+
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.is_text_visible")
+    def test_add_sending_success_should_queue_wake_target_by_hook(
+        self, is_text_visible_mock
+    ):
+        is_text_visible_mock.return_value = True
+        req = SimpleNamespace(
+            id=7,
+            request_type="add",
+            status="sending",
+            from_account_id=1,
+            to_account_id=2,
+            to_friend_id="1234567890123456",
+        )
+
+        with (
+            patch.object(self.task, "_save_request"),
+            patch.object(self.task, "_refresh_requests"),
+            patch.object(
+                self.task, "_close_modal", return_value=ActionResult.ok(wait=0.1)
+            ),
+        ):
+            result = self.task._handle_add_sending_result(req, {"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertIn(2, self.task._wake_account_ids)
+
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.is_text_visible")
+    def test_add_sending_with_green_yes_should_complete_as_already_friend(
+        self, is_text_visible_mock
+    ):
+        is_text_visible_mock.return_value = False
+        req = SimpleNamespace(
+            id=9,
+            request_type="add",
+            status="sending",
+            from_account_id=1,
+            to_account_id=2,
+            to_friend_id="1234567890123456",
+        )
+
+        with (
+            patch.object(
+                self.task,
+                "_find_green_yes_match",
+                return_value=SimpleNamespace(box=(1, 2, 3, 4)),
+            ),
+            patch.object(
+                self.task, "_complete_add_already_friend_request"
+            ) as complete_mock,
+            patch.object(self.task, "_refresh_requests") as refresh_mock,
+            patch.object(
+                self.task, "_close_modal", return_value=ActionResult.ok(wait=0.1)
+            ),
+        ):
+            result = self.task._handle_add_sending_result(req, {"ocr_results": []})
+
+        self.assertTrue(result.success)
+        complete_mock.assert_called_once_with(req)
+        refresh_mock.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.FriendRequestRepository")
+    def test_get_pending_requests_should_sort_by_created_at(self, request_repo_cls):
+        request_repo = request_repo_cls.return_value
+
+        sending_new = SimpleNamespace(
+            id=3,
+            created_at=datetime(2026, 2, 10, 11, 0, 0),
+            request_type="add",
+            status="sending",
+        )
+        sended_old = SimpleNamespace(
+            id=1,
+            created_at=datetime(2026, 2, 10, 9, 0, 0),
+            request_type="add",
+            status="sended",
+        )
+        deleting_mid = SimpleNamespace(
+            id=2,
+            created_at=datetime(2026, 2, 10, 10, 0, 0),
+            request_type="delete",
+            status="deleting",
+        )
+
+        request_repo.get_by_from_account_and_status.return_value = [sending_new]
+        request_repo.get_by_to_account_and_status.return_value = [sended_old]
+        request_repo.get_by_from_account_and_type.side_effect = [[], [deleting_mid]]
+
+        requests = self.task._get_pending_requests()
+
+        self.assertEqual([1, 2, 3], [item.id for item in requests])
 
 
 if __name__ == "__main__":
