@@ -199,6 +199,9 @@ src/ptcgp_auto_v2/web/
 - **onerror 防循环规范**：在图片 `onerror` 回退分支必须先 `this.onerror = null`，再改 `src`，避免 fallback 资源异常时产生无限 404 请求刷屏。
 - **旧缓存兼容规范**：当静态资源路径发生变更时，优先通过版本号更新与前端统一回退策略清除旧引用，避免继续依赖临时兼容路由。
 - **任务2.2 DOM 安全规范**：在 `plans.js`、`filters.js` 这类用户可触发的动态区域，禁止再使用字符串 `innerHTML` 拼接按钮/卡片；统一使用 `createElement + textContent + replaceChildren`。
+- **筛选组清空规范**：拥有卡牌页若提供“分组清空”，必须在前端一次性批量取消选中并只触发一次列表刷新，避免逐个 checkbox 触发多次 HTMX 请求。
+- **分段控件状态同步**：类似列数切换的 segmented 按钮，除视觉 `active` 外还要同步 `aria-pressed`，防止状态和实际值不一致。
+- **左栏滚动一致性**：当页面被定义为“左筛选 + 右内容”整体滚动时，不要给左栏卡片加 `sticky`；否则鼠标在左栏滚轮会触发页面滚动但左栏固定不动，造成两栏不同步的错觉。
 - **Modal 成功关闭规范**：提交成功后关闭弹窗统一使用 `data-close-modal-on-success="true" + bootstrap.js(hx-afterRequest)`，不要在模板里写 `hx-on:...closeModal()`。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 

@@ -7,6 +7,7 @@ import {
     refreshRecords,
     refreshOwnedCards,
     clearOwnedFilters,
+    clearOwnedFilterGroup,
     restoreOwnedFilters,
     restoreTasksFilters,
     updateOwnedFilterGroupsState,
@@ -428,6 +429,11 @@ function handleActionClick(event) {
 
     if (action === 'clear-owned-filters') {
         clearOwnedFilters();
+        return;
+    }
+
+    if (action === 'clear-owned-filter-group') {
+        clearOwnedFilterGroup(actionButton);
         return;
     }
 

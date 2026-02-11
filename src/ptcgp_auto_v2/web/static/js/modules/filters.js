@@ -53,6 +53,22 @@ function bindRequestLoading(button, targetId) {
     }, 10000);
 }
 
+function refreshOwnedCardsByForm(form) {
+    if (!form) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lang') || 'en';
+    const params = new URLSearchParams();
+    params.set('page', '0');
+    params.set('lang', lang);
+
+    const formData = new FormData(form);
+    formData.forEach((value, key) => {
+        params.append(key, value);
+    });
+
+    htmx.ajax('GET', `/api/owned-cards?${params.toString()}`, {target: '#owned-cards-container', swap: 'innerHTML'});
+}
+
 // --- 筛选序列化 ---
 export function serializeFormFilters(form, extraSelectors = []) {
     const formData = new FormData(form);
@@ -372,10 +388,28 @@ function updateOwnedFilterGroupSummary(group) {
         chip.className = 'owned-filter-chip';
         chip.dataset.action = 'toggle-owned-filter-chip';
         chip.dataset.inputId = item.id;
-        chip.textContent = item.text;
+        chip.textContent = `${item.text} ×`;
         fragment.appendChild(chip);
     });
     summary.replaceChildren(fragment);
+}
+
+// --- 清空单个筛选组 ---
+export function clearOwnedFilterGroup(button) {
+    const group = button.closest('[data-filter-group]');
+    const form = document.getElementById('owned-filter-form');
+    if (!group || !form) return;
+
+    const checkedInputs = Array.from(group.querySelectorAll('.owned-filter-checkbox')).filter((input) => input.checked);
+    if (checkedInputs.length === 0) return;
+
+    checkedInputs.forEach((input) => {
+        input.checked = false;
+    });
+
+    updateOwnedFilterGroupsState();
+    saveOwnedFilters();
+    refreshOwnedCardsByForm(form);
 }
 
 // --- 切换筛选 Chip ---

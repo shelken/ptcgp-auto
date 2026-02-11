@@ -22,9 +22,6 @@
                 <div class="space-y-2 account-identity-cell">
                     <div class="font-bold text-base leading-tight">{{ account.nickname or (account.display_name or '-') }}</div>
                     <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ account.id }}</div>
-                    {% if account.game_id %}
-                    <div class="text-xs text-muted">{{ t.col_game_id or 'Game ID' }}: {{ account.game_id }}</div>
-                    {% endif %}
                 </div>
                 {% if account.friend_id %}
                 <div class="group relative text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ account.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
