@@ -22,6 +22,12 @@
     --border-subtle: rgba(0, 0, 0, 0.2);
     --border-subtle-light: rgba(0, 0, 0, 0.1);
     --text-muted: rgba(0, 0, 0, 0.6);
+    --status-success-bg: rgba(50, 205, 50, 0.14);
+    --status-success-border: rgba(50, 205, 50, 0.45);
+    --status-failed-bg: rgba(255, 77, 77, 0.14);
+    --status-failed-border: rgba(255, 77, 77, 0.45);
+    --status-waiting-bg: rgba(0, 0, 0, 0.08);
+    --status-waiting-border: rgba(0, 0, 0, 0.25);
 }
 
 /* Theme: Retro-futuristic */
@@ -44,6 +50,12 @@
     --border-subtle: rgba(255, 0, 255, 0.3);
     --border-subtle-light: rgba(255, 0, 255, 0.15);
     --text-muted: rgba(0, 255, 157, 0.6);
+    --status-success-bg: rgba(0, 255, 157, 0.2);
+    --status-success-border: rgba(0, 255, 157, 0.5);
+    --status-failed-bg: rgba(255, 0, 85, 0.22);
+    --status-failed-border: rgba(255, 0, 255, 0.5);
+    --status-waiting-bg: rgba(0, 204, 255, 0.18);
+    --status-waiting-border: rgba(0, 204, 255, 0.5);
 }
 
 /* Theme: Organic/Natural */
@@ -84,6 +96,12 @@
     --border-subtle: rgba(212, 175, 55, 0.3);
     --border-subtle-light: rgba(212, 175, 55, 0.15);
     --text-muted: rgba(224, 224, 224, 0.6);
+    --status-success-bg: rgba(212, 175, 55, 0.16);
+    --status-success-border: rgba(212, 175, 55, 0.45);
+    --status-failed-bg: rgba(168, 50, 50, 0.25);
+    --status-failed-border: rgba(168, 50, 50, 0.5);
+    --status-waiting-bg: rgba(224, 224, 224, 0.1);
+    --status-waiting-border: rgba(224, 224, 224, 0.28);
 }
 
 /* Theme: Playful/Toy-like */
@@ -132,6 +150,12 @@
 
     --bg-subtle: rgba(197, 160, 89, 0.1);
     --border-subtle: rgba(197, 160, 89, 0.3);
+    --status-success-bg: rgba(197, 160, 89, 0.2);
+    --status-success-border: rgba(197, 160, 89, 0.42);
+    --status-failed-bg: rgba(31, 78, 95, 0.2);
+    --status-failed-border: rgba(31, 78, 95, 0.45);
+    --status-waiting-bg: rgba(229, 218, 218, 0.1);
+    --status-waiting-border: rgba(229, 218, 218, 0.3);
 }
 
 /* Theme: Soft/Pastel */
@@ -666,6 +690,130 @@ body {
     color: var(--text-color);
 }
 
+.records-filter-panel {
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+
+.card-name-overlay {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.25;
+    min-height: 2.5em;
+    text-overflow: ellipsis;
+}
+
+.daily-gift-date-scroll {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+}
+
+.daily-gift-date-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.daily-gift-date-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-subtle);
+    border-radius: 999px;
+}
+
+.daily-gift-date-chip {
+    flex: 0 0 auto;
+    min-width: 7.25rem;
+    min-height: 2.25rem;
+}
+
+.daily-gift-stat-card {
+    background-color: var(--bg-surface);
+}
+
+.daily-gift-stat-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.daily-gift-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    line-height: 1;
+}
+
+.daily-gift-stat-card.status-success {
+    background-color: var(--status-success-bg);
+    border-color: var(--status-success-border) !important;
+}
+
+.daily-gift-stat-card.status-failed {
+    background-color: var(--status-failed-bg);
+    border-color: var(--status-failed-border) !important;
+}
+
+.daily-gift-stat-card.status-waiting {
+    background-color: var(--status-waiting-bg);
+    border-color: var(--status-waiting-border) !important;
+}
+
+.account-resources-cell {
+    min-width: 11rem;
+}
+
+.account-resource-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px dashed var(--border-subtle);
+    padding-bottom: 0.25rem;
+}
+
+.account-resource-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.account-resource-label {
+    letter-spacing: 0.03em;
+}
+
+.account-resource-value {
+    white-space: nowrap;
+}
+
+.friendship-table-wrap table {
+    min-width: 980px;
+}
+
+.friendship-table-wrap th,
+.friendship-table-wrap td {
+    vertical-align: middle;
+}
+
+.friendship-table-wrap th:last-child,
+.friendship-table-wrap td:last-child {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.friendship-table-wrap td:nth-child(1),
+.friendship-table-wrap td:nth-child(4),
+.friendship-table-wrap td:nth-child(5),
+.friendship-table-wrap td:nth-child(6),
+.friendship-table-wrap td:nth-child(7) {
+    white-space: nowrap;
+}
+
 .pack-grid > .card-item {
     grid-column: span 2;
 }
@@ -696,6 +844,39 @@ body {
     .owned-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.5rem;
+    }
+
+    .daily-gift-date-chip {
+        min-width: 6.75rem;
+    }
+
+    .daily-gift-stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .records-filter-panel {
+        max-height: 1200px;
+        opacity: 1;
+        overflow: hidden;
+    }
+
+    .records-filter-panel.is-collapsed {
+        max-height: 0;
+        opacity: 0;
+        margin-top: 0;
+    }
+}
+
+@media (min-width: 1024px) {
+    .friendship-table-wrap table {
+        min-width: 100%;
+    }
+
+    .records-filter-panel,
+    .records-filter-panel.is-collapsed {
+        max-height: none;
+        opacity: 1;
+        overflow: visible;
     }
 }
 

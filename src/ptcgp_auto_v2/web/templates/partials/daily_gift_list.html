@@ -42,37 +42,48 @@
                 </div>
             </div>
             <button type="submit" class="brutal-btn">{{ t.btn_refresh or 'Refresh' }}</button>
-            <div class="w-full flex flex-wrap gap-2 pt-1">
-                {% for date_value in recent_biz_dates %}
-                <button
-                    type="submit"
-                    data-action="set-daily-gift-date"
-                    data-date="{{ date_value }}"
-                    class="brutal-btn text-xs {% if date_value == selected_biz_date_local %}active{% endif %}"
-                    name="biz_date_local"
-                    value="{{ date_value }}">
-                    {{ date_value }}
-                </button>
-                {% endfor %}
+            <div class="w-full pt-1">
+                <div class="daily-gift-date-scroll" role="group" aria-label="{{ t.label_biz_date_local or 'Biz Date' }}">
+                    {% for date_value in recent_biz_dates %}
+                    <button
+                        type="submit"
+                        data-action="set-daily-gift-date"
+                        data-date="{{ date_value }}"
+                        class="brutal-btn text-xs daily-gift-date-chip {% if date_value == selected_biz_date_local %}active{% endif %}"
+                        name="biz_date_local"
+                        value="{{ date_value }}">
+                        {{ date_value }}
+                    </button>
+                    {% endfor %}
+                </div>
             </div>
         </form>
     </div>
 
-    <div class="grid gap-3 md:grid-cols-4">
-        <div class="border-2 border-subtle rounded-lg p-3">
-            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_total_records or 'Total' }}</div>
+    <div class="grid gap-3 md:grid-cols-4 daily-gift-stats-grid">
+        <div class="border-2 border-subtle rounded-lg p-3 daily-gift-stat-card">
+            <div class="text-xs uppercase tracking-widest text-muted daily-gift-stat-label">{{ t.label_total_records or 'Total' }}</div>
             <div class="text-2xl font-bold">{{ stats.total }}</div>
         </div>
-        <div class="border-2 border-subtle rounded-lg p-3">
-            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_success_records or 'Success' }}</div>
+        <div class="border-2 border-subtle rounded-lg p-3 daily-gift-stat-card status-success">
+            <div class="text-xs uppercase tracking-widest text-muted daily-gift-stat-label">
+                <span class="daily-gift-stat-icon" aria-hidden="true">✓</span>
+                <span>{{ t.label_success_records or 'Success' }}</span>
+            </div>
             <div class="text-2xl font-bold">{{ stats.success }}</div>
         </div>
-        <div class="border-2 border-subtle rounded-lg p-3">
-            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_failed_records or 'Failed' }}</div>
+        <div class="border-2 border-subtle rounded-lg p-3 daily-gift-stat-card status-failed">
+            <div class="text-xs uppercase tracking-widest text-muted daily-gift-stat-label">
+                <span class="daily-gift-stat-icon" aria-hidden="true">!</span>
+                <span>{{ t.label_failed_records or 'Failed' }}</span>
+            </div>
             <div class="text-2xl font-bold">{{ stats.failed }}</div>
         </div>
-        <div class="border-2 border-subtle rounded-lg p-3">
-            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_waiting_records or 'Waiting' }}</div>
+        <div class="border-2 border-subtle rounded-lg p-3 daily-gift-stat-card status-waiting">
+            <div class="text-xs uppercase tracking-widest text-muted daily-gift-stat-label">
+                <span class="daily-gift-stat-icon" aria-hidden="true">…</span>
+                <span>{{ t.label_waiting_records or 'Waiting' }}</span>
+            </div>
             <div class="text-2xl font-bold">{{ stats.waiting }}</div>
         </div>
     </div>
