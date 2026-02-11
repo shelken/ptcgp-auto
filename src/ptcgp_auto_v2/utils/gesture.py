@@ -87,6 +87,7 @@ def quick_tap(
     x: Optional[int] = None,
     y: Optional[int] = None,
     times: int = 3,
+    tap_points: Optional[list[tuple[int, int]]] = None,
     wait: float = 0.1,
 ) -> ActionResult:
     """
@@ -96,16 +97,21 @@ def quick_tap(
         adb: ADB 控制器
         x: 点击 X 坐标（默认屏幕中心）
         y: 点击 Y 坐标（默认屏幕中心）
-        times: 点击次数
+        times: 点击轮次
+        tap_points: 点位列表，传入后按列表顺序点击（忽略 x/y）
         wait: 点击后等待时间
     """
-    if x is None:
-        x = adb.center_x()
-    if y is None:
-        y = adb.center_y()
+    points = tap_points
+    if not points:
+        if x is None:
+            x = adb.center_x()
+        if y is None:
+            y = adb.center_y()
+        points = [(x, y)]
 
     for i in range(times):
-        adb.tap(x, y)
+        for point_x, point_y in points:
+            adb.tap(point_x, point_y)
         if i < times - 1:
             # 快速点击之间短暂等待
             time.sleep(0.05)

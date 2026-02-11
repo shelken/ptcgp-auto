@@ -9,6 +9,7 @@ from ptcgp_auto_v2.utils.gesture import (
     normalize_text,
     perform_swipe,
     perform_tap,
+    quick_tap,
     scroll_points,
 )
 from typing import Any, cast
@@ -24,6 +25,7 @@ class DummyAdb:
         """初始化屏幕尺寸。"""
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.tap_points: list[tuple[int, int]] = []
 
     def scaled_y(self, y: int) -> int:
         """按原值返回，便于断言。"""
@@ -39,6 +41,7 @@ class DummyAdb:
 
     def tap(self, x: int, y: int) -> None:
         """模拟点击动作。"""
+        self.tap_points.append((x, y))
         return None
 
     def swipe(
@@ -101,6 +104,20 @@ def test_adb_no_business_gestures():
     """确认 adb 控制器不暴露业务手势。"""
     assert not hasattr(AdbController, "swipe_up")
     assert not hasattr(AdbController, "swipe_down")
+
+
+def test_quick_tap_should_click_by_points_in_order():
+    """验证 quick_tap 支持按点位列表顺序点击。"""
+    adb = DummyAdb(screen_width=1080, screen_height=1920)
+    result = quick_tap(
+        cast(AdbController, adb),
+        tap_points=[(100, 200), (300, 400), (500, 600)],
+        times=1,
+        wait=0.0,
+    )
+
+    assert result.ok is True
+    assert adb.tap_points == [(100, 200), (300, 400), (500, 600)]
 
 
 def _build_adb_with_fake_device():
