@@ -20,7 +20,8 @@ from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 class DummyPageDetector:
     """送卡任务启动阶段测试用页面检测桩。"""
 
-    pass
+    def find_all_templates(self, template_name, threshold=0.8, scale=1.0):
+        return []
 
 
 class TestSendCardDailyTask(unittest.TestCase):
@@ -154,6 +155,68 @@ class TestSendCardDailyTask(unittest.TestCase):
             task.handle_page("gift_select_card", {"ocr_results": []})
 
         self.assertTrue(task._filter_applied)
+
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.tap_box")
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.find_send_box_near_anchor")
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.find_target_search_plus_box")
+    def test_choose_friend_should_click_search_plus_before_send(
+        self,
+        find_plus_box_mock,
+        find_send_near_anchor_mock,
+        tap_box_mock,
+    ):
+        task = cast(Any, self.task)
+        task._target_friend_id = "1234567890123456"
+        task._target_nickname = "skn4"
+        task._target_friend_verified = False
+        find_plus_box_mock.return_value = (900, 360, 980, 430)
+        find_send_near_anchor_mock.return_value = (760, 520, 890, 570)
+        tap_box_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_choose_friend({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        tap_box_mock.assert_called_once_with(task.adb, (900, 360, 980, 430), wait=1.0)
+
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.tap_box")
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.find_send_box_near_anchor")
+    def test_choose_friend_should_click_send_after_friend_verified(
+        self,
+        find_send_near_anchor_mock,
+        tap_box_mock,
+    ):
+        task = cast(Any, self.task)
+        task._target_friend_verified = True
+        task._verified_row_anchor_y = 520
+        task._target_nickname = "skn4"
+        find_send_near_anchor_mock.return_value = (760, 520, 890, 570)
+        tap_box_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_choose_friend({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        tap_box_mock.assert_called_once_with(task.adb, (760, 520, 890, 570), wait=1.0)
+
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.click_close")
+    def test_handle_friend_profile_should_verify_target_friend_id(
+        self, click_close_mock
+    ):
+        task = cast(Any, self.task)
+        task._target_friend_id = "1234567890123456"
+        task._target_friend_verified = False
+        task._verified_row_anchor_y = 620
+        click_close_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_friend_profile(
+            {
+                "ocr_results": [
+                    {"text": "朋友ID 1234-5678-9012-3456", "box": (100, 100, 420, 140)}
+                ]
+            }
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(task._target_friend_verified)
 
 
 if __name__ == "__main__":
