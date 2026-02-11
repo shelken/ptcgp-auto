@@ -63,28 +63,27 @@
       - `device_pool.py` - 设备池管理
     - `tasks/` - 具体任务实现
       - `open_pack.py` - 开包任务
-    - `claim_rewards.py` - 领取奖励任务
-    - `fetch_account_info.py` - 账号信息同步任务
-    - `collect_account_cards.py` - 账号高稀有度卡牌采集任务
-    - `wonder_pick.py` - 得卡挑战任务
-    - `send_card_daily.py` - 每日送卡任务
+      - `claim_rewards.py` - 领取奖励任务
+      - `fetch_account_info.py` - 账号信息同步任务
+      - `collect_account_cards.py` - 账号高稀有度卡牌采集任务
+      - `wonder_pick.py` - 得卡挑战任务
+      - `send_card_daily.py` - 每日送卡任务
     - `infra/` - 基础设施层
-    - `adb.py` - ADB 控制封装
-    - `ocr.py` - OCR 引擎封装
-    - `model_manager.py` - [新增] YOLO模型管理（全局单例，异步加载）
-    - `card_hash_manager.py` - [新增] 卡牌Hash索引管理（内存缓存）
-    - `yolo_card_recognizer.py` - [新增] YOLO+Hash卡牌识别器
-    - `icon_group_detector.py` - 稀有度图标分组检测
-    - `page_detector.py` - 页面检测器
-    - `account_switcher.py` - 账号切换逻辑
-  - `db/` - 数据库层
-    - `models/` - 数据模型 (Account, TaskInstance)
-      - `account_card.py` - 账号卡牌关联表
-      - `account_gift_pair.py` - 账号送卡稳定配对表
-      - `account_gift_record.py` - 账号送卡执行记录表
-    - `repositories.py` - 数据访问对象 (DAO)
+      - `adb.py` - ADB 控制封装
+      - `ocr.py` - OCR 引擎封装
+      - `model_manager.py` - [新增] YOLO模型管理（全局单例，异步加载）
+      - `card_hash_manager.py` - [新增] 卡牌Hash索引管理（内存缓存）
+      - `yolo_card_recognizer.py` - [新增] YOLO+Hash卡牌识别器
+      - `icon_group_detector.py` - 稀有度图标分组检测
+      - `page_detector.py` - 页面检测器
+      - `account_switcher.py` - 账号切换逻辑
+    - `db/` - 数据库层
+      - `models/` - 数据模型 (Account, TaskInstance)
+        - `account_card.py` - 账号卡牌关联表
+        - `account_gift_pair.py` - 账号送卡稳定配对表
+        - `account_gift_record.py` - 账号送卡执行记录表
+      - `repositories/` - 数据访问对象 (DAO)
     - `config/` - 配置管理
-      - `rarity_icons.py` - 稀有度图标与映射配置
     - `locales/` - 多语言配置
     - `hooks/` - Hook 实现
     - `services/` - 业务服务层
@@ -142,7 +141,7 @@ ptcgp-auto/
 ## 常用命令
 
 ```bash
-# v2 守护模式 (推荐)
+# v2 守护模式
 python main_v2.py --daemon
 
 # 调试工具
@@ -152,16 +151,13 @@ python debug_tool.py
 ## 调试与开发
 
 1. **新增任务**: 在 `src/ptcgp_auto_v2/tasks/` 创建新文件，继承 `Task` 类并使用 `@TaskRegistry.register` 装饰器。
-2. **页面定义**: 在 `src/ptcgp_auto_v2/config/pages/` 中定义页面识别规则。
-3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id>` 单独测试任务。
+2. **页面定义**: 在 `各自task中` 中定义页面识别规则。
+3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id> --debug` 单独测试任务。
 4. **卡牌识别配置**: 在 `src/ptcgp_auto_v2/config/constants.py` 中调整 YOLO 和 Hash 阈值
-   - `YOLO_OBB_THRESHOLD` - YOLO检测置信度阈值
-   - `HASH_SIMILARITY_THRESHOLD` - Hash匹配相似度阈值
 
 ## 注意事项
 
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
-- **新增依赖**: 需要安装 `ultralytics>=8.3.0` 和 `scipy>=1.17.0`
 - **模型来源**: YOLO模型从 `shelken/ptcgp-assets` 自动下载
 - **Hash计算**: 使用 scipy DCT 实现，比纯Python快 100-1000 倍
 - **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)
