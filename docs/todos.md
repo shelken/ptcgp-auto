@@ -2,7 +2,6 @@
 
 ## 进行中
 
-- [ ] `give_cards` - 每日送卡任务
 
 ## 高优先级
 
@@ -81,3 +80,4 @@
 - [x] `wonder_pick` - 自动得卡挑战(检查当前卡面的稀有度，只要2星以上)
 - [x] 双手指缩放(uiautomator2)
 - [x] `manage_friendship` - 管理好友关系任务
+- [x] `give_cards` - 每日送卡任务
