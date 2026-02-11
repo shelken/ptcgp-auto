@@ -118,6 +118,24 @@ TEXT_PATTERNS = {
     # 谢谢按钮
     "thanks_button": ["謝謝！"],
     # ============================================================
+    # 每日送卡相关
+    # ============================================================
+    "gift_tab_send": ["分送"],
+    "gift_page_main": ["紀錄", "分送"],
+    "gift_choose_friend_title": ["請選擇朋友"],
+    "gift_friend_unavailable_today": ["今天已分送過卡牌"],
+    "gift_friend_unavailable_limit": ["已達可領取分送卡牌的上限"],
+    "gift_select_card_title": ["請選擇要分送的卡牌"],
+    "gift_filter_modal_title": ["我的最愛", "清除", "OK"],
+    "gift_filter_clear": ["清除"],
+    "gift_target_page": ["要分送的對象"],
+    "gift_hold_count": ["持有張數"],
+    "gift_send_button": ["分送"],
+    "gift_confirm_send_popup": ["確定要送給對方這張卡牌嗎"],
+    "gift_confirm_last_card_popup": ["將分送僅剩的1張卡牌", "確定要繼續嗎"],
+    "gift_swipe_to_send": ["向上輕滑卡牌"],
+    "gift_search_keyword_marowak": ["嘎啦嘎啦", "嘎啦嘎啦ex"],
+    # ============================================================
     # 卡牌列表与筛选相关
     # ============================================================
     "card_page_own": ["自己的卡牌"],

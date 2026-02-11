@@ -67,6 +67,7 @@
     - `fetch_account_info.py` - 账号信息同步任务
     - `collect_account_cards.py` - 账号高稀有度卡牌采集任务
     - `wonder_pick.py` - 得卡挑战任务
+    - `send_card_daily.py` - 每日送卡任务
     - `infra/` - 基础设施层
     - `adb.py` - ADB 控制封装
     - `ocr.py` - OCR 引擎封装
@@ -79,6 +80,8 @@
   - `db/` - 数据库层
     - `models/` - 数据模型 (Account, TaskInstance)
       - `account_card.py` - 账号卡牌关联表
+      - `account_gift_pair.py` - 账号送卡稳定配对表
+      - `account_gift_record.py` - 账号送卡执行记录表
     - `repositories.py` - 数据访问对象 (DAO)
     - `config/` - 配置管理
       - `rarity_icons.py` - 稀有度图标与映射配置
