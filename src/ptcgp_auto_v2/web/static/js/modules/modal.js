@@ -122,7 +122,3 @@ export function getModal() {
     }
     return modalInstance;
 }
-
-// Global functions for inline onclick handlers
-window.openModal = (html) => getModal().open(html);
-window.closeModal = () => getModal().close();

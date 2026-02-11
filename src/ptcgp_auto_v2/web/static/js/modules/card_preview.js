@@ -22,14 +22,14 @@ export function openCardPreview(cardElement) {
     const cardNumber = cardElement.dataset.cardNumber || '';
     const cardImage = cardElement.dataset.cardImageHd
         || cardElement.dataset.cardImage
-        || '/static/card_back.png';
+        || 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
     const previewHTML = `
-        <div id="card-preview-overlay" class="card-preview-overlay" onclick="closeCardPreview(event)">
+        <div id="card-preview-overlay" class="card-preview-overlay">
             <div id="card-preview-container" class="card-preview-container">
                 <div id="card-preview-card" class="card-preview-card">
                     <div class="card-preview-front">
-                        <img src="${cardImage}" alt="${cardName}" class="card-preview-image" draggable="false" onerror="this.src='/static/card_back.png'">
+                        <img src="${cardImage}" alt="${cardName}" class="card-preview-image" draggable="false" onerror="this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='">
                         <div id="card-preview-shine" class="card-preview-shine"></div>
                     </div>
                 </div>
@@ -47,6 +47,14 @@ export function openCardPreview(cardElement) {
     `;
 
     document.body.insertAdjacentHTML('beforeend', previewHTML);
+
+    const overlay = document.getElementById('card-preview-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', (event) => {
+            if (event.target !== overlay) return;
+            closeCardPreview();
+        });
+    }
 
     cardPreviewState.isOpen = true;
     cardPreviewState.rotateX = 0;

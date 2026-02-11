@@ -8,7 +8,8 @@
         <div class="flex items-center justify-between mb-6">
             <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.section_sets }}</h2>
             <button type="button"
-                    onclick="toggleSection('sets-grid')"
+                    data-action="toggle-section"
+                    data-target-id="sets-grid"
                     class="brutal-btn text-sm px-4 py-2"
                     id="sets-toggle-btn">
                 {{ t.btn_collapse or '收起' }}
@@ -50,7 +51,9 @@
             {% for set_code, packs in packs_by_set.items() %}
             <div class="border-2 border-subtle">
                 <button type="button"
-                        onclick="toggleSection('packs-{{ set_code }}', 'packs-toggle-icon-{{ set_code }}')"
+                        data-action="toggle-section"
+                        data-target-id="packs-{{ set_code }}"
+                        data-icon-id="packs-toggle-icon-{{ set_code }}"
                         class="w-full flex items-center justify-between p-4 hover-bg-subtle transition-colors">
                     <span class="font-bold text-lg uppercase">SET: {{ set_code }}</span>
                     <svg id="packs-toggle-icon-{{ set_code }}"
@@ -98,26 +101,4 @@
     </div>
 </div>
 
-<script>
-function toggleSection(sectionId, iconId) {
-    const section = document.getElementById(sectionId);
-    if (!section) return;
-
-    const isHidden = section.classList.contains('hidden');
-
-    if (isHidden) {
-        section.classList.remove('hidden');
-        if (iconId) {
-            const icon = document.getElementById(iconId);
-            if (icon) icon.style.transform = 'rotate(0deg)';
-        }
-    } else {
-        section.classList.add('hidden');
-        if (iconId) {
-            const icon = document.getElementById(iconId);
-            if (icon) icon.style.transform = 'rotate(-90deg)';
-        }
-    }
-}
-</script>
 {% endcall %}

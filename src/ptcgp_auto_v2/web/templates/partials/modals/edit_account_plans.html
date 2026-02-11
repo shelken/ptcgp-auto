@@ -11,7 +11,7 @@
                 
                 <!-- Add New Plan Control -->
                 <div class="flex gap-2">
-                    <select id="add-plan-select" onchange="addPlan()" class="js-custom-select brutal-input text-sm py-1 px-2 w-64">
+                    <select id="add-plan-select" data-action="add-plan" class="js-custom-select brutal-input text-sm py-1 px-2 w-64">
                         <option value="">{{ t.option_select_plan or '➕ Add Plan...' }}</option>
                         {% for plan in available_plans %}
                         <option value="{{ plan.id }}" data-name="{{ plan.name }}">{{ plan.name }}</option>
@@ -57,7 +57,7 @@
                     </label>
 
                     <!-- Remove Button -->
-                    <button type="button" onclick="removePlan(this)" class="text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors">
+                    <button type="button" data-action="remove-plan" class="text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors">
                         ✕
                     </button>
                 </div>
@@ -71,8 +71,8 @@
 
         <!-- Actions (Custom - Save uses savePlans() function instead of form submit) -->
         <div class="flex justify-end gap-4 pt-4 border-t-2 border-subtle-light mt-6">
-            <button type="button" onclick="closeModal()" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
-            <button type="button" onclick="savePlans()" class="brutal-btn active">{{ t.label_save or 'Save' }}</button>
+            <button type="button" data-action="close-modal" class="brutal-btn">{{ t.label_cancel or 'Cancel' }}</button>
+            <button type="button" data-action="save-account-plans" class="brutal-btn active">{{ t.label_save or 'Save' }}</button>
         </div>
     </div>
     </div>

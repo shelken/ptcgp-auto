@@ -1,5 +1,9 @@
 # Web 模块代码结构
 
+## 最高原则
+
+- 每次遇到新问题并解决了，必须把正确方式写回下面的常见问题与注意点，简洁点，直接告诉问题和正确做法。
+
 ## 目录结构
 
 ```
@@ -183,4 +187,23 @@ src/ptcgp_auto_v2/web/
 - **关联预加载原则**：跨线程/跨会话使用 ORM 对象时，必须显式预加载所需关联，避免脱离 session 后数据缺失。
 - **筛选恢复请求冲突**：恢复筛选仅回填 UI，不主动触发请求；首次加载由入口请求负责，避免“默认请求 + 恢复请求”双发。
 - **隐藏区域请求隔离**：HTMX 触发前需检查当前 Tab/容器是否激活，避免隐藏区域误触发请求。
+- **事件委托迁移规范**：将 `onclick/onchange` 迁移到 `data-action` 后，必须在 `bootstrap.js` 同步补全对应分发分支，并删除 `main.js` 中已不再需要的 `window.xxx` 导出，避免“模板已改、全局函数残留/缺失”造成回归。
+- **事件绑定时序**：依赖 `restoreTab()` 的页面初始化必须先绑定 `document.body` 事件委托，再执行 `restoreTab()`；否则 `restoreTab()` 内部触发的 `click()` 不会被分发，导致首屏不加载。
+- **动作类型与事件类型匹配**：`select` 触发类动作（如 `add-plan`、`set-theme`）必须走 `change` 委托，不要放在 `click` 委托中，避免误触或漏触发。
+- **Modal 关闭规范**：遮罩点击关闭应统一走 `modules/modal.js` 的容器监听，不再在模板中写 `onclick="if(event.target===this) closeModal()"`，防止重复逻辑。
+- **模板事件规范（强制）**：`templates/` 与 `templates/partials/` 禁止新增 `onclick/onchange/oninput/onsubmit` 内联逻辑；统一使用 `data-action` + `bootstrap.js` 事件委托。
+- **管理页弹窗打开规范**：触发 `hx-get` 且 `hx-target="#modal-content"` 的按钮不再手动操作 `#modal-container` 显隐，统一依赖 `htmx:afterSwap` + `getModal().openFromSwap()`。
+- **状态同步规范**：跨表单状态同步（如 friendship/daily-gift 隐藏字段）必须走委托处理（`change/submit`），不要把 `document.querySelector(...).value=...` 写在模板属性里。
+- **元数据折叠规范**：分区折叠逻辑放在模块函数（如 `toggleSection`）中，通过 `data-target-id/data-icon-id` 驱动；禁止在 partial 内嵌 `<script>`。
+- **图片兜底规范**：禁止引用不存在的 `/static/*.png` 占位图；如果不需要占位背景，统一使用透明 data URI 作为最终兜底，避免额外静态资源依赖。
+- **onerror 防循环规范**：在图片 `onerror` 回退分支必须先 `this.onerror = null`，再改 `src`，避免 fallback 资源异常时产生无限 404 请求刷屏。
+- **旧缓存兼容规范**：当静态资源路径发生变更时，优先通过版本号更新与前端统一回退策略清除旧引用，避免继续依赖临时兼容路由。
+- **任务2.2 DOM 安全规范**：在 `plans.js`、`filters.js` 这类用户可触发的动态区域，禁止再使用字符串 `innerHTML` 拼接按钮/卡片；统一使用 `createElement + textContent + replaceChildren`。
+- **Modal 成功关闭规范**：提交成功后关闭弹窗统一使用 `data-close-modal-on-success="true" + bootstrap.js(hx-afterRequest)`，不要在模板里写 `hx-on:...closeModal()`。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
+
+## UI 设计决策记录
+
+### 表格内容展示原则
+
+- **计划配置页面**：不喜欢滚动，希望直接展示出来，滚动不方便
