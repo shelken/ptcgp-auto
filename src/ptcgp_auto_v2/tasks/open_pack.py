@@ -15,8 +15,6 @@ from ptcgp_auto_v2.config.constants import (
     PACK_AUTO_EXCLUDE_SET_CODES,
     PACK_SERIES_CODES,
     PACK_TEMPLATE_THRESHOLD,
-    SWIPE_STEPS_OPEN,
-    SWIPE_STEPS_REGISTER,
     SWIPE_STEPS_SCROLL,
 )
 from ptcgp_auto_v2.config.settings import get_settings
@@ -32,20 +30,22 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
+    long_press_opening_card,
+    swipe_card_register,
+    swipe_open_pack,
+    tap_opening_continue,
+)
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
-    long_press_text,
     navigate_back,
     quick_tap,
     scroll_until_template,
     swipe,
-    swipe_card_coords,
-    swipe_pack_coords,
     tap_bottom_close,
     tap_box,
     tap_center,
-    tap_continue,
     tap_home_icon,
     tap_matched_element,
     tap_right_side,
@@ -64,9 +64,6 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
-
-# 延迟导入 OpenPackTask（避免循环导入）
-_open_pack_task = None
 
 
 # ============================================================
@@ -663,21 +660,16 @@ class OpenPackTask(Task):
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
         """滑动开包"""
-        logger.debug("  -> 从左往右滑动开包")
         self._packs_opened_count += 1
         self._result_recognized = False
-        start, end = swipe_pack_coords(self.adb)
-        return swipe(self.adb, start, end, steps=SWIPE_STEPS_OPEN, wait=2.5)
+        return swipe_open_pack(self.adb, wait=2.5)
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """长按跳过卡牌展示"""
         ocr_results = page_info.get("ocr_results", [])
-        long_press_patterns = get_text_patterns("long_press")
-
         wait = 3.0
-        result = long_press_text(self.adb, ocr_results, long_press_patterns, wait=wait)
+        result = long_press_opening_card(self.adb, ocr_results, wait=wait)
         if result:
-            logger.debug("  -> 长按文字跳过卡牌展示")
             return result
 
         self._home_check_count = 0
@@ -691,16 +683,15 @@ class OpenPackTask(Task):
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴"""
         logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
-        start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, steps=SWIPE_STEPS_REGISTER)
+        return swipe_card_register(self.adb)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页：识别卡牌并点击继续"""
         if not self._result_recognized:
             self._recognize_cards()
-
-        logger.debug("  -> 点击继续")
-        return tap_continue(self.adb, page_info.get("ocr_results", []), wait=1.5)
+        return tap_opening_continue(
+            self.adb, page_info.get("ocr_results", []), wait=1.5
+        )
 
     def _recognize_cards(self):
         """识别卡牌并保存记录（YOLO+Hash 版本）"""

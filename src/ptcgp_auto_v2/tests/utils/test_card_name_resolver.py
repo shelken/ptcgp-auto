@@ -25,6 +25,13 @@ class FakeRepo:
         return SimpleNamespace(name=name)
 
 
+class StrictRepo:
+    """用于验证 set_code 为空时不会触发仓储调用。"""
+
+    def get_card_by_set_and_number(self, set_code, card_number):
+        raise AssertionError("set_code 为 None 时不应查询仓储")
+
+
 class TestResolveCardName(unittest.TestCase):
     def test_returns_name_when_found(self):
         repo = FakeRepo({("B2", 28): "皮卡丘"})
@@ -33,6 +40,10 @@ class TestResolveCardName(unittest.TestCase):
     def test_returns_none_when_missing(self):
         repo = FakeRepo({})
         self.assertIsNone(resolve_card_name(repo, "B2", 28))
+
+    def test_returns_none_when_set_code_is_none(self):
+        repo = StrictRepo()
+        self.assertIsNone(resolve_card_name(repo, None, 28))
 
 
 if __name__ == "__main__":

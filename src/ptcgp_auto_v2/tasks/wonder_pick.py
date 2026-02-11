@@ -7,7 +7,7 @@ import logging
 import random
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import SWIPE_STEPS_REGISTER, SWIPE_STEPS_SCROLL
+from ptcgp_auto_v2.config.constants import SWIPE_STEPS_SCROLL
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -23,13 +23,13 @@ from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
     navigate_back,
     scroll_points,
     swipe,
-    swipe_card_coords,
     tap,
     tap_ok,
     tap_text_exact,
@@ -426,9 +426,7 @@ class WonderPickTask(Task):
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（精英牌组奖励）"""
-        logger.debug("  -> 向上滑动卡牌登录图鉴")
-        start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, steps=SWIPE_STEPS_REGISTER)
+        return swipe_card_register(self.adb)
 
     def _handle_get_card(self, page_info: dict) -> ActionResult:
         if self._is_action_done("get_card_saved"):

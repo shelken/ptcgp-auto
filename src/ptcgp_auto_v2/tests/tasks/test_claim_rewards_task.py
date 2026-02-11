@@ -54,5 +54,22 @@ class TestClaimRewardsHandleHome(unittest.TestCase):
         self.assertEqual([reward_match.box], adb.taps)
 
 
+class TestClaimRewardsCardRegister(unittest.TestCase):
+    """测试卡牌登录页处理。"""
+
+    def test_handle_card_register_swipes_up(self):
+        adb = FakeAdb()
+        page_detector = FakePageDetector(reward_match=None)
+        task = ClaimRewardsTask(adb, recognizer=None, page_detector=page_detector)
+
+        result = task._handle_card_register({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertEqual(1, len(adb.swipes))
+        start, end, _ = adb.swipes[0]
+        self.assertEqual(start[0], end[0])
+        self.assertGreater(start[1], end[1])
+
+
 if __name__ == "__main__":
     unittest.main()
