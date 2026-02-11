@@ -74,9 +74,9 @@ export function switchTab(tabName, options = {}) {
     if (tabName === 'records') {
         const container = document.getElementById('records-container');
         if (container && container.dataset.loaded !== 'true') {
+            // 避免首次进入 records 时触发双请求
             restoreFilters();
-        }
-        if (container && container.dataset.autoRefresh) {
+        } else if (container && container.dataset.autoRefresh) {
             triggerAutoRefresh(container);
         }
     }

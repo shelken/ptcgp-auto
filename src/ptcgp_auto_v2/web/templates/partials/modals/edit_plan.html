@@ -6,8 +6,8 @@
 
     <form hx-post="/api/plans?lang={{ current_lang }}"
           hx-target="#management-content"
-          hx-on:htmx:after-request="if(event.detail.successful) closeModal()"
-          onsubmit="this.querySelectorAll('[data-interval-group] input[data-interval-unit]').forEach((i) => updateIntervalSeconds(i));"
+          data-close-modal-on-success="true"
+          data-action="sync-plan-intervals-submit"
           class="space-y-6">
 
         {% if plan %}
@@ -53,7 +53,7 @@
                                    name="task_enabled_{{ task_type }}"
                                    class="w-5 h-5 border-2 border-theme accent-theme"
                                    {% if is_enabled %}checked{% endif %}
-                                   onchange="updateTaskItemState(this)">
+                                   data-action="update-task-item-state">
                             <label for="task-{{ task_type }}" class="font-bold flex-grow cursor-pointer uppercase select-none">{{ t['task_' + task_type] or task_type }}</label>
                         </div>
 
@@ -64,7 +64,8 @@
                                 <label class="text-xs uppercase font-bold text-muted">{{ t.label_frequency or 'Frequency' }}</label>
                                 <select name="task_reset_{{ task_type }}"
                                         class="js-custom-select brutal-input w-full p-2 text-sm"
-                                        onchange="const intervalInput = document.getElementById('interval-{{ task_type }}'); if(this.value === 'interval') intervalInput.classList.remove('hidden'); else intervalInput.classList.add('hidden');">
+                                        data-action="toggle-interval-input"
+                                        data-interval-target="interval-{{ task_type }}">
                                     <option value="default" {% if not task_config.get('reset_type') %}selected{% endif %}>{{ t.label_default or 'Default' }}</option>
                                     {% for rt in reset_types %}
                                     <option value="{{ rt }}" {% if task_config.get('reset_type') == rt %}selected{% endif %}>{{ t['reset_' + rt] or rt|title }}</option>
@@ -84,7 +85,7 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" inputmode="numeric" autocomplete="off"
                                                name="task_interval_days_{{ task_type }}" data-interval-unit="days"
-                                               oninput="updateIntervalSeconds(this)" value="{{ interval_days }}"
+                                               data-action="update-interval-seconds" value="{{ interval_days }}"
                                                aria-label="{{ t.label_interval_days or 'Days' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_days or 'Days' }}</span>
@@ -92,7 +93,7 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" max="23" inputmode="numeric" autocomplete="off"
                                                name="task_interval_hours_{{ task_type }}" data-interval-unit="hours"
-                                               oninput="updateIntervalSeconds(this)" value="{{ interval_hours }}"
+                                               data-action="update-interval-seconds" value="{{ interval_hours }}"
                                                aria-label="{{ t.label_interval_hours or 'Hours' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_hours or 'Hours' }}</span>
@@ -100,7 +101,7 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" max="59" inputmode="numeric" autocomplete="off"
                                                name="task_interval_minutes_{{ task_type }}" data-interval-unit="minutes"
-                                               oninput="updateIntervalSeconds(this)" value="{{ interval_minutes }}"
+                                               data-action="update-interval-seconds" value="{{ interval_minutes }}"
                                                aria-label="{{ t.label_interval_minutes or 'Minutes' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_minutes or 'Minutes' }}</span>
@@ -108,7 +109,7 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" max="59" inputmode="numeric" autocomplete="off"
                                                name="task_interval_seconds_{{ task_type }}" data-interval-unit="seconds"
-                                               oninput="updateIntervalSeconds(this)" value="{{ interval_secs }}"
+                                               data-action="update-interval-seconds" value="{{ interval_secs }}"
                                                aria-label="{{ t.label_interval_seconds or 'Seconds' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_seconds or 'Seconds' }}</span>

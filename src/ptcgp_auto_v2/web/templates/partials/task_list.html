@@ -133,7 +133,7 @@
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
-              onchange="saveTasksFilters(); updateTaskResetButtonState(this)"
+              data-action="save-tasks-filters"
               data-restore-trigger="true">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>

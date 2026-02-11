@@ -6,8 +6,7 @@
         <div class="flex gap-2">
             <button class="brutal-btn"
                     hx-get="/management/plans/edit?lang={{ current_lang }}"
-                    hx-target="#modal-content"
-                    onclick="document.getElementById('modal-container').classList.remove('hidden')">
+                    hx-target="#modal-content">
                 {{ t.btn_new_plan or '+ New Plan' }}
             </button>
             <button class="brutal-btn"
@@ -56,8 +55,7 @@
                 <div class="flex justify-end gap-2">
                     <button class="brutal-btn text-xs px-3 py-1"
                             hx-get="/management/plans/edit?plan_id={{ plan.id }}&lang={{ current_lang }}"
-                            hx-target="#modal-content"
-                            onclick="document.getElementById('modal-container').classList.remove('hidden')">
+                            hx-target="#modal-content">
                         {{ t.btn_edit or 'Edit' }}
                     </button>
                     <button class="brutal-btn text-xs px-3 py-1 bg-red-500 text-white hover:bg-red-600 !border-red-500"

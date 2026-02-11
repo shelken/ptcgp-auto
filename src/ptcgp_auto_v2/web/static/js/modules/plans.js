@@ -1,4 +1,28 @@
 import { showToast } from './utils.js';
+import { getModal } from './modal.js';
+
+function setButtonLoading(button, loading) {
+    if (!button) return;
+
+    if (loading) {
+        if (button.dataset.loadingActive === '1') return;
+        button.dataset.loadingActive = '1';
+        button.dataset.prevDisabled = button.disabled ? '1' : '0';
+        button.disabled = true;
+        button.classList.add('btn-loading');
+        button.setAttribute('aria-busy', 'true');
+        return;
+    }
+
+    if (button.dataset.loadingActive !== '1') return;
+    button.classList.remove('btn-loading');
+    button.removeAttribute('aria-busy');
+    if (button.dataset.prevDisabled !== '1') {
+        button.disabled = false;
+    }
+    delete button.dataset.loadingActive;
+    delete button.dataset.prevDisabled;
+}
 
 // --- 获取计划列表文本 ---
 export function getPlansMessages(list) {
@@ -52,31 +76,58 @@ export function addPlan() {
         return;
     }
 
-    const template = `
-        <div class="plan-item flex items-center gap-3 p-3 border border-subtle bg-card shadow-sm group select-none cursor-move" 
-             data-id="${planId}">
-            <div class="cursor-move text-muted hover:text-theme p-1">☰</div>
-            <div class="flex-grow">
-                <div class="font-bold text-lg text-theme">${planName}</div>
-                <div class="text-xs text-muted">ID: ${planId}</div>
-            </div>
-            <label class="flex items-center gap-2 cursor-pointer">
-                <span class="text-xs font-bold uppercase text-theme">${messages.labelActive}</span>
-                <input type="checkbox" class="plan-active-checkbox w-5 h-5 accent-theme border-theme focus:ring-0" checked>
-            </label>
-            <button type="button" onclick="removePlan(this)" class="text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors">
-                ✕
-            </button>
-        </div>
-    `;
+    const item = document.createElement('div');
+    item.className = 'plan-item flex items-center gap-3 p-3 border border-subtle bg-card shadow-sm group select-none cursor-move';
+    item.dataset.id = planId;
+
+    const handle = document.createElement('div');
+    handle.className = 'cursor-move text-muted hover:text-theme p-1';
+    handle.textContent = '☰';
+
+    const content = document.createElement('div');
+    content.className = 'flex-grow';
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'font-bold text-lg text-theme';
+    nameEl.textContent = planName;
+
+    const idEl = document.createElement('div');
+    idEl.className = 'text-xs text-muted';
+    idEl.textContent = `ID: ${planId}`;
+
+    content.appendChild(nameEl);
+    content.appendChild(idEl);
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'flex items-center gap-2 cursor-pointer';
+
+    const activeLabel = document.createElement('span');
+    activeLabel.className = 'text-xs font-bold uppercase text-theme';
+    activeLabel.textContent = messages.labelActive;
+
+    const activeInput = document.createElement('input');
+    activeInput.type = 'checkbox';
+    activeInput.className = 'plan-active-checkbox w-5 h-5 accent-theme border-theme focus:ring-0';
+    activeInput.checked = true;
+
+    activeWrap.appendChild(activeLabel);
+    activeWrap.appendChild(activeInput);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.dataset.action = 'remove-plan';
+    removeBtn.className = 'text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors';
+    removeBtn.textContent = '✕';
+
+    item.appendChild(handle);
+    item.appendChild(content);
+    item.appendChild(activeWrap);
+    item.appendChild(removeBtn);
 
     const msg = document.getElementById('empty-message');
     if (msg) msg.style.display = 'none';
 
-    const div = document.createElement('div');
-    div.innerHTML = template.trim();
-    const newItem = div.firstChild;
-    list.appendChild(newItem);
+    list.appendChild(item);
 
     select.value = '';
     select.dispatchEvent(new Event('change'));
@@ -93,7 +144,7 @@ export function removePlan(btn) {
 }
 
 // --- 保存计划 ---
-export function savePlans() {
+export function savePlans(button = null) {
     const list = document.getElementById('plans-list');
     if (!list) return;
     const messages = getPlansMessages(list);
@@ -104,6 +155,8 @@ export function savePlans() {
 
     const items = list.querySelectorAll('.plan-item');
     const data = [];
+
+    setButtonLoading(button, true);
 
     items.forEach((item) => {
         const id = item.getAttribute('data-id');
@@ -123,7 +176,7 @@ export function savePlans() {
     })
     .then(response => {
         if (response.ok) {
-            closeModal();
+            getModal().close();
             const refreshBtn = document.querySelector('[hx-get*="/management/accounts"]');
             if (refreshBtn) {
                 htmx.trigger(refreshBtn, 'click');
@@ -138,5 +191,8 @@ export function savePlans() {
     .catch(error => {
         console.error('Error:', error);
         showToast(messages.saveErrorMessage, 3000);
+    })
+    .finally(() => {
+        setButtonLoading(button, false);
     });
 }
