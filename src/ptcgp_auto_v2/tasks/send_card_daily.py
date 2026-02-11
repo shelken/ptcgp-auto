@@ -27,12 +27,16 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import GiftPairingService, GiftRecordService
+from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.tasks.utils.send_card_helpers import (
     build_ocr_signature,
+    find_send_box_near_anchor,
     find_send_button_for_target,
+    find_target_search_plus_box,
 )
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.gesture import (
+    click_close,
     clear_text,
     input_text,
     is_text_visible,
@@ -57,11 +61,13 @@ FIXED_CARD_NUMBER = 153
 
 BASE_FRIEND_SCROLL_DISTANCE_Y = 520
 BASE_CARD_SCROLL_DISTANCE_Y = 500
+BASE_FRIEND_ROW_THRESHOLD_Y = 130
 
 MAX_FRIEND_SCROLL_ROUNDS = 8
 MAX_FRIEND_STABLE_ROUNDS = 3
 MAX_CARD_STABLE_ROUNDS = 3
 MAX_FILTER_MODAL_STAY_ROUNDS = 2
+MAX_FRIEND_PROFILE_READ_ROUNDS = 3
 
 
 def _build_send_card_pages() -> list[dict]:
@@ -94,6 +100,11 @@ def _build_send_card_pages() -> list[dict]:
             "name": "gift_choose_friend",
             "identifiers": get_text_patterns("gift_choose_friend_title"),
             "priority": 60,
+        },
+        {
+            "name": "gift_friend_profile",
+            "identifiers": get_text_patterns("gift_friend_profile"),
+            "priority": 65,
         },
         {
             "name": "gift_select_card",
@@ -173,6 +184,10 @@ class SendCardDailyTask(Task):
         self._filter_opened = False
         self._filter_modal_stay_rounds = 0
 
+        self._target_friend_verified = False
+        self._verified_row_anchor_y: Optional[int] = None
+        self._friend_profile_read_rounds = 0
+
     def _is_action_done(self, key: str) -> bool:
         """检查动作缓存。"""
         return self._action_cache.get(key, False)
@@ -201,6 +216,10 @@ class SendCardDailyTask(Task):
         self._filter_applied = False
         self._filter_opened = False
         self._filter_modal_stay_rounds = 0
+
+        self._target_friend_verified = False
+        self._verified_row_anchor_y = None
+        self._friend_profile_read_rounds = 0
         self._prev_page_name = None
         self._reset_action_cache()
 
@@ -296,6 +315,7 @@ class SendCardDailyTask(Task):
             "community_page": self._handle_community,
             "gift_page_main": self._handle_gift_page_main,
             "gift_choose_friend": self._handle_choose_friend,
+            "gift_friend_profile": self._handle_friend_profile,
             "gift_select_card": self._handle_select_card,
             "gift_filter_modal": self._handle_filter_modal,
             "gift_target_page": self._handle_target_page,
@@ -381,7 +401,7 @@ class SendCardDailyTask(Task):
         return tap_box(self.adb, candidates[0][1], wait=1.0)
 
     def _handle_choose_friend(self, page_info: dict) -> ActionResult:
-        """好友选择页：定位目标账号并点击对应分送。"""
+        """好友选择页：先点加号核验 friend_id，再点击对应分送。"""
         ocr_results = page_info.get("ocr_results", [])
 
         friend_signature = build_ocr_signature(ocr_results)
@@ -391,16 +411,21 @@ class SendCardDailyTask(Task):
             self._friend_stable_rounds = 0
             self._last_friend_signature = friend_signature
 
-        # 说明：当列表出现“已达可领取上限/今天已分送过”时，昵称可能被遮挡或识别不稳定，
-        # 无法可靠判断是否就是目标账号，因此这里不做“目标不可送”的结论性判断。
+        # 第一阶段：必须先通过 icon_search_plus 进入详情页校验 friend_id。
+        if not self._target_friend_verified:
+            if self._is_action_done("friend_plus_clicked"):
+                return ActionResult.wait(0.6)
 
-        send_box = None
-        if self._target_nickname:
-            send_box = find_send_button_for_target(
-                ocr_results=ocr_results,
-                target_nickname=self._target_nickname,
-                send_text_patterns=get_text_patterns("gift_send_button"),
-            )
+            if not self._is_action_done("friend_plus_clicked"):
+                plus_box = self._find_target_search_plus_box(ocr_results)
+                if plus_box:
+                    self._verified_row_anchor_y = (plus_box[1] + plus_box[3]) // 2
+                    self._mark_action_done("friend_plus_clicked")
+                    return tap_box(self.adb, plus_box, wait=1.0)
+            return self._continue_find_target_in_friend_list()
+
+        # 第二阶段：已核验 friend_id，回到列表后点击同一行分送。
+        send_box = self._find_send_box_for_verified_target(ocr_results)
         if send_box:
             if self._record:
                 GiftRecordService.update_status(self._record, status="target_found")
@@ -409,6 +434,10 @@ class SendCardDailyTask(Task):
             self._last_friend_signature = None
             return tap_box(self.adb, send_box, wait=1.0)
 
+        return self._continue_find_target_in_friend_list()
+
+    def _continue_find_target_in_friend_list(self) -> ActionResult:
+        """好友列表继续查找目标（滑动或收敛）。"""
         if self._friend_stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
             return self._complete_without_send(
                 complete_reason="好友列表疑似到底且未找到可送目标，按完成态收敛",
@@ -431,6 +460,96 @@ class SendCardDailyTask(Task):
         )
         swipe(self.adb, start, end, wait=0.9)
         return ActionResult.ok(wait=0.8)
+
+    def _handle_friend_profile(self, page_info: dict) -> ActionResult:
+        """好友详情页：提取 friend_id 核验目标后返回列表。"""
+        ocr_results = page_info.get("ocr_results", [])
+        extracted_friend_id: Optional[str] = None
+        for item in ocr_results:
+            text = str(item.get("text", ""))
+            extracted_friend_id = extract_friend_id_from_text(text)
+            if extracted_friend_id:
+                break
+
+        if not extracted_friend_id:
+            self._friend_profile_read_rounds += 1
+            if self._friend_profile_read_rounds < MAX_FRIEND_PROFILE_READ_ROUNDS:
+                return ActionResult.wait(0.6)
+            logger.warning("送卡详情页连续未识别到 friend_id，返回好友列表重试")
+        elif self._target_friend_id and extracted_friend_id == self._target_friend_id:
+            self._target_friend_verified = True
+            self._mark_action_done("friend_verified")
+            logger.info("好友详情核验成功：friend_id=%s", extracted_friend_id)
+        else:
+            self._target_friend_verified = False
+            self._verified_row_anchor_y = None
+            logger.info(
+                "好友详情核验失败：识别到 %s，目标 %s",
+                extracted_friend_id,
+                self._target_friend_id,
+            )
+
+        self._friend_profile_read_rounds = 0
+        close_result = click_close(
+            self.adb,
+            self.page_detector,
+            ocr_results,
+            get_text_patterns("text_x"),
+        )
+        return close_result or ActionResult.wait(0.8)
+
+    def _find_target_search_plus_box(
+        self, ocr_results: list[dict]
+    ) -> Optional[tuple[int, int, int, int]]:
+        """在好友列表中查找目标昵称同一行的 icon_search_plus。"""
+        if not self._target_nickname:
+            return None
+        if not hasattr(self.page_detector, "find_all_templates"):
+            return None
+
+        matches = self.page_detector.find_all_templates(
+            "icon_search_plus",
+            threshold=0.8,
+            scale=1.0,
+        )
+        search_plus_boxes: list[tuple[int, int, int, int]] = []
+        for match in matches:
+            box = getattr(match, "box", None)
+            if box and len(box) == 4:
+                search_plus_boxes.append(tuple(box))
+
+        row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
+        return find_target_search_plus_box(
+            ocr_results=ocr_results,
+            target_nickname=self._target_nickname,
+            search_plus_boxes=search_plus_boxes,
+            row_threshold_y=row_threshold_y,
+        )
+
+    def _find_send_box_for_verified_target(
+        self, ocr_results: list[dict]
+    ) -> Optional[tuple[int, int, int, int]]:
+        """核验通过后按同一行锚点优先定位分送按钮。"""
+        row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
+
+        if self._verified_row_anchor_y is not None:
+            send_box = find_send_box_near_anchor(
+                ocr_results=ocr_results,
+                send_text_patterns=get_text_patterns("gift_send_button"),
+                anchor_y=self._verified_row_anchor_y,
+                row_threshold_y=row_threshold_y,
+            )
+            if send_box:
+                return send_box
+
+        if not self._target_nickname:
+            return None
+
+        return find_send_button_for_target(
+            ocr_results=ocr_results,
+            target_nickname=self._target_nickname,
+            send_text_patterns=get_text_patterns("gift_send_button"),
+        )
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：必须先筛选，再通过扫描定位固定卡牌。"""
