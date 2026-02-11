@@ -170,15 +170,16 @@
 
 <div class="brutal-card p-6 space-y-4">
     <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_friend_requests or 'FRIEND REQUESTS' }}</h3>
+    <div class="friendship-table-wrap friendship-requests-table">
     {% call table_container([
-        t.col_id or 'ID',
-        t.label_from_account or 'From Account',
-        t.col_to_account_id or 'To Account',
-        t.col_friend_id or 'Friend ID',
-        t.col_type or 'Type',
-        t.col_status or 'Status',
-        t.time_label or 'Time',
-        t.col_actions or 'Actions'
+        {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.label_from_account or 'From Account', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_to_account_id or 'To Account', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_type or 'Type', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_status or 'Status', 'class_name': 'whitespace-nowrap'},
+        {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
     ], t, (t.empty_friend_requests or '暂无好友请求') if not requests else '') %}
         {% for row in requests %}
             <tr class="border-b border-subtle hover-bg-subtle transition-colors">
@@ -211,17 +212,19 @@
             </tr>
         {% endfor %}
     {% endcall %}
+    </div>
 </div>
 
 <div class="brutal-card p-6 space-y-4">
     <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_friendships or 'FRIENDSHIPS' }}</h3>
+    <div class="friendship-table-wrap friendship-records-table">
     {% call table_container([
-        t.col_id or 'ID',
-        t.col_account_id or 'Account ID',
-        t.col_friend_id or 'Friend ID',
-        t.col_friend_account_id or 'Friend Account ID',
-        t.time_label or 'Time',
-        t.col_actions or 'Actions'
+        {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_account_id or 'Account ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_friend_account_id or 'Friend Account ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
     ], t, (t.empty_friendships or '暂无好友关系') if not friendships else '') %}
         {% for row in friendships %}
             <tr class="border-b border-subtle hover-bg-subtle transition-colors">
@@ -253,5 +256,6 @@
             </tr>
         {% endfor %}
     {% endcall %}
+    </div>
 </div>
 {% endcall %}

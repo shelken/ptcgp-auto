@@ -19,7 +19,13 @@
     ], t) %}
         {% for account in accounts %}
             {% set nickname_cell %}
-                <div class="font-medium">#{{ account.id }} · {{ account.nickname or '-' }}</div>
+                <div class="space-y-2 account-identity-cell">
+                    <div class="font-bold text-base leading-tight">{{ account.nickname or (account.display_name or '-') }}</div>
+                    <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ account.id }}</div>
+                    {% if account.game_id %}
+                    <div class="text-xs text-muted">{{ t.col_game_id or 'Game ID' }}: {{ account.game_id }}</div>
+                    {% endif %}
+                </div>
                 {% if account.friend_id %}
                 <div class="group relative text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ account.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
                     <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ account.friend_id[:4] }}-{{ account.friend_id[4:8] }}-{{ account.friend_id[8:12] }}-{{ account.friend_id[12:] }}</span>
@@ -34,21 +40,21 @@
                 {% endif %}
             {% endset %}
             {% set points_cell %}
-                <div class="space-y-1 text-xs">
-                    <div class="flex items-center gap-2">
-                        <span class="text-muted">{{ t.col_exchange_points or 'Exchange Points' }}</span>
+                <div class="space-y-2 text-xs account-resources-cell">
+                    <div class="account-resource-item">
+                        <span class="text-muted account-resource-label">{{ t.col_exchange_points or 'Exchange Points' }}</span>
                         {% if account.exchange_points is not none %}
-                        <span class="font-mono font-bold">{{ "{:,}".format(account.exchange_points) }}</span>
+                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(account.exchange_points) }}</span>
                         {% else %}
-                        <span class="text-muted">-</span>
+                        <span class="text-muted account-resource-value">-</span>
                         {% endif %}
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-muted">{{ t.col_pack_hourglass or 'Pack Hourglass' }}</span>
+                    <div class="account-resource-item">
+                        <span class="text-muted account-resource-label">{{ t.col_pack_hourglass or 'Pack Hourglass' }}</span>
                         {% if account.pack_hourglass_count is not none %}
-                        <span class="font-mono font-bold">{{ "{:,}".format(account.pack_hourglass_count) }}</span>
+                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(account.pack_hourglass_count) }}</span>
                         {% else %}
-                        <span class="text-muted">-</span>
+                        <span class="text-muted account-resource-value">-</span>
                         {% endif %}
                     </div>
                 </div>
