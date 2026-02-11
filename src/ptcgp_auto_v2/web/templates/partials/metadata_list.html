@@ -1,101 +1,123 @@
-{% from "partials/macros/tables.html" import table_container, table_row, auto_refresh_container %}
+{% from "partials/macros/tables.html" import auto_refresh_container %}
 
 {% call auto_refresh_container("/management/metadata?lang=" ~ current_lang, '', 'outerHTML', 'space-y-8') %}
 <div id="metadata-content">
 
     <!-- Card Sets Section -->
     <div class="brutal-card p-6">
-        <h2 class="text-3xl font-bold uppercase tracking-tight mb-6">{{ t.section_sets }}</h2>
-        {% call table_container([
-            t.col_code,
-            t.col_original_name,
-            t.col_zh_name,
-            {'label': t.col_status, 'class_name': 'text-right'}
-        ], t) %}
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.section_sets }}</h2>
+            <button type="button"
+                    onclick="toggleSection('sets-grid')"
+                    class="brutal-btn text-sm px-4 py-2"
+                    id="sets-toggle-btn">
+                {{ t.btn_collapse or '收起' }}
+            </button>
+        </div>
+
+        <div id="sets-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {% for set in sets %}
-                {% set code_cell %}
-                    <span class="font-mono font-bold text-muted">{{ set.code }}</span>
-                {% endset %}
-                {% set name_cell %}
-                    <span class="font-bold">{{ set.name }}</span>
-                {% endset %}
-                {% set input_cell %}
+            <div class="border-2 border-subtle p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-mono font-bold text-sm text-muted">{{ set.code }}</span>
+                    <span class="font-bold text-sm">{{ set.name }}</span>
+                </div>
+                <div class="relative">
                     <input type="text"
                            name="label_zh"
                            value="{{ set.label_dict.get('zh', '') }}"
-                           class="brutal-input text-sm"
+                           class="brutal-input text-sm w-full pr-16"
                            placeholder="{{ t.placeholder_zh_name }}"
                            hx-post="/api/metadata/set/{{ set.code }}/label?lang={{ current_lang }}"
                            hx-trigger="keyup changed delay:500ms"
                            hx-swap="none"
                            hx-indicator="#indicator-set-{{ set.code }}">
-                {% endset %}
-                {% set status_cell %}
-                    <div class="text-right">
-                        <span id="indicator-set-{{ set.code }}" class="htmx-indicator brutal-tag text-xs font-bold">
-                            SAVING...
-                        </span>
-                    </div>
-                {% endset %}
-                {{ table_row([
-                    code_cell,
-                    name_cell,
-                    input_cell,
-                    status_cell
-                ]) }}
+                    <span id="indicator-set-{{ set.code }}"
+                          class="htmx-indicator absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-muted">
+                        {{ t.status_saving or '保存中...' }}
+                    </span>
+                </div>
+            </div>
             {% endfor %}
-        {% endcall %}
+        </div>
     </div>
 
     <!-- Packs Section -->
     <div class="brutal-card p-6">
         <h2 class="text-3xl font-bold uppercase tracking-tight mb-6">{{ t.section_packs }}</h2>
 
-        <div class="space-y-8">
+        <div class="space-y-4">
             {% for set_code, packs in packs_by_set.items() %}
-            <div>
-                <div class="flex items-center gap-2 mb-4 border-b-2 border-theme pb-2">
-                    <span class="font-bold text-lg uppercase brutal-tag">SET: {{ set_code }}</span>
-                </div>
+            <div class="border-2 border-subtle">
+                <button type="button"
+                        onclick="toggleSection('packs-{{ set_code }}', 'packs-toggle-icon-{{ set_code }}')"
+                        class="w-full flex items-center justify-between p-4 hover-bg-subtle transition-colors">
+                    <span class="font-bold text-lg uppercase">SET: {{ set_code }}</span>
+                    <svg id="packs-toggle-icon-{{ set_code }}"
+                         width="20"
+                         height="20"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         stroke-linecap="round"
+                         stroke-linejoin="round"
+                         class="transition-transform"
+                         style="transform: rotate(-90deg);">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
 
-        {% call table_container([
-            t.col_pack_name,
-            t.col_zh_name,
-            {'label': t.col_status, 'class_name': 'text-right'}
-        ], t) %}
-                    {% for pack in packs %}
-                        {% set pack_name_cell %}
-                            <span class="font-mono font-bold">{{ pack.name }}</span>
-                        {% endset %}
-                        {% set pack_input_cell %}
-                            <input type="text"
-                                   name="label_zh"
-                                   value="{{ pack.label_dict.get('zh', '') }}"
-                                   class="brutal-input text-sm"
-                                   placeholder="{{ t.placeholder_zh_name }}"
-                                   hx-post="/api/metadata/pack/{{ pack.name }}/label?lang={{ current_lang }}"
-                                   hx-trigger="keyup changed delay:500ms"
-                                   hx-swap="none"
-                                   hx-indicator="#indicator-pack-{{ pack.name | replace(' ', '-') }}">
-                        {% endset %}
-                        {% set pack_status_cell %}
-                            <div class="text-right">
-                                <span id="indicator-pack-{{ pack.name | replace(' ', '-') }}" class="htmx-indicator brutal-tag text-xs font-bold">
-                                    SAVING...
+                <div id="packs-{{ set_code }}" class="border-t-2 border-subtle p-4 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for pack in packs %}
+                        <div class="border border-subtle-light p-3">
+                            <div class="font-mono font-bold text-sm text-muted mb-2">{{ pack.name }}</div>
+                            <div class="relative">
+                                <input type="text"
+                                       name="label_zh"
+                                       value="{{ pack.label_dict.get('zh', '') }}"
+                                       class="brutal-input text-sm w-full pr-16"
+                                       placeholder="{{ t.placeholder_zh_name }}"
+                                       hx-post="/api/metadata/pack/{{ pack.name }}/label?lang={{ current_lang }}"
+                                       hx-trigger="keyup changed delay:500ms"
+                                       hx-swap="none"
+                                       hx-indicator="#indicator-pack-{{ pack.name | replace(' ', '-') }}">
+                                <span id="indicator-pack-{{ pack.name | replace(' ', '-') }}"
+                                      class="htmx-indicator absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-muted">
+                                    {{ t.status_saving or '保存中...' }}
                                 </span>
                             </div>
-                        {% endset %}
-                        {{ table_row([
-                            pack_name_cell,
-                            pack_input_cell,
-                            pack_status_cell
-                        ], row_class='border-subtle') }}
-                    {% endfor %}
-                {% endcall %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             {% endfor %}
         </div>
     </div>
 </div>
 
+<script>
+function toggleSection(sectionId, iconId) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+
+    const isHidden = section.classList.contains('hidden');
+
+    if (isHidden) {
+        section.classList.remove('hidden');
+        if (iconId) {
+            const icon = document.getElementById(iconId);
+            if (icon) icon.style.transform = 'rotate(0deg)';
+        }
+    } else {
+        section.classList.add('hidden');
+        if (iconId) {
+            const icon = document.getElementById(iconId);
+            if (icon) icon.style.transform = 'rotate(-90deg)';
+        }
+    }
+}
+</script>
 {% endcall %}
