@@ -27,9 +27,9 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div class="flex items-center gap-6 text-sm font-bold tracking-widest">
                 <div>
-                    <a href="javascript:void(0)" onclick="setLang('en')" class="lang-link {% if current_lang == 'en' %}active{% endif %}" aria-label="Switch to English">EN</a>
+                    <button type="button" onclick="setLang('en')" class="lang-link {% if current_lang == 'en' %}active{% endif %}" aria-label="Switch to English">EN</button>
                     <span class="mx-2" aria-hidden="true">/</span>
-                    <a href="javascript:void(0)" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}" aria-label="切换到中文">中文</a>
+                    <button type="button" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}" aria-label="切换到中文">中文</button>
                 </div>
 
                 <!-- Theme Switcher -->

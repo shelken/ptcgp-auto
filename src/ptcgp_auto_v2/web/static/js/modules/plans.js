@@ -48,7 +48,7 @@ export function addPlan() {
 
     const existing = document.querySelector(`.plan-item[data-id="${planId}"]`);
     if (existing) {
-        alert(messages.duplicateMessage);
+        showToast(messages.duplicateMessage, 3000);
         return;
     }
 
@@ -132,11 +132,11 @@ export function savePlans() {
             }
             showToast(messages.saveSuccessMessage);
         } else {
-            alert(messages.saveErrorMessage);
+            showToast(messages.saveErrorMessage, 3000);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert(messages.saveErrorMessage);
+        showToast(messages.saveErrorMessage, 3000);
     });
 }

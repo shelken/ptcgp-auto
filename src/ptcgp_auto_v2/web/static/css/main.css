@@ -228,7 +228,7 @@ body {
     color: var(--text-color);
     border: var(--border-width) solid var(--border-color);
     border-radius: var(--radius);
-    outline: none;
+    /* outline: none; Removed global outline:none for better accessibility */
     font-family: var(--font-family);
     font-weight: bold;
     transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;

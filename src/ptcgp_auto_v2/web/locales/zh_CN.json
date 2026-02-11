@@ -293,6 +293,7 @@
     "label_close": "关闭",
     "desc_drag_reorder": "拖拽调整顺序",
     "label_save_plan": "保存计划",
+    "msg_plan_name_duplicate": "计划名称 '{name}' 已存在",
     "label_interval": "间隔",
     "reset_daily": "每日",
     "reset_weekly": "每周",
