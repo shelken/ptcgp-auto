@@ -18,7 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=4.15">
+    <link rel="stylesheet" href="/static/css/main.css?v=4.16">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -221,7 +221,7 @@
         <div id="tab-content-owned-cards" class="tab-content hidden">
             <div class="flex flex-col lg:flex-row gap-8">
                 <aside class="w-full lg:w-64 flex-shrink-0">
-                    <div class="brutal-card p-4 sticky top-4">
+                    <div class="brutal-card p-4">
                         <div class="flex items-center justify-between mb-4">
                             <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.filter_title or 'FILTERS' }}</span>
                             <button type="button" data-action="clear-owned-filters" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
@@ -255,10 +255,13 @@
                             </div>
 
                             <div class="owned-filter-group is-open" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
-                                    <span>{{ t.filter_rarity }}</span>
-                                    <span class="owned-filter-chevron">▾</span>
-                                </button>
+                                <div class="owned-filter-header">
+                                    <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
+                                        <span>{{ t.filter_rarity }}</span>
+                                        <span class="owned-filter-chevron">▾</span>
+                                    </button>
+                                    <button type="button" class="owned-filter-clear" data-action="clear-owned-filter-group">{{ t.clear_filters }}</button>
+                                </div>
                                 <div class="owned-filter-summary" data-filter-summary></div>
                                 <div class="owned-filter-content">
                                     <div class="flex flex-wrap gap-2">
@@ -274,10 +277,13 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
-                                    <span>{{ t.filter_type }}</span>
-                                    <span class="owned-filter-chevron">▾</span>
-                                </button>
+                                <div class="owned-filter-header">
+                                    <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
+                                        <span>{{ t.filter_type }}</span>
+                                        <span class="owned-filter-chevron">▾</span>
+                                    </button>
+                                    <button type="button" class="owned-filter-clear" data-action="clear-owned-filter-group">{{ t.clear_filters }}</button>
+                                </div>
                                 <div class="owned-filter-summary" data-filter-summary></div>
                                 <div class="owned-filter-content">
                                     <div class="flex flex-wrap gap-2">
@@ -293,10 +299,13 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
-                                    <span>{{ t.filter_set }}</span>
-                                    <span class="owned-filter-chevron">▾</span>
-                                </button>
+                                <div class="owned-filter-header">
+                                    <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
+                                        <span>{{ t.filter_set }}</span>
+                                        <span class="owned-filter-chevron">▾</span>
+                                    </button>
+                                    <button type="button" class="owned-filter-clear" data-action="clear-owned-filter-group">{{ t.clear_filters }}</button>
+                                </div>
                                 <div class="owned-filter-summary" data-filter-summary></div>
                                 <div class="owned-filter-content">
                                     <div class="flex flex-wrap gap-2">
@@ -314,10 +323,13 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
-                                    <span>{{ t.filter_pack }}</span>
-                                    <span class="owned-filter-chevron">▾</span>
-                                </button>
+                                <div class="owned-filter-header">
+                                    <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
+                                        <span>{{ t.filter_pack }}</span>
+                                        <span class="owned-filter-chevron">▾</span>
+                                    </button>
+                                    <button type="button" class="owned-filter-clear" data-action="clear-owned-filter-group">{{ t.clear_filters }}</button>
+                                </div>
                                 <div class="owned-filter-summary" data-filter-summary></div>
                                 <div class="owned-filter-content">
                                     <div class="flex flex-wrap gap-2">
@@ -335,10 +347,13 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
-                                    <span>{{ t.filter_element }}</span>
-                                    <span class="owned-filter-chevron">▾</span>
-                                </button>
+                                <div class="owned-filter-header">
+                                    <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
+                                        <span>{{ t.filter_element }}</span>
+                                        <span class="owned-filter-chevron">▾</span>
+                                    </button>
+                                    <button type="button" class="owned-filter-clear" data-action="clear-owned-filter-group">{{ t.clear_filters }}</button>
+                                </div>
                                 <div class="owned-filter-summary" data-filter-summary></div>
                                 <div class="owned-filter-content">
                                     <div class="flex flex-wrap gap-2">
@@ -360,10 +375,10 @@
                     <div class="flex flex-wrap justify-between items-center gap-6 mb-6">
                         <div class="flex items-center gap-3">
                             <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.owned_cols_label }}</span>
-                            <div class="flex items-center gap-2">
-                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="5">5</button>
-                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="6">6</button>
-                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="7">7</button>
+                            <div class="owned-cols-segmented" role="group" aria-label="{{ t.owned_cols_label }}">
+                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="5" aria-pressed="false">5</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="6" aria-pressed="false">6</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="7" aria-pressed="false">7</button>
                             </div>
                         </div>
 
@@ -519,6 +534,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.75"></script>
+    <script type="module" src="/static/js/main.js?v=4.76"></script>
 </body>
 </html>

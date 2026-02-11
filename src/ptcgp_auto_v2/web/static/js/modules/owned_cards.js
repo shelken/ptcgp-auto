@@ -16,8 +16,10 @@ export function setOwnedGridCols(value) {
         const target = parseInt(button.dataset.cols, 10);
         if (target === cols) {
             button.classList.add('active');
+            button.setAttribute('aria-pressed', 'true');
         } else {
             button.classList.remove('active');
+            button.setAttribute('aria-pressed', 'false');
         }
     });
 }

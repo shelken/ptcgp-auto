@@ -17,6 +17,7 @@
         </div>
     </div>
 
+    {% if plans %}
     {% call table_container([
         t.col_id or 'ID',
         t.col_name or 'Name',
@@ -75,4 +76,17 @@
             ], row_class='border-subtle hover-bg-subtle') }}
         {% endfor %}
     {% endcall %}
+    {% else %}
+    <div class="plans-empty-state brutal-border bg-surface p-10 text-center space-y-4">
+        <div class="text-xl font-bold uppercase tracking-widest">{{ t.msg_no_plans or 'No plans yet' }}</div>
+        <div class="text-sm text-muted">{{ t.desc_priority_hint or 'Create your first plan to start assigning tasks.' }}</div>
+        <div>
+            <button class="brutal-btn active text-sm px-5 py-2"
+                    hx-get="/management/plans/edit?lang={{ current_lang }}"
+                    hx-target="#modal-content">
+                {{ t.btn_new_plan or '+ New Plan' }}
+            </button>
+        </div>
+    </div>
+    {% endif %}
 {% endcall %}
