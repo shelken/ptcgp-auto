@@ -288,6 +288,7 @@
     "label_close": "Close",
     "desc_drag_reorder": "Drag to reorder",
     "label_save_plan": "Save Plan",
+    "msg_plan_name_duplicate": "Plan name '{name}' already exists",
     "label_interval": "Interval",
     "reset_daily": "Daily",
     "reset_weekly": "Weekly",

@@ -1,7 +1,5 @@
 import json
 
-import json
-
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
@@ -49,8 +47,8 @@ def build_plan_edit_context(plan_id: int | None, lang: str) -> dict:
     }
 
 
-def upsert_plan_from_form(form) -> None:
-    """根据表单创建或更新任务计划。"""
+def upsert_plan_from_form(form) -> str | None:
+    """根据表单创建或更新任务计划。返回错误消息或 None（成功）。"""
     plan_id = safe_get_string(form, "plan_id")
     name = safe_get_string(form, "name") or ""
     description = safe_get_string(form, "description")
@@ -102,6 +100,11 @@ def upsert_plan_from_form(form) -> None:
         if isinstance(val, str) and val.isdigit():
             plan = repo.get_by_id(int(val))
         if plan:
+            # 更新时检查新名称是否与其他计划重复
+            if plan.name != name:
+                existing = repo.get_by_name(name)
+                if existing and existing.id != plan.id:
+                    return name
             plan.name = name
             plan.description = description
             plan.task_types = json.dumps(task_types)
@@ -111,6 +114,10 @@ def upsert_plan_from_form(form) -> None:
                 print(f"ERROR: Failed to update plan {pid_str}")
 
     if not plan:
+        # 创建时检查名称是否已存在
+        existing = repo.get_by_name(name)
+        if existing:
+            return name
         plan = TaskPlan(
             name=name,
             description=description,
@@ -124,6 +131,8 @@ def upsert_plan_from_form(form) -> None:
         accounts = account_repo.list_accounts_by_plan_id(plan.id)
         for account in accounts:
             recompute_next_run_at_for_account(account, plan.task_types_list)
+
+    return None
 
 
 def delete_plan_by_id(plan_id: int) -> None:
