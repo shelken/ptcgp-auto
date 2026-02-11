@@ -11,24 +11,17 @@
     </div>
 
     {% call table_container([
-        t.col_id or 'ID',
-        t.label_nickname or 'Nickname',
-        t.col_game_id or 'Game ID',
-        t.col_exchange_points or 'Exchange Points',
+        t.col_account or 'Account',
+        t.col_resources or 'Resources',
         t.col_plans or 'Plans',
         t.col_target_pack or 'Target Pack',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
     ], t) %}
         {% for account in accounts %}
             {% set nickname_cell %}
-                <div>{{ account.nickname or '-' }}</div>
-                {% if account.remark %}
-                <div class="text-xs text-muted mt-1">{{ account.remark }}</div>
-                {% endif %}
-            {% endset %}
-            {% set game_cell %}
+                <div class="font-medium">#{{ account.id }} · {{ account.nickname or '-' }}</div>
                 {% if account.friend_id %}
-                <div class="group relative inline-block cursor-pointer" onclick="navigator.clipboard.writeText('{{ account.friend_id }}'); showToast('{{ t.msg_copied or 'Copied!' }}')">
+                <div class="group relative text-xs mt-1 inline-block cursor-pointer" onclick="navigator.clipboard.writeText('{{ account.friend_id }}'); showToast('{{ t.msg_copied or 'Copied!' }}')">
                     <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ account.friend_id[:4] }}-{{ account.friend_id[4:8] }}-{{ account.friend_id[8:12] }}-{{ account.friend_id[12:] }}</span>
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
                         <div class="bg-card text-theme border-2 border-theme text-xs p-2 rounded shadow-lg">
@@ -37,15 +30,28 @@
                     </div>
                 </div>
                 {% else %}
-                <span class="font-mono text-sm text-muted" title="{{ account.game_id }}">{{ account.game_id[:8] }}...</span>
+                <span class="text-xs text-muted mt-1">-</span>
                 {% endif %}
             {% endset %}
             {% set points_cell %}
-                {% if account.exchange_points is not none %}
-                <span class="font-mono font-bold">{{ "{:,}".format(account.exchange_points) }}</span>
-                {% else %}
-                <span class="text-muted">-</span>
-                {% endif %}
+                <div class="space-y-1 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="text-muted">{{ t.col_exchange_points or 'Exchange Points' }}</span>
+                        {% if account.exchange_points is not none %}
+                        <span class="font-mono font-bold">{{ "{:,}".format(account.exchange_points) }}</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-muted">{{ t.col_pack_hourglass or 'Pack Hourglass' }}</span>
+                        {% if account.pack_hourglass_count is not none %}
+                        <span class="font-mono font-bold">{{ "{:,}".format(account.pack_hourglass_count) }}</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </div>
+                </div>
             {% endset %}
             {% set plans_cell %}
                 <div class="flex flex-wrap gap-1">
@@ -106,9 +112,7 @@
                 </div>
             {% endset %}
             {{ table_row([
-                ('#' ~ account.id),
                 nickname_cell,
-                game_cell,
                 points_cell,
                 plans_cell,
                 target_pack_cell,
