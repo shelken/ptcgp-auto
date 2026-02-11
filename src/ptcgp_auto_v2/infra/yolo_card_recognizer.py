@@ -121,7 +121,7 @@ class YoloCardRecognizer:
         obb_threshold: float = DEFAULT_OBB_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         debug: bool = False,
-        resolve_name: Optional[Callable[[Optional[str], int], str]] = None,
+        resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
     ) -> List[DetectedCard]:
         """通用扫描接口，支持全局或指定系列"""
         results, total, _ = self._scan_common(
@@ -139,7 +139,7 @@ class YoloCardRecognizer:
     def _log_debug_details(
         detected: List[DetectedCard],
         unmatched: List[DetectedCard],
-        resolve_name: Optional[Callable[[Optional[str], int], str]] = None,
+        resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
     ) -> None:
         """输出详细的调试日志"""
         if detected:
@@ -191,7 +191,7 @@ class YoloCardRecognizer:
         obb_threshold: float,
         similarity_threshold: float,
         debug: bool,
-        resolve_name: Optional[Callable[[Optional[str], int], str]] = None,
+        resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
     ) -> Tuple[List[DetectedCard], int, List[DetectedCard]]:
         """
         通用扫描内部逻辑 - 实现两阶段匹配

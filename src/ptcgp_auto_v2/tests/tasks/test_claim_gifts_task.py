@@ -52,5 +52,22 @@ class TestClaimGiftsHandleHome(unittest.TestCase):
         self.assertEqual([gift_match.box], adb.taps)
 
 
+class TestClaimGiftsCardRegister(unittest.TestCase):
+    """测试礼物领取后的图鉴登录页处理。"""
+
+    def test_handle_card_register_swipes_up(self):
+        adb = FakeAdb()
+        page_detector = FakePageDetector(gift_match=None)
+        task = ClaimGiftsTask(adb, recognizer=None, page_detector=page_detector)
+
+        result = task._handle_card_register({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertEqual(1, len(adb.swipes))
+        start, end, _ = adb.swipes[0]
+        self.assertEqual(start[0], end[0])
+        self.assertGreater(start[1], end[1])
+
+
 if __name__ == "__main__":
     unittest.main()

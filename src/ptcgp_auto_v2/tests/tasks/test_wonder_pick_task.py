@@ -291,5 +291,20 @@ class TestWonderPickAfterSelect(unittest.TestCase):
         self.assertTrue(task._completed)
 
 
+class TestWonderPickCardRegister(unittest.TestCase):
+    """测试得卡挑战图鉴登录页处理。"""
+
+    def test_handle_card_register_swipes_up(self):
+        task = FakeTask()
+
+        result = task._handle_card_register({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertEqual(1, len(task.adb.swipes))
+        start, end, _ = task.adb.swipes[0]
+        self.assertEqual(start[0], end[0])
+        self.assertGreater(start[1], end[1])
+
+
 if __name__ == "__main__":
     unittest.main()
