@@ -44,7 +44,7 @@
 {% endmacro %}
 
 {% macro status_badge(status, t) %}
-<span class="brutal-tag text-xs{% if status == 'active' or status == 'enabled' %} active{% endif %}">
+<span class="brutal-tag status-badge{% if status == 'active' or status == 'enabled' %} active{% endif %}">
     {{ t['status_' ~ status] or status }}
 </span>
 {% endmacro %}
