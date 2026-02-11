@@ -289,6 +289,14 @@ body {
     border-radius: var(--radius);
 }
 
+/* 状态徽标专用样式 - 防止在表格中换行 */
+.status-badge {
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem; /* text-xs 对应的大小 */
+}
+
 .tooltip-tag {
     position: relative;
     cursor: help;
@@ -1099,3 +1107,9 @@ body {
 [data-theme="luxury"] .card-preview-front {
     box-shadow: 0 20px 60px rgba(212, 175, 55, 0.3);
 }
+
+/* 工具类 - 文本不换行 */
+.whitespace-nowrap {
+    white-space: nowrap;
+}
+

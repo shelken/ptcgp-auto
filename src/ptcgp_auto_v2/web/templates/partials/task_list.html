@@ -19,9 +19,9 @@
             <div class="text-xs text-muted">#{{ item.account_id }}</div>
         {% endset %}
         {% set task_cell %}
-            <div>{{ t['task_' + item.task_type] or item.task_type }}</div>
+            <div class="whitespace-nowrap">{{ t['task_' + item.task_type] or item.task_type }}</div>
             {% if item.task_type == 'open_pack' and item.target_pack_label %}
-                <div class="text-xs text-muted">
+                <div class="text-xs text-muted whitespace-nowrap">
                     {{ item.target_pack_label }}{% if item.target_pack_auto %} ({{ t.label_auto or 'Auto' }}){% endif %}
                 </div>
             {% endif %}
