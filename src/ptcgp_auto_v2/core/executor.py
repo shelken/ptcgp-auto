@@ -439,8 +439,21 @@ class TaskExecutor(BaseExecutor):
                                 clear_error_on_success=False,
                             )
                         else:
-                            logger.info(f"任务完成: {self.task_instance.task_type}")
-                            self._update_status(TaskStatus.COMPLETED)
+                            complete_reason = result.data.get("complete_reason")
+                            if complete_reason:
+                                logger.info(
+                                    f"任务完成: {self.task_instance.task_type} ({complete_reason})"
+                                )
+                                self._apply_task_status(
+                                    task_instance=self.task_instance,
+                                    account=self.account,
+                                    status=TaskStatus.COMPLETED,
+                                    error_message=f"完成: {complete_reason}",
+                                    clear_error_on_success=False,
+                                )
+                            else:
+                                logger.info(f"任务完成: {self.task_instance.task_type}")
+                                self._update_status(TaskStatus.COMPLETED)
                         return
                     else:
                         last_error = result.error
@@ -595,13 +608,26 @@ class AccountBatchExecutor(BaseExecutor):
                         clear_error_on_success=False,
                     )
                 else:
-                    logger.info(f"任务完成: {task_instance.task_type}")
-                    self._apply_task_status(
-                        task_instance=task_instance,
-                        account=self.account,
-                        status=TaskStatus.COMPLETED,
-                        clear_error_on_success=True,
-                    )
+                    complete_reason = result.data.get("complete_reason")
+                    if complete_reason:
+                        logger.info(
+                            f"任务完成: {task_instance.task_type} ({complete_reason})"
+                        )
+                        self._apply_task_status(
+                            task_instance=task_instance,
+                            account=self.account,
+                            status=TaskStatus.COMPLETED,
+                            error_message=f"完成: {complete_reason}",
+                            clear_error_on_success=False,
+                        )
+                    else:
+                        logger.info(f"任务完成: {task_instance.task_type}")
+                        self._apply_task_status(
+                            task_instance=task_instance,
+                            account=self.account,
+                            status=TaskStatus.COMPLETED,
+                            clear_error_on_success=True,
+                        )
             else:
                 logger.error(f"任务失败: {task_instance.task_type} - {result.error}")
                 self._apply_task_status(

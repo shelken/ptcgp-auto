@@ -285,7 +285,14 @@ class Task(ABC):
                         reason=skip_reason or "未知原因", iterations=iteration
                     )
                 else:
-                    result = TaskResult.ok(iterations=iteration)
+                    complete_reason = getattr(self, "_complete_reason", None)
+                    if complete_reason:
+                        result = TaskResult.ok(
+                            iterations=iteration,
+                            complete_reason=complete_reason,
+                        )
+                    else:
+                        result = TaskResult.ok(iterations=iteration)
                 break
 
             # 识别当前页面

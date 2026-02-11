@@ -20,6 +20,10 @@ class TestTaskRegistry(unittest.TestCase):
         """测试得卡挑战任务已注册"""
         self.assertIn("wonder_pick", ptcgp_auto_v2.tasks.TaskRegistry.all_types())
 
+    def test_send_card_daily_registered(self):
+        """测试每日送卡任务已注册"""
+        self.assertIn("send_card_daily", ptcgp_auto_v2.tasks.TaskRegistry.all_types())
+
 
 if __name__ == "__main__":
     unittest.main()

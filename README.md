@@ -30,6 +30,7 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 - **断点续传**：任务执行失败自动重试，进程重启后自动恢复进度
 - **YOLO+感知哈希卡牌识别**：使用 YOLO 检测+感知哈希匹配自动识别开包结果，替代传统模板匹配
 - **账号卡牌采集**：在卡牌列表页筛选高稀有度并写入账号卡牌关联表
+- **每日送卡**：支持自动稳定配对、好友前置校验与固定卡策略（A1-153）
 
 ## 🚀 快速开始
 
@@ -125,7 +126,7 @@ ptcgp-auto/
 │   ├── ptcgp_auto_v2/          # v2 核心代码
 │   │   ├── core/               # 调度核心 (Scheduler, Executor, TaskSchedule, Hooks)
 │   │   │   ├── task_status.py  # 任务状态定义
-│   │   ├── tasks/              # 任务实现 (OpenPack, CollectAccountCards...)
+│   │   ├── tasks/              # 任务实现 (OpenPack, CollectAccountCards, SendCardDaily...)
 │   │   ├── db/                 # 数据库层 (SQLAlchemy/SQLite)
 │   │   ├── hooks/              # Hook 实现
 │   │   ├── infra/              # 基础设施层
