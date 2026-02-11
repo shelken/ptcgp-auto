@@ -28,6 +28,7 @@ import { initDailyGiftDatePickers } from './daily_gift.js';
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
+const STORAGE_KEY_RECORD_FILTER_PANEL = 'ptcgp_records_filter_panel_open';
 const htmxLoadingButtons = new WeakMap();
 
 function setButtonLoading(button, loading) {
@@ -181,6 +182,39 @@ export function restoreTheme() {
     if (selector) {
         selector.value = theme;
     }
+}
+
+function setRecordFilterPanelOpen(open) {
+    const panel = document.getElementById('records-filter-panel');
+    const toggleBtn = document.querySelector('[data-action="toggle-record-filters"]');
+    if (!panel || !toggleBtn) return;
+
+    panel.classList.toggle('is-collapsed', !open);
+    toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggleBtn.classList.toggle('active', open);
+}
+
+function restoreRecordFilterPanelState() {
+    const panel = document.getElementById('records-filter-panel');
+    const toggleBtn = document.querySelector('[data-action="toggle-record-filters"]');
+    if (!panel || !toggleBtn) return;
+
+    if (window.innerWidth >= 1024) {
+        setRecordFilterPanelOpen(true);
+        return;
+    }
+
+    const stored = localStorage.getItem(STORAGE_KEY_RECORD_FILTER_PANEL);
+    const isOpen = stored === '1';
+    setRecordFilterPanelOpen(isOpen);
+}
+
+function toggleRecordFilterPanel() {
+    const panel = document.getElementById('records-filter-panel');
+    if (!panel) return;
+    const shouldOpen = panel.classList.contains('is-collapsed');
+    setRecordFilterPanelOpen(shouldOpen);
+    localStorage.setItem(STORAGE_KEY_RECORD_FILTER_PANEL, shouldOpen ? '1' : '0');
 }
 
 // --- 自动刷新列表 ---
@@ -382,6 +416,11 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === 'toggle-record-filters') {
+        toggleRecordFilterPanel();
+        return;
+    }
+
     if (action === 'refresh-owned-cards') {
         refreshOwnedCards(actionButton);
         return;
@@ -451,6 +490,7 @@ export function initApp() {
         }
         updateOwnedFilterGroupsState();
         restoreViewMode();
+        restoreRecordFilterPanelState();
         restoreOwnedGridCols();
         initCustomSelects(document);
         initDailyGiftDatePickers(document);
@@ -649,6 +689,7 @@ export function initApp() {
 
         document.addEventListener('visibilitychange', triggerAutoRefreshAll);
         window.addEventListener('focus', triggerAutoRefreshAll);
+        window.addEventListener('resize', restoreRecordFilterPanelState);
 
         document.body.addEventListener('htmx:beforeRequest', (event) => {
             const elt = event.detail && event.detail.elt;

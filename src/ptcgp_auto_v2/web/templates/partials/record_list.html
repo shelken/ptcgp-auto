@@ -105,7 +105,8 @@
                 {% endif %}
 
                 <!-- Card Name Overlay -->
-                <div class="absolute bottom-0 left-0 right-0 text-xs py-2 px-1 text-center font-bold translate-y-full group-hover:translate-y-0 transition-transform duration-200"
+                <div class="absolute bottom-0 left-0 right-0 text-xs py-2 px-2 text-center font-bold translate-y-full group-hover:translate-y-0 transition-transform duration-200 card-name-overlay tooltip-text"
+                     data-tooltip="{{ card.card_name }}"
                      style="background-color: var(--border-color); color: var(--bg-color); border-top: 2px solid var(--border-color);">
                     {{ card.card_name }}
                 </div>
