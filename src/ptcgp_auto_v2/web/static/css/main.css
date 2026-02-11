@@ -858,6 +858,62 @@ body {
     font-weight: bold;
 }
 
+/* --- Daily Gift Date Picker --- */
+.daily-date-picker {
+    position: relative;
+}
+
+.daily-date-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 60;
+    min-width: 20rem;
+    max-width: min(24rem, 92vw);
+}
+
+.daily-date-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.25rem;
+    margin-bottom: 0.35rem;
+}
+
+.daily-date-weekday {
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: bold;
+    letter-spacing: 0.03em;
+    color: var(--text-color);
+    opacity: 0.65;
+}
+
+.daily-date-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.25rem;
+}
+
+.daily-date-day {
+    width: 100%;
+    min-height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.daily-date-cell-empty {
+    min-height: 2rem;
+}
+
+@media (max-width: 768px) {
+    .daily-date-panel {
+        left: auto;
+        right: 0;
+        min-width: 18rem;
+    }
+}
+
 /* --- Card Preview Styles --- */
 
 /* 遮罩层 */

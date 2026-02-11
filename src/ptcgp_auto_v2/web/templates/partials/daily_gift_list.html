@@ -1,0 +1,196 @@
+{% from "partials/macros/tables.html" import table_container, auto_refresh_container %}
+
+{% call auto_refresh_container("/management/daily-gift?lang=" ~ current_lang, '#daily-gift-state-form', 'outerHTML', 'space-y-6') %}
+<form id="daily-gift-state-form" class="hidden">
+    <input type="hidden" name="biz_date_local" value="{{ selected_biz_date_local }}">
+</form>
+
+<div class="brutal-card p-6 space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_daily_gift or 'DAILY GIFT' }}</h2>
+        <form
+            id="daily-gift-filter-form"
+            class="flex flex-wrap items-end gap-3"
+            hx-get="/management/daily-gift?lang={{ current_lang }}"
+            hx-target="#management-content"
+            hx-swap="innerHTML"
+            onsubmit="document.querySelector('#daily-gift-state-form input[name=\'biz_date_local\']').value=this.querySelector('[data-role=\'value\']').value">
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_biz_date_local or 'Biz Date' }}</label>
+                <div class="daily-date-picker" data-daily-gift-date-picker data-locale="{{ current_lang }}">
+                    <input type="hidden" name="biz_date_local" value="{{ selected_biz_date_local }}" data-role="value">
+                    <button
+                        type="button"
+                        class="brutal-btn min-w-52 flex items-center justify-between"
+                        data-role="trigger"
+                        aria-label="{{ t.btn_pick_date or 'Pick Date' }}">
+                        <span class="font-mono" data-role="label">{{ selected_biz_date_local }}</span>
+                        <span aria-hidden="true">▾</span>
+                    </button>
+                    <div class="daily-date-panel brutal-card p-3 bg-surface hidden" data-role="panel">
+                        <div class="flex items-center justify-between gap-2 mb-3">
+                            <button type="button" class="brutal-btn text-xs px-2 py-1" data-role="prev-month" aria-label="{{ t.btn_prev_month or 'Previous Month' }}">←</button>
+                            <div class="text-sm font-bold" data-role="month-label"></div>
+                            <button type="button" class="brutal-btn text-xs px-2 py-1" data-role="next-month" aria-label="{{ t.btn_next_month or 'Next Month' }}">→</button>
+                        </div>
+                        <div class="daily-date-weekdays" data-role="weekdays"></div>
+                        <div class="daily-date-grid" data-role="days"></div>
+                        <div class="flex justify-end mt-3">
+                            <button type="button" class="brutal-btn text-xs" data-role="today">{{ t.btn_today or 'Today' }}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="brutal-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+            <div class="w-full flex flex-wrap gap-2 pt-1">
+                {% for date_value in recent_biz_dates %}
+                <button
+                    type="submit"
+                    class="brutal-btn text-xs {% if date_value == selected_biz_date_local %}active{% endif %}"
+                    onclick="this.form.querySelector('[data-role=\'value\']').value='{{ date_value }}'; this.form.querySelector('[data-role=\'label\']').textContent='{{ date_value }}'; document.querySelector('#daily-gift-state-form input[name=\'biz_date_local\']').value='{{ date_value }}'"
+                    name="biz_date_local"
+                    value="{{ date_value }}">
+                    {{ date_value }}
+                </button>
+                {% endfor %}
+            </div>
+        </form>
+    </div>
+
+    <div class="grid gap-3 md:grid-cols-4">
+        <div class="border-2 border-subtle rounded-lg p-3">
+            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_total_records or 'Total' }}</div>
+            <div class="text-2xl font-bold">{{ stats.total }}</div>
+        </div>
+        <div class="border-2 border-subtle rounded-lg p-3">
+            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_success_records or 'Success' }}</div>
+            <div class="text-2xl font-bold">{{ stats.success }}</div>
+        </div>
+        <div class="border-2 border-subtle rounded-lg p-3">
+            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_failed_records or 'Failed' }}</div>
+            <div class="text-2xl font-bold">{{ stats.failed }}</div>
+        </div>
+        <div class="border-2 border-subtle rounded-lg p-3">
+            <div class="text-xs uppercase tracking-widest text-muted">{{ t.label_waiting_records or 'Waiting' }}</div>
+            <div class="text-2xl font-bold">{{ stats.waiting }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="brutal-card p-6 space-y-4">
+    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_pair_progress or 'PAIR SEND STATUS' }}</h3>
+    {% call table_container([
+        t.col_pair or 'Pair',
+        t.col_direction_left_to_right or 'A to B',
+        t.col_direction_right_to_left or 'B to A',
+        t.col_progress or 'Progress'
+    ], t, (t.empty_daily_gift_pair_progress or '暂无可展示的配对互送状态') if not pair_send_status_rows else '') %}
+        {% for row in pair_send_status_rows %}
+        <tr class="border-b border-subtle hover-bg-subtle transition-colors">
+            <td class="p-3">
+                <div class="font-bold">#{{ row.left_account_id }} · {{ row.left_name }}</div>
+                <div class="text-xs text-muted">↔ #{{ row.right_account_id }} · {{ row.right_name }}</div>
+            </td>
+            <td class="p-3">
+                <div>{{ t['gift_status_' + row.left_to_right_status] or row.left_to_right_status }}</div>
+                {% if row.left_to_right_error %}
+                <div class="text-xs text-muted">{{ row.left_to_right_error }}</div>
+                {% endif %}
+            </td>
+            <td class="p-3">
+                <div>{{ t['gift_status_' + row.right_to_left_status] or row.right_to_left_status }}</div>
+                {% if row.right_to_left_error %}
+                <div class="text-xs text-muted">{{ row.right_to_left_error }}</div>
+                {% endif %}
+            </td>
+            <td class="p-3">{{ t['gift_pair_progress_' + row.pair_progress] or row.pair_progress }}</td>
+        </tr>
+        {% endfor %}
+    {% endcall %}
+</div>
+
+<div class="brutal-card p-6 space-y-4">
+    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_records or 'DAILY GIFT RECORDS' }}</h3>
+    {% call table_container([
+        t.col_id or 'ID',
+        t.col_account or 'Account',
+        t.col_to_account_id or 'Target Account',
+        t.col_friend_id or 'Friend ID',
+        t.col_card or 'Card',
+        t.col_status or 'Status',
+        t.col_count_change or 'Count Change',
+        t.col_error or 'Error',
+        t.time_label or 'Time'
+    ], t, (t.empty_daily_gift_records or '暂无送卡记录') if not records else '') %}
+        {% for row in records %}
+        <tr class="border-b border-subtle hover-bg-subtle transition-colors">
+            <td class="p-3">#{{ row.id }}</td>
+            <td class="p-3">#{{ row.account_id }} · {{ row.account_name }}</td>
+            <td class="p-3">
+                {% if row.target_account_id %}
+                    #{{ row.target_account_id }} · {{ row.target_name }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td class="p-3">{{ row.target_friend_id or '-' }}</td>
+            <td class="p-3">{{ row.card_label }}</td>
+            <td class="p-3">{{ t['gift_status_' + row.status] or row.status }}</td>
+            <td class="p-3">{{ (row.before_count|string) if row.before_count is not none else '-' }} -> {{ (row.after_count|string) if row.after_count is not none else '-' }}</td>
+            <td class="p-3">
+                {% if row.error_code or row.error_message %}
+                    <div class="text-xs text-muted">{{ row.error_code or '-' }}</div>
+                    <div class="text-xs text-muted">{{ row.error_message or '-' }}</div>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td class="p-3">{{ row.updated_at|datetime }}</td>
+        </tr>
+        {% endfor %}
+    {% endcall %}
+</div>
+
+<div class="brutal-card p-6 space-y-4">
+    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_pairs or 'CURRENT PAIRS' }}</h3>
+    {% if pair_cards %}
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {% for item in pair_cards %}
+        <div class="border-2 border-subtle rounded-lg p-4 bg-subtle space-y-2">
+            <div class="font-bold">#{{ item.left_account_id }} · {{ item.left_name }}</div>
+            <div class="text-center text-xs uppercase tracking-widest text-muted">{{ t.label_pair_link or 'PAIRED WITH' }}</div>
+            <div class="font-bold">#{{ item.right_account_id }} · {{ item.right_name }}</div>
+            <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.left_friend_id }} <-> {{ item.right_friend_id }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-muted">{{ t.empty_daily_gift_pairs or '暂无有效配对' }}</div>
+    {% endif %}
+</div>
+
+<div class="brutal-card p-6 space-y-4">
+    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_pair_anomalies or 'PAIR ANOMALIES' }}</h3>
+    {% call table_container([
+        t.col_account_id or 'Account ID',
+        t.col_to_account_id or 'Target Account',
+        t.col_friend_id or 'Friend ID',
+        t.col_reason or 'Reason'
+    ], t, (t.empty_daily_gift_pair_anomalies or '暂无异常关系') if not pair_anomalies else '') %}
+        {% for row in pair_anomalies %}
+        <tr class="border-b border-subtle hover-bg-subtle transition-colors">
+            <td class="p-3">#{{ row.account_id }} · {{ row.account_name }}</td>
+            <td class="p-3">
+                {% if row.target_account_id %}
+                    #{{ row.target_account_id }} · {{ row.target_name }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td class="p-3">{{ row.account_friend_id }} -> {{ row.target_friend_id }}</td>
+            <td class="p-3">{{ t['gift_pair_reason_' + row.reason_code] or row.reason_code }}</td>
+        </tr>
+        {% endfor %}
+    {% endcall %}
+</div>
+{% endcall %}
