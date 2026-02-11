@@ -6,9 +6,13 @@ from .friend_hooks import (
     FriendPreHook,
     ManageFriendshipWakePostHook,
 )
+from .gift_hooks import SendCardWakeTargetPostHook
+from .gift_hooks import ClaimGiftsPreHook
 
 __all__ = [
     "FriendPreHook",
     "DeleteFriendPostHook",
     "ManageFriendshipWakePostHook",
+    "ClaimGiftsPreHook",
+    "SendCardWakeTargetPostHook",
 ]

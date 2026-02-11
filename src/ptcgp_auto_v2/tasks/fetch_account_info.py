@@ -19,6 +19,8 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
+from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     quick_tap,
@@ -44,8 +46,9 @@ BASE_FALLBACK_TAP_Y = 300
 # 最小点击 Y 坐标
 MIN_TAP_Y = 50
 
-# 正则
-FRIEND_ID_PATTERN = re.compile(r"\d{4}-\d{4}-\d{4}-\d{4}")
+# 分送/交换冷冻期（新账号14天内不可进入交换）
+EXCHANGE_COOLDOWN_DAYS = 14
+
 LEVEL_PATTERN = re.compile(r"Lv\.?\s*(\d+)")
 
 
@@ -114,6 +117,7 @@ class FetchAccountInfoTask(Task):
 
         # 任务完成标志
         self._completed = False
+        self._complete_reason: Optional[str] = None
 
     def _is_action_done(self, key: str) -> bool:
         """检查操作是否已完成"""
@@ -203,6 +207,18 @@ class FetchAccountInfoTask(Task):
             return self._enter_profile(ocr)
 
         if not self._is_action_done("exchange_fetched"):
+            if self.account.created_at and not is_account_past_days(
+                self.account.created_at,
+                EXCHANGE_COOLDOWN_DAYS,
+            ):
+                # 冷冻期内交换不可用，直接标记完成以加速流程。
+                self._exchange_points = 0
+                self._mark_action_done("exchange_fetched")
+                self._complete_reason = "账号处于14天冷冻期，跳过交换页面"
+                logger.debug("  -> 账号处于交换冷冻期，跳过交换页面")
+                self._update_account()
+                self._completed = True
+                return ActionResult.ok(wait=0.5)
             # 第二步：进入社群页面
             logger.debug("  -> 点击社群图标")
             return tap_community_icon(self.adb, self.page_detector, wait=5.0)
@@ -221,10 +237,9 @@ class FetchAccountInfoTask(Task):
         for item in ocr:
             text = item["text"]
             if not self._friend_id:
-                m = FRIEND_ID_PATTERN.search(text)
-                if m:
-                    # 去掉破折号，存储纯数字格式
-                    self._friend_id = m.group().replace("-", "")
+                extracted_friend_id = extract_friend_id_from_text(text)
+                if extracted_friend_id:
+                    self._friend_id = extracted_friend_id
                     logger.debug(f"  -> friend_id: {self._friend_id}")
             if not self._level:
                 m = LEVEL_PATTERN.search(text)

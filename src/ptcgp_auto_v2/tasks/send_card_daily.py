@@ -1,0 +1,708 @@
+# -*- coding: utf-8 -*-
+"""
+每日送卡任务。
+
+初版策略：
+1. 自动配对系统内账号（稳定关系，缺失时增量补齐）
+2. 固定送出 A1-153（嘎啦嘎啦）
+3. 成功后记录流水并同步 account_cards 剩余数量
+"""
+
+import logging
+from typing import Optional
+
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
+from ptcgp_auto_v2.db.repositories import (
+    AccountCardRepository,
+    AccountRepository,
+    CardRepository,
+)
+from ptcgp_auto_v2.hooks import (
+    ClaimGiftsPreHook,
+    FriendPreHook,
+    SendCardWakeTargetPostHook,
+)
+from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
+from ptcgp_auto_v2.infra.model_manager import get_model_manager
+from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
+from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.services import GiftPairingService, GiftRecordService
+from ptcgp_auto_v2.tasks.utils.send_card_helpers import (
+    build_ocr_signature,
+    find_send_button_for_target,
+)
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
+from ptcgp_auto_v2.utils.gesture import (
+    clear_text,
+    input_text,
+    is_text_visible,
+    scroll_points,
+    swipe,
+    tap,
+    tap_box,
+    tap_community_icon,
+    tap_ok,
+    tap_template,
+    tap_text_exact,
+)
+
+logger = logging.getLogger(__name__)
+
+# ============================================================
+# 常量定义（基于 1080x1920）
+# ============================================================
+
+FIXED_CARD_SET_CODE = "A1"
+FIXED_CARD_NUMBER = 153
+
+BASE_FRIEND_SCROLL_DISTANCE_Y = 520
+BASE_CARD_SCROLL_DISTANCE_Y = 500
+
+MAX_FRIEND_SCROLL_ROUNDS = 8
+MAX_FRIEND_STABLE_ROUNDS = 3
+MAX_CARD_STABLE_ROUNDS = 3
+MAX_FILTER_MODAL_STAY_ROUNDS = 2
+
+
+def _build_send_card_pages() -> list[dict]:
+    """构建送卡任务页面规则。"""
+    return [
+        {
+            "name": "home_with_community_icon",
+            "templates": ["icon_community"],
+            "priority": 10,
+        },
+        {
+            "name": "game_home_main",
+            "identifiers": get_text_patterns("game_home_main"),
+            "match_all": True,
+            "priority": 20,
+        },
+        {
+            "name": "community_page",
+            "identifiers": get_text_patterns("community_page"),
+            "match_all": True,
+            "priority": 40,
+        },
+        {
+            "name": "gift_page_main",
+            "identifiers": get_text_patterns("gift_page_main"),
+            "match_all": True,
+            "priority": 50,
+        },
+        {
+            "name": "gift_choose_friend",
+            "identifiers": get_text_patterns("gift_choose_friend_title"),
+            "priority": 60,
+        },
+        {
+            "name": "gift_select_card",
+            "identifiers": get_text_patterns("gift_select_card_title"),
+            "priority": 70,
+        },
+        {
+            "name": "gift_filter_modal",
+            "identifiers": get_text_patterns("gift_filter_modal_title"),
+            "match_all": True,
+            "priority": 71,
+        },
+        {
+            "name": "gift_target_page",
+            "identifiers": get_text_patterns("gift_target_page"),
+            "priority": 80,
+        },
+        {
+            "name": "gift_confirm_popup",
+            "identifiers": get_text_patterns("gift_confirm_send_popup"),
+            "priority": 90,
+        },
+        {
+            "name": "gift_confirm_last_popup",
+            "identifiers": get_text_patterns("gift_confirm_last_card_popup"),
+            "priority": 91,
+        },
+        {
+            "name": "gift_swipe_page",
+            "identifiers": get_text_patterns("gift_swipe_to_send"),
+            "priority": 95,
+        },
+    ]
+
+
+@TaskRegistry.register("send_card_daily")
+class SendCardDailyTask(Task):
+    """每日送卡任务。"""
+
+    task_type = "send_card_daily"
+    reset_type = ResetType.INTERVAL
+    max_iterations = 180
+    max_unknown_pages = 20
+    pages = _build_send_card_pages()
+
+    def __init__(self, adb, recognizer, page_detector):
+        super().__init__(adb, recognizer, page_detector)
+        self.card_recognizer = YoloCardRecognizer(
+            adb=adb,
+            model_manager=get_model_manager(),
+            hash_manager=get_card_hash_manager(),
+        )
+        self._action_cache: dict[str, bool] = {}
+        self._last_page_name: Optional[str] = None
+        self._prev_page_name: Optional[str] = None
+
+        self._completed = False
+        self._complete_reason: Optional[str] = None
+
+        self._target_friend_id: Optional[str] = None
+        self._target_account_id: Optional[int] = None
+        self._target_nickname: Optional[str] = None
+        self._fixed_card_id: Optional[int] = None
+
+        self._record = None
+
+        self._friend_scroll_rounds = 0
+        self._friend_stable_rounds = 0
+        self._card_stable_rounds = 0
+        self._last_friend_signature: Optional[str] = None
+        self._last_card_signature: Optional[str] = None
+
+        self._before_count: Optional[int] = None
+        self._after_count: Optional[int] = None
+        self._gift_sent_success = False
+        self._filter_applied = False
+        self._filter_opened = False
+        self._filter_modal_stay_rounds = 0
+
+    def _is_action_done(self, key: str) -> bool:
+        """检查动作缓存。"""
+        return self._action_cache.get(key, False)
+
+    def _mark_action_done(self, key: str):
+        """标记动作完成。"""
+        self._action_cache[key] = True
+
+    def _reset_action_cache(self):
+        """重置页面动作缓存。"""
+        self._action_cache.clear()
+
+    def on_start(self):
+        """任务启动初始化。"""
+        self._completed = False
+        self._complete_reason = None
+        self._friend_scroll_rounds = 0
+        self._friend_stable_rounds = 0
+        self._card_stable_rounds = 0
+        self._last_friend_signature = None
+        self._last_card_signature = None
+        self._before_count = None
+        self._after_count = None
+        self._gift_sent_success = False
+        self._fixed_card_id = None
+        self._filter_applied = False
+        self._filter_opened = False
+        self._filter_modal_stay_rounds = 0
+        self._prev_page_name = None
+        self._reset_action_cache()
+
+        if self.account.id is None:
+            self._complete_reason = "账号ID为空"
+            self._completed = True
+            return
+
+        if not GiftPairingService.is_account_past_cooldown(self.account.created_at):
+            self._complete_reason = "账号未过14天冷冻期"
+            self._completed = True
+            return
+
+        pair = GiftPairingService.ensure_pairs_for_account(self.account.id)
+        if pair is None:
+            self._complete_reason = "无可用送卡目标（可能为奇数落单/冷冻期过滤）"
+            self._completed = True
+            return
+
+        self._target_friend_id = pair.target_friend_id
+        self._target_account_id = pair.target_account_id
+        if pair.target_account_id is not None:
+            target_account = AccountRepository().get_by_id(pair.target_account_id)
+            if target_account:
+                self._target_nickname = target_account.nickname
+
+        if not self._target_friend_id:
+            self._complete_reason = "目标 friend_id 为空"
+            self._completed = True
+            return
+
+        fixed_card = CardRepository().get_card_by_set_and_number(
+            FIXED_CARD_SET_CODE,
+            FIXED_CARD_NUMBER,
+        )
+        self._fixed_card_id = fixed_card.id if fixed_card else None
+
+        if GiftRecordService.is_daily_success(self.account.id, self._target_friend_id):
+            self._complete_reason = "今日已送卡成功"
+            self._completed = True
+            return
+
+        self._record = GiftRecordService.ensure_daily_record(
+            account_id=self.account.id,
+            target_friend_id=self._target_friend_id,
+            target_account_id=self._target_account_id,
+            card_set_code=FIXED_CARD_SET_CODE,
+            card_number=FIXED_CARD_NUMBER,
+        )
+
+        self._maybe_complete_for_pair_ordering()
+
+    def is_completed(self) -> bool:
+        """任务是否完成。"""
+        return self._completed
+
+    def get_pre_hooks(self) -> list:
+        """前置 Hook：确保好友关系存在。"""
+        if self._completed or not self._target_friend_id:
+            return []
+        return [
+            ClaimGiftsPreHook(),
+            FriendPreHook(
+                target_friend_id=self._target_friend_id,
+                target_account_id=self._target_account_id,
+            ),
+        ]
+
+    def get_post_hooks(self) -> list:
+        """后置 Hook：送卡成功后尝试唤醒目标账号回送。"""
+        return [SendCardWakeTargetPostHook()]
+
+    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
+        """页面分发处理。"""
+        previous_page_name = self._last_page_name
+        if page_name != self._last_page_name:
+            self._prev_page_name = previous_page_name
+            self._last_page_name = page_name
+            self._reset_action_cache()
+
+        # 兜底：筛选弹窗返回选卡页时，视为筛选流程已应用。
+        if (
+            page_name == "gift_select_card"
+            and self._prev_page_name == "gift_filter_modal"
+            and self._filter_opened
+        ):
+            self._filter_applied = True
+            self._filter_modal_stay_rounds = 0
+
+        handlers = {
+            "home_with_community_icon": self._handle_home,
+            "game_home_main": self._handle_home,
+            "community_page": self._handle_community,
+            "gift_page_main": self._handle_gift_page_main,
+            "gift_choose_friend": self._handle_choose_friend,
+            "gift_select_card": self._handle_select_card,
+            "gift_filter_modal": self._handle_filter_modal,
+            "gift_target_page": self._handle_target_page,
+            "gift_confirm_popup": self._handle_confirm_popup,
+            "gift_confirm_last_popup": self._handle_confirm_last_popup,
+            "gift_swipe_page": self._handle_swipe_page,
+        }
+        handler = handlers.get(page_name)
+        if handler:
+            return handler(page_info)
+        return ActionResult.wait(0.8)
+
+    def _fail(self, error_code: str, message: str) -> ActionResult:
+        """统一失败处理。"""
+        logger.warning("send_card_daily 失败: %s - %s", error_code, message)
+        if self._record:
+            GiftRecordService.update_status(
+                self._record,
+                status="failed",
+                error_code=error_code,
+                error_message=message,
+            )
+        return ActionResult.fail(f"{error_code}: {message}")
+
+    def _complete_without_send(
+        self,
+        complete_reason: str,
+        record_status: str,
+        error_code: Optional[str] = None,
+    ) -> ActionResult:
+        """在无需继续尝试时以完成态收敛任务。"""
+        self._complete_reason = complete_reason
+        self._completed = True
+        logger.info("send_card_daily 完成收敛: %s", complete_reason)
+        if self._record:
+            GiftRecordService.update_status(
+                self._record,
+                status=record_status,
+                error_code=error_code,
+                error_message=complete_reason,
+            )
+        return ActionResult.ok(wait=0.3)
+
+    def _handle_home(self, page_info: dict) -> ActionResult:
+        """主页点击社群入口。"""
+        if self._completed:
+            return ActionResult.ok(wait=0.5)
+        return tap_community_icon(self.adb, self.page_detector, wait=1.0)
+
+    def _handle_community(self, page_info: dict) -> ActionResult:
+        """社群页面点击分送入口。"""
+        ocr_results = page_info.get("ocr_results", [])
+        result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("gift_tab_send"),
+            wait=1.0,
+        )
+        return result or ActionResult.wait(0.8)
+
+    def _handle_gift_page_main(self, page_info: dict) -> ActionResult:
+        """分送主页面点击下方分送按钮。"""
+        ocr_results = page_info.get("ocr_results", [])
+        candidates: list[tuple[int, tuple[int, int, int, int]]] = []
+        for item in ocr_results:
+            text = "".join(str(item.get("text", "")).lower().split())
+            if text not in {
+                "".join(t.lower().split()) for t in get_text_patterns("gift_tab_send")
+            }:
+                continue
+            box = item.get("box")
+            if not box:
+                continue
+            center_y = (box[1] + box[3]) // 2
+            if center_y <= self.adb.center_y():
+                continue
+            candidates.append((center_y, tuple(box)))
+
+        if not candidates:
+            return ActionResult.wait(0.8)
+
+        candidates.sort(key=lambda item: item[0])
+        return tap_box(self.adb, candidates[0][1], wait=1.0)
+
+    def _handle_choose_friend(self, page_info: dict) -> ActionResult:
+        """好友选择页：定位目标账号并点击对应分送。"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        friend_signature = build_ocr_signature(ocr_results)
+        if friend_signature == self._last_friend_signature:
+            self._friend_stable_rounds += 1
+        else:
+            self._friend_stable_rounds = 0
+            self._last_friend_signature = friend_signature
+
+        # 说明：当列表出现“已达可领取上限/今天已分送过”时，昵称可能被遮挡或识别不稳定，
+        # 无法可靠判断是否就是目标账号，因此这里不做“目标不可送”的结论性判断。
+
+        send_box = None
+        if self._target_nickname:
+            send_box = find_send_button_for_target(
+                ocr_results=ocr_results,
+                target_nickname=self._target_nickname,
+                send_text_patterns=get_text_patterns("gift_send_button"),
+            )
+        if send_box:
+            if self._record:
+                GiftRecordService.update_status(self._record, status="target_found")
+            self._friend_scroll_rounds = 0
+            self._friend_stable_rounds = 0
+            self._last_friend_signature = None
+            return tap_box(self.adb, send_box, wait=1.0)
+
+        if self._friend_stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
+            return self._complete_without_send(
+                complete_reason="好友列表疑似到底且未找到可送目标，按完成态收敛",
+                record_status="completed_no_target",
+                error_code="TARGET_LIST_EXHAUSTED",
+            )
+
+        self._friend_scroll_rounds += 1
+        if self._friend_scroll_rounds > MAX_FRIEND_SCROLL_ROUNDS:
+            return self._complete_without_send(
+                complete_reason="好友列表遍历达到上限，未定位到可送目标",
+                record_status="completed_no_target",
+                error_code="TARGET_NOT_FOUND",
+            )
+
+        start, end = scroll_points(
+            self.adb,
+            base_distance_y=BASE_FRIEND_SCROLL_DISTANCE_Y,
+            direction="up",
+        )
+        swipe(self.adb, start, end, wait=0.9)
+        return ActionResult.ok(wait=0.8)
+
+    def _handle_select_card(self, page_info: dict) -> ActionResult:
+        """选卡页面：必须先筛选，再通过扫描定位固定卡牌。"""
+
+        if not self._filter_applied and not self._is_action_done("open_filter_clicked"):
+            result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
+            if result:
+                self._filter_opened = True
+                self._mark_action_done("open_filter_clicked")
+                return result
+
+        # 约束：未完成筛选前，不进行任何 OCR 选卡与滑动找卡。
+        if not self._filter_applied:
+            return ActionResult.wait(0.6)
+
+        detected = self.card_recognizer.scan(
+            set_code=FIXED_CARD_SET_CODE,
+            debug=False,
+        )
+        scan_tap_result = self._tap_target_card_by_scan(detected)
+        if scan_tap_result:
+            if self._record:
+                GiftRecordService.update_status(self._record, status="card_selected")
+            return scan_tap_result
+
+        signature = self._build_detect_signature(detected)
+        if signature == self._last_card_signature:
+            self._card_stable_rounds += 1
+        else:
+            self._card_stable_rounds = 0
+            self._last_card_signature = signature
+
+        if self._card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
+            return self._complete_without_send(
+                complete_reason="扫描多次未找到目标卡 A1-153，结束本次送卡任务",
+                record_status="completed_no_card",
+                error_code="CARD_NOT_FOUND_BY_SCAN",
+            )
+
+        start, end = scroll_points(
+            self.adb,
+            base_distance_y=BASE_CARD_SCROLL_DISTANCE_Y,
+            direction="up",
+        )
+        swipe(self.adb, start, end, wait=0.8)
+        return ActionResult.ok(wait=0.6)
+
+    def _tap_target_card_by_scan(self, detected) -> Optional[ActionResult]:
+        """通过 YOLO+Hash 扫描定位目标卡牌并点击。"""
+        if not detected:
+            return None
+
+        candidates = [
+            item
+            for item in detected
+            if item.set_code == FIXED_CARD_SET_CODE
+            and item.card_number == FIXED_CARD_NUMBER
+        ]
+        if not candidates:
+            return None
+
+        best = max(candidates, key=lambda item: (item.similarity, item.confidence))
+        return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=1.0)
+
+    @staticmethod
+    def _build_detect_signature(detected) -> str:
+        """构建扫描结果签名，用于判断列表是否变化。"""
+        if not detected:
+            return "__EMPTY__"
+        items: list[str] = []
+        for item in detected:
+            if not item.set_code:
+                continue
+            items.append(f"{item.set_code}:{item.card_number}")
+        if not items:
+            return "__EMPTY__"
+        return "|".join(sorted(items))
+
+    def _handle_filter_modal(self, page_info: dict) -> ActionResult:
+        """筛选弹窗：清空 -> 输入关键字 -> 确认，若仍停留则重复该循环。"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        # 若连续停留在筛选弹窗，重置流程，强制再次「清除 -> 输入 -> OK」。
+        if self._is_action_done("filter_keyword_input"):
+            self._filter_modal_stay_rounds += 1
+        else:
+            self._filter_modal_stay_rounds = 0
+
+        if self._filter_modal_stay_rounds >= MAX_FILTER_MODAL_STAY_ROUNDS:
+            self._action_cache.pop("filter_clear_clicked", None)
+            self._action_cache.pop("filter_keyword_input", None)
+            self._filter_modal_stay_rounds = 0
+
+        if not self._is_action_done("filter_clear_clicked"):
+            clear_button = tap_text_exact(
+                self.adb,
+                ocr_results,
+                get_text_patterns("gift_filter_clear"),
+                wait=0.5,
+            )
+            if clear_button:
+                self._mark_action_done("filter_clear_clicked")
+                return clear_button
+
+        if not self._is_action_done("filter_keyword_input"):
+            focus_point = self._get_filter_search_focus_point()
+            if focus_point is not None:
+                clear_text(
+                    self.adb,
+                    focus_point[0],
+                    focus_point[1],
+                    max_chars=40,
+                    wait=0.2,
+                )
+                input_text(
+                    self.adb,
+                    get_text_patterns("gift_search_keyword_marowak")[0],
+                    wait=0.3,
+                )
+                self._mark_action_done("filter_keyword_input")
+                return ActionResult.wait(0.6)
+
+        ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
+        if ok_result:
+            self._filter_applied = True
+            # 允许在“点击 OK 后仍停留弹窗”的情况下，下次再次执行完整清除+输入流程。
+            self._action_cache.pop("filter_clear_clicked", None)
+            self._action_cache.pop("filter_keyword_input", None)
+            self._filter_modal_stay_rounds = 0
+            return ok_result
+        return ActionResult.wait(0.6)
+
+    def _get_filter_search_focus_point(self) -> Optional[tuple[int, int]]:
+        """根据 icon_search 计算筛选输入框点击点。"""
+        box = self.page_detector.find_template("icon_search", threshold=0.8)
+        if not box:
+            match = self.page_detector.find_template_with_scale(
+                "icon_search", scale=1.0, threshold=0.8
+            )
+            if match:
+                box = match.box
+        if not box:
+            return None
+        return self.adb.center_x(), (box[1] + box[3]) // 2
+
+    def _handle_target_page(self, page_info: dict) -> ActionResult:
+        """目标确认页：解析持有数量并点击分送。"""
+        ocr_results = page_info.get("ocr_results", [])
+        if self._before_count is None or self._after_count is None:
+            self._extract_hold_counts(ocr_results)
+
+        if not is_text_visible(
+            ocr_results,
+            get_text_patterns("gift_hold_count"),
+            exact=False,
+        ):
+            return ActionResult.wait(0.6)
+
+        send_result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("gift_send_button"),
+            wait=0.8,
+        )
+        if send_result:
+            if self._record:
+                GiftRecordService.update_status(self._record, status="confirming")
+            return send_result
+        return ActionResult.wait(0.6)
+
+    def _extract_hold_counts(self, ocr_results: list[dict]):
+        """从 OCR 文本中提取持有数量变化。"""
+        for item in ocr_results:
+            text = str(item.get("text", ""))
+            before_count, after_count = GiftRecordService.parse_count_transition(text)
+            if before_count is not None and after_count is not None:
+                self._before_count = before_count
+                self._after_count = after_count
+                return
+
+    def _handle_confirm_popup(self, page_info: dict) -> ActionResult:
+        """确认弹窗点击 OK。"""
+        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
+        return result or ActionResult.wait(0.6)
+
+    def _handle_confirm_last_popup(self, page_info: dict) -> ActionResult:
+        """仅剩一张弹窗点击 OK。"""
+        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
+        return result or ActionResult.wait(0.6)
+
+    def _handle_swipe_page(self, page_info: dict) -> ActionResult:
+        """送卡成功页：执行上滑并落库。"""
+        if self._is_action_done("swiped"):
+            return ActionResult.ok(wait=0.5)
+
+        swipe_result = swipe_card_register(self.adb, wait=1.0)
+        if not swipe_result.success:
+            return swipe_result
+
+        self._mark_action_done("swiped")
+        self._finalize_success()
+        self._completed = True
+        return ActionResult.ok(wait=0.8)
+
+    def _finalize_success(self):
+        """任务成功后的记录与库存同步。"""
+        if not self._record:
+            return
+        self._record = GiftRecordService.mark_success_and_sync_count(
+            record=self._record,
+            card_id=self._fixed_card_id,
+            before_count=self._before_count,
+            after_count=self._after_count,
+        )
+        self._gift_sent_success = True
+
+    def _maybe_complete_for_pair_ordering(self):
+        """根据双向配对库存与当日执行情况决定是否等待对方先送。"""
+        if not self._record or not isinstance(self._target_account_id, int):
+            return
+        if not self._target_friend_id or self.account.id is None:
+            return
+
+        my_id = int(self.account.id)
+        peer_id = int(self._target_account_id)
+        my_friend_id = self.account.friend_id
+        if not my_friend_id:
+            return
+
+        peer_sent_to_me = GiftRecordService.is_daily_success(
+            account_id=peer_id,
+            target_friend_id=my_friend_id,
+        )
+        if peer_sent_to_me:
+            return
+
+        my_count = self._get_fixed_card_count(my_id)
+        peer_count = self._get_fixed_card_count(peer_id)
+
+        if my_count <= 0 and peer_count <= 0:
+            self._complete_without_send(
+                complete_reason="双方当前均无目标卡，结束本次送卡任务",
+                record_status="completed_no_card",
+                error_code="PAIR_BOTH_NO_CARD",
+            )
+            return
+
+        if my_count <= 0 < peer_count:
+            GiftRecordService.ensure_send_card_daily_pending(account_id=peer_id)
+            self._complete_without_send(
+                complete_reason="当前账号无卡且对方有卡，等待对方先送",
+                record_status="completed_wait_peer_first",
+                error_code="WAIT_PEER_FIRST",
+            )
+            return
+
+        if my_count > 0 and peer_count <= 0:
+            return
+
+        if my_count > 0 and peer_count > 0 and my_id > peer_id:
+            GiftRecordService.ensure_send_card_daily_pending(account_id=peer_id)
+            self._complete_without_send(
+                complete_reason="双方均有卡，按稳定顺序等待小ID账号先送",
+                record_status="completed_wait_peer_first",
+                error_code="WAIT_STABLE_ORDER",
+            )
+
+    def _get_fixed_card_count(self, account_id: int) -> int:
+        """读取账号当前固定目标卡库存数量。"""
+        if self._fixed_card_id is None:
+            return 0
+        row = AccountCardRepository().get(account_id, self._fixed_card_id)
+        if row is None:
+            return 0
+        return max(int(row.count), 0)
