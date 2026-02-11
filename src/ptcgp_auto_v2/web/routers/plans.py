@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request, Query, Depends
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
+import json
+
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.account_service import (
     build_account_plans_context,
@@ -13,7 +15,7 @@ from ptcgp_auto_v2.web.services.plan_service import (
     upsert_plan_from_form,
     delete_plan_by_id,
 )
-from ptcgp_auto_v2.web.utils.i18n import detect_lang
+from ptcgp_auto_v2.web.utils.i18n import detect_lang, get_translations, normalize_lang
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -54,7 +56,20 @@ async def save_plan(
 ):
     """保存计划数据。"""
     form = await request.form()
-    upsert_plan_from_form(form)
+    duplicate_name = upsert_plan_from_form(form)
+
+    if duplicate_name is not None:
+        # 名称重复，返回 toast 提示但不关闭弹窗
+        current_lang = normalize_lang(detect_lang(request, lang))
+        t = get_translations(current_lang)
+        msg_tpl = t.get("msg_plan_name_duplicate", "Plan name '{name}' already exists")
+        message = msg_tpl.replace("{name}", duplicate_name)
+        response = HTMLResponse("", status_code=422)
+        response.headers["HX-Reswap"] = "none"
+        response.headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"message": message}}, ensure_ascii=True
+        )
+        return response
 
     response = await get_management_plans(request, lang=lang)
     response.headers["HX-Trigger"] = "closeModal"
