@@ -18,7 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=4.12">
+    <link rel="stylesheet" href="/static/css/main.css?v=4.13">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -458,6 +458,18 @@
                                 <button
                                     type="button"
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
+                                    hx-get="/management/daily-gift?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    data-hash="daily-gift"
+                                    onclick="updateSidebarState(this)"
+                                    aria-label="{{ t.menu_daily_gift or 'DAILY GIFT' }}">
+                                    {{ t.menu_daily_gift or 'DAILY GIFT' }}
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/friendships?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="friendships"
@@ -490,7 +502,7 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.64"></script>
+    <script type="module" src="/static/js/main.js?v=4.66"></script>
     <script>
         document.body.addEventListener("closeModal", function(){
             closeModal();

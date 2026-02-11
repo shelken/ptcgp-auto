@@ -13,6 +13,7 @@ import { restoreOwnedGridCols } from './owned_cards.js';
 import { initSortable } from './tasks.js';
 import { cardPreviewState, closeCardPreview } from './card_preview.js';
 import { restoreTab, currentTabName } from './tabs.js';
+import { initDailyGiftDatePickers } from './daily_gift.js';
 
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
@@ -246,9 +247,10 @@ export function initApp() {
         restoreViewMode();
         restoreOwnedGridCols();
         initCustomSelects(document);
+        initDailyGiftDatePickers(document);
 
         const hash = window.location.hash.replace('#', '');
-        if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships'].includes(hash)) {
+        if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
             const activeBtn = document.querySelector(`.sidebar-btn.active[data-hash="${hash}"]`);
             if (!activeBtn) {
                 setTimeout(() => {
@@ -280,6 +282,7 @@ export function initApp() {
 
         document.body.addEventListener('htmx:load', function(evt) {
             initCustomSelects(evt.detail.elt);
+            initDailyGiftDatePickers(evt.detail.elt);
             updateRelativeTimes(evt.detail.elt);
             restoreTasksFilters(evt.detail.elt);
             initTaskSortControls(evt.detail.elt);
