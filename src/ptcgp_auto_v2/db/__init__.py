@@ -8,6 +8,7 @@
 from ptcgp_auto_v2.db.engine import get_engine, get_session, session_scope
 from ptcgp_auto_v2.db.models import (
     Account,
+    AccountStat,
     AccountPackConfig,
     PackRecord,
     TaskInstance,
@@ -16,6 +17,7 @@ from ptcgp_auto_v2.db.models import (
 from ptcgp_auto_v2.db.repositories import (
     AccountPackConfigRepository,
     AccountRepository,
+    AccountStatRepository,
     PackRecordRepository,
     TaskInstanceRepository,
     TaskPlanRepository,
@@ -28,6 +30,7 @@ __all__ = [
     "session_scope",
     # 模型
     "Account",
+    "AccountStat",
     "AccountPackConfig",
     "PackRecord",
     "TaskInstance",
@@ -35,6 +38,7 @@ __all__ = [
     # 仓库
     "AccountPackConfigRepository",
     "AccountRepository",
+    "AccountStatRepository",
     "PackRecordRepository",
     "TaskInstanceRepository",
     "TaskPlanRepository",

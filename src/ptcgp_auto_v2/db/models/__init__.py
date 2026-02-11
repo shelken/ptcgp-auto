@@ -6,6 +6,7 @@ SQLModel 模型定义
 """
 
 from .account import Account
+from .account_stat import AccountStat
 from .account_pack_config import AccountPackConfig
 from .account_pack_point import AccountPackPoint
 from .account_card import AccountCard
@@ -25,6 +26,7 @@ __all__ = [
     "TimestampMixin",
     "TaskPlan",
     "Account",
+    "AccountStat",
     "AccountTaskPlan",
     "AccountFriendRequest",
     "AccountFriendship",
