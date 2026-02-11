@@ -274,11 +274,59 @@ class TestHandleSelectCountry(unittest.TestCase):
         ]
         page_detector = FakePageDetector(ocr_results=ocr_results)
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        task._mark_action_done("select_country_list_opened")
 
         result = task._handle_select_country({"ocr_results": ocr_results})
 
         self.assertTrue(result.success)
-        # 验证国家选择已标记为完成（自动检测到目标国家已存在）
+        # 验证国家选择已标记为完成
+        self.assertTrue(task._is_action_done("select_country_country_clicked"))
+
+    @patch("ptcgp_auto_v2.tasks.init_account.tap_ok")
+    def test_resets_country_selection_flags_after_ok(self, tap_ok_mock):
+        """测试点击 OK 后会重置国家选择标记，便于下轮重试"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector(ocr_results=[])
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+
+        task._mark_action_done("select_country_list_opened")
+        task._mark_action_done("select_country_country_clicked")
+        task._mark_action_done("select_country_year_clicked")
+        task._mark_action_done("select_country_year_selected")
+        task._mark_action_done("select_country_month_clicked")
+        task._mark_action_done("select_country_month_selected")
+        tap_ok_mock.return_value = ActionResult.ok(wait=1.0)
+
+        result = task._handle_select_country({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertFalse(task._is_action_done("select_country_list_opened"))
+        self.assertFalse(task._is_action_done("select_country_country_clicked"))
+
+    @patch("ptcgp_auto_v2.tasks.init_account.tap_ok")
+    def test_keeps_country_selection_flags_on_country_form(self, tap_ok_mock):
+        """测试主表单点击 OK 时不重置国家标记，避免重复打开国家列表。"""
+        adb = FakeAdb()
+        ocr_results = [
+            {"text": "年", "box": {"x1": 300, "y1": 1300, "x2": 340, "y2": 1350}},
+            {"text": "月", "box": {"x1": 700, "y1": 1300, "x2": 740, "y2": 1350}},
+            {"text": "OK", "box": {"x1": 500, "y1": 1600, "x2": 580, "y2": 1680}},
+        ]
+        page_detector = FakePageDetector(ocr_results=ocr_results)
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+
+        task._mark_action_done("select_country_list_opened")
+        task._mark_action_done("select_country_country_clicked")
+        task._mark_action_done("select_country_year_clicked")
+        task._mark_action_done("select_country_year_selected")
+        task._mark_action_done("select_country_month_clicked")
+        task._mark_action_done("select_country_month_selected")
+        tap_ok_mock.return_value = ActionResult.ok(wait=1.0)
+
+        result = task._handle_select_country({"ocr_results": ocr_results})
+
+        self.assertTrue(result.success)
+        self.assertTrue(task._is_action_done("select_country_list_opened"))
         self.assertTrue(task._is_action_done("select_country_country_clicked"))
 
 
@@ -429,6 +477,32 @@ class TestHandleSelectFavoriteCard(unittest.TestCase):
 
         self.assertTrue(result.success)
         mock_helper.assert_called_once_with(adb, wait=1.0)
+
+
+class TestHandleUnknownPage(unittest.TestCase):
+    """测试未知页面兜底点击策略。"""
+
+    @patch("ptcgp_auto_v2.tasks.init_account.quick_tap")
+    def test_uses_three_fallback_points(self, quick_tap_mock):
+        """未知页面应按三点位顺序快速点击。"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        quick_tap_mock.return_value = ActionResult.ok(wait=0.5)
+
+        result = task.handle_unknown_page({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        quick_tap_mock.assert_called_once_with(
+            adb,
+            tap_points=[
+                (adb.center_x(), adb.scaled_y(10)),
+                (adb.center_x(), adb.center_y()),
+                (adb.scaled_x(960), adb.scaled_y(1740)),
+            ],
+            times=1,
+            wait=0.5,
+        )
 
 
 if __name__ == "__main__":
