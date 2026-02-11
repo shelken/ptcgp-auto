@@ -27,6 +27,12 @@ from ptcgp_auto_v2.core.task_base import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
+    long_press_opening_card,
+    swipe_card_register,
+    swipe_open_pack,
+    tap_opening_continue,
+)
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     click_close,
@@ -49,19 +55,6 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-# 延迟导入 OpenPackTask（避免循环导入）
-_open_pack_task = None
-
-
-def _get_open_pack_task(adb, recognizer, page_detector):
-    """获取 OpenPackTask 实例（延迟创建）"""
-    global _open_pack_task
-    if _open_pack_task is None:
-        from ptcgp_auto_v2.tasks.open_pack import OpenPackTask
-
-        _open_pack_task = OpenPackTask(adb, recognizer, page_detector)
-    return _open_pack_task
 
 
 # ============================================================
@@ -675,10 +668,7 @@ class InitAccountTask(Task):
     def _handle_swipe_open(self, page_info: dict) -> ActionResult:
         """处理滑动开包引导页面"""
         logger.info("  -> 滑动开包")
-        open_pack_task = _get_open_pack_task(
-            self.adb, self.recognizer, self.page_detector
-        )
-        return open_pack_task._handle_opening_swipe(page_info)
+        return swipe_open_pack(self.adb, wait=2.5)
 
     def _handle_tap_to_flip(self, page_info: dict) -> ActionResult:
         """处理翻开卡牌页面"""
@@ -697,22 +687,20 @@ class InitAccountTask(Task):
         return tap_center(self.adb, wait=2.0)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
-        """处理开包结果页面（复用 OpenPackTask）"""
-        open_pack_task = _get_open_pack_task(
-            self.adb, self.recognizer, self.page_detector
+        """处理开包结果页面（复用开包通用动作）"""
+        return tap_opening_continue(
+            self.adb, page_info.get("ocr_results", []), wait=1.5
         )
-        return open_pack_task._handle_pack_opening_result(page_info)
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
-        """处理卡牌登录页面（复用 OpenPackTask）"""
-        open_pack_task = _get_open_pack_task(
-            self.adb, self.recognizer, self.page_detector
-        )
-        return open_pack_task._handle_card_register(page_info)
+        """处理卡牌登录页面（复用开包通用动作）"""
+        return swipe_card_register(self.adb)
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
-        """处理卡牌展示页面（复用 OpenPackTask）"""
-        open_pack_task = _get_open_pack_task(
-            self.adb, self.recognizer, self.page_detector
+        """处理卡牌展示页面（复用开包通用动作）"""
+        result = long_press_opening_card(
+            self.adb, page_info.get("ocr_results", []), wait=3.0
         )
-        return open_pack_task._handle_opening_card(page_info)
+        if result:
+            return result
+        return ActionResult.ok(wait=3.0)

@@ -9,7 +9,6 @@
 import logging
 import time
 
-from ptcgp_auto_v2.config.constants import SWIPE_STEPS_REGISTER
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -18,11 +17,10 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     normalize_text,
-    swipe,
-    swipe_card_coords,
     tap_box,
     tap_home_icon,
     tap_text,
@@ -201,9 +199,7 @@ class ClaimGiftsTask(Task):
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """处理卡牌登录页面：向上滑动登录卡牌"""
-        logger.debug("  -> 卡牌登录页面，向上滑动登录卡牌")
-        start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, steps=SWIPE_STEPS_REGISTER, wait=1.0)
+        return swipe_card_register(self.adb, wait=1.0)
 
     def _handle_send_thanks(self, page_info: dict) -> ActionResult:
         """处理送出谢谢弹窗：点击"謝謝！"按钮"""

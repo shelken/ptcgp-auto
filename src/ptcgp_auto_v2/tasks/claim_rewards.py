@@ -9,7 +9,6 @@
 import logging
 import time
 
-from ptcgp_auto_v2.config.constants import SWIPE_STEPS_REGISTER
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -18,13 +17,12 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.color import is_button_clickable
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     navigate_back,
     quick_tap,
-    swipe,
-    swipe_card_coords,
     tap_box,
     tap_home_icon,
     tap_matched_element,
@@ -362,9 +360,7 @@ class ClaimRewardsTask(Task):
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（精英牌组奖励）"""
-        logger.debug("  -> 向上滑动卡牌登录图鉴")
-        start, end = swipe_card_coords(self.adb)
-        return swipe(self.adb, start, end, steps=SWIPE_STEPS_REGISTER)
+        return swipe_card_register(self.adb)
 
     def _handle_reward_detail(self, page_info: dict) -> ActionResult:
         """处理奖励详情页面：点击達成按钮"""

@@ -379,20 +379,20 @@ class TestHandleSwipeOpen(unittest.TestCase):
     """测试滑动开包页面处理"""
 
     def test_swipes_horizontally(self):
-        """测试横向滑动（调用 OpenPackTask 方法）"""
+        """测试横向滑动（调用开包通用工具）"""
         adb = FakeAdb()
         ocr_results = []
         page_detector = FakePageDetector(ocr_results=ocr_results)
         recognizer = MockRecognizer()
         task = InitAccountTask(adb, recognizer=recognizer, page_detector=page_detector)
 
-        # 调用后会使用 OpenPackTask._handle_opening_swipe
         result = task._handle_swipe_open({"ocr_results": ocr_results})
 
-        # 验证返回了 ActionResult
         self.assertTrue(result.success)
-        # OpenPackTask 会执行滑动，但具体 swipes 在 OpenPackTask 的 adb 实例上
-        # 这里我们主要验证没有抛出异常且返回成功
+        self.assertEqual(1, len(adb.swipes))
+        start, end, _ = adb.swipes[0]
+        self.assertGreater(end[0], start[0])
+        self.assertEqual(start[1], end[1])
 
 
 class TestHandleEnjoy(unittest.TestCase):
