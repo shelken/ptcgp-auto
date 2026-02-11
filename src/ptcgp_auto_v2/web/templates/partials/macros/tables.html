@@ -28,7 +28,7 @@
 {% macro table_row(cells, row_class='border-theme') %}
 <tr class="border-b {{ row_class }} hover-row transition-colors">
     {% for cell in cells %}
-    <td class="p-3">{{ cell }}</td>
+    <td class="p-4 align-middle">{{ cell }}</td>
     {% endfor %}
 </tr>
 {% endmacro %}
