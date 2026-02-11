@@ -3,6 +3,7 @@ from ptcgp_auto_v2.db.engine import get_engine
 from .account_pack_config_repository import AccountPackConfigRepository
 from .account_pack_point_repository import AccountPackPointRepository
 from .account_card_repository import AccountCardRepository
+from .account_stat_repository import AccountStatRepository
 from .account_gift_pair_repository import AccountGiftPairRepository
 from .account_gift_record_repository import AccountGiftRecordRepository
 from .account_repository import AccountRepository
@@ -18,6 +19,7 @@ __all__ = [
     "AccountPackConfigRepository",
     "AccountPackPointRepository",
     "AccountCardRepository",
+    "AccountStatRepository",
     "AccountGiftPairRepository",
     "AccountGiftRecordRepository",
     "AccountRepository",

@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskPlan
+from ptcgp_auto_v2.db.models import Account, AccountStat, AccountTaskPlan, TaskPlan
 
 
 class AccountRepository:
@@ -22,6 +22,7 @@ class AccountRepository:
                     selectinload(
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
+                    selectinload(cast(Any, Account.account_stat)),
                 )
             )
             return session.exec(statement).first()
@@ -47,6 +48,7 @@ class AccountRepository:
                     selectinload(
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
+                    selectinload(cast(Any, Account.account_stat)),
                 )
                 .order_by(col(Account.id))
             )
@@ -82,6 +84,7 @@ class AccountRepository:
                     selectinload(
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
+                    selectinload(cast(Any, Account.account_stat)),
                 )
                 .order_by(col(Account.id))
             )
@@ -102,6 +105,7 @@ class AccountRepository:
                     selectinload(
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
+                    selectinload(cast(Any, Account.account_stat)),
                 )
                 .order_by(col(Account.id))
             )
@@ -152,7 +156,6 @@ class AccountRepository:
             db_account.nintendo_id = account.nintendo_id
             db_account.nickname = account.nickname
             db_account.level = account.level
-            db_account.exchange_points = account.exchange_points
             db_account.country = account.country
             db_account.xml_content = account.xml_content
             db_account.session_token_iat = account.session_token_iat

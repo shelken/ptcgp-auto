@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from .account_stat import AccountStat
     from .pack_record import PackRecord
     from .task_instance import TaskInstance
     from .task_plan import TaskPlan
@@ -31,6 +32,7 @@ class Account(SQLModel, table=True):
     - country: 国家/地区代码（从 JWT 解析）
     - xml_content: 账号 XML 文件内容（用于账号切换）
     - session_token_iat: sessionToken 的 iat 字段（签发时间戳）
+    - 资源统计（exchange_points、pack_hourglass_count）迁移到 account_stats 表
     """
 
     __tablename__ = "accounts"
@@ -43,7 +45,6 @@ class Account(SQLModel, table=True):
     nintendo_id: Optional[str] = Field(default=None, description="Nintendo 账号 ID")
     nickname: Optional[str] = None
     level: Optional[int] = None
-    exchange_points: Optional[int] = None
     country: Optional[str] = Field(default=None, description="国家/地区代码")
     xml_content: Optional[bytes] = Field(default=None, description="XML 文件内容")
     session_token_iat: Optional[int] = None
@@ -74,6 +75,27 @@ class Account(SQLModel, table=True):
             "foreign_keys": "[PackRecord.account_id]",
         },
     )
+    account_stat: Optional["AccountStat"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "Account.id==AccountStat.account_id",
+            "foreign_keys": "[AccountStat.account_id]",
+            "uselist": False,
+        }
+    )
+
+    @property
+    def exchange_points(self) -> Optional[int]:
+        """读取账号交换点数（来自 account_stats）。"""
+        if self.account_stat is None:
+            return None
+        return self.account_stat.exchange_points
+
+    @property
+    def pack_hourglass_count(self) -> Optional[int]:
+        """读取账号开包沙漏数量（来自 account_stats）。"""
+        if self.account_stat is None:
+            return None
+        return self.account_stat.pack_hourglass_count
 
     @property
     def display_name(self) -> str:
@@ -90,6 +112,7 @@ class Account(SQLModel, table=True):
             "nickname": self.nickname,
             "level": self.level,
             "exchange_points": self.exchange_points,
+            "pack_hourglass_count": self.pack_hourglass_count,
             "country": self.country,
             "remark": self.remark,
             "xml_content": self.xml_content.hex() if self.xml_content else None,
