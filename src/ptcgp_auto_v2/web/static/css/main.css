@@ -493,6 +493,12 @@ body {
     overflow: hidden;
 }
 
+.owned-filter-header {
+    display: flex;
+    align-items: stretch;
+    border-bottom: var(--border-width) solid var(--border-color);
+}
+
 .owned-filter-toggle {
     width: 100%;
     display: flex;
@@ -504,7 +510,23 @@ body {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    border-bottom: var(--border-width) solid var(--border-color);
+    border-bottom: 0;
+}
+
+.owned-filter-clear {
+    border-left: var(--border-width) solid var(--border-color);
+    padding: 0 0.65rem;
+    font-size: 0.68rem;
+    font-weight: bold;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    background-color: var(--bg-subtle);
+    color: var(--text-color);
+}
+
+.owned-filter-clear:hover {
+    background-color: var(--card-bg);
 }
 
 .owned-filter-chevron {
@@ -688,6 +710,45 @@ body {
     border-radius: var(--radius);
     background-color: var(--bg-subtle);
     color: var(--text-color);
+}
+
+.owned-cols-segmented {
+    display: inline-flex;
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.owned-cols-segmented .owned-cols-btn {
+    border: none;
+    border-right: var(--border-width) solid var(--border-color);
+    box-shadow: none;
+    border-radius: 0;
+    min-width: 2.4rem;
+    padding: 0.2rem 0.7rem;
+}
+
+.owned-cols-segmented .owned-cols-btn:last-child {
+    border-right: none;
+}
+
+.plans-empty-state {
+    border-style: dashed;
+}
+
+.sortable-ghost {
+    opacity: 0.35;
+    border-style: dashed !important;
+}
+
+.sortable-chosen {
+    background-color: var(--bg-subtle) !important;
+    box-shadow: 0 0 0 2px var(--border-color);
+}
+
+.sortable-drag {
+    transform: rotate(1deg);
+    box-shadow: 0 10px 24px var(--shadow-color);
 }
 
 .records-filter-panel {

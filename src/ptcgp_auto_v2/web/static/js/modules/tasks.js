@@ -90,7 +90,9 @@ export function initSortable(context = document) {
     if (taskList && !taskList.dataset.sortableInit) {
         new Sortable(taskList, {
             animation: 150,
-            ghostClass: 'bg-subtle',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
             handle: '.cursor-move',
             onEnd: function() {
                 updateTaskOrder();
@@ -104,7 +106,9 @@ export function initSortable(context = document) {
     if (plansList && !plansList.dataset.sortableInit) {
         new Sortable(plansList, {
             animation: 150,
-            ghostClass: 'bg-subtle',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
             handle: '.cursor-move',
             onEnd: function() {
                 checkEmpty(plansList);
