@@ -18,12 +18,14 @@
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.filter_account }}</label>
                 <select
                     name="account_id"
+                    data-action="sync-friendship-state"
+                    data-state-name="account_id"
                     class="brutal-input min-w-56 js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
                     {% endif %}
-                    onchange="document.querySelector('#friendship-state-form input[name=\'account_id\']').value=this.value">
+                    >
                     <option value="">{{ t.label_all or 'All' }}</option>
                     {% for account in accounts %}
                     {% set account_label = (account.nickname or account.display_name or ('#' ~ account.id)) ~ ' #' ~ account.id %}
@@ -53,8 +55,9 @@
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_from_account or 'From Account' }}</label>
                 <select
                     name="from_account_id"
+                    data-action="sync-friendship-state"
+                    data-state-name="from_account_id"
                     class="brutal-input w-full js-custom-select"
-                    onchange="document.querySelector('#friendship-state-form input[name=\'from_account_id\']').value=this.value"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -113,8 +116,9 @@
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_from_account or 'From Account' }}</label>
                 <select
                     name="from_account_id"
+                    data-action="sync-friendship-state"
+                    data-state-name="from_account_id"
                     class="brutal-input w-full js-custom-select"
-                    onchange="document.querySelector('#friendship-state-form input[name=\'from_account_id\']').value=this.value"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"

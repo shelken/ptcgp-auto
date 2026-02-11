@@ -6,7 +6,7 @@
 
     <form hx-post="/api/accounts/{{ account.id }}/details?lang={{ current_lang }}"
           hx-target="#management-content"
-          hx-on:htmx:after-request="if(event.detail.successful) closeModal()"
+          data-close-modal-on-success="true"
           class="space-y-6">
 
         <!-- Info Section -->

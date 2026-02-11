@@ -2,22 +2,113 @@ import { getModal } from './modal.js';
 import { isElementInActiveTab, showToast } from './utils.js';
 import { initCustomSelects } from './custom_select.js';
 import {
+    clearFilters,
     restoreFilters,
+    refreshRecords,
+    refreshOwnedCards,
+    clearOwnedFilters,
     restoreOwnedFilters,
     restoreTasksFilters,
     updateOwnedFilterGroupsState,
+    toggleOwnedFilterGroup,
+    toggleOwnedFilterChip,
+    saveTasksFilters,
+    updateTaskResetButtonState,
     saveOwnedFilters,
+    saveFilters,
     initTaskSortControls,
 } from './filters.js';
-import { restoreOwnedGridCols } from './owned_cards.js';
-import { initSortable } from './tasks.js';
-import { cardPreviewState, closeCardPreview } from './card_preview.js';
-import { restoreTab, currentTabName } from './tabs.js';
+import { restoreOwnedGridCols, setOwnedGridCols, toggleOwnedCounts } from './owned_cards.js';
+import { initSortable, updateIntervalSeconds, updateTaskItemState } from './tasks.js';
+import { addPlan, removePlan, savePlans } from './plans.js';
+import { cardPreviewState, closeCardPreview, openCardPreview } from './card_preview.js';
+import { restoreTab, currentTabName, switchTab, updateSidebarState } from './tabs.js';
 import { initDailyGiftDatePickers } from './daily_gift.js';
 
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_THEME = 'ptcgp_theme';
+const htmxLoadingButtons = new WeakMap();
+
+function setButtonLoading(button, loading) {
+    if (!button) return;
+
+    if (loading) {
+        if (button.dataset.loadingActive === '1') return;
+        button.dataset.loadingActive = '1';
+        button.dataset.prevDisabled = button.disabled ? '1' : '0';
+        button.disabled = true;
+        button.classList.add('btn-loading');
+        button.setAttribute('aria-busy', 'true');
+        return;
+    }
+
+    if (button.dataset.loadingActive !== '1') return;
+    button.classList.remove('btn-loading');
+    button.removeAttribute('aria-busy');
+    if (button.dataset.prevDisabled !== '1') {
+        button.disabled = false;
+    }
+    delete button.dataset.loadingActive;
+    delete button.dataset.prevDisabled;
+}
+
+function resolveRequestButton(detail) {
+    const elt = detail && detail.elt;
+    if (!elt || !(elt instanceof Element)) return null;
+
+    if (elt.matches('button, input[type="submit"]')) {
+        return elt;
+    }
+
+    if (elt.tagName === 'FORM') {
+        const active = document.activeElement;
+        if (active instanceof Element
+            && elt.contains(active)
+            && active.matches('button, input[type="submit"]')) {
+            return active;
+        }
+        return elt.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
+    }
+
+    return elt.closest('button, input[type="submit"]');
+}
+
+function toggleSection(sectionId, iconId = null) {
+    if (!sectionId) return;
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+
+    const shouldShow = section.classList.contains('hidden');
+    section.classList.toggle('hidden', !shouldShow);
+
+    if (!iconId) return;
+    const icon = document.getElementById(iconId);
+    if (!icon) return;
+    icon.style.transform = shouldShow ? 'rotate(0deg)' : 'rotate(-90deg)';
+}
+
+async function copyTextWithToast(text, message) {
+    if (!text) return;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const input = document.createElement('textarea');
+            input.value = text;
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+        }
+        showToast(message || 'Copied!');
+    } catch (error) {
+        console.error('复制失败:', error);
+    }
+}
 
 // --- 语言持久化 ---
 export function setLang(lang) {
@@ -231,11 +322,126 @@ export function updateRelativeTimes(root = document) {
     });
 }
 
+function handleActionClick(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const actionButton = target.closest('[data-action]');
+    if (!actionButton) return;
+    const { action } = actionButton.dataset;
+
+    if (action === 'set-lang' && actionButton.dataset.lang) {
+        setLang(actionButton.dataset.lang);
+        return;
+    }
+
+    if (action === 'switch-tab' && actionButton.dataset.tab) {
+        switchTab(actionButton.dataset.tab);
+        return;
+    }
+
+    if (action === 'set-view-mode' && actionButton.dataset.mode) {
+        setViewMode(actionButton.dataset.mode);
+        return;
+    }
+
+    if (action === 'toggle-owned-filter-group') {
+        toggleOwnedFilterGroup(actionButton);
+        return;
+    }
+
+    if (action === 'toggle-owned-filter-chip') {
+        const inputId = actionButton.dataset.inputId;
+        if (inputId) {
+            toggleOwnedFilterChip(inputId);
+        }
+        return;
+    }
+
+    if (action === 'set-owned-grid-cols') {
+        setOwnedGridCols(actionButton.dataset.cols);
+        return;
+    }
+
+    if (action === 'toggle-owned-counts') {
+        toggleOwnedCounts();
+        return;
+    }
+
+    if (action === 'update-sidebar-state') {
+        updateSidebarState(actionButton);
+        return;
+    }
+
+    if (action === 'refresh-records') {
+        refreshRecords(actionButton);
+        return;
+    }
+
+    if (action === 'clear-record-filters') {
+        clearFilters();
+        return;
+    }
+
+    if (action === 'refresh-owned-cards') {
+        refreshOwnedCards(actionButton);
+        return;
+    }
+
+    if (action === 'clear-owned-filters') {
+        clearOwnedFilters();
+        return;
+    }
+
+    if (action === 'save-account-plans') {
+        savePlans(actionButton);
+        return;
+    }
+
+    if (action === 'remove-plan') {
+        removePlan(actionButton);
+        return;
+    }
+
+    if (action === 'open-card-preview') {
+        openCardPreview(actionButton);
+        return;
+    }
+
+    if (action === 'close-modal') {
+        getModal().close();
+        return;
+    }
+
+    if (action === 'toggle-section') {
+        toggleSection(actionButton.dataset.targetId, actionButton.dataset.iconId || null);
+        return;
+    }
+
+    if (action === 'copy-text') {
+        copyTextWithToast(actionButton.dataset.copyText, actionButton.dataset.copyToast);
+        return;
+    }
+
+    if (action === 'set-daily-gift-date' && actionButton.dataset.date) {
+        const dateValue = actionButton.dataset.date;
+        const form = actionButton.closest('form');
+        if (form) {
+            const valueInput = form.querySelector('[data-role="value"]');
+            const labelEl = form.querySelector('[data-role="label"]');
+            if (valueInput) valueInput.value = dateValue;
+            if (labelEl) labelEl.textContent = dateValue;
+        }
+        const stateInput = document.querySelector('#daily-gift-state-form input[name="biz_date_local"]');
+        if (stateInput) stateInput.value = dateValue;
+    }
+}
+
 // --- 初始化入口 ---
 export function initApp() {
     document.addEventListener('DOMContentLoaded', () => {
         initLang();
         restoreTheme();
+        document.body.addEventListener('click', handleActionClick);
         restoreTab();
         if (currentTabName === 'records') {
             restoreFilters();
@@ -291,6 +497,99 @@ export function initApp() {
         document.body.addEventListener('change', (event) => {
             if (event.target && event.target.classList.contains('owned-filter-checkbox')) {
                 updateOwnedFilterGroupsState();
+            }
+        });
+
+        document.body.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            const actionElement = target.closest('[data-action]');
+            if (!actionElement) return;
+            const action = actionElement.dataset.action;
+            if (action === 'set-theme') {
+                if (!(actionElement instanceof HTMLSelectElement)) return;
+                setTheme(actionElement.value);
+                return;
+            }
+            if (action === 'save-record-filters') {
+                saveFilters();
+                return;
+            }
+            if (action === 'save-owned-filters') {
+                saveOwnedFilters();
+                return;
+            }
+            if (action === 'save-tasks-filters') {
+                if (!(actionElement instanceof HTMLFormElement)) return;
+                saveTasksFilters();
+                updateTaskResetButtonState(actionElement);
+                return;
+            }
+            if (action === 'add-plan') {
+                if (!(actionElement instanceof HTMLSelectElement)) return;
+                addPlan();
+                return;
+            }
+            if (action === 'update-task-item-state') {
+                if (!(actionElement instanceof HTMLInputElement)) return;
+                updateTaskItemState(actionElement);
+                return;
+            }
+            if (action === 'toggle-interval-input') {
+                if (!(actionElement instanceof HTMLSelectElement)) return;
+                const targetId = actionElement.dataset.intervalTarget;
+                if (!targetId) return;
+                const intervalInput = document.getElementById(targetId);
+                if (!intervalInput) return;
+                intervalInput.classList.toggle('hidden', actionElement.value !== 'interval');
+                return;
+            }
+            if (action === 'sync-friendship-state') {
+                if (!(actionElement instanceof HTMLSelectElement)) return;
+                const stateName = actionElement.dataset.stateName;
+                if (!stateName) return;
+                const stateInput = document.querySelector(`#friendship-state-form input[name="${stateName}"]`);
+                if (stateInput) stateInput.value = actionElement.value;
+            }
+        });
+
+        document.body.addEventListener('input', (event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+            const actionElement = target.closest('[data-action]');
+            if (!actionElement) return;
+            const action = actionElement.dataset.action;
+            if (action === 'save-owned-filters-input') {
+                saveOwnedFilters();
+                return;
+            }
+            if (action === 'update-interval-seconds') {
+                if (!(actionElement instanceof HTMLInputElement)) return;
+                updateIntervalSeconds(actionElement);
+            }
+        });
+
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement)) return;
+            const action = form.dataset.action;
+            if (!action) return;
+
+            if (action === 'sync-daily-gift-submit') {
+                const valueInput = form.querySelector('[data-role="value"]');
+                const stateInput = document.querySelector('#daily-gift-state-form input[name="biz_date_local"]');
+                if (valueInput && stateInput) {
+                    stateInput.value = valueInput.value;
+                }
+                return;
+            }
+
+            if (action === 'sync-plan-intervals-submit') {
+                form.querySelectorAll('[data-interval-group] input[data-interval-unit]').forEach((input) => {
+                    if (input instanceof HTMLInputElement) {
+                        updateIntervalSeconds(input);
+                    }
+                });
             }
         });
 
@@ -374,10 +673,20 @@ export function initApp() {
                 && !window.ownedCardsUserScrolled
             ) {
                 event.preventDefault();
+                return;
+            }
+
+            const requestButton = resolveRequestButton(event.detail);
+            if (requestButton) {
+                if (elt) {
+                    htmxLoadingButtons.set(elt, requestButton);
+                }
+                setButtonLoading(requestButton, true);
             }
         });
 
         document.body.addEventListener('htmx:afterRequest', (event) => {
+            const elt = event.detail && event.detail.elt;
             const target = event.detail && event.detail.target;
             if (target && target.dataset) {
                 target.dataset.refreshing = '0';
@@ -386,6 +695,22 @@ export function initApp() {
                     target.dataset.loading = 'false';
                 }
             }
+
+            const requestButton = elt ? htmxLoadingButtons.get(elt) : null;
+            if (requestButton) {
+                setButtonLoading(requestButton, false);
+                htmxLoadingButtons.delete(elt);
+            }
+
+            if (event.detail && event.detail.successful && elt instanceof Element) {
+                if (elt.matches('[data-close-modal-on-success="true"]')) {
+                    getModal().close();
+                }
+            }
+        });
+
+        document.body.addEventListener('closeModal', () => {
+            getModal().close();
         });
 
         document.body.addEventListener('showToast', (event) => {

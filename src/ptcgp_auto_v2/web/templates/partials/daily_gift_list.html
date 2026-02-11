@@ -10,11 +10,11 @@
         <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_daily_gift or 'DAILY GIFT' }}</h2>
         <form
             id="daily-gift-filter-form"
+            data-action="sync-daily-gift-submit"
             class="flex flex-wrap items-end gap-3"
             hx-get="/management/daily-gift?lang={{ current_lang }}"
             hx-target="#management-content"
-            hx-swap="innerHTML"
-            onsubmit="document.querySelector('#daily-gift-state-form input[name=\'biz_date_local\']').value=this.querySelector('[data-role=\'value\']').value">
+            hx-swap="innerHTML">
             <div>
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_biz_date_local or 'Biz Date' }}</label>
                 <div class="daily-date-picker" data-daily-gift-date-picker data-locale="{{ current_lang }}">
@@ -46,8 +46,9 @@
                 {% for date_value in recent_biz_dates %}
                 <button
                     type="submit"
+                    data-action="set-daily-gift-date"
+                    data-date="{{ date_value }}"
                     class="brutal-btn text-xs {% if date_value == selected_biz_date_local %}active{% endif %}"
-                    onclick="this.form.querySelector('[data-role=\'value\']').value='{{ date_value }}'; this.form.querySelector('[data-role=\'label\']').textContent='{{ date_value }}'; document.querySelector('#daily-gift-state-form input[name=\'biz_date_local\']').value='{{ date_value }}'"
                     name="biz_date_local"
                     value="{{ date_value }}">
                     {{ date_value }}

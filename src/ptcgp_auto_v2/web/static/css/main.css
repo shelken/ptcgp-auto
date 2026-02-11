@@ -391,6 +391,33 @@ body {
     box-shadow: none !important;
 }
 
+.brutal-btn.btn-loading {
+    position: relative;
+    pointer-events: none;
+    cursor: wait;
+    opacity: 0.75;
+}
+
+.brutal-btn.btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 0.9rem;
+    height: 0.9rem;
+    top: 50%;
+    right: 0.5rem;
+    margin-top: -0.45rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: btn-spinner-rotate 0.7s linear infinite;
+}
+
+@keyframes btn-spinner-rotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* Specific theme active states */
 [data-theme="brutalist"] .brutal-btn.active { color: #fff !important; background-color: #000 !important; box-shadow: none !important; }
 [data-theme="retro"] .brutal-btn.active { color: #000 !important; background-color: var(--text-color) !important; box-shadow: none !important; }
@@ -1112,4 +1139,3 @@ body {
 .whitespace-nowrap {
     white-space: nowrap;
 }
-

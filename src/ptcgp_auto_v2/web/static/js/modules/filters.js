@@ -5,6 +5,54 @@ const STORAGE_KEY_FILTERS = 'ptcgp_filters';
 const STORAGE_KEY_OWNED_FILTERS = 'ptcgp_owned_filters';
 const STORAGE_KEY_TASKS_FILTERS = 'ptcgp_tasks_filters';
 
+function setButtonLoading(button, loading) {
+    if (!button) return;
+
+    if (loading) {
+        if (button.dataset.loadingActive === '1') return;
+        button.dataset.loadingActive = '1';
+        button.dataset.prevDisabled = button.disabled ? '1' : '0';
+        button.disabled = true;
+        button.classList.add('btn-loading');
+        button.setAttribute('aria-busy', 'true');
+        return;
+    }
+
+    if (button.dataset.loadingActive !== '1') return;
+    button.classList.remove('btn-loading');
+    button.removeAttribute('aria-busy');
+    if (button.dataset.prevDisabled !== '1') {
+        button.disabled = false;
+    }
+    delete button.dataset.loadingActive;
+    delete button.dataset.prevDisabled;
+}
+
+function bindRequestLoading(button, targetId) {
+    if (!button) return;
+    setButtonLoading(button, true);
+
+    let released = false;
+    const release = () => {
+        if (released) return;
+        released = true;
+        setButtonLoading(button, false);
+    };
+
+    const onAfterRequest = (event) => {
+        const target = event.detail && event.detail.target;
+        if (!target || target.id !== targetId) return;
+        document.body.removeEventListener('htmx:afterRequest', onAfterRequest);
+        release();
+    };
+
+    document.body.addEventListener('htmx:afterRequest', onAfterRequest);
+    setTimeout(() => {
+        document.body.removeEventListener('htmx:afterRequest', onAfterRequest);
+        release();
+    }, 10000);
+}
+
 // --- 筛选序列化 ---
 export function serializeFormFilters(form, extraSelectors = []) {
     const formData = new FormData(form);
@@ -304,7 +352,7 @@ function updateOwnedFilterGroupSummary(group) {
 
     if (checkedInputs.length === 0) {
         summary.classList.remove('has-items');
-        summary.innerHTML = '';
+        summary.replaceChildren();
         return;
     }
 
@@ -317,9 +365,17 @@ function updateOwnedFilterGroupSummary(group) {
     });
 
     summary.classList.add('has-items');
-    summary.innerHTML = items.map((item) => (
-        `<button type="button" class="owned-filter-chip" data-input-id="${item.id}" onclick="toggleOwnedFilterChip('${item.id}')">${item.text}</button>`
-    )).join('');
+    const fragment = document.createDocumentFragment();
+    items.forEach((item) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'owned-filter-chip';
+        chip.dataset.action = 'toggle-owned-filter-chip';
+        chip.dataset.inputId = item.id;
+        chip.textContent = item.text;
+        fragment.appendChild(chip);
+    });
+    summary.replaceChildren(fragment);
 }
 
 // --- 切换筛选 Chip ---
@@ -403,7 +459,7 @@ export function clearOwnedFilters() {
 }
 
 // --- 刷新记录列表 ---
-export function refreshRecords() {
+export function refreshRecords(button = null) {
     const urlParams = new URLSearchParams(window.location.search);
     const lang = urlParams.get('lang') || 'en';
 
@@ -422,12 +478,13 @@ export function refreshRecords() {
         });
     }
 
+    bindRequestLoading(button, 'records-container');
     htmx.ajax('GET', `/api/records?${params.toString()}`, {target: '#records-container', swap: 'innerHTML'});
     showToast('已刷新');
 }
 
 // --- 刷新已拥有卡牌列表 ---
-export function refreshOwnedCards() {
+export function refreshOwnedCards(button = null) {
     const urlParams = new URLSearchParams(window.location.search);
     const lang = urlParams.get('lang') || 'en';
 
@@ -444,6 +501,7 @@ export function refreshOwnedCards() {
         });
     }
 
+    bindRequestLoading(button, 'owned-cards-container');
     htmx.ajax('GET', `/api/owned-cards?${params.toString()}`, {target: '#owned-cards-container', swap: 'innerHTML'});
     showToast('已刷新');
 }

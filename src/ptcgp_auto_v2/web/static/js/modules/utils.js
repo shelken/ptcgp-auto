@@ -39,6 +39,34 @@ export function showToast(message, duration = 2000) {
 }
 
 /**
+ * 切换按钮加载态
+ * @param {HTMLElement | null} button - 目标按钮
+ * @param {boolean} loading - 是否处于加载中
+ */
+export function setButtonLoading(button, loading) {
+    if (!button) return;
+
+    if (loading) {
+        if (button.dataset.loadingActive === '1') return;
+        button.dataset.loadingActive = '1';
+        button.dataset.prevDisabled = button.disabled ? '1' : '0';
+        button.disabled = true;
+        button.classList.add('btn-loading');
+        button.setAttribute('aria-busy', 'true');
+        return;
+    }
+
+    if (button.dataset.loadingActive !== '1') return;
+    button.classList.remove('btn-loading');
+    button.removeAttribute('aria-busy');
+    if (button.dataset.prevDisabled !== '1') {
+        button.disabled = false;
+    }
+    delete button.dataset.loadingActive;
+    delete button.dataset.prevDisabled;
+}
+
+/**
  * Focus 管理
  */
 let previousActiveElement = null;
@@ -96,6 +124,7 @@ export function isElementInActiveTab(element) {
 // 导出到全局（供内联 onclick 使用）
 if (typeof window !== 'undefined') {
     window.showToast = showToast;
+    window.setButtonLoading = setButtonLoading;
     window.saveFocus = saveFocus;
     window.restoreFocus = restoreFocus;
     window.throttle = throttle;

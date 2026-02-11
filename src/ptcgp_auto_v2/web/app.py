@@ -32,6 +32,7 @@ import ptcgp_auto_v2.tasks
 
 app = FastAPI(title="PTCGP Auto Web")
 
+
 # 静态资源挂载
 static_path = os.path.join(current_dir, "static")
 app.mount("/static", StaticFiles(directory=static_path), name="static")

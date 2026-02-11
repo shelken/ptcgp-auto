@@ -18,7 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=4.13">
+    <link rel="stylesheet" href="/static/css/main.css?v=4.14">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -27,15 +27,15 @@
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div class="flex items-center gap-6 text-sm font-bold tracking-widest">
                 <div>
-                    <button type="button" onclick="setLang('en')" class="lang-link {% if current_lang == 'en' %}active{% endif %}" aria-label="Switch to English">EN</button>
+                    <button type="button" data-action="set-lang" data-lang="en" class="lang-link {% if current_lang == 'en' %}active{% endif %}" aria-label="Switch to English">EN</button>
                     <span class="mx-2" aria-hidden="true">/</span>
-                    <button type="button" onclick="setLang('zh_CN')" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}" aria-label="切换到中文">中文</button>
+                    <button type="button" data-action="set-lang" data-lang="zh_CN" class="lang-link {% if current_lang == 'zh_CN' %}active{% endif %}" aria-label="切换到中文">中文</button>
                 </div>
 
                 <!-- Theme Switcher -->
                 <div class="flex items-center gap-2">
                     <label for="theme-selector" class="opacity-60" aria-hidden="true">{{ t.theme_label }}:</label>
-                    <select id="theme-selector" onchange="setTheme(this.value)" class="theme-select js-custom-select w-48" aria-label="{{ t.theme_label }}">
+                    <select id="theme-selector" data-action="set-theme" class="theme-select js-custom-select w-48" aria-label="{{ t.theme_label }}">
                         <option value="brutalist">{{ t.themes.brutalist }}</option>
                         <option value="retro">{{ t.themes.retro }}</option>
                         <option value="organic">{{ t.themes.organic }}</option>
@@ -68,7 +68,8 @@
             <div class="flex gap-4 overflow-x-auto p-2">
                 <button
                     type="button"
-                    onclick="switchTab('records')"
+                    data-action="switch-tab"
+                    data-tab="records"
                     class="brutal-btn active text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-records"
                     data-hash="records"
@@ -78,7 +79,8 @@
                 </button>
                 <button
                     type="button"
-                    onclick="switchTab('owned-cards')"
+                    data-action="switch-tab"
+                    data-tab="owned-cards"
                     class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-owned-cards"
                     data-hash="owned-cards"
@@ -88,7 +90,8 @@
                 </button>
                 <button
                     type="button"
-                    onclick="switchTab('management')"
+                    data-action="switch-tab"
+                    data-tab="management"
                     class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-management"
                     data-hash="management"
@@ -105,15 +108,15 @@
                  <!-- View Mode -->
                 <div class="flex items-center gap-2">
                     <span class="font-bold uppercase tracking-widest text-sm text-muted" aria-hidden="true">{{ t.view_mode }}</span>
-                    <button type="button" onclick="setViewMode('list')" id="btn-view-list" class="brutal-btn active" aria-label="{{ t.view_mode }} {{ t.view_list }}">{{ t.view_list }}</button>
-                    <button type="button" onclick="setViewMode('grid')" id="btn-view-grid" class="brutal-btn" aria-label="{{ t.view_mode }} {{ t.view_grid }}">{{ t.view_grid }}</button>
+                    <button type="button" data-action="set-view-mode" data-mode="list" id="btn-view-list" class="brutal-btn active" aria-label="{{ t.view_mode }} {{ t.view_list }}">{{ t.view_list }}</button>
+                    <button type="button" data-action="set-view-mode" data-mode="grid" id="btn-view-grid" class="brutal-btn" aria-label="{{ t.view_mode }} {{ t.view_grid }}">{{ t.view_grid }}</button>
                 </div>
 
                 <!-- Separator -->
                 <div class="hidden lg:block w-px h-6 bg-separator" aria-hidden="true"></div>
 
                 <!-- Refresh -->
-                <button type="button" onclick="refreshRecords()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
+                <button type="button" data-action="refresh-records" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
                     {{ t.refresh }} ↻
                 </button>
 
@@ -121,7 +124,7 @@
                 <div class="hidden lg:block w-px h-6 bg-separator" aria-hidden="true"></div>
 
                 <!-- Clear Filters -->
-                <button type="button" onclick="clearFilters()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
+                <button type="button" data-action="clear-record-filters" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
                     {{ t.clear_filters }} ✕
                 </button>
             </div>
@@ -131,7 +134,7 @@
                   hx-target="#records-container"
                   hx-swap="innerHTML"
                   class="space-y-4"
-                  onchange="saveFilters()">
+                  data-action="save-record-filters">
 
                 <!-- Rarity Filter -->
                 <div class="flex flex-col lg:items-end gap-2">
@@ -207,7 +210,7 @@
                     <div class="brutal-card p-4 sticky top-4">
                         <div class="flex items-center justify-between mb-4">
                             <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.filter_title or 'FILTERS' }}</span>
-                            <button type="button" onclick="clearOwnedFilters()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
+                            <button type="button" data-action="clear-owned-filters" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.clear_filters }}">
                                 {{ t.clear_filters }}
                             </button>
                         </div>
@@ -217,7 +220,7 @@
                               hx-target="#owned-cards-container"
                               hx-swap="innerHTML"
                               class="space-y-4"
-                              onchange="saveOwnedFilters()">
+                              data-action="save-owned-filters">
 
                             <div>
                                 <label for="owned-account-id" class="block text-xs uppercase tracking-widest text-muted mb-2">
@@ -234,11 +237,11 @@
                                     hx-target="#owned-cards-container"
                                     hx-include="#owned-filter-form,#owned-sort-select"
                                     hx-trigger="input changed delay:400ms"
-                                    oninput="saveOwnedFilters()">
+                                    data-action="save-owned-filters-input">
                             </div>
 
                             <div class="owned-filter-group is-open" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
                                     <span>{{ t.filter_rarity }}</span>
                                     <span class="owned-filter-chevron">▾</span>
                                 </button>
@@ -257,7 +260,7 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
                                     <span>{{ t.filter_type }}</span>
                                     <span class="owned-filter-chevron">▾</span>
                                 </button>
@@ -276,7 +279,7 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
                                     <span>{{ t.filter_set }}</span>
                                     <span class="owned-filter-chevron">▾</span>
                                 </button>
@@ -297,7 +300,7 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
                                     <span>{{ t.filter_pack }}</span>
                                     <span class="owned-filter-chevron">▾</span>
                                 </button>
@@ -318,7 +321,7 @@
                             </div>
 
                             <div class="owned-filter-group" data-filter-group>
-                                <button type="button" class="owned-filter-toggle" onclick="toggleOwnedFilterGroup(this)">
+                                <button type="button" class="owned-filter-toggle" data-action="toggle-owned-filter-group">
                                     <span>{{ t.filter_element }}</span>
                                     <span class="owned-filter-chevron">▾</span>
                                 </button>
@@ -344,9 +347,9 @@
                         <div class="flex items-center gap-3">
                             <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.owned_cols_label }}</span>
                             <div class="flex items-center gap-2">
-                                <button type="button" class="brutal-btn owned-cols-btn" data-cols="5" onclick="setOwnedGridCols(5)">5</button>
-                                <button type="button" class="brutal-btn owned-cols-btn" data-cols="6" onclick="setOwnedGridCols(6)">6</button>
-                                <button type="button" class="brutal-btn owned-cols-btn" data-cols="7" onclick="setOwnedGridCols(7)">7</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="5">5</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="6">6</button>
+                                <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="7">7</button>
                             </div>
                         </div>
 
@@ -358,7 +361,7 @@
                                     name="sort_by"
                                     form="owned-filter-form"
                                     class="js-custom-select brutal-input text-xs py-1 px-2"
-                                    onchange="saveOwnedFilters()"
+                                    data-action="save-owned-filters"
                                     hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
                                     hx-target="#owned-cards-container"
                                     hx-include="#owned-filter-form,#owned-sort-select">
@@ -366,10 +369,10 @@
                                     <option value="acquired" selected>{{ t.owned_sort_acquired }}</option>
                                 </select>
                             </div>
-                            <button type="button" onclick="refreshOwnedCards()" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
+                            <button type="button" data-action="refresh-owned-cards" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
                                 {{ t.refresh }} ↻
                             </button>
-                            <button type="button" onclick="toggleOwnedCounts()" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_toggle }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
+                            <button type="button" data-action="toggle-owned-counts" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_toggle }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
                                 {{ t.owned_counts_toggle }}
                             </button>
                         </div>
@@ -413,7 +416,7 @@
                                     hx-get="/management/accounts?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="accounts"
-                                    onclick="updateSidebarState(this)"
+                                    data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_accounts or 'ACCOUNTS' }}">
                                     {{ t.menu_accounts or 'ACCOUNTS' }}
                                 </button>
@@ -425,7 +428,7 @@
                                     hx-get="/management/plans?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="plans"
-                                    onclick="updateSidebarState(this)"
+                                    data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_plans or 'TASK PLANS' }}">
                                     {{ t.menu_plans or 'TASK PLANS' }}
                                 </button>
@@ -437,7 +440,7 @@
                                     hx-get="/management/tasks?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="tasks"
-                                    onclick="updateSidebarState(this)"
+                                    data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_tasks or 'TASKS' }}">
                                     {{ t.menu_tasks or 'TASKS' }}
                                 </button>
@@ -449,7 +452,7 @@
                                     hx-get="/management/metadata?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="metadata"
-                                    onclick="updateSidebarState(this)"
+                                    data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_metadata or 'METADATA' }}">
                                     {{ t.menu_metadata or 'METADATA' }}
                                 </button>
@@ -461,7 +464,7 @@
                                     hx-get="/management/daily-gift?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="daily-gift"
-                                    onclick="updateSidebarState(this)"
+                                    data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_daily_gift or 'DAILY GIFT' }}">
                                     {{ t.menu_daily_gift or 'DAILY GIFT' }}
                                 </button>
@@ -473,7 +476,7 @@
                                     hx-get="/management/friendships?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-hash="friendships"
-                                    onclick="updateSidebarState(this)"
+                                    data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_friendships or 'FRIENDSHIPS' }}">
                                     {{ t.menu_friendships or 'FRIENDSHIPS' }}
                                 </button>
@@ -493,7 +496,7 @@
     </main>
 
     <!-- Modal Container -->
-    <div id="modal-container" class="fixed inset-0 bg-overlay z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true" onclick="if(event.target === this) closeModal()">
+    <div id="modal-container" class="fixed inset-0 bg-overlay z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
         <div id="modal-content" class="bg-surface p-6 brutal-border w-full max-w-4xl max-h-[90vh] overflow-y-auto relative"></div>
     </div>
 
@@ -502,11 +505,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=4.66"></script>
-    <script>
-        document.body.addEventListener("closeModal", function(){
-            closeModal();
-        });
-    </script>
+    <script type="module" src="/static/js/main.js?v=4.74"></script>
 </body>
 </html>
