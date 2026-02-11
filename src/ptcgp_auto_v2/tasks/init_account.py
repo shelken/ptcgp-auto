@@ -71,6 +71,11 @@ BASE_COUNTRY_BTN_Y = 745
 # 国家/地区列表滚动距离（基于 1920 高度）
 BASE_COUNTRY_SCROLL_DISTANCE_Y = 576  # 1920 * 0.30
 
+# 未知页面兜底点击点位（基于 1080x1920）
+BASE_UNKNOWN_TOP_TAP_Y = 10
+BASE_UNKNOWN_TASK_TAP_X = 960
+BASE_UNKNOWN_TASK_TAP_Y = 1740
+
 
 class InitAccountPhase(Enum):
     """新账号初始化任务阶段（仅用于页面间流转）"""
@@ -311,10 +316,19 @@ class InitAccountTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("未知页面，点击屏幕中心兜底")
-        tap_text_exact(
-            self.adb, page_info.get("ocr_results", []), get_text_patterns("text_task")
+        return quick_tap(
+            self.adb,
+            tap_points=[
+                (self.adb.center_x(), self.adb.scaled_y(BASE_UNKNOWN_TOP_TAP_Y)),
+                (self.adb.center_x(), self.adb.center_y()),
+                (
+                    self.adb.scaled_x(BASE_UNKNOWN_TASK_TAP_X),
+                    self.adb.scaled_y(BASE_UNKNOWN_TASK_TAP_Y),
+                ),
+            ],
+            times=1,
+            wait=0.5,
         )
-        return quick_tap(self.adb, wait=0.5)
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
@@ -372,59 +386,63 @@ class InitAccountTask(Task):
                     return country
             return None
 
-        # 步骤 1: 检测是否已选择允许列表中的任一国家
-        if not self._is_action_done("select_country_list_opened"):
-            matched_country = _find_allowed_country(ocr_results)
-            if matched_country:
-                logger.info(
-                    f"  -> 检测到允许的国家 {matched_country} 已选择，跳过国家选择"
-                )
-                self._mark_action_done("select_country_country_clicked")
-                self._mark_action_done("select_country_list_opened")
-            else:
-                # 优先尝试 OCR 识别文字点击
-                result = tap_text_exact(
-                    self.adb,
-                    ocr_results,
-                    get_text_patterns("init_country_btn"),
-                    wait=1.0,
-                )
-                if result:
-                    logger.info("  -> 点击「國家/地區」打开列表")
-                    self._mark_action_done("select_country_list_opened")
-                    return result
+        # 当前是否已回到国家+生日主表单（而非国家列表弹层）
+        is_country_form_ready = is_text_visible(
+            ocr_results, get_text_patterns("init_year_btn")
+        ) and is_text_visible(ocr_results, get_text_patterns("init_month_btn"))
 
-                # 兜底方案：OCR 失败时直接点击固定坐标
-                logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
-                tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
-                result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
+        # 步骤 1: 点击「國家/地區」打开列表
+        if (
+            not self._is_action_done("select_country_list_opened")
+            and not is_country_form_ready
+        ):
+            # 优先尝试 OCR 识别文字点击
+            result = tap_text_exact(
+                self.adb,
+                ocr_results,
+                get_text_patterns("init_country_btn"),
+                wait=1.0,
+            )
+            if result:
+                logger.info("  -> 点击「國家/地區」打开列表")
                 self._mark_action_done("select_country_list_opened")
                 return result
 
+            # 兜底方案：OCR 失败时直接点击固定坐标
+            logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
+            tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
+            result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
+            self._mark_action_done("select_country_list_opened")
+            return result
+
         # 步骤 2: 在列表中查找并点击允许的国家
         if not self._is_action_done("select_country_country_clicked"):
-            matched_country = _find_allowed_country(ocr_results)
-            if matched_country:
-                logger.info(f"  -> 找到允许的国家 {matched_country}，点击选择")
-                result = tap_text_exact(
-                    self.adb, ocr_results, [matched_country], wait=0.5
-                )
-                if result:
-                    self._mark_action_done("select_country_country_clicked")
-                    return result
+            if is_country_form_ready:
+                # 主表单里已经有国家值，不需要再反复点国家列表
+                self._mark_action_done("select_country_country_clicked")
             else:
-                logger.info("  -> 滑动查找目标国家")
-                start, end = scroll_points(
-                    self.adb,
-                    base_distance_y=BASE_COUNTRY_SCROLL_DISTANCE_Y,
-                    direction="up",
-                )
-                return swipe(
-                    self.adb,
-                    start,
-                    end,
-                    wait=2.0,
-                )
+                matched_country = _find_allowed_country(ocr_results)
+                if matched_country:
+                    logger.info(f"  -> 找到允许的国家 {matched_country}，点击选择")
+                    result = tap_text_exact(
+                        self.adb, ocr_results, [matched_country], wait=0.5
+                    )
+                    if result:
+                        self._mark_action_done("select_country_country_clicked")
+                        return result
+                else:
+                    logger.info("  -> 滑动查找目标国家")
+                    start, end = scroll_points(
+                        self.adb,
+                        base_distance_y=BASE_COUNTRY_SCROLL_DISTANCE_Y,
+                        direction="up",
+                    )
+                    return swipe(
+                        self.adb,
+                        start,
+                        end,
+                        wait=2.0,
+                    )
 
         # 步骤 3: 点击「年」打开年份选择列表
         if not self._is_action_done("select_country_year_clicked"):
@@ -485,6 +503,10 @@ class InitAccountTask(Task):
 
         # 最后点击 OK 完成整个页面
         result = tap_ok(self.adb, ocr_results, wait=1.0)
+        if result and not is_country_form_ready:
+            # 若未跳出当前页面，下次进入时重复「打开列表 -> 选国家 -> OK」流程。
+            self._action_cache.pop("select_country_list_opened", None)
+            self._action_cache.pop("select_country_country_clicked", None)
         return result or ActionResult.ok(wait=1.0)
 
     def _handle_data_use(self, page_info: dict) -> ActionResult:
