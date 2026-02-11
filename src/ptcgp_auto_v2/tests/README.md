@@ -11,7 +11,7 @@ v2 代码库的所有测试都必须位于此目录 (`src/ptcgp_auto_v2/tests/`)
 
 ## 测试规范
 
-1.  **镜像结构**：如果你要测试 `src/ptcgp_auto_v2/db/repositories.py`，测试文件应位于 `src/ptcgp_auto_v2/tests/db/test_repositories.py`。
+1.  **镜像结构**：如果你要测试 `src/ptcgp_auto_v2/db/`的文件，测试文件应该位于 `src/ptcgp_auto_v2/tests/db/`。
 2.  **命名规则**：所有测试文件必须以 `test_` 开头。
 3.  **测试类型**：
     *   **单元测试 (Unit Tests)**：Mock 外部依赖（DB, ADB 等），隔离测试逻辑。
