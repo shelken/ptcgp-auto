@@ -397,6 +397,9 @@ class WonderPickTask(Task):
             self._skip("挑战力不足")
             return ActionResult.ok(wait=1.0)
 
+        # 在弹窗中重扫一次，确保目标位索引基于稳定的 5 张卡布局计算
+        self._refresh_target_pick_index_in_popup()
+
         result = tap_ok(self.adb, ocr_results, wait=1.0)
         if result:
             self._consume_stamina()
@@ -496,7 +499,6 @@ class WonderPickTask(Task):
             best = self.pick_best_target(active_found, self._active_targets)
             if not best:
                 return None
-            self._target_pick_index = self._build_rarity_index_map(detected).get(best)
             center = rarity_to_center[best]
             self._tap_card_center(center)
             return best
@@ -674,6 +676,24 @@ class WonderPickTask(Task):
         if cost is None:
             return
         self._current_stamina = max(self._current_stamina - cost, 0)
+
+    def _refresh_target_pick_index_in_popup(self):
+        """在挑战确认弹窗内重扫卡牌，刷新目标位索引。"""
+        self._target_pick_index = None
+        if not self._selected_rarity or not self._card_repo:
+            return
+
+        detected = self._scan_cards()
+        if not detected:
+            return
+
+        index_map = self._build_rarity_index_map(detected)
+        self._target_pick_index = index_map.get(self._selected_rarity)
+        logger.debug(
+            "弹窗重扫目标位: rarity=%s, pick_index=%s",
+            self._selected_rarity,
+            self._target_pick_index,
+        )
 
     def _get_wonder_stamina(self) -> Optional[int]:
         screenshot, _ = self.page_detector.get_last_page_context()

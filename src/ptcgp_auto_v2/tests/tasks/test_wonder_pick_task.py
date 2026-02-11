@@ -306,5 +306,80 @@ class TestWonderPickCardRegister(unittest.TestCase):
         self.assertGreater(start[1], end[1])
 
 
+class TestWonderPickTargetPickIndexTiming(unittest.TestCase):
+    """测试目标位索引在弹窗阶段再确定。"""
+
+    def test_scan_targets_does_not_set_target_pick_index(self):
+        task = FakeTask()
+        task._card_repo = FakeCardRepo({("A", 1): "SR"})
+
+        detected = [
+            DetectedCard(
+                set_code="A",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(100.0, 200.0),
+            )
+        ]
+
+        with patch.object(task, "_tap_card_center") as mock_tap:
+            target = task._scan_targets(detected)
+
+        self.assertEqual(target, "SR")
+        self.assertIsNone(task._target_pick_index)
+        mock_tap.assert_called_once_with((100.0, 200.0))
+
+    def test_handle_popup_sets_target_pick_index_by_rescan(self):
+        task = FakeTask()
+        task._selected_rarity = "SR"
+        task._card_repo = FakeCardRepo(
+            {
+                ("A", 1): "AR",
+                ("A", 2): "SR",
+                ("A", 3): "SAR",
+            }
+        )
+        task._current_stamina = 3
+
+        detected = [
+            DetectedCard(
+                set_code="A",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(100.0, 200.0),
+            ),
+            DetectedCard(
+                set_code="A",
+                card_number=2,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(300.0, 200.0),
+            ),
+            DetectedCard(
+                set_code="A",
+                card_number=3,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(500.0, 200.0),
+            ),
+        ]
+
+        with patch.object(task, "_scan_cards", return_value=detected):
+            with patch(
+                "ptcgp_auto_v2.tasks.wonder_pick.tap_ok",
+                return_value=ActionResult.ok(wait=0.5),
+            ):
+                result = task._handle_popup({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertEqual(task._target_pick_index, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
