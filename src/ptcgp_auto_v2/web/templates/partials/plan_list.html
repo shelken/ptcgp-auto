@@ -27,7 +27,7 @@
     ], t) %}
         {% for plan in plans %}
             {% set config_cell %}
-                <div class="space-y-1 max-w-[300px]">
+                <div class="space-y-1">
                     {% for task_type in plan.task_types_list %}
                         {% set task_config = plan.config_dict.get(task_type, {}) %}
                         {% set reset_type = task_config.get('reset_type', 'daily') %}
