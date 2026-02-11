@@ -9,11 +9,16 @@ db/
 ├── __init__.py          # 模块导出
 ├── engine.py            # 数据库引擎和会话管理
 ├── connection.py        # 旧的连接模块（仅用于初始化 schema）
-├── repositories.py      # 数据访问层（Repository 模式）
+├── repositories/        # 数据访问层（Repository 模式）
+│   ├── __init__.py
+│   ├── account_repository.py
+│   ├── account_stat_repository.py
+│   └── ...
 ├── models/              # SQLModel 模型定义
 │   ├── __init__.py
 │   ├── base.py          # 基础类和 Mixin
 │   ├── account.py
+│   ├── account_stat.py
 │   ├── account_pack_config.py
 │   ├── pack_record.py
 │   ├── task_instance.py

@@ -68,6 +68,7 @@ class Database:
     def _init_schema(self):
         """初始化数据库表结构（自动同步模式）"""
         from sqlmodel import SQLModel, create_engine, inspect, text
+
         # 必须导入 models 确保它们注册到 metadata
         from ptcgp_auto_v2.db import models
 
@@ -96,7 +97,9 @@ class Database:
                     continue
 
                 # 获取数据库中现有的列名
-                existing_columns = {col['name'] for col in inspector.get_columns(table_name)}
+                existing_columns = {
+                    col["name"] for col in inspector.get_columns(table_name)
+                }
 
                 # 遍历 Model 定义的列
                 for column in table.columns:
@@ -109,7 +112,7 @@ class Database:
                         # 处理默认值 (简单处理，非空字段必须有默认值)
                         if column.server_default is not None:
                             # 如果有 server_default，直接使用
-                            if hasattr(column.server_default, 'arg'):
+                            if hasattr(column.server_default, "arg"):
                                 default_val = f" DEFAULT {column.server_default.arg}"
                             else:
                                 default_val = f" DEFAULT {column.server_default}"
@@ -126,9 +129,13 @@ class Database:
                         sql = f'ALTER TABLE "{table_name}" ADD COLUMN "{column.name}" {col_type}{default_val}'
                         try:
                             conn.execute(text(sql))
-                            logger.info(f"自动迁移: 表 {table_name} 添加列 {column.name}")
+                            logger.info(
+                                f"自动迁移: 表 {table_name} 添加列 {column.name}"
+                            )
                         except Exception as e:
-                            logger.error(f"自动迁移失败 {table_name}.{column.name}: {e}")
+                            logger.error(
+                                f"自动迁移失败 {table_name}.{column.name}: {e}"
+                            )
             conn.commit()
 
     def _init_default_data(self, engine):
@@ -143,6 +150,19 @@ class Database:
             VALUES ('base', '基础任务计划', '[]', datetime('now', 'localtime'))
             """
             conn.execute(text(sql))
+
+            # 迁移历史账号资源字段：accounts.exchange_points -> account_stats.exchange_points
+            # 说明：accounts 旧列暂不删除，仅读一次并回填到新表。
+            migrate_sql = """
+            INSERT INTO account_stats (account_id, exchange_points, created_at, updated_at)
+            SELECT a.id, a.exchange_points, datetime('now', 'localtime'), datetime('now', 'localtime')
+            FROM accounts a
+            WHERE a.exchange_points IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM account_stats s WHERE s.account_id = a.id
+              )
+            """
+            conn.execute(text(migrate_sql))
             conn.commit()
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:

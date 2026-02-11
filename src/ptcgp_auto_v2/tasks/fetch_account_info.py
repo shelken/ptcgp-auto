@@ -2,9 +2,9 @@
 """
 账号信息获取任务
 
-从游戏 UI 获取 friend_id、nickname、level、exchange_points，更新到数据库。
+从游戏 UI 获取 friend_id、nickname、level、exchange_points、pack_hourglass_count，更新到数据库。
 采用字典映射处理页面，使用 action_cache 管理页面内操作状态。
-流程：主页 → 个人资料页 → 返回 → 社群页面 → 交换页面 → 返回 → 完成
+流程：主页 → 开包沙漏弹窗 → 个人资料页 → 返回 → 社群页面 → 交换页面 → 返回 → 完成
 """
 
 import logging
@@ -19,14 +19,17 @@ from ptcgp_auto_v2.core.task_base import (
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
 from ptcgp_auto_v2.utils.gesture import (
+    click_close,
     navigate_back,
     quick_tap,
     tap_above_point,
     tap_community_icon,
     tap_home_icon,
+    tap_template,
     tap_text,
     tap_top_center,
 )
@@ -49,6 +52,10 @@ MIN_TAP_Y = 50
 # 分送/交换冷冻期（新账号14天内不可进入交换）
 EXCHANGE_COOLDOWN_DAYS = 14
 
+# 开包沙漏数量 OCR 过滤范围（基于 1080x1920）
+BASE_HOURGLASS_TOP_IGNORE_Y = 260
+BASE_HOURGLASS_TITLE_SEARCH_RANGE_Y = 420
+
 LEVEL_PATTERN = re.compile(r"Lv\.?\s*(\d+)")
 
 
@@ -70,6 +77,11 @@ def _build_fetch_pages() -> list[dict]:
             "name": "profile_page",
             "identifiers": get_text_patterns("profile_page"),
             "priority": 20,
+        },
+        {
+            "name": "pack_hourglass_popup",
+            "identifiers": get_text_patterns("pack_hourglass_title"),
+            "priority": 22,
         },
         {
             "name": "community_page",
@@ -114,6 +126,7 @@ class FetchAccountInfoTask(Task):
         self._nickname: Optional[str] = None
         self._level: Optional[int] = None
         self._exchange_points: Optional[int] = None
+        self._pack_hourglass_count: Optional[int] = None
 
         # 任务完成标志
         self._completed = False
@@ -137,10 +150,27 @@ class FetchAccountInfoTask(Task):
         # 排除账号注册任务
         if any(t.task_type == "init_account" for t in tasks):
             return False
+
+        stat = getattr(account, "account_stat", None)
+        if stat is None and getattr(account, "id", None):
+            stat = AccountStatRepository().get_by_account_id(int(account.id))
+
+        exchange_points = (
+            stat.exchange_points
+            if stat is not None
+            else getattr(account, "exchange_points", None)
+        )
+        pack_hourglass_count = (
+            stat.pack_hourglass_count
+            if stat is not None
+            else getattr(account, "pack_hourglass_count", None)
+        )
+
         return (
             not account.friend_id
             or not account.nickname
-            or account.exchange_points is None
+            or exchange_points is None
+            or pack_hourglass_count is None
         )
 
     def setup(self) -> bool:
@@ -158,7 +188,8 @@ class FetchAccountInfoTask(Task):
             if self._friend_id or self._nickname or self._exchange_points is not None:
                 return TaskResult.ok(
                     message=f"获取完成: friend_id={self._friend_id}, nickname={self._nickname}, "
-                    f"level={self._level}, exchange_points={self._exchange_points}"
+                    f"level={self._level}, exchange_points={self._exchange_points}, "
+                    f"pack_hourglass_count={self._pack_hourglass_count}"
                 )
             return TaskResult.fail("未能获取账号信息")
         return None
@@ -168,6 +199,7 @@ class FetchAccountInfoTask(Task):
         handlers = {
             "game_home_main": self._handle_home,
             "profile_page": self._handle_profile,
+            "pack_hourglass_popup": self._handle_pack_hourglass_popup,
             "community_page": self._handle_community,
             "exchange_page": self._handle_exchange,
             "exchange_locked_popup": self._handle_exchange_locked,
@@ -201,6 +233,18 @@ class FetchAccountInfoTask(Task):
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页：根据进度决定下一步"""
         ocr = page_info.get("ocr_results", [])
+
+        if not self._is_action_done("pack_hourglass_fetched"):
+            # 规则：在首页持续匹配并点击沙漏图标，直到进入弹窗并完成采集。
+            result = tap_template(
+                self.adb,
+                self.page_detector,
+                "icon_hourglass_pack",
+                wait=1.0,
+            )
+            if result:
+                return result
+            return ActionResult.wait(0.6)
 
         if not self._is_action_done("profile_fetched"):
             # 第一步：进入个人资料页
@@ -303,6 +347,33 @@ class FetchAccountInfoTask(Task):
             return result
         return ActionResult.ok(wait=1.0)
 
+    def _handle_pack_hourglass_popup(self, page_info: dict) -> ActionResult:
+        """开包沙漏弹窗：提取数量并关闭弹窗。"""
+        ocr = page_info.get("ocr_results", [])
+        count = self._extract_pack_hourglass(ocr)
+        if count is not None:
+            self._pack_hourglass_count = count
+            logger.info(f"  -> 获取开包沙漏数量: {count}")
+        else:
+            logger.warning("  -> 未识别到开包沙漏数量")
+
+        self._mark_action_done("pack_hourglass_fetched")
+
+        close_result = click_close(
+            self.adb,
+            self.page_detector,
+            ocr,
+            get_text_patterns("text_x"),
+        )
+        if close_result:
+            return close_result
+        return navigate_back(
+            self.adb,
+            self.page_detector,
+            ocr,
+            get_text_patterns("back_button"),
+        )
+
     def _handle_home_icon(self, page_info: dict) -> ActionResult:
         """点击主页图标"""
         return tap_home_icon(self.adb, self.page_detector, wait=3)
@@ -381,6 +452,59 @@ class FetchAccountInfoTask(Task):
         candidates.sort(key=lambda item: (len(item[0]), item[1]), reverse=True)
         return candidates[0][1]
 
+    def _extract_pack_hourglass(self, ocr: list) -> Optional[int]:
+        """从开包沙漏弹窗提取数量（忽略左上角系统数字）。"""
+        title_patterns = {
+            "".join(t.split()) for t in get_text_patterns("pack_hourglass_title")
+        }
+        title_center_y: Optional[int] = None
+        for item in ocr:
+            text = "".join(str(item.get("text", "")).split())
+            if text not in title_patterns:
+                continue
+            box = item.get("box")
+            if not box:
+                continue
+            title_center_y = (box[1] + box[3]) // 2
+            break
+
+        top_ignore_y = self.adb.scaled_y(BASE_HOURGLASS_TOP_IGNORE_Y)
+        candidates: list[tuple[int, int]] = []
+        for item in ocr:
+            raw_text = str(item.get("text", ""))
+            text = raw_text.replace(",", "").replace(" ", "")
+            if not text.isdecimal():
+                continue
+            box = item.get("box")
+            if not box:
+                continue
+
+            center_x = (box[0] + box[2]) // 2
+            center_y = (box[1] + box[3]) // 2
+
+            if center_y <= top_ignore_y:
+                continue
+            if title_center_y is not None:
+                if center_y >= title_center_y:
+                    continue
+                if abs(title_center_y - center_y) > self.adb.scaled_y(
+                    BASE_HOURGLASS_TITLE_SEARCH_RANGE_Y
+                ):
+                    continue
+            if center_x <= self.adb.center_x():
+                continue
+
+            value = int(text)
+            if value < 0 or value > 999999:
+                continue
+            candidates.append((len(text), value))
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        return candidates[0][1]
+
     def _update_account(self):
         """更新数据库"""
         if not self.account:
@@ -396,18 +520,46 @@ class FetchAccountInfoTask(Task):
         if self._level and self.account.level != self._level:
             self.account.level = self._level
             changed = True
-        if (
-            self._exchange_points is not None
-            and self.account.exchange_points != self._exchange_points
-        ):
-            self.account.exchange_points = self._exchange_points
-            changed = True
-
         if changed:
-            from ptcgp_auto_v2.db.repositories import AccountRepository
-
             AccountRepository().update(self.account)
+
+        if self.account.id is None:
+            return
+
+        stat_repo = AccountStatRepository()
+        existing_stat = stat_repo.get_by_account_id(int(self.account.id))
+        exchange_points = (
+            self._exchange_points
+            if self._exchange_points is not None
+            else (existing_stat.exchange_points if existing_stat else None)
+        )
+        pack_hourglass_count = (
+            self._pack_hourglass_count
+            if self._pack_hourglass_count is not None
+            else (existing_stat.pack_hourglass_count if existing_stat else None)
+        )
+
+        stat_changed = False
+        if existing_stat is None:
+            stat_changed = (
+                exchange_points is not None or pack_hourglass_count is not None
+            )
+        else:
+            stat_changed = (
+                existing_stat.exchange_points != exchange_points
+                or existing_stat.pack_hourglass_count != pack_hourglass_count
+            )
+
+        if stat_changed:
+            stat_repo.upsert(
+                account_id=int(self.account.id),
+                exchange_points=exchange_points,
+                pack_hourglass_count=pack_hourglass_count,
+            )
+
+        if changed or stat_changed:
             logger.info(
                 f"已更新账号: friend_id={self.account.friend_id}, nickname={self.account.nickname}, "
-                f"level={self.account.level}, exchange_points={self.account.exchange_points}"
+                f"level={self.account.level}, exchange_points={exchange_points}, "
+                f"pack_hourglass_count={pack_hourglass_count}"
             )
