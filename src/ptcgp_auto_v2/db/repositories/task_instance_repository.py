@@ -250,6 +250,20 @@ class TaskInstanceRepository:
             session.commit()
             return count
 
+    def ensure_pending(
+        self, account_id: int, task_type: str, reset_type: str
+    ) -> TaskInstance:
+        """确保指定任务实例存在且处于 pending 状态。"""
+        instance = self.get_or_create(
+            account_id=account_id,
+            task_type=task_type,
+            reset_type=reset_type,
+        )
+        if instance.status != TaskStatus.PENDING.value:
+            instance.status = TaskStatus.PENDING.value
+            instance.save()
+        return instance
+
     def reset_all_pending(self) -> int:
         """将所有异常状态的任务重置为待执行（用于程序重启后恢复）
 
