@@ -176,6 +176,12 @@ def parse_args(argv: list[str] | None = None):
     )
 
     parser.add_argument(
+        "--init-first",
+        action="store_true",
+        help="调度时优先执行 init_account 任务（默认先执行其他任务）",
+    )
+
+    parser.add_argument(
         "--max-accounts",
         type=int,
         default=100,
@@ -525,6 +531,7 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
             poll_interval=settings.poll_interval,
             max_workers=settings.max_workers,
             task_generation_interval=settings.task_generation_interval,
+            init_first=args.init_first,
             auto_scale_emulators=settings.auto_scale_emulators,
             auto_scale_instance_prefix=settings.auto_scale_instance_prefix,
             auto_scale_min_idle_devices=settings.auto_scale_min_idle_devices,
@@ -539,6 +546,9 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
             ),
         ),
     )
+
+    if args.init_first:
+        logger.info("已启用 init_first：优先执行 init_account 任务")
 
     try:
         scheduler.run()
