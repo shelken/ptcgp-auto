@@ -15,6 +15,7 @@ from ptcgp_auto_v2.tasks import collect_account_cards
 from ptcgp_auto_v2.tasks import wonder_pick
 from ptcgp_auto_v2.tasks import manage_friendship
 from ptcgp_auto_v2.tasks import send_card_daily
+from ptcgp_auto_v2.tasks import exchange_cards
 
 # 导出任务注册表
 from ptcgp_auto_v2.core.task_base import TaskRegistry
