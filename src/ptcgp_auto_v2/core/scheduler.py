@@ -876,10 +876,20 @@ class Scheduler:
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # 根据配置选择任务优先级策略
-                # - init_first=True: 优先 init_account
-                # - init_first=False: 优先非 init_account，空闲时再处理 init_account
-                batch = self._pick_next_account_batch()
+                # init_first: 在未达到账号上限前，优先触发创建账号
+                if (
+                    self.config.init_first
+                    and self._settings.auto_create_accounts
+                    and self._account_repo
+                    and self._account_repo.count_all() < self._settings.max_accounts
+                ):
+                    self._trigger_multi_device_creation()
+                    time.sleep(self.config.poll_interval)
+                    continue
+
+                # 优先执行所有待处理任务（包括 init_account）
+                # 只有在完全没有待执行任务时才创建新账号
+                batch = self._get_next_account_batch()
                 if batch:
                     # 有待执行任务，优先执行
                     account, task_instances = batch
@@ -892,18 +902,6 @@ class Scheduler:
             except RuntimeError as e:
                 logger.exception(f"调度器主循环异常: {e}")
                 time.sleep(self.config.poll_interval)
-
-    def _pick_next_account_batch(
-        self,
-    ) -> Optional[tuple["Account", list["TaskInstance"]]]:
-        """按配置选择下一个账号批次。"""
-        if self.config.init_first:
-            return self._get_next_account_batch()
-
-        non_init_batch = self._get_next_non_init_batch()
-        if non_init_batch:
-            return non_init_batch
-        return self._get_next_account_batch()
 
     def start(self):
         """启动调度器"""

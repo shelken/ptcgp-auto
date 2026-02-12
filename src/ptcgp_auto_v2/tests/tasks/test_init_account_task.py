@@ -329,6 +329,39 @@ class TestHandleSelectCountry(unittest.TestCase):
         self.assertTrue(task._is_action_done("select_country_list_opened"))
         self.assertTrue(task._is_action_done("select_country_country_clicked"))
 
+    @patch("ptcgp_auto_v2.tasks.init_account.tap_ok")
+    @patch("ptcgp_auto_v2.tasks.init_account.tap_text_exact")
+    def test_country_list_overlay_should_tap_country_then_ok(
+        self, tap_text_exact_mock, tap_ok_mock
+    ):
+        """国家列表弹层（含 X）应优先点击允许国家，再点击 OK。"""
+        adb = FakeAdb()
+        ocr_results = [
+            {
+                "text": "選擇國家/地區",
+                "box": {"x1": 200, "y1": 150, "x2": 800, "y2": 250},
+            },
+            {"text": "香港", "box": {"x1": 450, "y1": 350, "x2": 620, "y2": 420}},
+            {"text": "OK", "box": {"x1": 480, "y1": 1600, "x2": 600, "y2": 1680}},
+            {"text": "X", "box": {"x1": 980, "y1": 1800, "x2": 1040, "y2": 1860}},
+        ]
+        page_detector = FakePageDetector(ocr_results=ocr_results)
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+
+        def _tap_text_exact_side_effect(_adb, _ocr, patterns, wait=1.0):
+            if patterns == ["香港"]:
+                return ActionResult.ok(wait=wait)
+            return None
+
+        tap_text_exact_mock.side_effect = _tap_text_exact_side_effect
+        tap_ok_mock.return_value = ActionResult.ok(wait=1.0)
+
+        result = task._handle_select_country({"ocr_results": ocr_results})
+
+        self.assertTrue(result.success)
+        self.assertTrue(tap_text_exact_mock.called)
+        self.assertTrue(tap_ok_mock.called)
+
 
 class TestHandleTermsPrivacy(unittest.TestCase):
     """测试条款与隐私页面处理"""
