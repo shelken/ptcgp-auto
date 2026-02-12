@@ -23,7 +23,7 @@ export function switchTab(tabName, options = {}) {
     let initialHash = preferHash !== null ? preferHash : currentHash;
     if (
         tabName === 'management'
-        && !['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(initialHash)
+        && !['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift', 'exchange-cards'].includes(initialHash)
     ) {
         const rememberedHash = localStorage.getItem(STORAGE_KEY_MANAGEMENT_HASH);
         if (rememberedHash) {
@@ -99,7 +99,7 @@ export function switchTab(tabName, options = {}) {
         if (!hasContent) {
             const hash = initialHash;
             let targetBtn = null;
-            if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+            if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift', 'exchange-cards'].includes(hash)) {
                 targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
             }
             if (!targetBtn) {
@@ -162,7 +162,7 @@ export function updateSidebarState(btn) {
         applyTaskFiltersToSidebar(btn);
     }
     if (hash) {
-        if (['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+        if (['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift', 'exchange-cards'].includes(hash)) {
             localStorage.setItem(STORAGE_KEY_MANAGEMENT_HASH, hash);
         }
         window.location.hash = hash;
@@ -207,7 +207,7 @@ export function restoreTab() {
 
     if (hash === 'records' || hash === 'management' || hash === 'owned-cards') {
         tabName = hash;
-    } else if (['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+    } else if (['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift', 'exchange-cards'].includes(hash)) {
         tabName = 'management';
     } else {
         tabName = localStorage.getItem(STORAGE_KEY_TAB);
@@ -216,7 +216,7 @@ export function restoreTab() {
     if (!tabName) {
         tabName = 'records';
     }
-    if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+    if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift', 'exchange-cards'].includes(hash)) {
         switchTab('management', { preserveHash: true, preferHash: hash });
         return;
     }
