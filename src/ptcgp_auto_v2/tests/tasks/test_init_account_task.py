@@ -137,6 +137,7 @@ class TestInitAccountPages(unittest.TestCase):
             "init_open_pack",
             "init_tap_to_flip",
             "init_enjoy",
+            "game_home_main",
             "pack_opening_result",
             "pack_card_register",
             "pack_opening_card",
@@ -152,6 +153,16 @@ class TestInitAccountPages(unittest.TestCase):
         for page in pages:
             self.assertIn("name", page)
             self.assertIn("priority", page)
+
+    def test_game_home_main_should_require_match_all(self):
+        """测试 game_home_main 需要 match_all 防止教程弹窗误匹配。"""
+        pages = _build_init_pages()
+        home_page = next((p for p in pages if p.get("name") == "game_home_main"), None)
+
+        self.assertIsNotNone(home_page)
+        if home_page is None:
+            return
+        self.assertTrue(home_page.get("match_all", False))
 
 
 class TestInitAccountPhase(unittest.TestCase):
