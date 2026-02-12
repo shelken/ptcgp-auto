@@ -1,0 +1,85 @@
+{% from "partials/macros/tables.html" import table_container, auto_refresh_container %}
+
+{% call auto_refresh_container("/management/exchange-cards?lang=" ~ current_lang, '#exchange-card-state-form', 'outerHTML', 'space-y-6') %}
+<form id="exchange-card-state-form" class="hidden">
+    <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
+    <input type="hidden" name="status" value="{{ selected_status or '' }}">
+</form>
+
+<div class="brutal-card p-6 space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_exchange_cards or 'EXCHANGE REQUESTS' }}</h2>
+        <form
+            class="flex flex-wrap items-end gap-3"
+            hx-get="/management/exchange-cards?lang={{ current_lang }}"
+            hx-target="#management-content"
+            hx-swap="innerHTML">
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.filter_account }}</label>
+                <select name="account_id" class="brutal-input min-w-56 js-custom-select">
+                    <option value="">{{ t.label_all or 'All' }}</option>
+                    {% for account in accounts %}
+                    <option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %}>
+                        #{{ account.id }} · {{ account_name_map.get(account.id, account.game_id) }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.col_status or 'Status' }}</label>
+                <select name="status" class="brutal-input min-w-40 js-custom-select">
+                    <option value="">{{ t.label_all or 'All' }}</option>
+                    {% for item in ['sending', 'sended', 'completed', 'failed', 'canceled'] %}
+                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="brutal-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+        </form>
+    </div>
+</div>
+
+<div class="brutal-card p-6 space-y-4">
+    {% call table_container([
+        {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.label_from_account or 'From Account', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_to_account_id or 'To Account', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_card or 'Card', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_status or 'Status', 'class_name': 'whitespace-nowrap'},
+        {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
+    ], t, (t.empty_exchange_requests or '暂无交换请求') if not requests else '') %}
+        {% for row in requests %}
+        <tr class="border-b border-subtle hover-bg-subtle transition-colors">
+            <td class="p-3">#{{ row.id }}</td>
+            <td class="p-3">#{{ row.from_account_id }} · {{ account_name_map.get(row.from_account_id, t.unknown_account or 'Unknown') }}</td>
+            <td class="p-3">
+                {% if row.to_account_id %}
+                    #{{ row.to_account_id }} · {{ account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown') }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td class="p-3">{{ row.to_friend_id or '-' }}</td>
+            <td class="p-3">#{{ row.target_card_id }} · {{ row.target_card_rarity }}</td>
+            <td class="p-3">{{ row.status }}</td>
+            <td class="p-3">{{ row.created_at|datetime }}</td>
+            <td class="p-3 text-right">
+                {% if row.can_cancel %}
+                <form
+                    hx-post="/api/exchange-cards/requests/{{ row.id }}/cancel?lang={{ current_lang }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+                    hx-target="#management-content"
+                    hx-swap="innerHTML"
+                    class="inline">
+                    <button type="submit" class="brutal-btn text-xs px-3 py-1">{{ t.btn_cancel_exchange_request or '取消请求' }}</button>
+                </form>
+                {% else %}
+                <span class="text-muted text-xs">-</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    {% endcall %}
+</div>
+{% endcall %}
