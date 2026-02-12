@@ -179,6 +179,7 @@ def _build_init_pages() -> list[dict]:
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),
+            "match_all": True,
             "priority": 90,
         },
         {
