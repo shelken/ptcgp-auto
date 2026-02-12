@@ -502,7 +502,7 @@ export function initApp() {
         initDailyGiftDatePickers(document);
 
         const hash = window.location.hash.replace('#', '');
-        if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+        if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift', 'exchange-cards'].includes(hash)) {
             const activeBtn = document.querySelector(`.sidebar-btn.active[data-hash="${hash}"]`);
             if (!activeBtn) {
                 setTimeout(() => {

@@ -24,6 +24,7 @@ from ptcgp_auto_v2.web.routers import (
     pack_config,
     friendship,
     daily_gift,
+    exchange_card,
 )
 
 # 导入任务模块以触发注册
@@ -57,6 +58,7 @@ app.include_router(metadata.router)
 app.include_router(pack_config.router)
 app.include_router(friendship.router)
 app.include_router(daily_gift.router)
+app.include_router(exchange_card.router)
 
 
 if __name__ == "__main__":

@@ -505,6 +505,18 @@
                                     {{ t.menu_friendships or 'FRIENDSHIPS' }}
                                 </button>
                             </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
+                                    hx-get="/management/exchange-cards?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    data-hash="exchange-cards"
+                                    data-action="update-sidebar-state"
+                                    aria-label="{{ t.menu_exchange_cards or 'EXCHANGE RECORDS' }}">
+                                    {{ t.menu_exchange_cards or 'EXCHANGE RECORDS' }}
+                                </button>
+                            </li>
                         </ul>
                     </nav>
                 </aside>
