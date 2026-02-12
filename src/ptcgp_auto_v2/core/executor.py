@@ -293,6 +293,98 @@ class BaseExecutor(ABC):
         # 保存到数据库
         task_instance.save()
 
+    def _execute_task_with_prerequisites(
+        self,
+        task_instance: "TaskInstance",
+        account: "Account",
+        stack: Optional[set[str]] = None,
+        chain: Optional[list[str]] = None,
+    ) -> TaskResult:
+        """执行任务：递归处理前置任务，并补齐前置任务自己的 pre/post hooks。"""
+        from ptcgp_auto_v2.utils.logger import set_context
+
+        if account.id is None:
+            return TaskResult.fail("前置任务参数无效")
+
+        stack = stack or set()
+        chain = chain or []
+        current_task_type = task_instance.task_type
+        if current_task_type in stack:
+            return TaskResult.fail(f"检测到前置任务循环: {current_task_type}")
+
+        stack.add(current_task_type)
+        chain.append(current_task_type)
+        set_context(task=current_task_type)
+        logger.debug("任务链: %s", " -> ".join(chain))
+
+        task = self._build_task(task_instance, account)
+        result = task.execute()
+
+        pre_task_types = result.data.get("pre_task_types")
+        if result.skipped and isinstance(pre_task_types, list) and pre_task_types:
+            logger.debug(
+                "任务 %s 收集到前置任务: %s",
+                current_task_type,
+                " -> ".join(pre_task_types),
+            )
+            for pre_task_type in pre_task_types:
+                set_context(task=pre_task_type)
+                pre_task_instance = self._get_or_create_task_instance(
+                    account_id=account.id,
+                    task_type=pre_task_type,
+                )
+                if pre_task_instance is None:
+                    stack.remove(current_task_type)
+                    chain.pop()
+                    set_context(task=current_task_type)
+                    return TaskResult.fail(f"前置任务创建失败: {pre_task_type}")
+
+                logger.info(f"执行前置任务: {pre_task_type} (账号: {account.nickname})")
+                pre_result = self._execute_task_with_prerequisites(
+                    pre_task_instance,
+                    account,
+                    stack,
+                    chain,
+                )
+
+                if not pre_result.success:
+                    self._apply_task_status(
+                        task_instance=pre_task_instance,
+                        account=account,
+                        status=TaskStatus.FAILED,
+                        error_message=pre_result.error,
+                        clear_error_on_success=False,
+                    )
+                    stack.remove(current_task_type)
+                    chain.pop()
+                    set_context(task=current_task_type)
+                    return TaskResult.fail(f"前置任务失败: {pre_result.error}")
+
+                self._apply_task_status(
+                    task_instance=pre_task_instance,
+                    account=account,
+                    status=(
+                        TaskStatus.SKIPPED
+                        if pre_result.skipped
+                        else TaskStatus.COMPLETED
+                    ),
+                    error_message=(
+                        f"跳过: {pre_result.skip_reason}"
+                        if pre_result.skipped
+                        else None
+                    ),
+                    clear_error_on_success=not pre_result.skipped,
+                )
+                set_context(task=current_task_type)
+
+            task = self._build_task(task_instance, account)
+            result = task.execute(skip_pre_hooks=True)
+
+        stack.remove(current_task_type)
+        chain.pop()
+        set_context(task=current_task_type)
+        return result
+
     @abstractmethod
     def run(self):
         """执行任务（子类实现）"""
@@ -399,33 +491,12 @@ class TaskExecutor(BaseExecutor):
                     break
 
                 try:
-                    # 创建并执行任务
-                    task = self._create_task()
-                    result = task.execute()
+                    result = self._execute_task_with_prerequisites(
+                        task_instance=self.task_instance,
+                        account=self.account,
+                    )
 
                     if result.success:
-                        if result.skipped and result.data.get("pre_task_type"):
-                            pre_task_type = result.data.get("pre_task_type")
-                            if not pre_task_type or self.account.id is None:
-                                self._update_status(
-                                    TaskStatus.FAILED, "前置任务参数无效"
-                                )
-                                return
-                            pre_task_instance = self._get_or_create_task_instance(
-                                account_id=self.account.id,
-                                task_type=pre_task_type,
-                            )
-                            if pre_task_instance:
-                                if pre_task_instance.status != TaskStatus.PENDING.value:
-                                    pre_task_instance.status = TaskStatus.PENDING.value
-                                    pre_task_instance.save()
-                                self._update_status(
-                                    TaskStatus.BLOCKED,
-                                    error="等待前置任务",
-                                )
-                                return
-                            self._update_status(TaskStatus.FAILED, "前置任务创建失败")
-                            return
                         if result.skipped:
                             # 跳过的任务设为 skipped 状态，不会被重复调度
                             logger.info(
@@ -541,7 +612,7 @@ class AccountBatchExecutor(BaseExecutor):
         self.task_instances = task_instances
         self.pending_tasks = list(task_instances)
 
-    def _execute_single_task(self, task_instance: "TaskInstance", index: int) -> bool:
+    def _execute_single_task(self, task_instance: "TaskInstance") -> bool:
         """
         执行单个任务
 
@@ -557,42 +628,10 @@ class AccountBatchExecutor(BaseExecutor):
 
         try:
             # 创建并执行任务
-            task = self._build_task(task_instance, self.account)
-            result = task.execute()
-
-            if result.skipped and result.data.get("pre_task_type"):
-                pre_task_type = result.data.get("pre_task_type")
-                if not pre_task_type or self.account.id is None:
-                    self._apply_task_status(
-                        task_instance=task_instance,
-                        account=self.account,
-                        status=TaskStatus.FAILED,
-                        error_message="前置任务参数无效",
-                        clear_error_on_success=False,
-                    )
-                    return True
-                pre_task_instance = self._get_or_create_task_instance(
-                    account_id=self.account.id,
-                    task_type=pre_task_type,
-                )
-                if pre_task_instance:
-                    if pre_task_instance.status != TaskStatus.PENDING.value:
-                        pre_task_instance.status = TaskStatus.PENDING.value
-                        pre_task_instance.save()
-                    self.pending_tasks.insert(index, pre_task_instance)
-                    logger.info(
-                        f"插入前置任务: {pre_task_type} (账号: {self.account.nickname})"
-                    )
-                    return False
-                logger.error(f"前置任务创建失败: {pre_task_type}")
-                self._apply_task_status(
-                    task_instance=task_instance,
-                    account=self.account,
-                    status=TaskStatus.FAILED,
-                    error_message="前置任务创建失败",
-                    clear_error_on_success=False,
-                )
-                return True
+            result = self._execute_task_with_prerequisites(
+                task_instance=task_instance,
+                account=self.account,
+            )
 
             # 更新任务状态
             if result.success:
@@ -712,7 +751,7 @@ class AccountBatchExecutor(BaseExecutor):
                     continue
 
                 # 执行单个任务（失败继续执行后续任务）
-                advance = self._execute_single_task(task_instance, index)
+                advance = self._execute_single_task(task_instance)
                 if advance:
                     index += 1
 
