@@ -314,5 +314,10 @@
     "status_skipped": "Skipped",
     "status_blocked": "Blocked",
     "card_preview_hint": "Drag to rotate",
-    "card_preview_close_hint": "Click outside or press ESC to close"
+    "card_preview_close_hint": "Click outside or press ESC to close",
+    "exchange_search_accounts": "Search by Account ID / Nickname / Friend ID",
+    "exchange_input_friend_id": "Target Friend ID",
+    "exchange_confirm_send": "Confirm Send",
+    "exchange_has_active_request": "This account has an active exchange request. Cannot create a new one.",
+    "label_from_account": "From Account"
 }
