@@ -7,6 +7,7 @@ from sqlmodel import SQLModel, create_engine
 from ptcgp_auto_v2.db.repositories.exchange_card_request_repository import (
     ExchangeCardRequestRepository,
 )
+from ptcgp_auto_v2.services.exchange_card_service import ExchangeCardService
 
 
 @pytest.fixture(name="engine")
@@ -50,3 +51,20 @@ def test_one_account_only_one_active_exchange_request(engine, mock_get_engine):
         status="sending",
     )
     assert second is None
+
+
+def test_create_request_rejects_im_and_ur_rarity():
+    """IM/UR 稀有度在服务层必须被拒绝。"""
+    with patch(
+        "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+    ) as repo_cls:
+        created = ExchangeCardService.create_request(
+            from_account_id=101,
+            to_account_id=202,
+            to_friend_id="123456789",
+            target_card_id=3001,
+            target_card_rarity="IM",
+        )
+
+        assert created is None
+        repo_cls.return_value.create.assert_not_called()
