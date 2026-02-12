@@ -4,7 +4,7 @@
 
 从游戏 UI 获取 friend_id、nickname、level、exchange_points、pack_hourglass_count，更新到数据库。
 采用字典映射处理页面，使用 action_cache 管理页面内操作状态。
-流程：主页 → 开包沙漏弹窗 → 个人资料页 → 返回 → 社群页面 → 交换页面 → 返回 → 完成
+流程：主页 → 个人资料页 → 返回 → 更多菜单 → 持有物页面 → 提取资源 → 返回 → 完成
 """
 
 import logging
@@ -21,13 +21,12 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
-from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
 from ptcgp_auto_v2.utils.gesture import (
-    click_close,
     navigate_back,
     quick_tap,
+    scroll_points,
+    swipe,
     tap_above_point,
-    tap_community_icon,
     tap_home_icon,
     tap_template,
     tap_text,
@@ -49,12 +48,11 @@ BASE_FALLBACK_TAP_Y = 300
 # 最小点击 Y 坐标
 MIN_TAP_Y = 50
 
-# 分送/交换冷冻期（新账号14天内不可进入交换）
-EXCHANGE_COOLDOWN_DAYS = 14
+# 持有物页面向上滑动距离（基于 1080x1920）
+BASE_HOLDINGS_SCROLL_DISTANCE_Y = 260
 
-# 开包沙漏数量 OCR 过滤范围（基于 1080x1920）
-BASE_HOURGLASS_TOP_IGNORE_Y = 260
-BASE_HOURGLASS_TITLE_SEARCH_RANGE_Y = 420
+# 持有物页面最大滑动次数
+MAX_HOLDINGS_SCROLL_ROUNDS = 4
 
 LEVEL_PATTERN = re.compile(r"Lv\.?\s*(\d+)")
 
@@ -79,25 +77,20 @@ def _build_fetch_pages() -> list[dict]:
             "priority": 20,
         },
         {
-            "name": "pack_hourglass_popup",
-            "identifiers": get_text_patterns("pack_hourglass_title"),
+            "name": "more_menu_modal",
+            "identifiers": get_text_patterns("more_menu_modal"),
+            "match_all": True,
             "priority": 22,
         },
         {
-            "name": "community_page",
-            "identifiers": get_text_patterns("community_page"),
-            "match_all": True,
-            "priority": 25,
+            "name": "holdings_page",
+            "identifiers": get_text_patterns("holdings_page"),
+            "priority": 24,
         },
         {
-            "name": "exchange_locked_popup",
-            "identifiers": get_text_patterns("exchange_locked_popup"),
-            "priority": 28,
-        },
-        {
-            "name": "exchange_page",
-            "identifiers": get_text_patterns("exchange_page"),
-            "priority": 30,
+            "name": "holdings_page_scrolled",
+            "identifiers": get_text_patterns("holdings_page_scrolled"),
+            "priority": 24,
         },
         {
             "name": "home_icon",
@@ -127,6 +120,7 @@ class FetchAccountInfoTask(Task):
         self._level: Optional[int] = None
         self._exchange_points: Optional[int] = None
         self._pack_hourglass_count: Optional[int] = None
+        self._holdings_scroll_rounds = 0
 
         # 任务完成标志
         self._completed = False
@@ -199,10 +193,9 @@ class FetchAccountInfoTask(Task):
         handlers = {
             "game_home_main": self._handle_home,
             "profile_page": self._handle_profile,
-            "pack_hourglass_popup": self._handle_pack_hourglass_popup,
-            "community_page": self._handle_community,
-            "exchange_page": self._handle_exchange,
-            "exchange_locked_popup": self._handle_exchange_locked,
+            "more_menu_modal": self._handle_more_menu_modal,
+            "holdings_page": self._handle_holdings_page,
+            "holdings_page_scrolled": self._handle_holdings_page,
             "home_icon": self._handle_home_icon,
         }
 
@@ -234,38 +227,23 @@ class FetchAccountInfoTask(Task):
         """主页：根据进度决定下一步"""
         ocr = page_info.get("ocr_results", [])
 
-        if not self._is_action_done("pack_hourglass_fetched"):
-            # 规则：在首页持续匹配并点击沙漏图标，直到进入弹窗并完成采集。
-            result = tap_template(
-                self.adb,
-                self.page_detector,
-                "icon_hourglass_pack",
-                wait=1.0,
-            )
-            if result:
-                return result
-            return ActionResult.wait(0.6)
-
         if not self._is_action_done("profile_fetched"):
             # 第一步：进入个人资料页
             return self._enter_profile(ocr)
 
-        if not self._is_action_done("exchange_fetched"):
-            if self.account.created_at and not is_account_past_days(
-                self.account.created_at,
-                EXCHANGE_COOLDOWN_DAYS,
-            ):
-                # 冷冻期内交换不可用，直接标记完成以加速流程。
-                self._exchange_points = 0
-                self._mark_action_done("exchange_fetched")
-                self._complete_reason = "账号处于14天冷冻期，跳过交换页面"
-                logger.debug("  -> 账号处于交换冷冻期，跳过交换页面")
-                self._update_account()
-                self._completed = True
-                return ActionResult.ok(wait=0.5)
-            # 第二步：进入社群页面
-            logger.debug("  -> 点击社群图标")
-            return tap_community_icon(self.adb, self.page_detector, wait=5.0)
+        if not self._is_action_done("holdings_fetched"):
+            if not self._is_action_done("more_menu_opened"):
+                result = tap_template(
+                    self.adb,
+                    self.page_detector,
+                    "icon_bottom_more",
+                    wait=1.0,
+                )
+                if result:
+                    self._mark_action_done("more_menu_opened")
+                    return result
+                return ActionResult.wait(0.8)
+            return ActionResult.wait(0.8)
 
         # 都完成了
         self._update_account()
@@ -302,77 +280,74 @@ class FetchAccountInfoTask(Task):
             self.adb, self.page_detector, ocr, get_text_patterns("back_button")
         )
 
-    def _handle_community(self, page_info: dict) -> ActionResult:
-        """社群页面：点击交换按钮或返回主页"""
-        wait = 3.0
-        if self._is_action_done("exchange_fetched"):
-            return tap_home_icon(self.adb, self.page_detector, wait=wait)
-
+    def _handle_more_menu_modal(self, page_info: dict) -> ActionResult:
+        """更多菜单：精确点击「持有物」进入资源列表。"""
         ocr = page_info.get("ocr_results", [])
+        if self._is_action_done("holdings_fetched"):
+            return navigate_back(
+                self.adb,
+                self.page_detector,
+                ocr,
+                get_text_patterns("back_button"),
+            )
+
         result = tap_text(
-            self.adb, ocr, get_text_patterns("community_exchange_btn"), wait=wait
+            self.adb,
+            ocr,
+            get_text_patterns("more_menu_holdings"),
+            wait=1.5,
+            exact=True,
         )
         if result:
-            logger.debug("  -> 点击交換按钮")
+            self._mark_action_done("holdings_entered")
+            self._holdings_scroll_rounds = 0
+            logger.debug("  -> 点击持有物")
             return result
-        return ActionResult.ok(wait=wait)
+        return ActionResult.wait(0.8)
 
-    def _handle_exchange(self, page_info: dict) -> ActionResult:
-        """交换页面：提取点数后标记完成"""
+    def _handle_holdings_page(self, page_info: dict) -> ActionResult:
+        """持有物页面：提取开包沙漏和闪亮沙子。"""
         ocr = page_info.get("ocr_results", [])
+        exchange_points, pack_hourglass_count = self._extract_holdings_values(ocr)
+        if exchange_points is not None:
+            self._exchange_points = exchange_points
+            logger.debug("  -> 识别閃亮沙子: %s", exchange_points)
+        if pack_hourglass_count is not None:
+            self._pack_hourglass_count = pack_hourglass_count
+            logger.debug("  -> 识别開包沙漏: %s", pack_hourglass_count)
 
-        points = self._extract_exchange_points(ocr)
-        if points is not None:
-            self._exchange_points = points
-            logger.debug(f"  -> exchange_points: {points}")
+        if self._exchange_points is not None and self._pack_hourglass_count is not None:
+            self._mark_action_done("holdings_fetched")
+            logger.info(
+                "  -> 获取持有物完成: exchange_points=%s, pack_hourglass_count=%s",
+                self._exchange_points,
+                self._pack_hourglass_count,
+            )
+            return navigate_back(
+                self.adb,
+                self.page_detector,
+                ocr,
+                get_text_patterns("back_button"),
+            )
 
-        self._mark_action_done("exchange_fetched")
-        logger.debug("  -> 交换点数获取完成，返回")
-        return navigate_back(
-            self.adb, self.page_detector, ocr, get_text_patterns("back_button")
-        )
+        if self._holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
+            logger.warning("  -> 持有物页面滑动到上限，仍未提取到完整资源")
+            self._mark_action_done("holdings_fetched")
+            return navigate_back(
+                self.adb,
+                self.page_detector,
+                ocr,
+                get_text_patterns("back_button"),
+            )
 
-    def _handle_exchange_locked(self, page_info: dict) -> ActionResult:
-        """交换未解锁弹窗：点击OK并标记完成"""
-        ocr = page_info.get("ocr_results", [])
-
-        # 标记为 0 表示未解锁
-        self._exchange_points = 0
-        self._mark_action_done("exchange_fetched")
-        logger.info("  -> 交换功能未解锁，标记完成")
-
-        # 点击 OK 关闭弹窗
-        result = tap_text(self.adb, ocr, get_text_patterns("popup_ok"), wait=2.0)
-        if result:
-            return result
-        return ActionResult.ok(wait=1.0)
-
-    def _handle_pack_hourglass_popup(self, page_info: dict) -> ActionResult:
-        """开包沙漏弹窗：提取数量并关闭弹窗。"""
-        ocr = page_info.get("ocr_results", [])
-        count = self._extract_pack_hourglass(ocr)
-        if count is not None:
-            self._pack_hourglass_count = count
-            logger.info(f"  -> 获取开包沙漏数量: {count}")
-        else:
-            logger.warning("  -> 未识别到开包沙漏数量")
-
-        self._mark_action_done("pack_hourglass_fetched")
-
-        close_result = click_close(
+        self._holdings_scroll_rounds += 1
+        start, end = scroll_points(
             self.adb,
-            self.page_detector,
-            ocr,
-            get_text_patterns("text_x"),
+            base_distance_y=BASE_HOLDINGS_SCROLL_DISTANCE_Y,
+            direction="up",
         )
-        if close_result:
-            return close_result
-        return navigate_back(
-            self.adb,
-            self.page_detector,
-            ocr,
-            get_text_patterns("back_button"),
-        )
+        swipe(self.adb, start, end, wait=0.8)
+        return ActionResult.ok(wait=0.8)
 
     def _handle_home_icon(self, page_info: dict) -> ActionResult:
         """点击主页图标"""
@@ -436,74 +411,126 @@ class FetchAccountInfoTask(Task):
             return candidates[0][0]
         return None
 
-    def _extract_exchange_points(self, ocr: list) -> Optional[int]:
-        """从交换页面提取点数（过滤单位数字，优先位数最多）"""
-        candidates = []
+    def _extract_holdings_values(
+        self, ocr: list
+    ) -> tuple[Optional[int], Optional[int]]:
+        """从持有物页面提取闪亮沙子与开包沙漏数量。"""
+        flash_patterns = get_text_patterns("holdings_flash_sand")
+        hourglass_patterns = get_text_patterns("holdings_pack_hourglass")
+        label_texts: list[str] = []
+        number_texts: list[str] = []
+
         for item in ocr:
-            text = item["text"].replace(",", "").replace(" ", "")
-            if text.isdecimal():
-                value = int(text)
-                if 0 < value <= 999999 and len(text) >= 2:
-                    candidates.append((text, value))
+            text = str(item.get("text", ""))
+            normalized = "".join(text.split())
+            if any(
+                "".join(p.split()) in normalized
+                for p in flash_patterns + hourglass_patterns
+            ):
+                label_texts.append(text)
+            if self._parse_numeric_text(text) is not None:
+                number_texts.append(text)
 
-        if not candidates:
-            return None
+        logger.debug(
+            "  -> 持有物OCR标签=%s, 数字=%s",
+            label_texts,
+            number_texts,
+        )
 
-        candidates.sort(key=lambda item: (len(item[0]), item[1]), reverse=True)
-        return candidates[0][1]
+        exchange_points = self._extract_value_near_label(
+            ocr,
+            flash_patterns,
+        )
+        pack_hourglass_count = self._extract_value_near_label(
+            ocr,
+            hourglass_patterns,
+        )
 
-    def _extract_pack_hourglass(self, ocr: list) -> Optional[int]:
-        """从开包沙漏弹窗提取数量（忽略左上角系统数字）。"""
-        title_patterns = {
-            "".join(t.split()) for t in get_text_patterns("pack_hourglass_title")
-        }
-        title_center_y: Optional[int] = None
+        logger.debug(
+            "  -> 持有物识别结果: 閃亮沙子=%s, 開包沙漏=%s",
+            exchange_points,
+            pack_hourglass_count,
+        )
+        return exchange_points, pack_hourglass_count
+
+    def _extract_value_near_label(
+        self,
+        ocr: list,
+        label_patterns: list[str],
+    ) -> Optional[int]:
+        """按列表页结构化关系提取标签对应数值。"""
+        normalized_patterns = {"".join(pattern.split()) for pattern in label_patterns}
+        labels: list[tuple[int, int, int, int]] = []
+        numbers: list[tuple[int, tuple[int, int, int, int]]] = []
+
         for item in ocr:
+            box = item.get("box")
+            if not box:
+                continue
             text = "".join(str(item.get("text", "")).split())
-            if text not in title_patterns:
-                continue
-            box = item.get("box")
-            if not box:
-                continue
-            title_center_y = (box[1] + box[3]) // 2
-            break
-
-        top_ignore_y = self.adb.scaled_y(BASE_HOURGLASS_TOP_IGNORE_Y)
-        candidates: list[tuple[int, int]] = []
-        for item in ocr:
-            raw_text = str(item.get("text", ""))
-            text = raw_text.replace(",", "").replace(" ", "")
-            if not text.isdecimal():
-                continue
-            box = item.get("box")
-            if not box:
+            if any(pattern in text for pattern in normalized_patterns):
+                labels.append(tuple(box))
                 continue
 
-            center_x = (box[0] + box[2]) // 2
-            center_y = (box[1] + box[3]) // 2
+            value = self._parse_numeric_text(text)
+            if value is not None:
+                numbers.append((value, tuple(box)))
 
-            if center_y <= top_ignore_y:
-                continue
-            if title_center_y is not None:
-                if center_y >= title_center_y:
-                    continue
-                if abs(title_center_y - center_y) > self.adb.scaled_y(
-                    BASE_HOURGLASS_TITLE_SEARCH_RANGE_Y
-                ):
-                    continue
-            if center_x <= self.adb.center_x():
-                continue
-
-            value = int(text)
-            if value < 0 or value > 999999:
-                continue
-            candidates.append((len(text), value))
-
-        if not candidates:
+        if not labels or not numbers:
             return None
 
-        candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
-        return candidates[0][1]
+        best: Optional[tuple[int, int, int]] = None
+        for label_box in labels:
+            for value, number_box in numbers:
+                relation = self._score_label_number_relation(label_box, number_box)
+                if relation is None:
+                    continue
+                candidate = (relation[0], relation[1], value)
+                if best is None or candidate < best:
+                    best = candidate
+
+        return best[2] if best else None
+
+    def _score_label_number_relation(
+        self,
+        label_box: tuple[int, int, int, int],
+        number_box: tuple[int, int, int, int],
+    ) -> Optional[tuple[int, int]]:
+        """为标签与数字的几何关系打分，分值越小越优。"""
+        lx = (label_box[0] + label_box[2]) // 2
+        ly = (label_box[1] + label_box[3]) // 2
+
+        nx = (number_box[0] + number_box[2]) // 2
+        ny = (number_box[1] + number_box[3]) // 2
+
+        right_tolerance = self.adb.scaled_x(620)
+        row_tolerance = self.adb.scaled_y(140)
+        vertical_tolerance = self.adb.scaled_y(320)
+        horizontal_tolerance = self.adb.scaled_x(260)
+
+        dx = nx - lx
+        dy = ny - ly
+
+        # 同行右侧：优先级最高。
+        if dx > 0 and dx <= right_tolerance and abs(dy) <= row_tolerance:
+            return 0, dx + abs(dy) * 2
+
+        # 同列下方：作为次优匹配。
+        if dy > 0 and dy <= vertical_tolerance and abs(dx) <= horizontal_tolerance:
+            return 1, dy + abs(dx) // 2
+
+        return None
+
+    @staticmethod
+    def _parse_numeric_text(text: str) -> Optional[int]:
+        """解析 OCR 中的数字文本。"""
+        normalized = text.replace(",", "").replace(" ", "")
+        if not normalized.isdecimal():
+            return None
+        value = int(normalized)
+        if 0 <= value <= 999999:
+            return value
+        return None
 
     def _update_account(self):
         """更新数据库"""

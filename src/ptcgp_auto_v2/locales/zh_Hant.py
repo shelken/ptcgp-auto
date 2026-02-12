@@ -45,6 +45,13 @@ TEXT_PATTERNS = {
     # 社群页面
     "community_page": ["社群", "他人的收藏"],
     "community_exchange_btn": ["交換"],
+    # 更多菜单 / 持有物页面
+    "more_menu_modal": ["商店", "禮物盒"],
+    "more_menu_holdings": ["持有物"],
+    "holdings_page": ["持有物", "寶可金塊（免費）"],
+    "holdings_page_scrolled": ["開包沙漏", "挑戰沙漏"],
+    "holdings_flash_sand": ["閃亮沙子"],
+    "holdings_pack_hourglass": ["開包沙漏"],
     # 交换页面
     "exchange_page": ["交換卡牌", "設定", "紀錄"],
     "exchange_point_title": ["交換"],
