@@ -4,6 +4,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.repositories import AccountCardRepository
+from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.queries.owned_card_queries import build_owned_cards_next_page_url
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
@@ -75,9 +76,15 @@ def build_owned_card_modal_context(
 
     repo = AccountCardRepository()
     data = repo.get_owned_card_accounts(card_id)
+    exchange_accounts = [
+        item for item in data["accounts"] if int(item.get("count", 0) or 0) > 0
+    ]
+    exchange_blocked = card.rarity in ExchangeCardService.NON_EXCHANGEABLE_RARITIES
     return {
         "card": card,
         "accounts": data["accounts"],
+        "exchange_accounts": exchange_accounts,
+        "exchange_blocked": exchange_blocked,
         "total_accounts": data["total_accounts"],
         "total_count": data["total_count"],
         "t": t,
