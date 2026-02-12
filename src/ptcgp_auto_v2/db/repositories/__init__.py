@@ -9,6 +9,7 @@ from .account_gift_record_repository import AccountGiftRecordRepository
 from .account_repository import AccountRepository
 from .card_repository import CardRepository
 from .friend_request_repository import FriendRequestRepository
+from .exchange_card_request_repository import ExchangeCardRequestRepository
 from .friendship_repository import FriendshipRepository
 from .pack_record_repository import PackRecordRepository
 from .task_instance_repository import TaskInstanceRepository
@@ -25,6 +26,7 @@ __all__ = [
     "AccountRepository",
     "CardRepository",
     "FriendRequestRepository",
+    "ExchangeCardRequestRepository",
     "FriendshipRepository",
     "PackRecordRepository",
     "TaskInstanceRepository",
