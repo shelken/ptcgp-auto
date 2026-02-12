@@ -17,7 +17,8 @@ src/ptcgp_auto_v2/web/
 │   ├── management.py
 │   ├── plans.py
 │   ├── metadata.py
-│   └── pack_config.py
+│   ├── pack_config.py
+│   └── exchange_card.py
 ├── services/                   # 业务层（视图模型/业务组合）
 │   ├── index_service.py
 │   ├── record_service.py
@@ -26,12 +27,14 @@ src/ptcgp_auto_v2/web/
 │   ├── plan_service.py
 │   ├── metadata_service.py
 │   ├── pack_config_service.py
+│   ├── exchange_card_service.py
 │   └── account_service.py
 ├── queries/                    # 查询层（SQL 构造/分页过滤）
 │   ├── record_queries.py
 │   ├── owned_card_queries.py
 │   ├── task_queries.py
-│   └── metadata_queries.py
+│   ├── metadata_queries.py
+│   └── exchange_card_queries.py
 ├── utils/                      # 工具模块
 │   ├── form_utils.py          # 表单处理工具函数
 │   ├── element_utils.py       # 元素归一化工具
@@ -45,6 +48,7 @@ src/ptcgp_auto_v2/web/
 │       ├── plan_list.html      # 计划列表
 │       ├── record_list.html    # 开包记录列表
 │       ├── metadata_list.html  # 卡包元数据列表
+│       ├── exchange_card_list.html # 交换记录列表
 │       ├── options_boosters.html # 补充包选项
 │       ├── macros/             # 宏定义（可复用组件）
 │       │   ├── modal.html      # 模态框宏
@@ -204,6 +208,7 @@ src/ptcgp_auto_v2/web/
 - **左栏滚动一致性**：当页面被定义为“左筛选 + 右内容”整体滚动时，不要给左栏卡片加 `sticky`；否则鼠标在左栏滚轮会触发页面滚动但左栏固定不动，造成两栏不同步的错觉。
 - **Modal 成功关闭规范**：提交成功后关闭弹窗统一使用 `data-close-modal-on-success="true" + bootstrap.js(hx-afterRequest)`，不要在模板里写 `hx-on:...closeModal()`。
 - **任务手动重置优先级**：`reset-completed` 把任务改回 `pending` 时必须同时清空 `next_run_at`（设为 `NULL`），否则未来时间会导致重置任务被已到期任务长期抢占。
+- **管理页 hash 白名单同步**：新增管理子页（如 `exchange-cards`）时，必须同时更新 `tabs.js` 与 `bootstrap.js` 中的 hash 白名单，否则刷新/直达时不会自动加载对应页面。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录
