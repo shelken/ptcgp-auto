@@ -137,6 +137,12 @@ COMMON_PAGES = [
         "patterns_key": "text_home",
     },
     {
+        "name": "_scene_restart_game",
+        "identifiers": _get_patterns(TEXT_PATTERNS, "_scene_restart_game"),
+        "priority": 900,
+        "action": "restart_game",
+    },
+    {
         "name": "_close_app_popup",
         "identifiers": _get_patterns(TEXT_PATTERNS, "close_app_popup"),
         "match_all": True,
