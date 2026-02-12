@@ -7,19 +7,16 @@
 2. 后置：送卡成功后唤醒目标账号执行回送任务
 """
 
-from datetime import datetime
-
 from ptcgp_auto_v2.core.hooks import Hook, HookContext, HookResult
-from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.services import GiftRecordService
 
 
 class ClaimGiftsPreHook(Hook):
-    """送卡前置 Hook：确保当前账号先执行领取礼物任务。"""
+    """Hook：确保当前账号先执行领取礼物任务。"""
 
     def run(self, context: HookContext) -> tuple[HookResult, dict]:
-        """若今日未完成 claim_gifts，则插入 claim_gifts 作为前置任务。"""
+        """直接插入 claim_gifts 前置任务，不做额外判断。"""
         if context.account.id is None:
             return HookResult.ABORT, {
                 "error": "账号ID为空，无法执行 claim_gifts 前置任务"
@@ -27,32 +24,16 @@ class ClaimGiftsPreHook(Hook):
 
         account_id = int(context.account.id)
         repo = TaskInstanceRepository()
-        instance = repo.get_by_account_and_type(account_id, "claim_gifts")
-        today = datetime.now().date()
-
-        if (
-            instance is not None
-            and instance.status == TaskStatus.COMPLETED.value
-            and instance.last_completed_at is not None
-            and instance.last_completed_at.date() == today
-        ):
-            return HookResult.CONTINUE, {}
-
-        if instance is None:
-            instance = repo.get_or_create(
-                account_id=account_id,
-                task_type="claim_gifts",
-                reset_type="daily",
-            )
-
-        if instance.status != TaskStatus.PENDING.value:
-            instance.status = TaskStatus.PENDING.value
-            instance.save()
+        repo.get_or_create(
+            account_id=account_id,
+            task_type="claim_gifts",
+            reset_type="daily",
+        )
 
         return HookResult.INSERT_TASK, {
             "task_type": "claim_gifts",
             "priority": "high",
-            "reason": "送卡前先领取礼物",
+            "reason": "领取礼物",
         }
 
 

@@ -198,7 +198,7 @@ class Task(ABC):
         return []
 
     def _run_pre_hooks(self) -> Optional[TaskResult]:
-        """执行前置 Hook，必要时返回中断结果"""
+        """执行前置 Hook，收集并返回前置任务列表。"""
         from ptcgp_auto_v2.core.hooks import HookResult
 
         pre_hooks = self.get_pre_hooks()
@@ -208,18 +208,27 @@ class Task(ABC):
         if self._hook_context is None:
             return TaskResult.fail("Hook 上下文未初始化")
 
+        pre_task_types: list[str] = []
         for hook in pre_hooks:
             result, data = hook.run(self._hook_context)
             if result == HookResult.ABORT:
                 error_msg = data.get("error", "PreHook aborted")
                 return TaskResult.fail(error_msg)
             if result == HookResult.INSERT_TASK:
-                return TaskResult.skip(
-                    reason="等待前置任务",
-                    pre_task_type=data.get("task_type"),
-                    pre_task_priority=data.get("priority", "high"),
-                    pre_task_reason=data.get("reason"),
-                )
+                task_type = data.get("task_type")
+                if (
+                    isinstance(task_type, str)
+                    and task_type
+                    and task_type not in pre_task_types
+                ):
+                    pre_task_types.append(task_type)
+
+        if pre_task_types:
+            return TaskResult.skip(
+                reason="等待前置任务",
+                pre_task_types=pre_task_types,
+                pre_task_type=pre_task_types[0],
+            )
 
         return None
 
@@ -245,7 +254,7 @@ class Task(ABC):
         """
         return ActionResult.wait(1.0)
 
-    def execute(self) -> TaskResult:
+    def execute(self, skip_pre_hooks: bool = False) -> TaskResult:
         """
         执行任务的主循环
 
@@ -261,10 +270,11 @@ class Task(ABC):
         import time
 
         self.on_start()
-        pre_result = self._run_pre_hooks()
-        if pre_result:
-            self.on_complete(pre_result)
-            return pre_result
+        if not skip_pre_hooks:
+            pre_result = self._run_pre_hooks()
+            if pre_result:
+                self.on_complete(pre_result)
+                return pre_result
 
         unknown_count = 0
         result: Optional[TaskResult] = None
