@@ -475,9 +475,9 @@ class FetchAccountInfoTask(Task):
         ocr: list,
         label_patterns: list[str],
     ) -> Optional[int]:
-        """按列表页结构化关系提取标签对应数值。"""
+        """按标签与数字的Y轴距离最近原则提取数值。"""
         normalized_patterns = {"".join(pattern.split()) for pattern in label_patterns}
-        labels: list[tuple[int, int, int, int]] = []
+        label_center_ys: list[int] = []
         numbers: list[tuple[int, tuple[int, int, int, int]]] = []
 
         for item in ocr:
@@ -486,57 +486,27 @@ class FetchAccountInfoTask(Task):
                 continue
             text = "".join(str(item.get("text", "")).split())
             if any(pattern in text for pattern in normalized_patterns):
-                labels.append(tuple(box))
+                label_center_ys.append((box[1] + box[3]) // 2)
                 continue
 
             value = self._parse_numeric_text(text)
             if value is not None:
                 numbers.append((value, tuple(box)))
 
-        if not labels or not numbers:
+        if not label_center_ys or not numbers:
             return None
 
-        best: Optional[tuple[int, int, int]] = None
-        for label_box in labels:
+        best_value: Optional[int] = None
+        best_dy: Optional[int] = None
+        for label_y in label_center_ys:
             for value, number_box in numbers:
-                relation = self._score_label_number_relation(label_box, number_box)
-                if relation is None:
-                    continue
-                candidate = (relation[0], relation[1], value)
-                if best is None or candidate < best:
-                    best = candidate
+                number_y = (number_box[1] + number_box[3]) // 2
+                dy = abs(number_y - label_y)
+                if best_dy is None or dy < best_dy:
+                    best_dy = dy
+                    best_value = value
 
-        return best[2] if best else None
-
-    def _score_label_number_relation(
-        self,
-        label_box: tuple[int, int, int, int],
-        number_box: tuple[int, int, int, int],
-    ) -> Optional[tuple[int, int]]:
-        """为标签与数字的几何关系打分，分值越小越优。"""
-        lx = (label_box[0] + label_box[2]) // 2
-        ly = (label_box[1] + label_box[3]) // 2
-
-        nx = (number_box[0] + number_box[2]) // 2
-        ny = (number_box[1] + number_box[3]) // 2
-
-        right_tolerance = self.adb.scaled_x(620)
-        row_tolerance = self.adb.scaled_y(140)
-        vertical_tolerance = self.adb.scaled_y(320)
-        horizontal_tolerance = self.adb.scaled_x(260)
-
-        dx = nx - lx
-        dy = ny - ly
-
-        # 同行右侧：优先级最高。
-        if dx > 0 and dx <= right_tolerance and abs(dy) <= row_tolerance:
-            return 0, dx + abs(dy) * 2
-
-        # 同列下方：作为次优匹配。
-        if dy > 0 and dy <= vertical_tolerance and abs(dx) <= horizontal_tolerance:
-            return 1, dy + abs(dx) // 2
-
-        return None
+        return best_value
 
     @staticmethod
     def _parse_numeric_text(text: str) -> Optional[int]:
