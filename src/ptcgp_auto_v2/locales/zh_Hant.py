@@ -160,6 +160,7 @@ TEXT_PATTERNS = {
     # ============================================================
     "init_select_country": ["選擇國家", "請選擇您居住的國家"],
     "init_country_btn": ["國家/地區"],  # 国家/地区选择按钮
+    "init_country_list_close": ["×"],  # 国家列表弹层关闭按钮
     "init_year_btn": ["年"],  # 年份选择按钮
     "init_month_btn": ["月"],  # 月份选择按钮
     "init_month_2": ["2"],  # 月份 2

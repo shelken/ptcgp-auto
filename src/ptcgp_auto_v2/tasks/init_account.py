@@ -76,6 +76,9 @@ BASE_UNKNOWN_TOP_TAP_Y = 10
 BASE_UNKNOWN_TASK_TAP_X = 960
 BASE_UNKNOWN_TASK_TAP_Y = 1740
 
+# 主页兜底完成阈值：当已完成「选择喜欢的卡牌」后，连续识别到主页达到该次数即判定完成
+HOME_FALLBACK_THRESHOLD = 8
+
 
 class InitAccountPhase(Enum):
     """新账号初始化任务阶段（仅用于页面间流转）"""
@@ -174,6 +177,11 @@ def _build_init_pages() -> list[dict]:
             "priority": 99,
         },
         {
+            "name": "game_home_main",
+            "identifiers": get_text_patterns("game_home_main"),
+            "priority": 90,
+        },
+        {
             "name": "init_tap_to_flip",
             "identifiers": get_text_patterns("init_tap_to_flip"),
             "priority": 99,
@@ -231,7 +239,7 @@ class InitAccountTask(Task):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
         self._phase = InitAccountPhase.INIT
-        self._action_cache: dict[str, bool] = {}
+        self._action_cache: dict[str, bool | int] = {}
 
     def _get_target_nickname(self) -> str:
         """获取目标昵称，格式为 前缀 + 账号ID（如果没有账号则只有前缀）"""
@@ -241,7 +249,7 @@ class InitAccountTask(Task):
 
     def _is_action_done(self, key: str) -> bool:
         """检查操作是否已完成"""
-        return self._action_cache.get(key, False)
+        return bool(self._action_cache.get(key, False))
 
     def _mark_action_done(self, key: str):
         """标记操作已完成"""
@@ -259,6 +267,10 @@ class InitAccountTask(Task):
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """处理识别到的页面"""
         logger.debug(f"处理页面: {page_name}, 当前阶段: {self._phase.name}")
+
+        # 仅在“连续主页”场景累计计数；一旦离开主页立即重置
+        if page_name != "game_home_main":
+            self._action_cache.pop("home_consecutive_count", None)
 
         # 页面处理器映射
         handlers = {
@@ -283,6 +295,7 @@ class InitAccountTask(Task):
             "init_tap_to_flip": self._handle_tap_to_flip,
             "init_select_favorite_card": self._handle_select_favorite_card,
             "init_enjoy": self._handle_enjoy,
+            "game_home_main": self._handle_game_home_main,
             "pack_opening_result": self._handle_pack_opening_result,
             "pack_card_register": self._handle_card_register,
             "pack_opening_card": self._handle_opening_card,
@@ -380,16 +393,25 @@ class InitAccountTask(Task):
         ocr_results = page_info.get("ocr_results", [])
 
         # 辅助函数：查找 OCR 中匹配的第一个允许国家
-        def _find_allowed_country(ocr_results: list[dict]) -> str | None:
+        def _find_allowed_country(
+            ocr_results: list[dict], exact: bool = False
+        ) -> str | None:
             for country in self.ALLOWED_COUNTRIES:
-                if is_text_visible(ocr_results, [country]):
+                if is_text_visible(ocr_results, [country], exact=exact):
                     return country
             return None
 
+        # 判断当前是否处于国家列表弹层（弹层通常带有「×」关闭按钮）
+        is_country_list_overlay = is_text_visible(
+            ocr_results, get_text_patterns("init_country_list_close"), exact=True
+        )
+
         # 当前是否已回到国家+生日主表单（而非国家列表弹层）
-        is_country_form_ready = is_text_visible(
-            ocr_results, get_text_patterns("init_year_btn")
-        ) and is_text_visible(ocr_results, get_text_patterns("init_month_btn"))
+        # 只要主表单上已出现允许国家，且不在国家列表弹层，即视为国家已设置。
+        has_selected_country = (
+            _find_allowed_country(ocr_results, exact=True) is not None
+        )
+        is_country_form_ready = has_selected_country and not is_country_list_overlay
 
         # 步骤 1: 点击「國家/地區」打开列表
         if (
@@ -417,11 +439,11 @@ class InitAccountTask(Task):
 
         # 步骤 2: 在列表中查找并点击允许的国家
         if not self._is_action_done("select_country_country_clicked"):
+            matched_country = _find_allowed_country(ocr_results)
             if is_country_form_ready:
-                # 主表单里已经有国家值，不需要再反复点国家列表
+                # 主表单里已显示有效国家，直接标记完成，避免误触再次打开列表。
                 self._mark_action_done("select_country_country_clicked")
             else:
-                matched_country = _find_allowed_country(ocr_results)
                 if matched_country:
                     logger.info(f"  -> 找到允许的国家 {matched_country}，点击选择")
                     result = tap_text_exact(
@@ -503,10 +525,10 @@ class InitAccountTask(Task):
 
         # 最后点击 OK 完成整个页面
         result = tap_ok(self.adb, ocr_results, wait=1.0)
-        if result and not is_country_form_ready:
-            # 若未跳出当前页面，下次进入时重复「打开列表 -> 选国家 -> OK」流程。
+        if result and is_country_list_overlay:
+            # 若刚关闭国家列表弹层，下次进入可重新尝试打开列表；
+            # 但国家已选状态不在这里清空，避免回到主表单后重复选国家。
             self._action_cache.pop("select_country_list_opened", None)
-            self._action_cache.pop("select_country_country_clicked", None)
         return result or ActionResult.ok(wait=1.0)
 
     def _handle_data_use(self, page_info: dict) -> ActionResult:
@@ -700,13 +722,37 @@ class InitAccountTask(Task):
     def _handle_select_favorite_card(self, page_info: dict) -> ActionResult:
         """处理选择喜欢的卡牌页面"""
         logger.info("  -> 选择喜欢的卡牌")
-        return tap_favorite_card(self.adb, wait=1.0)
+        result = tap_favorite_card(self.adb, wait=1.0)
+        if result and result.success:
+            self._mark_action_done("after_favorite_card")
+        return result
 
     def _handle_enjoy(self, page_info: dict) -> ActionResult:
         """处理完成页面"""
         logger.info("  -> 初始化完成，点击继续")
         self._phase = InitAccountPhase.COMPLETED
         return tap_center(self.adb, wait=2.0)
+
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
+        """处理游戏主页兜底：仅在后期里程碑达成后，连续主页超时才判定完成。"""
+        if not self._is_action_done("after_favorite_card"):
+            logger.debug("  -> 已在主页，但未到最终引导阶段，继续等待")
+            return ActionResult.ok(wait=1.0)
+
+        home_count = int(self._action_cache.get("home_consecutive_count", 0)) + 1
+        self._action_cache["home_consecutive_count"] = home_count
+
+        if home_count >= HOME_FALLBACK_THRESHOLD:
+            logger.warning(
+                "  -> 已完成选喜欢卡牌且连续主页达到阈值，触发初始化完成兜底"
+            )
+            self._phase = InitAccountPhase.COMPLETED
+            return ActionResult.ok(wait=0.5)
+
+        logger.info(
+            f"  -> 已完成选喜欢卡牌，主页兜底计数 {home_count}/{HOME_FALLBACK_THRESHOLD}"
+        )
+        return ActionResult.ok(wait=0.5)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页面（复用开包通用动作）"""

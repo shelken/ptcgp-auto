@@ -459,6 +459,51 @@ class TestHandleEnjoy(unittest.TestCase):
         self.assertEqual(task._phase, InitAccountPhase.COMPLETED)
 
 
+class TestHandleHomeFallback(unittest.TestCase):
+    """测试主页兜底完成逻辑。"""
+
+    def test_handle_page_should_not_complete_on_home_without_favorite_marker(self):
+        """未到最终引导阶段时，主页不应直接判定完成。"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+
+        result = task.handle_page("game_home_main", {"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertNotEqual(task._phase, InitAccountPhase.COMPLETED)
+
+    def test_handle_page_should_complete_after_home_hits_with_favorite_marker(self):
+        """完成“喜欢卡牌”后，连续8次主页应触发兜底完成。"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        task._mark_action_done("after_favorite_card")
+
+        for _ in range(7):
+            result = task.handle_page("game_home_main", {"ocr_results": []})
+            self.assertTrue(result.success)
+            self.assertNotEqual(task._phase, InitAccountPhase.COMPLETED)
+
+        result = task.handle_page("game_home_main", {"ocr_results": []})
+        self.assertTrue(result.success)
+        self.assertEqual(task._phase, InitAccountPhase.COMPLETED)
+
+    def test_handle_page_should_reset_home_counter_after_leaving_home(self):
+        """主页计数应为连续计数，离开主页后需要清零。"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
+        task._mark_action_done("after_favorite_card")
+
+        task.handle_page("game_home_main", {"ocr_results": []})
+        task.handle_page("game_home_main", {"ocr_results": []})
+        self.assertEqual(task._action_cache.get("home_consecutive_count"), 2)
+
+        task.handle_page("init_open_pack", {"ocr_results": []})
+        self.assertIsNone(task._action_cache.get("home_consecutive_count"))
+
+
 class TestHandleSelectFavoriteCard(unittest.TestCase):
     """测试选择喜欢的卡牌页面处理"""
 
@@ -476,6 +521,7 @@ class TestHandleSelectFavoriteCard(unittest.TestCase):
             result = task._handle_select_favorite_card({"ocr_results": []})
 
         self.assertTrue(result.success)
+        self.assertTrue(task._is_action_done("after_favorite_card"))
         mock_helper.assert_called_once_with(adb, wait=1.0)
 
 
