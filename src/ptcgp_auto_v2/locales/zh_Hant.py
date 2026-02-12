@@ -55,6 +55,9 @@ TEXT_PATTERNS = {
     # 交换页面
     "exchange_page": ["交換卡牌", "設定", "紀錄"],
     "exchange_point_title": ["交換"],
+    "exchange_target_page": ["要交換的對象", "交換"],
+    "exchange_record_page": ["交換卡牌", "紀錄"],
+    "exchange_send_button": ["交換"],
     # 交换未解锁弹窗
     "exchange_locked_popup": ["開放條件", "距離開放還剩"],
     # 通用页面
