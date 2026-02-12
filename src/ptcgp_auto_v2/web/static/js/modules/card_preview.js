@@ -1,4 +1,16 @@
-// --- 卡牌预览状态 ---
+// --- 通用拖拽状态 ---
+const dragState = {
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    rotateX: 0,
+    rotateY: 0,
+    targetElement: null,
+    shineElement: null,
+    onDragEnd: null
+};
+
+// --- 全屏预览状态 ---
 export const cardPreviewState = {
     isOpen: false,
     isDragging: false,
@@ -11,9 +23,139 @@ export const cardPreviewState = {
     targetElement: null
 };
 
-// --- 卡牌预览功能 ---
+// --- 绑定拖拽事件（通用）---
+function bindDragEvents(element, options = {}) {
+    const {
+        maxRotateX = 30,
+        maxRotateY = 30,
+        sensitivity = 0.4,
+        shineElement = null,
+        onDragEnd = null,
+        autoReset = true
+    } = options;
+
+    dragState.rotateX = 0;
+    dragState.rotateY = 0;
+    dragState.targetElement = element;
+    dragState.shineElement = shineElement;
+    dragState.onDragEnd = onDragEnd;
+
+    const handleDragStart = (e) => {
+        e.preventDefault();
+        dragState.isDragging = true;
+        element.classList.add('dragging');
+
+        if (e.type === 'touchstart') {
+            dragState.startX = e.touches[0].clientX;
+            dragState.startY = e.touches[0].clientY;
+        } else {
+            dragState.startX = e.clientX;
+            dragState.startY = e.clientY;
+        }
+    };
+
+    const handleDragMove = (e) => {
+        if (!dragState.isDragging) return;
+        e.preventDefault();
+
+        let clientX, clientY;
+        if (e.type === 'touchmove') {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+
+        const deltaX = clientX - dragState.startX;
+        const deltaY = clientY - dragState.startY;
+
+        dragState.rotateY += deltaX * sensitivity;
+        dragState.rotateX -= deltaY * sensitivity;
+
+        dragState.rotateX = Math.max(-maxRotateX, Math.min(maxRotateX, dragState.rotateX));
+        dragState.rotateY = Math.max(-maxRotateY, Math.min(maxRotateY, dragState.rotateY));
+
+        updateDragRotation();
+
+        dragState.startX = clientX;
+        dragState.startY = clientY;
+    };
+
+    const handleDragEnd = () => {
+        if (!dragState.isDragging) return;
+
+        dragState.isDragging = false;
+        element.classList.remove('dragging');
+
+        if (autoReset) {
+            animateReset(element);
+        }
+
+        if (dragState.onDragEnd) {
+            dragState.onDragEnd();
+        }
+    };
+
+    element.addEventListener('mousedown', handleDragStart);
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+
+    element.addEventListener('touchstart', handleDragStart, { passive: false });
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('touchend', handleDragEnd);
+}
+
+// --- 更新旋转角度 ---
+function updateDragRotation() {
+    const card = dragState.targetElement;
+    if (!card) return;
+
+    card.style.transform = `rotateY(${dragState.rotateY}deg) rotateX(${dragState.rotateX}deg)`;
+
+    if (dragState.shineElement) {
+        const shineX = -dragState.rotateY * 1.5;
+        const shineY = dragState.rotateX * 1.5;
+        dragState.shineElement.style.transform = `translateX(${shineX}px) translateY(${shineY}px)`;
+    }
+}
+
+// --- 自动回正动画 ---
+function animateReset(element) {
+    const startX = dragState.rotateX;
+    const startY = dragState.rotateY;
+    if (Math.abs(startX) < 0.1 && Math.abs(startY) < 0.1) return;
+
+    element.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    dragState.rotateX = 0;
+    dragState.rotateY = 0;
+    updateDragRotation();
+
+    setTimeout(() => {
+        if (element) element.style.transition = 'transform 0.1s ease-out';
+    }, 500);
+}
+
+// --- 初始化弹窗内卡牌拖拽 ---
+export function initInlineCardDrag(elementId, shineSelector = null) {
+    const element = document.getElementById(elementId);
+    if (!element) return null;
+
+    const shineElement = shineSelector ? element.querySelector(shineSelector) : null;
+
+    bindDragEvents(element, {
+        maxRotateX: 25,
+        maxRotateY: 25,
+        sensitivity: 0.35,
+        shineElement: shineElement,
+        autoReset: true
+    });
+
+    return element;
+}
+
+// --- 全屏卡牌预览 ---
 export function openCardPreview(cardElement) {
-    // 防止重复打开
     if (cardPreviewState.isOpen) return;
 
     const cardName = cardElement.dataset.cardName || 'Unknown';
@@ -61,7 +203,16 @@ export function openCardPreview(cardElement) {
     cardPreviewState.rotateY = 0;
     cardPreviewState.targetElement = document.getElementById('card-preview-card');
 
-    bindCardPreviewEvents();
+    const cardEl = document.getElementById('card-preview-card');
+    const shineEl = document.getElementById('card-preview-shine');
+
+    bindDragEvents(cardEl, {
+        maxRotateX: 45,
+        maxRotateY: 45,
+        sensitivity: 0.5,
+        shineElement: shineEl,
+        autoReset: true
+    });
 
     document.body.style.overflow = 'hidden';
 
@@ -71,7 +222,7 @@ export function openCardPreview(cardElement) {
     });
 }
 
-// --- 关闭卡牌预览 ---
+// --- 关闭全屏预览 ---
 export function closeCardPreview(event) {
     if (event && event.target.id !== 'card-preview-overlay') return;
 
@@ -86,132 +237,4 @@ export function closeCardPreview(event) {
         cardPreviewState.targetElement = null;
         document.body.style.overflow = '';
     }, 300);
-}
-
-// --- 绑定拖拽事件 ---
-function bindCardPreviewEvents() {
-    const container = document.getElementById('card-preview-container');
-    if (!container) return;
-
-    container.addEventListener('mousedown', handleDragStart);
-    document.addEventListener('mousemove', handleDragMove);
-    document.addEventListener('mouseup', handleDragEnd);
-
-    container.addEventListener('touchstart', handleDragStart, { passive: false });
-    document.addEventListener('touchmove', handleDragMove, { passive: false });
-    document.addEventListener('touchend', handleDragEnd);
-}
-
-// --- 拖拽开始 ---
-function handleDragStart(e) {
-    if (!cardPreviewState.isOpen) return;
-    e.preventDefault();
-
-    cardPreviewState.isDragging = true;
-
-    if (e.type === 'touchstart') {
-        cardPreviewState.startX = e.touches[0].clientX;
-        cardPreviewState.startY = e.touches[0].clientY;
-    } else {
-        cardPreviewState.startX = e.clientX;
-        cardPreviewState.startY = e.clientY;
-    }
-
-    const card = document.getElementById('card-preview-card');
-    if (card) card.classList.add('dragging');
-}
-
-// --- 拖拽移动 ---
-function handleDragMove(e) {
-    if (!cardPreviewState.isDragging || !cardPreviewState.isOpen) return;
-
-    e.preventDefault();
-
-    let clientX;
-    let clientY;
-    if (e.type === 'touchmove') {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-    } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-    }
-
-    const deltaX = clientX - cardPreviewState.startX;
-    const deltaY = clientY - cardPreviewState.startY;
-
-    cardPreviewState.rotateY += deltaX * 0.5;
-    cardPreviewState.rotateX -= deltaY * 0.5;
-
-    cardPreviewState.rotateX = Math.max(-45, Math.min(45, cardPreviewState.rotateX));
-    cardPreviewState.rotateY = Math.max(-45, Math.min(45, cardPreviewState.rotateY));
-
-    updateCardRotation();
-
-    cardPreviewState.startX = clientX;
-    cardPreviewState.startY = clientY;
-}
-
-// --- 拖拽结束 ---
-function handleDragEnd() {
-    if (!cardPreviewState.isDragging) return;
-
-    cardPreviewState.isDragging = false;
-
-    const card = document.getElementById('card-preview-card');
-    if (card) card.classList.remove('dragging');
-
-    animateResetToFront();
-}
-
-// --- 更新卡牌旋转 ---
-function updateCardRotation() {
-    const card = cardPreviewState.targetElement;
-    if (!card) return;
-
-    card.style.transform = `rotateY(${cardPreviewState.rotateY}deg) rotateX(${cardPreviewState.rotateX}deg)`;
-    updateShineEffect();
-}
-
-// --- 更新卡牌光影 ---
-function updateShineEffect() {
-    const shine = document.getElementById('card-preview-shine');
-    if (!shine) return;
-
-    const shineX = -cardPreviewState.rotateY * 2;
-    const shineY = cardPreviewState.rotateX * 2;
-
-    const angle = 115 + (cardPreviewState.rotateY * 0.3);
-    const opacity = 0.4 + (Math.abs(cardPreviewState.rotateY) / 90) * 0.3;
-
-    shine.style.background = `linear-gradient(
-        ${angle}deg,
-        rgba(255, 255, 255, 0) 0%,
-        rgba(255, 255, 255, 0) 35%,
-        rgba(255, 255, 255, ${opacity}) 50%,
-        rgba(255, 255, 255, 0) 65%,
-        rgba(255, 255, 255, 0) 100%
-    )`;
-    shine.style.transform = `translateZ(2px) translateX(${shineX}px) translateY(${shineY}px)`;
-}
-
-// --- 自动回正动画 ---
-function animateResetToFront() {
-    if (!cardPreviewState.isOpen) return;
-
-    const card = document.getElementById('card-preview-card');
-    if (!card) return;
-
-    const startX = cardPreviewState.rotateX;
-    const startY = cardPreviewState.rotateY;
-    if (Math.abs(startX) < 0.1 && Math.abs(startY) < 0.1) return;
-
-    card.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
-    cardPreviewState.rotateX = 0;
-    cardPreviewState.rotateY = 0;
-    updateCardRotation();
-
-    setTimeout(() => {
-        if (card) card.style.transition = 'transform 0.15s ease-out';
-    }, 600);
 }
