@@ -37,7 +37,11 @@ from ptcgp_auto_v2.utils.bluestacks_manager import (
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import TaskInstance, Account
-    from ptcgp_auto_v2.db.repositories import TaskInstanceRepository, AccountRepository
+    from ptcgp_auto_v2.db.repositories import (
+        TaskInstanceRepository,
+        AccountRepository,
+        ExchangeCardRequestRepository,
+    )
 
 from ptcgp_auto_v2.core.account_creation import check_and_trigger_account_creation
 
@@ -112,16 +116,21 @@ class Scheduler:
         # 延迟初始化的仓库
         self._task_instance_repo: Optional["TaskInstanceRepository"] = None
         self._account_repo: Optional["AccountRepository"] = None
+        self._exchange_card_request_repo: Optional["ExchangeCardRequestRepository"] = (
+            None
+        )
 
     def _init_repositories(self):
         """初始化数据仓库"""
         from ptcgp_auto_v2.db.repositories import (
             TaskInstanceRepository,
             AccountRepository,
+            ExchangeCardRequestRepository,
         )
 
         self._task_instance_repo = TaskInstanceRepository()
         self._account_repo = AccountRepository()
+        self._exchange_card_request_repo = ExchangeCardRequestRepository()
 
         # 启动时自动重置异常状态的任务
         reset_count = self._task_instance_repo.reset_all_pending()
@@ -184,6 +193,31 @@ class Scheduler:
         )
         if reset_count > 0:
             logger.info(f"已重置 {reset_count} 个超时/异常状态的任务为待执行")
+
+    def _wake_due_exchange_cards_tasks(self, now: Optional[datetime] = None):
+        """唤醒到期的 exchange_cards 请求。"""
+        if self._task_instance_repo is None:
+            return
+
+        if self._exchange_card_request_repo is None:
+            from ptcgp_auto_v2.db.repositories import ExchangeCardRequestRepository
+
+            self._exchange_card_request_repo = ExchangeCardRequestRepository()
+
+        current_time = now or datetime.now()
+        due_account_ids = {
+            request.from_account_id
+            for request in self._exchange_card_request_repo.list_sended_requests()
+            if request.next_check_at is not None
+            and request.next_check_at <= current_time
+        }
+
+        for account_id in sorted(due_account_ids):
+            self._task_instance_repo.ensure_pending(
+                account_id=account_id,
+                task_type="exchange_cards",
+                reset_type=ResetType.ONCE.value,
+            )
 
     def _count_pending_tasks(self) -> int:
         """统计 pending 任务数量"""
@@ -868,6 +902,9 @@ class Scheduler:
 
                 # 检查并重置超时的异常任务
                 self._check_and_reset_stale_tasks()
+
+                # 唤醒到达复查时间的 exchange_cards 任务
+                self._wake_due_exchange_cards_tasks()
 
                 # 自动扩缩容评估
                 self._auto_scale_evaluate()
