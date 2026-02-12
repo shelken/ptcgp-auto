@@ -70,6 +70,22 @@ class GiftRecordService:
         )
         return success is not None
 
+    @classmethod
+    def is_daily_scan_no_card(
+        cls,
+        account_id: int,
+        target_friend_id: str,
+    ) -> bool:
+        """判断当日是否因扫描未找到目标卡而收敛。"""
+        record = AccountGiftRecordRepository().get_daily_record(
+            account_id=account_id,
+            target_friend_id=target_friend_id,
+            biz_date_local=cls.today_local_date(),
+        )
+        if record is None:
+            return False
+        return record.error_code == "CARD_NOT_FOUND_BY_SCAN"
+
     @staticmethod
     def ensure_send_card_daily_pending(account_id: int) -> bool:
         """确保目标账号的 send_card_daily 任务处于 pending。"""
