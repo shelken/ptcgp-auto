@@ -54,6 +54,12 @@ BASE_HOLDINGS_SCROLL_DISTANCE_Y = 260
 # 持有物页面最大滑动次数
 MAX_HOLDINGS_SCROLL_ROUNDS = 4
 
+# 进入持有物页面后，至少先扫描几轮再允许滑动
+MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL = 2
+
+# 持有物列表滑动后的稳定等待时间（秒）
+HOLDINGS_SCROLL_SETTLE_WAIT = 1.4
+
 LEVEL_PATTERN = re.compile(r"Lv\.?\s*(\d+)")
 
 
@@ -121,6 +127,7 @@ class FetchAccountInfoTask(Task):
         self._exchange_points: Optional[int] = None
         self._pack_hourglass_count: Optional[int] = None
         self._holdings_scroll_rounds = 0
+        self._holdings_scan_rounds = 0
 
         # 任务完成标志
         self._completed = False
@@ -301,6 +308,7 @@ class FetchAccountInfoTask(Task):
         if result:
             self._mark_action_done("holdings_entered")
             self._holdings_scroll_rounds = 0
+            self._holdings_scan_rounds = 0
             logger.debug("  -> 点击持有物")
             return result
         return ActionResult.wait(0.8)
@@ -330,6 +338,15 @@ class FetchAccountInfoTask(Task):
                 get_text_patterns("back_button"),
             )
 
+        self._holdings_scan_rounds += 1
+        if self._holdings_scan_rounds <= MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL:
+            logger.debug(
+                "  -> 持有物页面先扫描后滑动 (%s/%s)",
+                self._holdings_scan_rounds,
+                MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL,
+            )
+            return ActionResult.wait(0.8)
+
         if self._holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
             logger.warning("  -> 持有物页面滑动到上限，仍未提取到完整资源")
             self._mark_action_done("holdings_fetched")
@@ -346,8 +363,8 @@ class FetchAccountInfoTask(Task):
             base_distance_y=BASE_HOLDINGS_SCROLL_DISTANCE_Y,
             direction="up",
         )
-        swipe(self.adb, start, end, wait=0.8)
-        return ActionResult.ok(wait=0.8)
+        swipe(self.adb, start, end, wait=HOLDINGS_SCROLL_SETTLE_WAIT)
+        return ActionResult.ok(wait=HOLDINGS_SCROLL_SETTLE_WAIT)
 
     def _handle_home_icon(self, page_info: dict) -> ActionResult:
         """点击主页图标"""
