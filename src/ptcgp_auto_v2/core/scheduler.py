@@ -876,20 +876,36 @@ class Scheduler:
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # init_first: 在未达到账号上限前，优先触发创建账号
+                # 优先执行所有待处理任务（包括 init_account）
+                # 只有在完全没有待执行任务时才创建新账号
+                batch = self._get_next_account_batch()
+
+                # init_first: 创建账号优先于非 init 任务，但不应打断 init_account 执行
                 if (
                     self.config.init_first
                     and self._settings.auto_create_accounts
                     and self._account_repo
                     and self._account_repo.count_all() < self._settings.max_accounts
                 ):
+                    if batch:
+                        account, task_instances = batch
+                        has_init_task = any(
+                            task.task_type == "init_account" for task in task_instances
+                        )
+                        if has_init_task:
+                            self._dispatch_account_batch(account, task_instances)
+                            continue
+
+                        # 当前无 init 任务可执行，优先触发新账号创建
+                        self._trigger_multi_device_creation()
+                        time.sleep(self.config.poll_interval)
+                        continue
+
+                    # 无待执行任务，触发创建流程
                     self._trigger_multi_device_creation()
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # 优先执行所有待处理任务（包括 init_account）
-                # 只有在完全没有待执行任务时才创建新账号
-                batch = self._get_next_account_batch()
                 if batch:
                     # 有待执行任务，优先执行
                     account, task_instances = batch
