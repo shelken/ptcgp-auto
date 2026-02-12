@@ -329,6 +329,10 @@ class InitAccountTask(Task):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
         logger.debug("未知页面，点击屏幕中心兜底")
+        return self._quick_tap_home_like_fallback()
+
+    def _quick_tap_home_like_fallback(self) -> ActionResult:
+        """主页/未知页统一兜底点击逻辑。"""
         return quick_tap(
             self.adb,
             tap_points=[
@@ -378,6 +382,166 @@ class InitAccountTask(Task):
     # 页面处理方法
     # ============================================================
 
+    def _find_allowed_country(
+        self, ocr_results: list[dict], exact: bool = False
+    ) -> str | None:
+        """在 OCR 结果中查找第一个允许国家。"""
+        for country in self.ALLOWED_COUNTRIES:
+            if is_text_visible(ocr_results, [country], exact=exact):
+                return country
+        return None
+
+    def _is_country_list_overlay(self, ocr_results: list[dict]) -> bool:
+        """判断当前是否处于国家列表弹层。"""
+        return is_text_visible(
+            ocr_results,
+            get_text_patterns("init_country_list_close"),
+            exact=True,
+        )
+
+    def _swipe_country_list(self) -> ActionResult:
+        """在国家列表中上滑查找目标国家。"""
+        start, end = scroll_points(
+            self.adb,
+            base_distance_y=BASE_COUNTRY_SCROLL_DISTANCE_Y,
+            direction="up",
+        )
+        return swipe(self.adb, start, end, wait=2.0)
+
+    def _handle_country_list_overlay(self, ocr_results: list[dict]) -> ActionResult:
+        """处理国家列表弹层：循环执行“点国家 + 点OK”，找不到则滑动。"""
+        matched_country = self._find_allowed_country(ocr_results, exact=True)
+        if matched_country:
+            logger.info(f"  -> 国家列表弹层：点击允许国家 {matched_country}")
+            tap_text_exact(self.adb, ocr_results, [matched_country], wait=0.2)
+            ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
+            return ok_result or ActionResult.ok(wait=1.0)
+
+        logger.info("  -> 国家列表弹层：未找到允许国家，继续滑动查找")
+        return self._swipe_country_list()
+
+    def _open_country_list_if_needed(
+        self, ocr_results: list[dict], is_country_form_ready: bool
+    ) -> ActionResult | None:
+        """在主表单中按需打开国家列表。"""
+        if self._is_action_done("select_country_list_opened") or is_country_form_ready:
+            return None
+
+        result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("init_country_btn"),
+            wait=1.0,
+        )
+        if result:
+            logger.info("  -> 点击「國家/地區」打开列表")
+            self._mark_action_done("select_country_list_opened")
+            return result
+
+        logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
+        tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
+        result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
+        self._mark_action_done("select_country_list_opened")
+        return result
+
+    def _select_country_if_needed(
+        self, ocr_results: list[dict], is_country_form_ready: bool
+    ) -> ActionResult | None:
+        """在主表单阶段按需确认国家已选择。"""
+        if self._is_action_done("select_country_country_clicked"):
+            return None
+
+        if is_country_form_ready:
+            # 主表单里已显示有效国家，直接标记完成，避免误触再次打开列表。
+            self._mark_action_done("select_country_country_clicked")
+            return None
+
+        matched_country = self._find_allowed_country(ocr_results)
+        if matched_country:
+            logger.info(f"  -> 找到允许的国家 {matched_country}，点击选择")
+            result = tap_text_exact(self.adb, ocr_results, [matched_country], wait=0.5)
+            if result:
+                self._mark_action_done("select_country_country_clicked")
+                return result
+            return None
+
+        logger.info("  -> 滑动查找目标国家")
+        return self._swipe_country_list()
+
+    def _select_birth_year_if_needed(
+        self, ocr_results: list[dict]
+    ) -> ActionResult | None:
+        """按需选择出生年份。"""
+        if not self._is_action_done("select_country_year_clicked"):
+            if is_text_visible(ocr_results, get_text_patterns("init_year_btn")):
+                result = tap_text_exact(
+                    self.adb,
+                    ocr_results,
+                    get_text_patterns("init_year_btn"),
+                    wait=1.0,
+                )
+                if result:
+                    logger.info("  -> 点击「年」打开年份选择")
+                    self._mark_action_done("select_country_year_clicked")
+                    return result
+            return None
+
+        if self._is_action_done("select_country_year_selected"):
+            return None
+
+        target_year = str(datetime.now().year - self.BIRTH_YEAR_OFFSET)
+        if is_text_visible(ocr_results, [target_year]):
+            logger.info(f"  -> 找到年份 {target_year}，点击选择")
+            result = tap_text_exact(self.adb, ocr_results, [target_year], wait=0.5)
+            if result:
+                self._mark_action_done("select_country_year_selected")
+                return result
+            return None
+
+        logger.info("  -> 上滑查找目标年份")
+        start_x = self.adb.scaled_x(300)
+        start_y = self.adb.scaled_y(1400)
+        end_y = self.adb.scaled_y(900)
+        return swipe(
+            self.adb,
+            (start_x, end_y),
+            (start_x, start_y),
+            wait=1.0,
+        )
+
+    def _select_birth_month_if_needed(
+        self, ocr_results: list[dict]
+    ) -> ActionResult | None:
+        """按需选择出生月份。"""
+        if not self._is_action_done("select_country_month_clicked"):
+            if is_text_visible(ocr_results, get_text_patterns("init_month_btn")):
+                result = tap_text_exact(
+                    self.adb,
+                    ocr_results,
+                    get_text_patterns("init_month_btn"),
+                    wait=1.0,
+                )
+                if result:
+                    logger.info("  -> 点击「月」打开月份选择")
+                    self._mark_action_done("select_country_month_clicked")
+                    return result
+            return None
+
+        if self._is_action_done("select_country_month_selected"):
+            return None
+
+        result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("init_month_2"),
+            wait=0.5,
+        )
+        if result:
+            logger.info("  -> 选择月份 2")
+            self._mark_action_done("select_country_month_selected")
+            return result
+        return None
+
     def _handle_select_country(self, page_info: dict) -> ActionResult:
         """
         处理选择国家/地区页面
@@ -392,143 +556,27 @@ class InitAccountTask(Task):
         """
         ocr_results = page_info.get("ocr_results", [])
 
-        # 辅助函数：查找 OCR 中匹配的第一个允许国家
-        def _find_allowed_country(
-            ocr_results: list[dict], exact: bool = False
-        ) -> str | None:
-            for country in self.ALLOWED_COUNTRIES:
-                if is_text_visible(ocr_results, [country], exact=exact):
-                    return country
-            return None
+        if self._is_country_list_overlay(ocr_results):
+            return self._handle_country_list_overlay(ocr_results)
 
-        # 判断当前是否处于国家列表弹层（弹层通常带有「×」关闭按钮）
-        is_country_list_overlay = is_text_visible(
-            ocr_results, get_text_patterns("init_country_list_close"), exact=True
-        )
-
-        # 当前是否已回到国家+生日主表单（而非国家列表弹层）
-        # 只要主表单上已出现允许国家，且不在国家列表弹层，即视为国家已设置。
         has_selected_country = (
-            _find_allowed_country(ocr_results, exact=True) is not None
+            self._find_allowed_country(ocr_results, exact=True) is not None
         )
-        is_country_form_ready = has_selected_country and not is_country_list_overlay
+        is_country_form_ready = has_selected_country
 
-        # 步骤 1: 点击「國家/地區」打开列表
-        if (
-            not self._is_action_done("select_country_list_opened")
-            and not is_country_form_ready
+        for step in (
+            lambda: self._open_country_list_if_needed(
+                ocr_results, is_country_form_ready
+            ),
+            lambda: self._select_country_if_needed(ocr_results, is_country_form_ready),
+            lambda: self._select_birth_year_if_needed(ocr_results),
+            lambda: self._select_birth_month_if_needed(ocr_results),
         ):
-            # 优先尝试 OCR 识别文字点击
-            result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("init_country_btn"),
-                wait=1.0,
-            )
+            result = step()
             if result:
-                logger.info("  -> 点击「國家/地區」打开列表")
-                self._mark_action_done("select_country_list_opened")
                 return result
 
-            # 兜底方案：OCR 失败时直接点击固定坐标
-            logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
-            tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
-            result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
-            self._mark_action_done("select_country_list_opened")
-            return result
-
-        # 步骤 2: 在列表中查找并点击允许的国家
-        if not self._is_action_done("select_country_country_clicked"):
-            matched_country = _find_allowed_country(ocr_results)
-            if is_country_form_ready:
-                # 主表单里已显示有效国家，直接标记完成，避免误触再次打开列表。
-                self._mark_action_done("select_country_country_clicked")
-            else:
-                if matched_country:
-                    logger.info(f"  -> 找到允许的国家 {matched_country}，点击选择")
-                    result = tap_text_exact(
-                        self.adb, ocr_results, [matched_country], wait=0.5
-                    )
-                    if result:
-                        self._mark_action_done("select_country_country_clicked")
-                        return result
-                else:
-                    logger.info("  -> 滑动查找目标国家")
-                    start, end = scroll_points(
-                        self.adb,
-                        base_distance_y=BASE_COUNTRY_SCROLL_DISTANCE_Y,
-                        direction="up",
-                    )
-                    return swipe(
-                        self.adb,
-                        start,
-                        end,
-                        wait=2.0,
-                    )
-
-        # 步骤 3: 点击「年」打开年份选择列表
-        if not self._is_action_done("select_country_year_clicked"):
-            if is_text_visible(ocr_results, get_text_patterns("init_year_btn")):
-                result = tap_text_exact(
-                    self.adb, ocr_results, get_text_patterns("init_year_btn"), wait=1.0
-                )
-                if result:
-                    logger.info("  -> 点击「年」打开年份选择")
-                    self._mark_action_done("select_country_year_clicked")
-                    return result
-
-        # 步骤 4: 在年份列表中查找并选择目标年份（仅在已点击「年」后执行）
-        if self._is_action_done(
-            "select_country_year_clicked"
-        ) and not self._is_action_done("select_country_year_selected"):
-            target_year = str(datetime.now().year - self.BIRTH_YEAR_OFFSET)
-            if is_text_visible(ocr_results, [target_year]):
-                logger.info(f"  -> 找到年份 {target_year}，点击选择")
-                result = tap_text_exact(self.adb, ocr_results, [target_year], wait=0.5)
-                if result:
-                    self._mark_action_done("select_country_year_selected")
-                    return result
-            else:
-                logger.info("  -> 上滑查找目标年份")
-                start_x = self.adb.scaled_x(300)
-                start_y = self.adb.scaled_y(1400)
-                end_y = self.adb.scaled_y(900)
-                return swipe(
-                    self.adb,
-                    (start_x, end_y),
-                    (start_x, start_y),
-                    wait=1.0,
-                )
-
-        # 步骤 5: 点击「月」打开月份选择列表
-        if not self._is_action_done("select_country_month_clicked"):
-            if is_text_visible(ocr_results, get_text_patterns("init_month_btn")):
-                result = tap_text_exact(
-                    self.adb, ocr_results, get_text_patterns("init_month_btn"), wait=1.0
-                )
-                if result:
-                    logger.info("  -> 点击「月」打开月份选择")
-                    self._mark_action_done("select_country_month_clicked")
-                    return result
-
-        # 步骤 6: 在月份列表中点击「2」（仅在已点击「月」后执行）
-        if self._is_action_done(
-            "select_country_month_clicked"
-        ) and not self._is_action_done("select_country_month_selected"):
-            result = tap_text_exact(
-                self.adb, ocr_results, get_text_patterns("init_month_2"), wait=0.5
-            )
-            if result:
-                logger.info("  -> 选择月份 2")
-                self._mark_action_done("select_country_month_selected")
-                return result
-
-        # 最后点击 OK 完成整个页面
         result = tap_ok(self.adb, ocr_results, wait=1.0)
-        if result and is_country_list_overlay:
-            # 若刚关闭国家列表弹层，下次进入可重新尝试打开列表；
-            # 但国家已选状态不在这里清空，避免回到主表单后重复选国家。
-            self._action_cache.pop("select_country_list_opened", None)
         return result or ActionResult.ok(wait=1.0)
 
     def _handle_data_use(self, page_info: dict) -> ActionResult:
@@ -735,9 +783,11 @@ class InitAccountTask(Task):
 
     def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """处理游戏主页兜底：仅在后期里程碑达成后，连续主页超时才判定完成。"""
+        tap_result = self._quick_tap_home_like_fallback()
+
         if not self._is_action_done("after_favorite_card"):
-            logger.debug("  -> 已在主页，但未到最终引导阶段，继续等待")
-            return ActionResult.ok(wait=1.0)
+            logger.debug("  -> 已在主页，先点击推进提示；未到最终引导阶段，继续等待")
+            return tap_result or ActionResult.ok(wait=1.0)
 
         home_count = int(self._action_cache.get("home_consecutive_count", 0)) + 1
         self._action_cache["home_consecutive_count"] = home_count
@@ -747,12 +797,12 @@ class InitAccountTask(Task):
                 "  -> 已完成选喜欢卡牌且连续主页达到阈值，触发初始化完成兜底"
             )
             self._phase = InitAccountPhase.COMPLETED
-            return ActionResult.ok(wait=0.5)
+            return tap_result or ActionResult.ok(wait=0.5)
 
         logger.info(
             f"  -> 已完成选喜欢卡牌，主页兜底计数 {home_count}/{HOME_FALLBACK_THRESHOLD}"
         )
-        return ActionResult.ok(wait=0.5)
+        return tap_result or ActionResult.ok(wait=0.5)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页面（复用开包通用动作）"""
