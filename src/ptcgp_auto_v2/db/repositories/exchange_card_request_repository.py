@@ -60,15 +60,14 @@ class ExchangeCardRequestRepository:
         with Session(get_engine()) as session:
             return self._get_active_by_account_with_session(session, from_account_id)
 
-    def list_due_sended_requests(self, now: datetime) -> list[ExchangeCardRequest]:
-        """查询已到 next_check_at 的 sended 请求。"""
+    def list_sended_requests(self) -> list[ExchangeCardRequest]:
+        """查询处于 sended 状态的请求。"""
         with Session(get_engine()) as session:
             statement = (
                 select(ExchangeCardRequest)
                 .where(
                     ExchangeCardRequest.status == "sended",
-                    ExchangeCardRequest.next_check_at.is_not(None),
-                    col(ExchangeCardRequest.next_check_at) <= now,
+                    ExchangeCardRequest.next_check_at != None,  # noqa: E711
                 )
                 .order_by(col(ExchangeCardRequest.next_check_at))
             )
