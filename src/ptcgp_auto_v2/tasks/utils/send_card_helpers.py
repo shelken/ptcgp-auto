@@ -6,6 +6,24 @@
 from typing import Optional
 
 
+AMBIGUOUS_NICKNAME_CHARS = {"0", "o", "i", "l"}
+
+
+def _normalize_text(text: str) -> str:
+    """基础归一化：小写并移除空白。"""
+    return "".join(text.lower().split())
+
+
+def _normalize_nickname_for_match(text: str) -> str:
+    """昵称匹配归一化：过滤易混淆字符后再比较。"""
+    normalized = _normalize_text(text)
+    stripped = "".join(
+        char for char in normalized if char not in AMBIGUOUS_NICKNAME_CHARS
+    )
+    # 避免过滤后为空导致误匹配，回退到基础归一化结果。
+    return stripped or normalized
+
+
 def build_ocr_signature(ocr_results: list[dict]) -> str:
     """构建 OCR 文本签名。"""
     texts = [str(item.get("text", "")).strip() for item in ocr_results]
@@ -18,10 +36,10 @@ def find_send_button_for_target(
     send_text_patterns: list[str],
 ) -> Optional[tuple[int, int, int, int]]:
     """按目标昵称匹配对应分送按钮。"""
-    target_text = "".join(target_nickname.lower().split())
+    target_text = _normalize_nickname_for_match(target_nickname)
     nickname_boxes: list[tuple[int, int, int, int]] = []
     for item in ocr_results:
-        text = "".join(str(item.get("text", "")).lower().split())
+        text = _normalize_nickname_for_match(str(item.get("text", "")))
         if text != target_text:
             continue
         box = item.get("box")
@@ -31,10 +49,10 @@ def find_send_button_for_target(
     if not nickname_boxes:
         return None
 
-    send_patterns = {"".join(t.lower().split()) for t in send_text_patterns}
+    send_patterns = {_normalize_text(t) for t in send_text_patterns}
     send_boxes: list[tuple[int, int, int, int]] = []
     for item in ocr_results:
-        text = "".join(str(item.get("text", "")).lower().split())
+        text = _normalize_text(str(item.get("text", "")))
         if text not in send_patterns:
             continue
         box = item.get("box")
@@ -68,10 +86,10 @@ def find_target_search_plus_box(
     if not target_nickname or not search_plus_boxes:
         return None
 
-    target_text = "".join(target_nickname.lower().split())
+    target_text = _normalize_nickname_for_match(target_nickname)
     nickname_boxes: list[tuple[int, int, int, int]] = []
     for item in ocr_results:
-        text = "".join(str(item.get("text", "")).lower().split())
+        text = _normalize_nickname_for_match(str(item.get("text", "")))
         if text != target_text:
             continue
         box = item.get("box")
@@ -85,15 +103,11 @@ def find_target_search_plus_box(
     best_distance: Optional[int] = None
     for nickname_box in nickname_boxes:
         nickname_cy = (nickname_box[1] + nickname_box[3]) // 2
-        nickname_cx = (nickname_box[0] + nickname_box[2]) // 2
         for plus_box in search_plus_boxes:
             plus_cy = (plus_box[1] + plus_box[3]) // 2
-            plus_cx = (plus_box[0] + plus_box[2]) // 2
-            if plus_cx <= nickname_cx:
-                continue
-            if abs(plus_cy - nickname_cy) > row_threshold_y:
-                continue
             distance = abs(plus_cy - nickname_cy)
+            if distance > row_threshold_y:
+                continue
             if best_distance is None or distance < best_distance:
                 best_distance = distance
                 best = plus_box
@@ -107,10 +121,10 @@ def find_send_box_near_anchor(
     row_threshold_y: int,
 ) -> Optional[tuple[int, int, int, int]]:
     """按锚点 Y 轴在同一行查找分送按钮。"""
-    send_patterns = {"".join(t.lower().split()) for t in send_text_patterns}
+    send_patterns = {_normalize_text(t) for t in send_text_patterns}
     candidates: list[tuple[int, tuple[int, int, int, int]]] = []
     for item in ocr_results:
-        text = "".join(str(item.get("text", "")).lower().split())
+        text = _normalize_text(str(item.get("text", "")))
         if text not in send_patterns:
             continue
         box = item.get("box")
@@ -134,24 +148,24 @@ def is_target_row_unavailable(
     row_threshold_y: int,
 ) -> bool:
     """判断目标昵称所在行是否包含不可送标记。"""
-    target_text = "".join(target_nickname.lower().split())
+    target_text = _normalize_nickname_for_match(target_nickname)
     nickname_boxes = []
     for item in ocr_results:
-        text = "".join(str(item.get("text", "")).lower().split())
+        text = _normalize_nickname_for_match(str(item.get("text", "")))
         if text == target_text and item.get("box"):
             nickname_boxes.append(item["box"])
 
     if not nickname_boxes:
         return False
 
-    pattern_set = {"".join(t.lower().split()) for t in unavailable_patterns}
+    pattern_set = {_normalize_text(t) for t in unavailable_patterns}
     for nickname_box in nickname_boxes:
         nickname_cy = (nickname_box[1] + nickname_box[3]) // 2
         for item in ocr_results:
             box = item.get("box")
             if not box:
                 continue
-            text = "".join(str(item.get("text", "")).lower().split())
+            text = _normalize_text(str(item.get("text", "")))
             if text not in pattern_set:
                 continue
             text_cy = (box[1] + box[3]) // 2

@@ -21,6 +21,7 @@ from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     normalize_text,
+    quick_tap,
     tap_box,
     tap_home_icon,
     tap_text,
@@ -161,6 +162,11 @@ class ClaimGiftsTask(Task):
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
         logger.info(f"任务完成，结果: {'成功' if result.success else '失败'}")
+
+    def handle_unknown_page(self, page_info) -> ActionResult:
+        """未知页面兜底：点击屏幕上方，触发页面继续流转。"""
+        logger.debug("未知页面，点击屏幕上方兜底")
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), times=3)
 
     # ============================================================
     # 页面处理方法
