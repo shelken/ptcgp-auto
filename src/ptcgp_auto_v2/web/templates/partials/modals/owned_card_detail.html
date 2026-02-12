@@ -69,5 +69,35 @@
                 </tbody>
             </table>
         </div>
+
+        <div class="mt-6 space-y-3">
+            <h5 class="text-sm font-bold uppercase tracking-widest">{{ t.exchange_entry_title or '发起交换' }}</h5>
+            {% if exchange_blocked %}
+            <div class="text-xs text-muted">{{ t.exchange_entry_blocked_rarity or '该稀有度不可交换' }}</div>
+            {% elif exchange_accounts %}
+            <div class="space-y-2">
+                {% for item in exchange_accounts %}
+                <form
+                    hx-post="/api/exchange-cards/requests?lang={{ current_lang }}"
+                    hx-swap="none"
+                    class="flex items-center justify-between gap-2 border border-subtle rounded px-3 py-2">
+                    <input type="hidden" name="from_account_id" value="{{ item.account_id }}">
+                    <input type="hidden" name="to_account_id" value="">
+                    <input type="hidden" name="to_friend_id" value="{{ item.friend_id or '' }}">
+                    <input type="hidden" name="target_card_id" value="{{ card.id }}">
+                    <input type="hidden" name="target_card_rarity" value="{{ card.rarity }}">
+                    <div class="text-xs">
+                        <span class="font-mono">#{{ item.account_id }}</span>
+                        <span class="text-muted">{{ item.nickname or '-' }}</span>
+                        <span class="font-mono ml-2">x{{ item.count }}</span>
+                    </div>
+                    <button type="submit" class="brutal-btn text-xs px-3 py-1">{{ t.exchange_entry_action or '交换' }}</button>
+                </form>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-xs text-muted">{{ t.exchange_entry_no_available_accounts or '暂无可发起交换的账号' }}</div>
+            {% endif %}
+        </div>
     </div>
 </div>
