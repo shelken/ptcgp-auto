@@ -653,6 +653,7 @@ class Scheduler:
 
         if prerequisite.status != TaskStatus.PENDING.value:
             prerequisite.status = TaskStatus.PENDING.value
+            prerequisite.next_run_at = None
             prerequisite.save()
 
         return prerequisite

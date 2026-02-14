@@ -242,6 +242,7 @@ class BaseExecutor(ABC):
         for task in blocked_tasks:
             logger.info(f"恢复被阻塞任务: {task.task_type} (账号: {account.nickname})")
             task.status = TaskStatus.PENDING.value
+            task.next_run_at = None
             task.save()
 
     def _sync_account_on_finish(self):
