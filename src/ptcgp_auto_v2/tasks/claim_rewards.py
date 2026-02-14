@@ -24,7 +24,6 @@ from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     quick_tap,
     tap_box,
-    tap_home_icon,
     tap_matched_element,
     tap_text,
 )
@@ -110,12 +109,6 @@ def _build_claim_rewards_pages() -> list[dict]:
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 25,
         },
-        {
-            # 通用 home_icon
-            "name": "home_icon",
-            "templates": ["icon_home"],
-            "priority": 50,
-        },
     ]
 
 
@@ -182,7 +175,6 @@ class ClaimRewardsTask(Task):
             "reward_detail_page": self._handle_reward_detail,
             "theme_collection_page": self._handle_theme_collection,
             "pack_card_register": self._handle_card_register,
-            "home_icon": self._handle_home_icon,
             "speed_up_button": self._handle_speed_up,
         }
 
@@ -373,8 +365,3 @@ class ClaimRewardsTask(Task):
 
         logger.debug("  -> 奖励详情页面，等待...")
         return ActionResult.ok(wait=1.0)
-
-    def _handle_home_icon(self, page_info: dict) -> ActionResult:
-        """点击主页图标回到游戏主页"""
-        logger.debug("  -> 点击主页图标回到游戏主页")
-        return tap_home_icon(self.adb, self.page_detector, wait=1.7)

@@ -46,7 +46,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_bottom_close,
     tap_box,
     tap_center,
-    tap_home_icon,
     tap_matched_element,
     tap_right_side,
     tap_template_or_text,
@@ -148,11 +147,6 @@ def _build_pack_pages() -> list[dict]:
             "name": "game_home_main",
             "match_all": True,
             "identifiers": get_text_patterns("game_home_main"),
-            "priority": 99,
-        },
-        {
-            "name": "home_icon",
-            "templates": ["icon_home"],
             "priority": 99,
         },
         {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
@@ -365,7 +359,6 @@ class OpenPackTask(Task):
         # 页面处理器映射
         handlers = {
             "game_home_main": self._handle_home,
-            "home_icon": self._handle_home_icon,
             "pack_series_select": self._handle_pack_series_select,
             "pack_list": self._handle_pack_list,
             "pack_detail": self._handle_pack_detail,
@@ -449,11 +442,6 @@ class OpenPackTask(Task):
             self._completed = True
 
         return ActionResult.ok(wait=1.0)
-
-    def _handle_home_icon(self, page_info: dict) -> ActionResult:
-        """点击主页图标回到游戏主页"""
-        logger.debug("  -> 点击主页图标回到游戏主页")
-        return tap_home_icon(self.adb, self.page_detector, wait=1.0)
 
     def _handle_pack_series_select(self, page_info: dict) -> ActionResult:
         """选择扩充包系列"""

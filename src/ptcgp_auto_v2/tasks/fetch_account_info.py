@@ -98,11 +98,6 @@ def _build_fetch_pages() -> list[dict]:
             "identifiers": get_text_patterns("holdings_page_scrolled"),
             "priority": 24,
         },
-        {
-            "name": "home_icon",
-            "templates": ["icon_home"],
-            "priority": 50,
-        },
     ]
 
 
@@ -203,7 +198,6 @@ class FetchAccountInfoTask(Task):
             "more_menu_modal": self._handle_more_menu_modal,
             "holdings_page": self._handle_holdings_page,
             "holdings_page_scrolled": self._handle_holdings_page,
-            "home_icon": self._handle_home_icon,
         }
 
         handler = handlers.get(page_name)
@@ -365,10 +359,6 @@ class FetchAccountInfoTask(Task):
         )
         swipe(self.adb, start, end, wait=HOLDINGS_SCROLL_SETTLE_WAIT)
         return ActionResult.ok(wait=HOLDINGS_SCROLL_SETTLE_WAIT)
-
-    def _handle_home_icon(self, page_info: dict) -> ActionResult:
-        """点击主页图标"""
-        return tap_home_icon(self.adb, self.page_detector, wait=3)
 
     def _enter_profile(self, ocr: list) -> ActionResult:
         """点击头像进入个人资料"""
