@@ -194,6 +194,12 @@ class SendCardDailyTask(Task):
         self._friend_plus_wait_rounds = 0
         self._last_clicked_plus_box: Optional[tuple[int, int, int, int]] = None
 
+        self._skip_reason: Optional[str] = None
+
+    def was_skipped(self) -> bool:
+        """任务是否被跳过（不更新 last_completed_at）。"""
+        return self._skip_reason is not None
+
     def _is_action_done(self, key: str) -> bool:
         """检查动作缓存。"""
         return self._action_cache.get(key, False)
@@ -243,8 +249,7 @@ class SendCardDailyTask(Task):
 
         pair = GiftPairingService.ensure_pairs_for_account(self.account.id)
         if pair is None:
-            self._complete_reason = "无可用送卡目标（可能为奇数落单/冷冻期过滤）"
-            self._completed = True
+            self._skip_reason = "无可用送卡目标"
             return
 
         self._target_friend_id = pair.target_friend_id
@@ -457,11 +462,8 @@ class SendCardDailyTask(Task):
     def _continue_find_target_in_friend_list(self) -> ActionResult:
         """好友列表继续查找目标（滑动或收敛）。"""
         if self._friend_stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
-            return self._complete_without_send(
-                complete_reason="好友列表疑似到底且未找到可送目标，按完成态收敛",
-                record_status="completed_no_target",
-                error_code="TARGET_LIST_EXHAUSTED",
-            )
+            self._skip_reason = "好友列表遍历完成未找到可送目标"
+            return ActionResult.ok(wait=0.3)
 
         self._friend_scroll_rounds += 1
         if self._friend_scroll_rounds > MAX_FRIEND_SCROLL_ROUNDS:

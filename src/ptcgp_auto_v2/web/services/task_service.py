@@ -121,7 +121,8 @@ def list_task_status_view(
         computed_next_run_at, effective_reset_type, interval_seconds, plan_source = (
             compute_next_run_for_instance(instance, cache)
         )
-        next_run_at = instance.next_run_at or computed_next_run_at
+        # 手动重置后 next_run_at 为 None，不再 fallback 到计算值，确保显示为空
+        next_run_at = instance.next_run_at
 
         next_run_at_is_past = next_run_at is not None and next_run_at <= now
 
