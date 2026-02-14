@@ -54,6 +54,7 @@ TEXT_PATTERNS = {
     "holdings_pack_hourglass": ["開包沙漏"],
     # 交换页面
     "exchange_page": ["交換卡牌"],
+    "exchange_page_sended": ["正在等待回應"],
     "exchange_choose_friend_title": ["請選擇朋友"],
     "exchange_select_card_title": ["請選擇要送給對方的卡牌"],
     "exchange_target_confirm_page": ["交換對象"],
