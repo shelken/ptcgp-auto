@@ -21,10 +21,7 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
-from ptcgp_auto_v2.tasks.utils.nickname_utils import (
-    extract_nickname_by_lv,
-    extract_nickname_near_friend_id,
-)
+from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     input_text,
@@ -318,25 +315,7 @@ class ManageFriendshipTask(Task):
         ocr_results: list[dict],
         target_friend_id: Optional[str],
     ) -> Optional[str]:
-        """从搜索结果 OCR 中提取目标昵称。"""
-        excluded_patterns = {
-            "".join(str(p).lower().split())
-            for p in (
-                get_text_patterns("friend_apply_button")
-                + get_text_patterns("friend_cancel_request")
-                + get_text_patterns("friend_search_placeholder")
-            )
-        }
-
-        nickname = extract_nickname_near_friend_id(
-            ocr_results=ocr_results,
-            target_friend_id=target_friend_id or "",
-            excluded_patterns=excluded_patterns,
-            row_threshold_y=140,
-        )
-        if nickname:
-            return nickname
-
+        """从搜索结果 OCR 中提取目标昵称（Lv 下方）。"""
         return extract_nickname_by_lv(
             ocr_results=ocr_results,
             search_range_y=self.adb.scaled_y(300),
