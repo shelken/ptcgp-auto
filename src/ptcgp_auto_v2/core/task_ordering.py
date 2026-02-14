@@ -51,10 +51,26 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
         ]
 
     if normalized_sort_by == TASK_SORT_BY_NEXT_RUN:
+        # once 任务不参与 next_run_at 排序，强制排最后
+        once_priority = case((TaskInstance.reset_type == "once", 1), else_=0)
         if normalized_sort_order == "asc":
-            return [next_run_col.asc().nulls_first()]
-        return [next_run_col.desc().nulls_first()]
+            return [
+                once_priority.asc(),
+                next_run_col.asc().nulls_first(),
+            ]
+        return [
+            once_priority.asc(),
+            next_run_col.desc().nulls_first(),
+        ]
 
+    # once 任务不参与 last_completed_at 排序，强制排最后
+    once_priority = case((TaskInstance.reset_type == "once", 1), else_=0)
     if normalized_sort_order == "asc":
-        return [last_completed_col.asc().nulls_first()]
-    return [last_completed_col.desc().nulls_first()]
+        return [
+            once_priority.asc(),
+            last_completed_col.asc().nulls_first(),
+        ]
+    return [
+        once_priority.asc(),
+        last_completed_col.desc().nulls_first(),
+    ]
