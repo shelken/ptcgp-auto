@@ -101,6 +101,7 @@ class GiftRecordService:
 
         if instance.status != TaskStatus.PENDING.value:
             instance.status = TaskStatus.PENDING.value
+            instance.next_run_at = None
             instance.save()
 
         return True
@@ -120,6 +121,7 @@ class GiftRecordService:
 
         if instance.status != TaskStatus.PENDING.value:
             instance.status = TaskStatus.PENDING.value
+            instance.next_run_at = None
             instance.save()
 
         return True
