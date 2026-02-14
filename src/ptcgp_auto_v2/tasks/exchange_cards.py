@@ -37,7 +37,10 @@ from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
     FriendSelectionFlow,
     FriendSelectionHelper,
 )
-from ptcgp_auto_v2.tasks.utils.rarity_filter import select_rarity_in_filter_panel
+from ptcgp_auto_v2.tasks.utils.rarity_filter import (
+    FilterPanelState,
+    handle_filter_panel,
+)
 from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
@@ -121,8 +124,12 @@ def _build_exchange_pages() -> list[dict]:
         {
             "name": "exchange_choose_friend",
             "identifiers": get_text_patterns("exchange_choose_friend_title"),
-            "match_all": True,
             "priority": 50,
+        },
+        {
+            "name": "friend_profile",
+            "identifiers": get_text_patterns("friend_profile"),
+            "priority": 55,
         },
         {
             "name": "exchange_select_card",
@@ -139,6 +146,7 @@ def _build_exchange_pages() -> list[dict]:
             "name": "exchange_target_confirm_page",
             "identifiers": get_text_patterns("exchange_target_confirm_page"),
             "match_all": True,
+            "exclude_identifiers": get_text_patterns("exchange_confirm_send_popup"),
             "priority": 70,
         },
         {
@@ -211,6 +219,7 @@ class ExchangeCardsTask(Task):
         self._card_stable_rounds = 0
         self._last_card_signature: Optional[str] = None
         self._action_cache: dict[str, bool] = {}
+        self._filter_state = FilterPanelState()
         self._friend_helper: Optional[FriendSelectionHelper] = None
 
     def on_start(self):
@@ -219,6 +228,7 @@ class ExchangeCardsTask(Task):
         self._card_stable_rounds = 0
         self._last_card_signature = None
         self._action_cache = {}
+        self._filter_state = FilterPanelState()
 
         if self.account.id is None:
             self._ctx.runtime.completed = True
@@ -284,7 +294,7 @@ class ExchangeCardsTask(Task):
             page_detector=self.page_detector,
             flow=self._ctx.friend_flow,
             target_friend_id=request.to_friend_id or "",
-            profile_page_name="exchange_friend_profile",
+            profile_page_name="friend_profile",
             send_text_patterns=get_text_patterns("exchange_send_button"),
             on_nickname_found=self._on_nickname_found,
             on_scroll_exhausted=self._on_scroll_exhausted,
@@ -430,7 +440,9 @@ class ExchangeCardsTask(Task):
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
         ocr_results = page_info.get("ocr_results", [])
-        if self._ctx.runtime.current_request.status == "sending":
+        request = self._ctx.runtime.current_request
+
+        if request.status == "sending":
             result = tap_text_exact(
                 self.adb,
                 ocr_results,
@@ -439,13 +451,27 @@ class ExchangeCardsTask(Task):
             )
             return result or ActionResult.wait(0.6)
 
-        result = tap_text_exact(
-            self.adb,
-            ocr_results,
-            get_text_patterns("exchange_confirm_button"),
-            wait=0.8,
-        )
-        return result or ActionResult.wait(0.6)
+        if request.status == "sended":
+            has_confirm = is_text_visible(
+                ocr_results, get_text_patterns("exchange_confirm_button"), exact=False
+            )
+            if has_confirm:
+                result = tap_text_exact(
+                    self.adb,
+                    ocr_results,
+                    get_text_patterns("exchange_confirm_button"),
+                    wait=0.8,
+                )
+                return result or ActionResult.wait(0.6)
+            else:
+                logger.info("sended 状态但未看到確認按钮，交换已失效，标记取消")
+                self._request_repo.mark_canceled(request, reason="交换已失效")
+                self._ctx.runtime.completed = True
+                self._ctx.runtime.complete_reason = "交换已失效"
+                return ActionResult.ok(wait=0.3)
+
+        logger.warning("请求状态不可处理: %s", request.status)
+        return ActionResult.wait(0.6)
 
     def _handle_choose_friend(self, page_info: dict) -> ActionResult:
         """请选择朋友页面：先核验 friend_id，再点击对应交换。"""
@@ -489,12 +515,16 @@ class ExchangeCardsTask(Task):
             return ActionResult.wait(0.6)
         ocr_results = page_info.get("ocr_results", [])
 
-        if self._is_action_done("target_card_tapped") and is_text_visible(
-            ocr_results,
-            get_text_patterns("exchange_insufficient_points"),
-            exact=False,
-        ):
-            return self._fail_and_complete("点击目标卡后检测到交换点数不足")
+        if self._is_action_done("target_card_tapped"):
+            if is_text_visible(
+                ocr_results,
+                get_text_patterns("exchange_insufficient_points"),
+                exact=False,
+            ):
+                return self._fail_and_complete("点击目标卡后检测到交换点数不足")
+            ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
+            logger.info("点击卡牌后点击 OK")
+            return ok_result or ActionResult.wait(0.5)
 
         if not self._is_action_done("open_filter_clicked"):
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
@@ -514,6 +544,11 @@ class ExchangeCardsTask(Task):
             self._card_stable_rounds = 0
             self._last_card_signature = None
             self._mark_action_done("target_card_tapped")
+            logger.info(
+                "点击目标卡牌: set_code=%s, number=%s",
+                self._ctx.card.set_code,
+                self._ctx.card.number,
+            )
             return tap_result
 
         card_signature = build_detect_signature(detected)
@@ -535,22 +570,31 @@ class ExchangeCardsTask(Task):
         return ActionResult.ok(wait=0.6)
 
     def _handle_filter_modal(self, page_info: dict) -> ActionResult:
-        """筛选弹窗：按目标稀有度选择后点击 OK。"""
+        """筛选弹窗：按目标稀有度执行完整筛选流程。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
-        ocr_results = page_info.get("ocr_results", [])
 
-        if not self._is_action_done("rarity_selected"):
-            result = self._select_target_rarity_group(page_info)
-            if result:
-                self._mark_action_done("rarity_selected")
-                return result
+        rarity_code = (
+            self._ctx.runtime.current_request.target_card_rarity or ""
+        ).upper()
+        rarity_codes = [rarity_code] if rarity_code else []
 
-        ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
-        if ok_result:
+        result = handle_filter_panel(
+            adb=self.adb,
+            page_detector=self.page_detector,
+            icon_detector=self._icon_detector,
+            page_info=page_info,
+            rarity_codes=rarity_codes,
+            state=self._filter_state,
+            action_cache=self._action_cache,
+        )
+
+        if self._is_action_done("filter_selected") and self._is_action_done(
+            "filter_ok_scrolled"
+        ):
             self._mark_action_done("filter_applied")
-            return ok_result
-        return ActionResult.wait(0.6)
+
+        return result
 
     def _handle_target_confirm_page(self, page_info: dict) -> ActionResult:
         """送卡确认页面：校验目标昵称后点击 OK。"""
@@ -565,12 +609,30 @@ class ExchangeCardsTask(Task):
         ):
             return self._fail_and_complete("确认页目标昵称不匹配")
 
-        if self._ctx.card.name and not is_text_visible(
-            ocr_results,
-            [self._ctx.card.name],
-            exact=False,
-        ):
-            logger.info("确认页未识别到目标卡名，继续尝试按流程确认")
+        if self._ctx.card.set_code and self._ctx.card.number:
+            detected = self._card_recognizer.scan(
+                set_code=self._ctx.card.set_code,
+                debug=False,
+            )
+            candidates = [
+                item
+                for item in detected
+                if item.set_code == self._ctx.card.set_code
+                and item.card_number == self._ctx.card.number
+            ]
+            if not candidates:
+                logger.warning(
+                    "确认页扫描未匹配到目标卡牌: set_code=%s, number=%s",
+                    self._ctx.card.set_code,
+                    self._ctx.card.number,
+                )
+                return self._fail_and_complete("确认页卡牌不匹配")
+            logger.info(
+                "确认页扫描匹配到目标卡牌: set_code=%s, number=%s, similarity=%.2f",
+                self._ctx.card.set_code,
+                self._ctx.card.number,
+                candidates[0].similarity,
+            )
 
         result = tap_ok(self.adb, ocr_results, wait=0.8)
         return result or ActionResult.wait(0.6)
@@ -709,21 +771,6 @@ class ExchangeCardsTask(Task):
     def _is_action_done(self, action_name: str) -> bool:
         """查询页面动作是否完成。"""
         return self._action_cache.get(action_name, False)
-
-    def _select_target_rarity_group(self, page_info: dict) -> Optional[ActionResult]:
-        """在筛选弹窗中按目标稀有度点选图标分组。"""
-        if self._ctx.runtime.current_request is None:
-            return None
-        rarity_code = (
-            self._ctx.runtime.current_request.target_card_rarity or ""
-        ).upper()
-        return select_rarity_in_filter_panel(
-            adb=self.adb,
-            page_detector=self.page_detector,
-            icon_detector=self._icon_detector,
-            rarity_code=rarity_code,
-            wait=0.4,
-        )
 
     def _tap_target_card_by_scan(self, detected) -> Optional[ActionResult]:
         """通过 YOLO+Hash 扫描定位目标卡牌。"""

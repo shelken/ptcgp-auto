@@ -93,6 +93,11 @@ def _build_send_card_pages() -> list[dict]:
             "priority": 60,
         },
         {
+            "name": "friend_profile",
+            "identifiers": get_text_patterns("friend_profile"),
+            "priority": 65,
+        },
+        {
             "name": "gift_select_card",
             "identifiers": get_text_patterns("gift_select_card_title"),
             "priority": 70,
@@ -263,7 +268,7 @@ class SendCardDailyTask(Task):
             page_detector=self.page_detector,
             flow=self._friend_flow,
             target_friend_id=self._target_friend_id or "",
-            profile_page_name="gift_friend_profile",
+            profile_page_name="friend_profile",
             send_text_patterns=get_text_patterns("gift_send_button"),
             on_success=self._on_friend_verified,
             on_nickname_found=self._on_nickname_found,
