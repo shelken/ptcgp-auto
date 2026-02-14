@@ -57,7 +57,7 @@ TEXT_PATTERNS = {
     "exchange_page_sended": ["正在等待回應"],
     "exchange_choose_friend_title": ["請選擇朋友"],
     "exchange_select_card_title": ["請選擇要送給對方的卡牌"],
-    "exchange_target_confirm_page": ["交換對象"],
+    "exchange_target_confirm_page": ["編輯卡牌"],
     "exchange_confirm_send_popup": ["確定要送給對方這張卡牌嗎"],
     "exchange_confirm_last_card_popup": ["將交換僅剩的1張卡牌"],
     "exchange_proposed_done_popup": ["已將卡牌提議給對方"],
