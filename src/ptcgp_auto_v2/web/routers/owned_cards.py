@@ -86,7 +86,6 @@ async def create_exchange_request(
 
     from_account_id = parse_optional_int(form.get("from_account_id"))
     to_account_id = parse_optional_int(form.get("to_account_id"))
-    to_nickname = safe_get_string(form, "to_nickname")
     to_friend_id = safe_get_string(form, "to_friend_id") or ""
     target_card_id = parse_optional_int(form.get("target_card_id"))
     target_card_rarity = safe_get_string(form, "target_card_rarity") or ""
@@ -96,7 +95,6 @@ async def create_exchange_request(
         created = ExchangeCardService.create_request(
             from_account_id=from_account_id,
             to_account_id=to_account_id,
-            to_nickname=to_nickname,
             to_friend_id=to_friend_id,
             target_card_id=target_card_id,
             target_card_rarity=target_card_rarity,
