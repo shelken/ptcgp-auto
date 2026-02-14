@@ -76,7 +76,12 @@ def reset_completed_task_instances(
     if account_id is not None:
         statement = statement.where(TaskInstance.account_id == account_id)
 
-    statement = statement.values(status="pending", updated_at=datetime.now())
+    # 手动重置已完成任务时，清空 next_run_at，确保调度按“立即可执行”优先处理。
+    statement = statement.values(
+        status="pending",
+        next_run_at=None,
+        updated_at=datetime.now(),
+    )
     result = session.exec(statement)
     session.commit()
     return result.rowcount or 0

@@ -203,6 +203,7 @@ src/ptcgp_auto_v2/web/
 - **分段控件状态同步**：类似列数切换的 segmented 按钮，除视觉 `active` 外还要同步 `aria-pressed`，防止状态和实际值不一致。
 - **左栏滚动一致性**：当页面被定义为“左筛选 + 右内容”整体滚动时，不要给左栏卡片加 `sticky`；否则鼠标在左栏滚轮会触发页面滚动但左栏固定不动，造成两栏不同步的错觉。
 - **Modal 成功关闭规范**：提交成功后关闭弹窗统一使用 `data-close-modal-on-success="true" + bootstrap.js(hx-afterRequest)`，不要在模板里写 `hx-on:...closeModal()`。
+- **任务手动重置优先级**：`reset-completed` 把任务改回 `pending` 时必须同时清空 `next_run_at`（设为 `NULL`），否则未来时间会导致重置任务被已到期任务长期抢占。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录
