@@ -72,7 +72,6 @@ MAX_FRIEND_STABLE_ROUNDS = 3
 MAX_CARD_STABLE_ROUNDS = 3
 MAX_FILTER_MODAL_STAY_ROUNDS = 2
 MAX_FRIEND_PROFILE_READ_ROUNDS = 3
-MAX_FRIEND_PLUS_WAIT_ROUNDS = 3
 
 
 def _build_send_card_pages() -> list[dict]:
@@ -192,8 +191,7 @@ class SendCardDailyTask(Task):
         self._target_friend_verified = False
         self._verified_row_anchor_y: Optional[int] = None
         self._friend_profile_read_rounds = 0
-        self._friend_plus_wait_rounds = 0
-        self._last_clicked_plus_box: Optional[tuple[int, int, int, int]] = None
+        self._failed_plus_rows: set[int] = set()
 
         self._skip_reason: Optional[str] = None
 
@@ -233,8 +231,7 @@ class SendCardDailyTask(Task):
         self._target_friend_verified = False
         self._verified_row_anchor_y = None
         self._friend_profile_read_rounds = 0
-        self._friend_plus_wait_rounds = 0
-        self._last_clicked_plus_box = None
+        self._failed_plus_rows: set[int] = set()
         self._prev_page_name = None
         self._reset_action_cache()
 
@@ -322,6 +319,14 @@ class SendCardDailyTask(Task):
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """页面分发处理。"""
+        # 极简方案：点击加号等详情页加载时，吞掉其他页面匹配
+        if (
+            self._is_action_done("friend_plus_clicked")
+            and not self._target_friend_verified
+            and page_name not in ("gift_friend_profile", "gift_choose_friend")
+        ):
+            return ActionResult.wait(1.5)
+
         previous_page_name = self._last_page_name
         if page_name != self._last_page_name:
             self._prev_page_name = previous_page_name
@@ -471,24 +476,12 @@ class SendCardDailyTask(Task):
             self._last_friend_signature = friend_signature
 
         # 第一阶段：必须先通过 icon_search_plus 进入详情页校验 friend_id。
-        wait = 3
         if not self._target_friend_verified:
-            if self._is_action_done("friend_plus_clicked"):
-                self._friend_plus_wait_rounds += 1
-                if self._friend_plus_wait_rounds <= MAX_FRIEND_PLUS_WAIT_ROUNDS:
-                    return ActionResult.wait(wait)
-                self._friend_plus_wait_rounds = 0
-                if self._last_clicked_plus_box:
-                    return tap_box(self.adb, self._last_clicked_plus_box, wait=wait)
-                return ActionResult.wait(wait)
-
             plus_box = self._find_target_search_plus_box(ocr_results)
             if plus_box:
                 self._verified_row_anchor_y = (plus_box[1] + plus_box[3]) // 2
-                self._friend_plus_wait_rounds = 0
-                self._last_clicked_plus_box = plus_box
                 self._mark_action_done("friend_plus_clicked")
-                return tap_box(self.adb, plus_box, wait=wait)
+                return tap_box(self.adb, plus_box, wait=3)
             return self._continue_find_target_in_friend_list()
 
         # 第二阶段：已核验 friend_id，回到列表后点击同一行分送。
@@ -520,6 +513,11 @@ class SendCardDailyTask(Task):
                 error_code="TARGET_NOT_FOUND",
             )
 
+        # 滑动前清空已失败的行记录（新页面行位置重置）
+        if self._failed_plus_rows:
+            logger.debug("滑动前清空已失败行记录: %s", self._failed_plus_rows)
+            self._failed_plus_rows.clear()
+
         start, end = scroll_points(
             self.adb,
             base_distance_y=BASE_FRIEND_SCROLL_DISTANCE_Y,
@@ -530,8 +528,6 @@ class SendCardDailyTask(Task):
 
     def _handle_friend_profile(self, page_info: dict) -> ActionResult:
         """好友详情页：提取 friend_id 核验目标后返回列表。"""
-        self._friend_plus_wait_rounds = 0
-        self._last_clicked_plus_box = None
         # 已进入详情页，清除上次“已点击加号”状态，回到列表后可重新点击。
         self._action_cache.pop("friend_plus_clicked", None)
         ocr_results = page_info.get("ocr_results", [])
@@ -553,9 +549,12 @@ class SendCardDailyTask(Task):
             logger.info("好友详情核验成功：friend_id=%s", extracted_friend_id)
         else:
             self._target_friend_verified = False
+            # 记录失败的行，避免重复点击同名好友
+            if self._verified_row_anchor_y is not None:
+                self._failed_plus_rows.add(self._verified_row_anchor_y)
             self._verified_row_anchor_y = None
             logger.info(
-                "好友详情核验失败：识别到 %s，目标 %s",
+                "好友详情核验失败：识别到 %s，目标 %s，已记录失败行",
                 extracted_friend_id,
                 self._target_friend_id,
             )
@@ -592,21 +591,35 @@ class SendCardDailyTask(Task):
                 search_plus_boxes.append(tuple(box))
 
         logger.debug(
-            "昵称匹配目标=%s，当前检测到 icon_search_plus=%d",
+            "昵称匹配目标=%s，当前检测到 icon_search_plus=%d，已失败行=%s",
             self._target_nickname,
             len(search_plus_boxes),
+            self._failed_plus_rows,
         )
 
         row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
+
+        # 过滤掉已失败的行（比较中心点 Y 坐标）
+        available_boxes = [
+            box
+            for box in search_plus_boxes
+            if not any(
+                abs((box[1] + box[3]) // 2 - failed_y) < row_threshold_y
+                for failed_y in self._failed_plus_rows
+            )
+        ]
+
         matched_box = find_target_search_plus_box(
             ocr_results=ocr_results,
             target_nickname=self._target_nickname,
-            search_plus_boxes=search_plus_boxes,
+            search_plus_boxes=available_boxes,
             row_threshold_y=row_threshold_y,
         )
         if matched_box is None:
             logger.debug(
-                "昵称匹配未命中任何加号行，row_threshold_y=%s", row_threshold_y
+                "昵称匹配未命中任何加号行（过滤后剩余%d个），row_threshold_y=%s",
+                len(available_boxes),
+                row_threshold_y,
             )
         return matched_box
 
