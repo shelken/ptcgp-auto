@@ -86,6 +86,22 @@ class GiftRecordService:
             return False
         return record.error_code == "CARD_NOT_FOUND_BY_SCAN"
 
+    @classmethod
+    def has_daily_attempt(
+        cls,
+        account_id: int,
+        target_friend_id: str,
+    ) -> bool:
+        """判断当日是否已执行过一次送卡尝试（不含 init）。"""
+        record = AccountGiftRecordRepository().get_daily_record(
+            account_id=account_id,
+            target_friend_id=target_friend_id,
+            biz_date_local=cls.today_local_date(),
+        )
+        if record is None:
+            return False
+        return record.status != "init"
+
     @staticmethod
     def ensure_send_card_daily_pending(account_id: int) -> bool:
         """确保目标账号的 send_card_daily 任务处于 pending。"""
@@ -99,9 +115,15 @@ class GiftRecordService:
                 reset_type="interval",
             )
 
+        should_save = False
         if instance.status != TaskStatus.PENDING.value:
             instance.status = TaskStatus.PENDING.value
+            should_save = True
+        if getattr(instance, "next_run_at", None) is not None:
             instance.next_run_at = None
+            should_save = True
+
+        if should_save:
             instance.save()
 
         return True
@@ -119,9 +141,15 @@ class GiftRecordService:
                 reset_type="daily",
             )
 
+        should_save = False
         if instance.status != TaskStatus.PENDING.value:
             instance.status = TaskStatus.PENDING.value
+            should_save = True
+        if getattr(instance, "next_run_at", None) is not None:
             instance.next_run_at = None
+            should_save = True
+
+        if should_save:
             instance.save()
 
         return True
