@@ -5,6 +5,7 @@
 封装交换卡牌请求创建与状态推进的业务规则。
 """
 
+from datetime import datetime, timedelta
 from typing import Optional
 
 from ptcgp_auto_v2.db.models import ExchangeCardRequest
@@ -26,6 +27,7 @@ class ExchangeCardService:
         "SSR": 30000,
     }
     NON_EXCHANGEABLE_RARITIES = {"IM", "UR"}
+    DEFAULT_EXPIRE_MINUTES = 5
 
     @classmethod
     def create_request(
@@ -35,17 +37,29 @@ class ExchangeCardService:
         target_card_id: int,
         target_card_rarity: str,
         to_account_id: Optional[int] = None,
+        to_nickname: Optional[str] = None,
     ) -> Optional[ExchangeCardRequest]:
         """创建交换请求；不允许 IM/UR 稀有度。"""
         normalized_rarity = (target_card_rarity or "").upper()
         if normalized_rarity in cls.NON_EXCHANGEABLE_RARITIES:
             return None
 
-        return ExchangeCardRequestRepository().create(
+        repo = ExchangeCardRequestRepository()
+        if repo.has_active_request(from_account_id):
+            return None
+
+        request = repo.create(
             from_account_id=from_account_id,
             to_account_id=to_account_id,
+            to_nickname=to_nickname,
             to_friend_id=to_friend_id,
             target_card_id=target_card_id,
             target_card_rarity=normalized_rarity,
             status="sending",
         )
+        if request is None:
+            return None
+        request.expire_at = datetime.now() + timedelta(
+            minutes=cls.DEFAULT_EXPIRE_MINUTES
+        )
+        return repo.update(request)

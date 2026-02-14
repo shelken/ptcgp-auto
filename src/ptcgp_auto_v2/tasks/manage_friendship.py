@@ -16,10 +16,15 @@ from typing import TYPE_CHECKING, Optional
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
+    ExchangeCardRequestRepository,
     FriendRequestRepository,
     FriendshipRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.nickname_utils import (
+    extract_nickname_by_lv,
+    extract_nickname_near_friend_id,
+)
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     input_text,
@@ -105,6 +110,7 @@ class ManageFriendshipTask(Task):
         self._submitted_request_id: Optional[int] = None
         self._completed = False
         self._wake_account_ids: set[int] = set()
+        self._accept_whitelist: dict[str, "AccountFriendRequest"] = {}
 
         self._add_apply_wait_rounds = 0
         self._cancel_wait_rounds = 0
@@ -134,6 +140,7 @@ class ManageFriendshipTask(Task):
         self._accept_wait_rounds = 0
         self._delete_wait_rounds = 0
         self._wake_account_ids = set()
+        self._accept_whitelist = self._collect_accept_whitelist()
 
         self.requests_to_process = self._get_pending_requests()
         self._log_pending_request_order("start")
@@ -305,6 +312,88 @@ class ManageFriendshipTask(Task):
         if not match:
             return None
         return match.group().replace("-", "")
+
+    def _extract_friend_id_from_ocr(self, ocr_results: list[dict]) -> Optional[str]:
+        """从 OCR 结果中提取首个 friend_id。"""
+        for item in ocr_results:
+            friend_id = self._extract_friend_id_from_text(str(item.get("text", "")))
+            if friend_id:
+                return friend_id
+        return None
+
+    def _extract_nickname_from_ocr(
+        self,
+        ocr_results: list[dict],
+        target_friend_id: Optional[str],
+    ) -> Optional[str]:
+        """从搜索结果 OCR 中提取目标昵称。"""
+        excluded_patterns = {
+            "".join(str(p).lower().split())
+            for p in (
+                get_text_patterns("friend_apply_button")
+                + get_text_patterns("friend_cancel_request")
+                + get_text_patterns("friend_search_placeholder")
+            )
+        }
+
+        nickname = extract_nickname_near_friend_id(
+            ocr_results=ocr_results,
+            target_friend_id=target_friend_id or "",
+            excluded_patterns=excluded_patterns,
+            row_threshold_y=140,
+        )
+        if nickname:
+            return nickname
+
+        return extract_nickname_by_lv(
+            ocr_results=ocr_results,
+            search_range_y=self.adb.scaled_y(300),
+            excluded_contains=get_text_patterns("profile_exclude"),
+        )
+
+    def _save_target_nickname(self, req, ocr_results: list[dict]):
+        """保存好友请求与交换请求的目标昵称。"""
+        if req.request_type != "add" or req.status != "sending":
+            return
+        target_friend_id = self._resolve_request_friend_id(req)
+        nickname = self._extract_nickname_from_ocr(ocr_results, target_friend_id)
+        if not nickname:
+            return
+        if req.to_nickname == nickname:
+            return
+
+        req.to_nickname = nickname
+        FriendRequestRepository().update(req)
+
+        if target_friend_id and self.account.id is not None:
+            ExchangeCardRequestRepository().update_active_nickname(
+                from_account_id=self.account.id,
+                to_friend_id=target_friend_id,
+                to_nickname=nickname,
+            )
+
+    def _collect_accept_whitelist(self) -> dict[str, "AccountFriendRequest"]:
+        """构建可自动接受的 friend_id 白名单。"""
+        if self.account.id is None:
+            return {}
+
+        repo = FriendRequestRepository()
+        requests = repo.get_by_to_account_and_status(self.account.id, "sended")
+        whitelist: dict[str, "AccountFriendRequest"] = {}
+        account_repo = AccountRepository()
+
+        for req in requests:
+            sender = account_repo.get_by_id(req.from_account_id)
+            sender_friend_id = getattr(sender, "friend_id", None)
+            if sender_friend_id:
+                whitelist[sender_friend_id] = req
+        return whitelist
+
+    def _decide_reply_action(self, friend_id: Optional[str]) -> str:
+        """根据白名单决定回复动作（accept/reject）。"""
+        if friend_id and friend_id in self._accept_whitelist:
+            return "accept"
+        return "reject"
 
     def _get_search_icon_box(self) -> Optional[tuple[int, int, int, int]]:
         """获取搜索按钮模板框。"""
@@ -508,6 +597,7 @@ class ManageFriendshipTask(Task):
         if is_text_visible(
             ocr_results, get_text_patterns("friend_cancel_request"), exact=True
         ):
+            self._save_target_nickname(req, ocr_results)
             self._save_request(req, "sended")
             if req.to_account_id:
                 self._wake_account_ids.add(req.to_account_id)

@@ -1,4 +1,4 @@
-"""送卡昵称匹配辅助函数测试。"""
+"""好友列表与卡牌扫描流程辅助函数测试。"""
 
 import importlib.util
 from pathlib import Path
@@ -10,14 +10,14 @@ MODULE_PATH = (
     / "ptcgp_auto_v2"
     / "tasks"
     / "utils"
-    / "send_card_helpers.py"
+    / "friend_card_flow.py"
 )
 
 
 def _load_module():
     """直接按文件加载模块，避免引入任务包的重依赖。"""
     spec = importlib.util.spec_from_file_location(
-        "send_card_helpers_for_test", MODULE_PATH
+        "friend_card_flow_for_test", MODULE_PATH
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

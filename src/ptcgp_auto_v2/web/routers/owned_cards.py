@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
+from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.services.owned_card_service import (
     list_owned_cards,
@@ -85,6 +86,7 @@ async def create_exchange_request(
 
     from_account_id = parse_optional_int(form.get("from_account_id"))
     to_account_id = parse_optional_int(form.get("to_account_id"))
+    to_nickname = safe_get_string(form, "to_nickname")
     to_friend_id = safe_get_string(form, "to_friend_id") or ""
     target_card_id = parse_optional_int(form.get("target_card_id"))
     target_card_rarity = safe_get_string(form, "target_card_rarity") or ""
@@ -94,10 +96,17 @@ async def create_exchange_request(
         created = ExchangeCardService.create_request(
             from_account_id=from_account_id,
             to_account_id=to_account_id,
+            to_nickname=to_nickname,
             to_friend_id=to_friend_id,
             target_card_id=target_card_id,
             target_card_rarity=target_card_rarity,
         )
+        if created is not None:
+            TaskInstanceRepository().ensure_pending(
+                account_id=from_account_id,
+                task_type="exchange_cards",
+                reset_type="once",
+            )
 
     message = (
         t.get("msg_exchange_request_created")

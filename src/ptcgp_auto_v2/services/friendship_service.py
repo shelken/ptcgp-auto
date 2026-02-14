@@ -33,6 +33,7 @@ class FriendshipService:
         from_account_id: int,
         to_friend_id: str,
         to_account_id: Optional[int] = None,
+        to_nickname: Optional[str] = None,
     ) -> "AccountFriendRequest | None":
         """
         创建添加好友请求
@@ -85,6 +86,7 @@ class FriendshipService:
             from_account_id=from_account_id,
             to_friend_id=normalized_friend_id,
             to_account_id=to_account_id,
+            to_nickname=to_nickname,
             request_type="add",
             status="sending",
         )

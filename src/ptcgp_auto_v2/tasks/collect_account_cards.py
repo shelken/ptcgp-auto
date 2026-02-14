@@ -13,7 +13,6 @@ from typing import Optional
 from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS, SWIPE_STEPS_SCROLL
 from ptcgp_auto_v2.config.rarity_icons import (
     RARITY_CODE_REVERSE,
-    RARITY_GROUP_DEFAULTS,
     RARITY_ICON_TEMPLATES,
 )
 from ptcgp_auto_v2.core.task_base import (
@@ -23,14 +22,14 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
 )
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
-from ptcgp_auto_v2.infra.icon_group_detector import (
-    IconGroupDetector,
-    find_group_by_rarity,
-)
+from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
+from ptcgp_auto_v2.tasks.utils.rarity_filter import (
+    select_rarity_in_filter_panel,
+)
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     pinch_in,
@@ -344,6 +343,7 @@ class CollectAccountCardsTask(Task):
         return tap(self.adb, tap_x, tap_y, wait=1.0)
 
     def _select_high_rarities(self, page_info: dict) -> Optional[ActionResult]:
+        """按高稀有度规则选择筛选项（复用通用稀有度筛选逻辑）。"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
         if screenshot is None:
             screenshot, ocr_results = self.page_detector.capture()
@@ -356,30 +356,6 @@ class CollectAccountCardsTask(Task):
         if not title_box:
             return None
 
-        roi_x1 = self.adb.scaled_x(BASE_FILTER_ROI_X1)
-        roi_x2 = self.adb.scaled_x(BASE_FILTER_ROI_X2)
-        roi_y1 = title_box[1]
-        roi_y2 = title_box[3] + self.adb.scaled_y(BASE_FILTER_ROI_HEIGHT)
-        roi = (roi_x1, roi_y1, roi_x2, min(roi_y2, self.adb.screen_height))
-
-        hits = self.icon_detector.detect_icons(
-            screenshot=screenshot,
-            template_paths=RARITY_ICON_TEMPLATES,
-            roi=roi,
-            threshold=RARITY_GROUP_DEFAULTS["threshold"],
-            nms_iou=RARITY_GROUP_DEFAULTS["nms_iou"],
-            screen_width=self.adb.screen_width,
-        )
-
-        row_tol = self.adb.scaled_y(RARITY_GROUP_DEFAULTS["row_tol_px"])
-        gap = self.adb.scaled_x(RARITY_GROUP_DEFAULTS["gap_px"])
-        groups = self.icon_detector.group_hits(
-            hits,
-            row_tol=row_tol,
-            gap=gap,
-            min_count=RARITY_GROUP_DEFAULTS["min_count"],
-        )
-
         clicked = False
         visited = set()
         for rarity_code in HIGH_RARITY_TARGETS:
@@ -389,11 +365,16 @@ class CollectAccountCardsTask(Task):
             if pattern in visited:
                 continue
             visited.add(pattern)
-            group = find_group_by_rarity(rarity_code, groups, RARITY_CODE_REVERSE)
-            if not group:
+            tap_result = select_rarity_in_filter_panel(
+                adb=self.adb,
+                page_detector=self.page_detector,
+                icon_detector=self.icon_detector,
+                rarity_code=rarity_code,
+                wait=0.0,
+            )
+            if not tap_result:
                 logger.debug("未找到稀有度分组: %s", rarity_code)
                 continue
-            tap(self.adb, int(group.center[0]), int(group.center[1]), wait=0.0)
             logger.info("已选择稀有度: %s", rarity_code)
             clicked = True
 
