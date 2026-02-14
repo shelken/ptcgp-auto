@@ -193,7 +193,7 @@ class TestSendCardDailyTask(unittest.TestCase):
         result = task._handle_choose_friend({"ocr_results": []})
 
         self.assertTrue(result.success)
-        tap_box_mock.assert_called_once_with(task.adb, (900, 360, 980, 430), wait=1.0)
+        tap_box_mock.assert_called_once_with(task.adb, (900, 360, 980, 430), wait=3)
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.tap_box")
     @patch("ptcgp_auto_v2.tasks.send_card_daily.find_send_box_near_anchor")
@@ -330,6 +330,50 @@ class TestSendCardDailyTask(unittest.TestCase):
         self.assertFalse(task.is_completed())
         record_service_mock.ensure_send_card_daily_pending.assert_not_called()
         record_service_mock.update_status.assert_not_called()
+
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.extract_friend_id_from_text")
+    def test_duplicate_nickname_should_skip_failed_row_and_try_next(self, extract_mock):
+        """同名好友场景：第一个验证失败后，应尝试第二个"""
+        task = cast(Any, self.task)
+        task._target_friend_id = "9999-9999-9999-9999"
+        task._target_nickname = "skn"
+        task._target_friend_verified = False
+        task._failed_plus_rows = set()  # 初始化失败行记录
+
+        # 模拟找到两个加号（同名好友）
+        plus_boxes = [
+            (900, 360, 980, 430),  # 第一行
+            (900, 600, 980, 670),  # 第二行
+        ]
+        task.page_detector = SimpleNamespace(
+            find_all_templates=lambda *args, **kwargs: [
+                SimpleNamespace(box=box) for box in plus_boxes
+            ]
+        )
+
+        # OCR 结果包含两个同名好友
+        ocr_results = [
+            {"text": "skn", "box": (389, 408, 450, 430)},
+            {"text": "skn", "box": (389, 648, 450, 670)},
+        ]
+
+        # 第一次提取返回错误的 friend_id
+        extract_mock.side_effect = ["1111-1111-1111-1111", "9999-9999-9999-9999"]
+
+        # 第一次调用 _find_target_search_plus_box
+        box1 = task._find_target_search_plus_box(ocr_results)
+        self.assertEqual(box1, (900, 360, 980, 430))
+
+        # 模拟验证失败，记录失败行
+        task._verified_row_anchor_y = (360 + 430) // 2
+        task._failed_plus_rows.add(task._verified_row_anchor_y)
+
+        # 第二次调用应返回第二个加号
+        box2 = task._find_target_search_plus_box(ocr_results)
+        self.assertEqual(box2, (900, 600, 980, 670))
+
+        # 验证失败行已被记录
+        self.assertIn((360 + 430) // 2, task._failed_plus_rows)
 
 
 if __name__ == "__main__":
