@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-每日送卡任务辅助函数。
+好友列表与卡牌扫��流程辅助函数。
+
+供 send_card_daily 和 exchange_cards 共用。
 """
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.tasks.utils.constants import (
+    BASE_FRIEND_SCROLL_DISTANCE_Y,
+    BASE_FRIEND_ROW_THRESHOLD_Y,
+)
+from ptcgp_auto_v2.utils.gesture import scroll_points, swipe
+
+if TYPE_CHECKING:
+    from ptcgp_auto_v2.infra.page_detector import PageDetector
 
 
 AMBIGUOUS_NICKNAME_CHARS = {"0", "o", "i", "l"}
@@ -20,7 +32,6 @@ def _normalize_nickname_for_match(text: str) -> str:
     stripped = "".join(
         char for char in normalized if char not in AMBIGUOUS_NICKNAME_CHARS
     )
-    # 避免过滤后为空导致误匹配，回退到基础归一化结果。
     return stripped or normalized
 
 
@@ -30,12 +41,26 @@ def build_ocr_signature(ocr_results: list[dict]) -> str:
     return "|".join(sorted(texts))
 
 
+def build_detect_signature(detected) -> str:
+    """构建识别结果签名，用于判断列表是否变化。"""
+    if not detected:
+        return "__EMPTY__"
+    items: list[str] = []
+    for item in detected:
+        if not item.set_code:
+            continue
+        items.append(f"{item.set_code}:{item.card_number}")
+    if not items:
+        return "__EMPTY__"
+    return "|".join(sorted(items))
+
+
 def find_send_button_for_target(
     ocr_results: list[dict],
     target_nickname: str,
     send_text_patterns: list[str],
 ) -> Optional[tuple[int, int, int, int]]:
-    """按目标昵称匹配对应分送按钮。"""
+    """按目标昵称匹配对应分送/交换按钮。"""
     target_text = _normalize_nickname_for_match(target_nickname)
     nickname_boxes: list[tuple[int, int, int, int]] = []
     for item in ocr_results:
@@ -172,3 +197,37 @@ def is_target_row_unavailable(
             if abs(text_cy - nickname_cy) <= row_threshold_y:
                 return True
     return False
+
+
+def scroll_friend_list(
+    adb,
+    direction: str = "up",
+    base_distance_y: int = BASE_FRIEND_SCROLL_DISTANCE_Y,
+    wait_scroll: float = 0.9,
+    wait_after: float = 0.8,
+) -> ActionResult:
+    """通用好友列表滑动。"""
+    start, end = scroll_points(
+        adb, base_distance_y=base_distance_y, direction=direction
+    )
+    swipe(adb, start, end, wait=wait_scroll)
+    return ActionResult.ok(wait=wait_after)
+
+
+def find_all_search_plus_boxes(
+    page_detector: "PageDetector",
+    template_name: str = "icon_search_plus",
+    threshold: float = 0.8,
+) -> list[tuple[int, int, int, int]]:
+    """查找页面上所有搜索加号图标。"""
+    if not hasattr(page_detector, "find_all_templates"):
+        return []
+    matches = page_detector.find_all_templates(
+        template_name, threshold=threshold, scale=1.0
+    )
+    boxes: list[tuple[int, int, int, int]] = []
+    for match in matches:
+        box = getattr(match, "box", None)
+        if box and len(box) == 4:
+            boxes.append(tuple(box))
+    return boxes

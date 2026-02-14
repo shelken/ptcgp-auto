@@ -7,7 +7,10 @@ import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
 from ptcgp_auto_v2.db.models import Account, ExchangeCardRequest
-from ptcgp_auto_v2.web.services.exchange_card_service import build_exchange_card_context
+from ptcgp_auto_v2.web.services.exchange_card_service import (
+    build_exchange_card_context,
+    cancel_exchange_request,
+)
 
 
 @pytest.fixture(name="engine")
@@ -47,3 +50,41 @@ def test_management_exchange_page_renders_requests_and_actions(engine):
 
     assert context["requests"]
     assert context["requests"][0]["can_cancel"] is True
+
+
+def test_cancel_sended_request_sets_cancel_intent_and_wakes_task():
+    """sended 取消应写取消意图并唤醒 exchange_cards。"""
+    request = ExchangeCardRequest(
+        id=99,
+        from_account_id=1001,
+        to_account_id=1002,
+        to_friend_id="1234567890123456",
+        target_card_id=1,
+        target_card_rarity="R",
+        status="sended",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+
+    with (
+        patch(
+            "ptcgp_auto_v2.web.services.exchange_card_service.ExchangeCardRequestRepository"
+        ) as repo_cls,
+        patch(
+            "ptcgp_auto_v2.web.services.exchange_card_service.TaskInstanceRepository"
+        ) as task_repo_cls,
+    ):
+        repo = repo_cls.return_value
+        repo.get_by_id.return_value = request
+        repo.update.return_value = request
+
+        ok = cancel_exchange_request(99, reason="manual_cancel")
+
+        assert ok is True
+        assert request.status == "sended"
+        assert request.cancel_reason == "manual_cancel"
+        task_repo_cls.return_value.ensure_pending.assert_called_once_with(
+            account_id=1001,
+            task_type="exchange_cards",
+            reset_type="once",
+        )

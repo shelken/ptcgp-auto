@@ -27,6 +27,7 @@ class ExchangeCardRequestRepository:
         target_card_id: int,
         target_card_rarity: str,
         to_account_id: Optional[int] = None,
+        to_nickname: Optional[str] = None,
         status: str = "sending",
     ) -> Optional[ExchangeCardRequest]:
         """创建交换请求；同一账号仅允许一条活跃请求。"""
@@ -39,6 +40,7 @@ class ExchangeCardRequestRepository:
                 from_account_id=from_account_id,
                 to_account_id=to_account_id,
                 to_friend_id=to_friend_id,
+                to_nickname=to_nickname,
                 target_card_id=target_card_id,
                 target_card_rarity=target_card_rarity,
                 status=status,
@@ -73,6 +75,24 @@ class ExchangeCardRequestRepository:
             )
             return list(session.exec(statement).all())
 
+    def list_due_sended_requests(self, now: datetime) -> list[ExchangeCardRequest]:
+        """查询到期的 sended 请求（next_check_at <= now）。"""
+        with Session(get_engine()) as session:
+            statement = (
+                select(ExchangeCardRequest)
+                .where(
+                    ExchangeCardRequest.status == "sended",
+                    ExchangeCardRequest.next_check_at != None,  # noqa: E711
+                    ExchangeCardRequest.next_check_at <= now,
+                )
+                .order_by(col(ExchangeCardRequest.next_check_at))
+            )
+            return list(session.exec(statement).all())
+
+    def has_active_request(self, from_account_id: int) -> bool:
+        """判断账号是否存在活跃请求（sending/sended）。"""
+        return self.get_active_by_account(from_account_id) is not None
+
     def update(self, request: ExchangeCardRequest) -> ExchangeCardRequest:
         """更新请求记录。"""
         with Session(get_engine()) as session:
@@ -81,6 +101,68 @@ class ExchangeCardRequestRepository:
             session.commit()
             session.refresh(request)
             return request
+
+    def mark_sended(
+        self,
+        request: ExchangeCardRequest,
+        next_check_at: Optional[datetime],
+    ) -> ExchangeCardRequest:
+        """标记请求为 sended。"""
+        request.status = "sended"
+        request.next_check_at = next_check_at
+        request.failed_reason = None
+        return self.update(request)
+
+    def mark_failed(
+        self, request: ExchangeCardRequest, reason: str
+    ) -> ExchangeCardRequest:
+        """标记请求为 failed。"""
+        request.status = "failed"
+        request.failed_reason = reason
+        request.next_check_at = None
+        return self.update(request)
+
+    def mark_canceled(
+        self,
+        request: ExchangeCardRequest,
+        reason: Optional[str] = None,
+    ) -> ExchangeCardRequest:
+        """标记请求为 canceled。"""
+        request.status = "canceled"
+        request.cancel_reason = reason
+        request.next_check_at = None
+        return self.update(request)
+
+    def mark_completed(self, request: ExchangeCardRequest) -> ExchangeCardRequest:
+        """标记请求为 completed。"""
+        request.status = "completed"
+        request.next_check_at = None
+        request.failed_reason = None
+        return self.update(request)
+
+    def update_active_nickname(
+        self,
+        from_account_id: int,
+        to_friend_id: str,
+        to_nickname: str,
+    ):
+        """更新账号对指定 friend_id 的活跃交换请求昵称。"""
+        if not to_nickname:
+            return
+        with Session(get_engine()) as session:
+            statement = select(ExchangeCardRequest).where(
+                ExchangeCardRequest.from_account_id == from_account_id,
+                ExchangeCardRequest.to_friend_id == to_friend_id,
+                col(ExchangeCardRequest.status).in_(self.ACTIVE_STATUSES),
+            )
+            rows = list(session.exec(statement).all())
+            if not rows:
+                return
+            for row in rows:
+                row.to_nickname = to_nickname
+                row.updated_at = datetime.now()
+                session.add(row)
+            session.commit()
 
     def _get_active_by_account_with_session(
         self,

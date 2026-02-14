@@ -22,6 +22,7 @@ class ExchangeCardRequest(SQLModel, table=True):
         default=None, index=True, description="目标账号ID"
     )
     to_friend_id: str = Field(index=True, description="目标 friend_id")
+    to_nickname: Optional[str] = Field(default=None, description="目标昵称")
     target_card_id: int = Field(index=True, description="目标卡牌ID")
     target_card_rarity: str = Field(description="目标卡牌稀有度")
 
