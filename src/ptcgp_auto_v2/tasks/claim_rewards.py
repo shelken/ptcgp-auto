@@ -316,6 +316,7 @@ class ClaimRewardsTask(Task):
         # 需要颜色检查的模式（全部領取的多语言版本）
         color_check_patterns = get_text_patterns("reward_claim_all")
 
+        wait = 0.8
         for pattern in claim_patterns:
             for item in ocr_results:
                 text = "".join(item["text"].lower().split())
@@ -335,13 +336,13 @@ class ClaimRewardsTask(Task):
                             screenshot, box, threshold=0.3
                         ):
                             logger.debug(f"  -> 点击全部领取按钮: {pattern}")
-                            return tap_box(self.adb, box, wait=0.3)
+                            return tap_box(self.adb, box, wait=wait)
                         else:
                             logger.debug(f"  -> 全部领取按钮 {pattern} 已置灰，跳过")
                     else:
                         # 其他按钮（領取/達成）直接点击，不需要颜色检查
                         logger.debug(f"  -> 点击领取按钮: {pattern}")
-                        return tap_box(self.adb, box, wait=0.3)
+                        return tap_box(self.adb, box, wait=wait)
 
         return None
 
