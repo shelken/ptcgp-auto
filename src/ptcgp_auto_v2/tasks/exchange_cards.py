@@ -122,6 +122,11 @@ def _build_exchange_pages() -> list[dict]:
             "priority": 40,
         },
         {
+            "name": "exchange_page_sended",
+            "identifiers": get_text_patterns("exchange_page_sended"),
+            "priority": 41,
+        },
+        {
             "name": "exchange_choose_friend",
             "identifiers": get_text_patterns("exchange_choose_friend_title"),
             "priority": 50,
@@ -375,7 +380,7 @@ class ExchangeCardsTask(Task):
             return self._handle_home(page_info)
         if page_name == "community_page":
             return self._handle_community(page_info)
-        if page_name == "exchange_page_main":
+        if page_name in {"exchange_page_main", "exchange_page_sended"}:
             return self._handle_exchange_page_main(page_info)
 
         if self._ctx.runtime.current_request.status == "sending":
