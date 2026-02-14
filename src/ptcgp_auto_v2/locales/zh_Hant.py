@@ -132,6 +132,7 @@ TEXT_PATTERNS = {
     "gift_tab_send": ["分送"],
     "gift_page_main": ["紀錄", "分送"],
     "gift_choose_friend_title": ["請選擇朋友"],
+    "gift_choose_friend_empty": ["沒有朋友"],
     "gift_friend_profile": ["朋友ID", "戰績"],
     "gift_friend_unavailable_today": ["今天已分送過卡牌"],
     "gift_friend_unavailable_limit": ["已達可領取分送卡牌的上限"],
