@@ -378,7 +378,6 @@ function searchExchangeAccounts(query) {
 function showExchangeForm(button) {
     const container = document.getElementById('exchange-form-container');
     const fromAccountIdInput = document.getElementById('exchange-from-account-id');
-    const toNicknameInput = document.getElementById('exchange-to-nickname');
     const fromAccountDisplay = document.getElementById('exchange-from-account-display');
     const toFriendIdInput = document.getElementById('exchange-to-friend-id');
     const submitBtn = document.getElementById('exchange-submit-btn');
@@ -387,14 +386,12 @@ function showExchangeForm(button) {
     if (!container || !fromAccountIdInput || !fromAccountDisplay || !toFriendIdInput) return;
     
     const accountId = button.dataset.accountId || '';
-    const friendId = button.dataset.friendId || '';
     const nickname = button.dataset.nickname || '';
     const hasActive = button.dataset.hasActive === 'true';
     
     fromAccountIdInput.value = accountId;
-    if (toNicknameInput) toNicknameInput.value = nickname;
     fromAccountDisplay.textContent = nickname ? `#${accountId} · ${nickname}` : `#${accountId}`;
-    toFriendIdInput.value = friendId;
+    toFriendIdInput.value = '';
     
     if (hasActive) {
         if (warningEl) warningEl.classList.remove('hidden');

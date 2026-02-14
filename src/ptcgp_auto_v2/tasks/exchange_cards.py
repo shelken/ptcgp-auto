@@ -28,31 +28,19 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import ExchangeCardService
-from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
-from ptcgp_auto_v2.tasks.utils.rarity_filter import (
-    select_rarity_in_filter_panel,
-)
 from ptcgp_auto_v2.tasks.utils.constants import (
     BASE_CARD_SCROLL_DISTANCE_Y,
-    BASE_FRIEND_ROW_THRESHOLD_Y,
-    BASE_FRIEND_SCROLL_DISTANCE_Y,
     MAX_CARD_STABLE_ROUNDS,
-    MAX_FRIEND_PROFILE_READ_ROUNDS,
-    MAX_FRIEND_SCROLL_ROUNDS,
-    MAX_FRIEND_STABLE_ROUNDS,
 )
-from ptcgp_auto_v2.tasks.utils.friend_card_flow import (
-    build_detect_signature,
-    build_ocr_signature,
-    find_all_search_plus_boxes,
-    find_send_button_for_target,
-    find_target_search_plus_box,
+from ptcgp_auto_v2.tasks.utils.friend_card_flow import build_detect_signature
+from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
+    FriendSelectionFlow,
+    FriendSelectionHelper,
 )
-from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
+from ptcgp_auto_v2.tasks.utils.rarity_filter import select_rarity_in_filter_panel
 from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
-    click_close,
     is_text_visible,
     scroll_points,
     swipe,
@@ -65,6 +53,8 @@ from ptcgp_auto_v2.utils.gesture import (
 )
 
 logger = logging.getLogger(__name__)
+
+RECHECK_DELAY_SECONDS = 300
 
 
 @dataclass
@@ -79,56 +69,31 @@ class ExchangeRuntimeState:
 
 
 @dataclass
-class ExchangeTargetState:
-    """请求目标态。"""
+class ExchangeCardState:
+    """目标卡牌状态。"""
 
-    nickname: Optional[str] = None
-    card_name: Optional[str] = None
-    card_set_code: Optional[str] = None
-    card_number: Optional[int] = None
-    friend_verified: bool = False
-
-
-@dataclass
-class ExchangeFlowState:
-    """页面流程态。"""
-
-    friend_scroll_rounds: int = 0
-    friend_stable_rounds: int = 0
-    friend_profile_read_rounds: int = 0
-    card_stable_rounds: int = 0
-    last_friend_signature: Optional[str] = None
-    last_card_signature: Optional[str] = None
-    action_cache: dict[str, bool] = field(default_factory=dict)
-    # 无 nickname 时的探测状态
-    probe_plus_index: int = 0  # 当前探测的 plus 索引
-    probe_boxes: list = field(default_factory=list)  # 所有 plus boxes 缓存
+    name: Optional[str] = None
+    set_code: Optional[str] = None
+    number: Optional[int] = None
 
 
 @dataclass
 class ExchangeTaskContext:
-    """交换任务上下文：按语义归类状态。"""
+    """交换任务上下文。"""
 
     runtime: ExchangeRuntimeState = field(default_factory=ExchangeRuntimeState)
-    target: ExchangeTargetState = field(default_factory=ExchangeTargetState)
-    flow: ExchangeFlowState = field(default_factory=ExchangeFlowState)
+    card: ExchangeCardState = field(default_factory=ExchangeCardState)
+    friend_flow: FriendSelectionFlow = field(default_factory=FriendSelectionFlow)
 
     def reset(self):
         """重置任务上下文。"""
         self.runtime = ExchangeRuntimeState()
-        self.target = ExchangeTargetState()
-        self.flow = ExchangeFlowState()
-
-
-# 交换特有常量
-RECHECK_DELAY_SECONDS = 300  # sended 阶段延时复查秒数（5分钟）
+        self.card = ExchangeCardState()
+        self.friend_flow = FriendSelectionFlow()
 
 
 def _build_exchange_pages() -> list[dict]:
-    """构建交换任务页面识别规则。
-
-    需求原文：进来游戏，主页，通过模板匹配「icon_community」点击进入到社群页面。
-    """
+    """构建交换任务页面识别规则。"""
     return [
         {
             "name": "home_with_community_icon",
@@ -158,12 +123,6 @@ def _build_exchange_pages() -> list[dict]:
             "identifiers": get_text_patterns("exchange_choose_friend_title"),
             "match_all": True,
             "priority": 50,
-        },
-        {
-            "name": "exchange_friend_profile",
-            "identifiers": get_text_patterns("exchange_friend_profile"),
-            "match_all": True,
-            "priority": 55,
         },
         {
             "name": "exchange_select_card",
@@ -249,10 +208,17 @@ class ExchangeCardsTask(Task):
             model_manager=get_model_manager(),
             hash_manager=get_card_hash_manager(),
         )
+        self._card_stable_rounds = 0
+        self._last_card_signature: Optional[str] = None
+        self._action_cache: dict[str, bool] = {}
+        self._friend_helper: Optional[FriendSelectionHelper] = None
 
     def on_start(self):
         """加载请求并执行前置校验。"""
         self._ctx.reset()
+        self._card_stable_rounds = 0
+        self._last_card_signature = None
+        self._action_cache = {}
 
         if self.account.id is None:
             self._ctx.runtime.completed = True
@@ -280,15 +246,14 @@ class ExchangeCardsTask(Task):
 
         request_nickname = getattr(request, "to_nickname", None)
         if request_nickname:
-            self._ctx.target.nickname = request_nickname
+            self._ctx.friend_flow.nickname = request_nickname
         else:
-            # 尝试从 AccountFriendship 读取已记录的昵称
             friendship = FriendshipRepository().get_friendship(
                 account_id=self.account.id,
                 friend_id=request.to_friend_id,
             )
             if friendship and friendship.friend_nickname:
-                self._ctx.target.nickname = friendship.friend_nickname
+                self._ctx.friend_flow.nickname = friendship.friend_nickname
                 logger.info(
                     "从好友关系读取昵称: %s -> %s",
                     request.to_friend_id,
@@ -297,18 +262,48 @@ class ExchangeCardsTask(Task):
 
         card = self._card_repo.get_by_id(request.target_card_id)
         if card is not None:
-            self._ctx.target.card_name = resolve_card_name(
+            self._ctx.card.name = resolve_card_name(
                 self._card_repo,
                 card.set_code,
                 card.number,
             )
-            self._ctx.target.card_set_code = card.set_code
-            self._ctx.target.card_number = card.number
+            self._ctx.card.set_code = card.set_code
+            self._ctx.card.number = card.number
 
+        self._init_friend_helper()
         self._preflight_validate()
 
+    def _init_friend_helper(self):
+        """初始化好友选择辅助类。"""
+        request = self._ctx.runtime.current_request
+        if request is None:
+            return
+
+        self._friend_helper = FriendSelectionHelper(
+            adb=self.adb,
+            page_detector=self.page_detector,
+            flow=self._ctx.friend_flow,
+            target_friend_id=request.to_friend_id or "",
+            profile_page_name="exchange_friend_profile",
+            send_text_patterns=get_text_patterns("exchange_send_button"),
+            on_nickname_found=self._on_nickname_found,
+            on_scroll_exhausted=self._on_scroll_exhausted,
+        )
+
+    def _on_nickname_found(self, account_id: int, friend_id: str, nickname: str):
+        """发现 nickname 回调：持久化到好友关系。"""
+        FriendshipRepository().update_nickname(
+            account_id=account_id,
+            friend_id=friend_id,
+            nickname=nickname,
+        )
+
+    def _on_scroll_exhausted(self, reason: str) -> ActionResult:
+        """滑动耗尽回调。"""
+        return self._fail_and_complete(reason)
+
     def _preflight_validate(self):
-        """任务启动时统一执行前置校验并在失败时收敛。"""
+        """任务启动时统一执行前置校验。"""
         if self._ctx.runtime.current_request is None:
             return
 
@@ -327,16 +322,11 @@ class ExchangeCardsTask(Task):
             self._fail_request(f"不支持的目标稀有度: {rarity_code}")
             return
 
-        # nickname 非必须，缺失时会遍历探测获取
-        # if not self._ctx.target.nickname:
-        #     self._fail_request("目标昵称缺失，请先完成加好友并抓取昵称")
-        #     return
-
-        if not self._ctx.target.card_set_code or self._ctx.target.card_number is None:
+        if not self._ctx.card.set_code or self._ctx.card.number is None:
             self._fail_request("目标卡牌不存在，无法执行交换")
             return
 
-        if request.status == "sending" and not self._ctx.target.card_name:
+        if request.status == "sending" and not self._ctx.card.name:
             self._fail_request("目标卡牌名称缺失，无法在确认页核验")
             return
 
@@ -353,7 +343,7 @@ class ExchangeCardsTask(Task):
             FriendPreHook(
                 target_friend_id=target_friend_id,
                 target_account_id=self._ctx.runtime.current_request.to_account_id,
-                target_nickname=self._ctx.target.nickname,
+                target_nickname=self._ctx.friend_flow.nickname,
             )
         ]
 
@@ -394,7 +384,6 @@ class ExchangeCardsTask(Task):
         """sending 阶段页面处理。"""
         handlers = {
             "exchange_choose_friend": self._handle_choose_friend,
-            "exchange_friend_profile": self._handle_friend_profile,
             "exchange_select_card": self._handle_select_card,
             "exchange_filter_modal": self._handle_filter_modal,
             "exchange_target_confirm_page": self._handle_target_confirm_page,
@@ -460,142 +449,39 @@ class ExchangeCardsTask(Task):
 
     def _handle_choose_friend(self, page_info: dict) -> ActionResult:
         """请选择朋友页面：先核验 friend_id，再点击对应交换。"""
-        if self._ctx.runtime.current_request is None:
-            return ActionResult.wait(0.6)
-        ocr_results = page_info.get("ocr_results", [])
-
-        signature = build_ocr_signature(ocr_results)
-        if signature == self._ctx.flow.last_friend_signature:
-            self._ctx.flow.friend_stable_rounds += 1
-        else:
-            self._ctx.flow.friend_stable_rounds = 0
-            self._ctx.flow.last_friend_signature = signature
-
-        # 已验证好友，直接点击交换按钮
-        if self._ctx.target.friend_verified:
-            exchange_box = self._find_exchange_box_for_verified_target(ocr_results)
-            if exchange_box:
-                return tap_box(self.adb, exchange_box, wait=1.0)
-            return self._continue_find_target_in_friend_list()
-
-        # 有 nickname，通过 nickname 定位
-        if self._ctx.target.nickname:
-            if not self._is_action_done("friend_plus_clicked"):
-                plus_box = self._find_target_search_plus_box(ocr_results)
-                if plus_box:
-                    self._mark_action_done("friend_plus_clicked")
-                    return tap_box(self.adb, plus_box, wait=1.0)
-            return self._continue_find_target_in_friend_list()
-
-        # 无 nickname，遍历探测
-        return self._probe_friend_by_plus_boxes(ocr_results)
-
-    def _probe_friend_by_plus_boxes(self, ocr_results: list[dict]) -> ActionResult:
-        """无 nickname 时遍历探测 friend_id。"""
-        # 收集所有 plus boxes（仅首次）
-        if not self._ctx.flow.probe_boxes:
-            self._ctx.flow.probe_boxes = find_all_search_plus_boxes(self.page_detector)
-            self._ctx.flow.probe_plus_index = 0
-            logger.info("开始遍历探测，共 %d 个 plus", len(self._ctx.flow.probe_boxes))
-
-        # 逐个点击探测
-        if self._ctx.flow.probe_plus_index < len(self._ctx.flow.probe_boxes):
-            box = self._ctx.flow.probe_boxes[self._ctx.flow.probe_plus_index]
-            self._ctx.flow.probe_plus_index += 1
-            logger.info(
-                "探测第 %d/%d 个 plus",
-                self._ctx.flow.probe_plus_index,
-                len(self._ctx.flow.probe_boxes),
-            )
-            return tap_box(self.adb, box, wait=1.0)
-
-        # 本页遍历完，重置状态并滑动继续
-        logger.info("本页遍历完成，滑动继续")
-        self._ctx.flow.probe_boxes = []
-        self._ctx.flow.probe_plus_index = 0
-        return self._continue_find_target_in_friend_list()
-
-    def _continue_find_target_in_friend_list(self) -> ActionResult:
-        """好友列表持续查找目标。"""
-        if self._ctx.flow.friend_stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
-            return self._fail_and_complete("好友列表疑似到底且未找到目标账号")
-
-        self._ctx.flow.friend_scroll_rounds += 1
-        if self._ctx.flow.friend_scroll_rounds > MAX_FRIEND_SCROLL_ROUNDS:
-            return self._fail_and_complete("好友列表遍历达到上限，未定位到目标账号")
-
-        start, end = scroll_points(
-            self.adb,
-            base_distance_y=BASE_FRIEND_SCROLL_DISTANCE_Y,
-            direction="up",
-        )
-        swipe(self.adb, start, end, wait=0.9)
-        return ActionResult.ok(wait=0.8)
-
-    def _handle_friend_profile(self, page_info: dict) -> ActionResult:
-        """好友详情页：提取 friend_id 核验后关闭返回。"""
-        if self._ctx.runtime.current_request is None:
+        if self._friend_helper is None or self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
 
         ocr_results = page_info.get("ocr_results", [])
-        target_friend_id = self._ctx.runtime.current_request.to_friend_id or ""
 
-        extracted_friend_id: Optional[str] = None
-        for item in ocr_results:
-            extracted_friend_id = extract_friend_id_from_text(str(item.get("text", "")))
-            if extracted_friend_id:
-                break
+        if is_text_visible(
+            ocr_results,
+            get_text_patterns("gift_choose_friend_empty"),
+            exact=False,
+        ):
+            return self._fail_and_complete("好友列表为空，无法执行交换")
 
-        if not extracted_friend_id:
-            self._ctx.flow.friend_profile_read_rounds += 1
-            if (
-                self._ctx.flow.friend_profile_read_rounds
-                < MAX_FRIEND_PROFILE_READ_ROUNDS
-            ):
-                return ActionResult.wait(0.6)
-            # 读取失败，关闭返回继续探测
-            self._ctx.flow.friend_profile_read_rounds = 0
-            click_close(
-                self.adb, self.page_detector, ocr_results, get_text_patterns("text_x")
+        if self._friend_helper.update_signature_and_check_stable(ocr_results):
+            return self._friend_helper.scroll_or_fail()
+
+        if self._ctx.friend_flow.friend_verified:
+            send_box = self._friend_helper.find_send_box_by_anchor(ocr_results)
+            if send_box:
+                return tap_box(self.adb, send_box, wait=1.0)
+            return self._friend_helper.scroll_or_fail()
+
+        if self._ctx.friend_flow.nickname:
+            plus_box = self._friend_helper.find_plus_for_nickname(
+                ocr_results, self._ctx.friend_flow.nickname
             )
-            return ActionResult.wait(0.5)
+            if plus_box:
+                return self._friend_helper.tap_plus_and_wait_profile(plus_box)
+            return self._friend_helper.scroll_or_fail()
 
-        if extracted_friend_id == target_friend_id:
-            # 匹配成功
-            self._ctx.target.friend_verified = True
-            self._ctx.flow.action_cache.pop("friend_plus_clicked", None)
-
-            # 提取 nickname（如果没有的话）
-            if not self._ctx.target.nickname:
-                nickname = extract_nickname_by_lv(
-                    ocr_results,
-                    search_range_y=self.adb.scaled_y(300),
-                    excluded_contains=list(get_text_patterns("profile_exclude")),
-                )
-                if nickname and self.account.id:
-                    self._ctx.target.nickname = nickname
-                    logger.info("探测到好友昵称: %s -> %s", target_friend_id, nickname)
-                    # 持久化到 AccountFriendship
-                    FriendshipRepository().update_nickname(
-                        account_id=self.account.id,
-                        friend_id=target_friend_id,
-                        nickname=nickname,
-                    )
-        else:
-            # 不匹配，继续探测
-            self._ctx.target.friend_verified = False
-            self._ctx.flow.action_cache.pop("friend_plus_clicked", None)
-            logger.debug(
-                "friend_id 不匹配: %s != %s",
-                extracted_friend_id,
-                target_friend_id,
-            )
-
-        self._ctx.flow.friend_profile_read_rounds = 0
-        click_close(
-            self.adb, self.page_detector, ocr_results, get_text_patterns("text_x")
-        )
-        return ActionResult.wait(0.5)
+        probe_box = self._friend_helper.get_next_probe_box()
+        if probe_box:
+            return self._friend_helper.tap_plus_and_wait_profile(probe_box)
+        return self._friend_helper.scroll_or_fail()
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：筛选稀有度，扫描目标卡并点击。"""
@@ -620,24 +506,24 @@ class ExchangeCardsTask(Task):
             return ActionResult.wait(0.6)
 
         detected = self._card_recognizer.scan(
-            set_code=self._ctx.target.card_set_code,
+            set_code=self._ctx.card.set_code,
             debug=False,
         )
         tap_result = self._tap_target_card_by_scan(detected)
         if tap_result:
-            self._ctx.flow.card_stable_rounds = 0
-            self._ctx.flow.last_card_signature = None
+            self._card_stable_rounds = 0
+            self._last_card_signature = None
             self._mark_action_done("target_card_tapped")
             return tap_result
 
         card_signature = build_detect_signature(detected)
-        if card_signature == self._ctx.flow.last_card_signature:
-            self._ctx.flow.card_stable_rounds += 1
+        if card_signature == self._last_card_signature:
+            self._card_stable_rounds += 1
         else:
-            self._ctx.flow.card_stable_rounds = 0
-            self._ctx.flow.last_card_signature = card_signature
+            self._card_stable_rounds = 0
+            self._last_card_signature = card_signature
 
-        if self._ctx.flow.card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
+        if self._card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
             return self._fail_and_complete("连续三次扫描未找到目标卡牌")
 
         start, end = scroll_points(
@@ -672,16 +558,16 @@ class ExchangeCardsTask(Task):
             return ActionResult.wait(0.6)
         ocr_results = page_info.get("ocr_results", [])
 
-        if self._ctx.target.nickname and not is_text_visible(
+        if self._ctx.friend_flow.nickname and not is_text_visible(
             ocr_results,
-            [self._ctx.target.nickname],
+            [self._ctx.friend_flow.nickname],
             exact=False,
         ):
             return self._fail_and_complete("确认页目标昵称不匹配")
 
-        if self._ctx.target.card_name and not is_text_visible(
+        if self._ctx.card.name and not is_text_visible(
             ocr_results,
-            [self._ctx.target.card_name],
+            [self._ctx.card.name],
             exact=False,
         ):
             logger.info("确认页未识别到目标卡名，继续尝试按流程确认")
@@ -818,52 +704,11 @@ class ExchangeCardsTask(Task):
 
     def _mark_action_done(self, action_name: str):
         """标记页面动作已完成。"""
-        self._ctx.flow.action_cache[action_name] = True
+        self._action_cache[action_name] = True
 
     def _is_action_done(self, action_name: str) -> bool:
         """查询页面动作是否完成。"""
-        return self._ctx.flow.action_cache.get(action_name, False)
-
-    def _find_target_search_plus_box(
-        self, ocr_results: list[dict]
-    ) -> Optional[tuple[int, int, int, int]]:
-        """在好友列表中查找目标昵称对应的 icon_search_plus。"""
-        if not hasattr(self.page_detector, "find_all_templates"):
-            return None
-
-        matches = self.page_detector.find_all_templates(
-            "icon_search_plus",
-            threshold=0.8,
-            scale=1.0,
-        )
-        plus_boxes: list[tuple[int, int, int, int]] = []
-        for match in matches:
-            box = getattr(match, "box", None)
-            if box and len(box) == 4:
-                plus_boxes.append(tuple(box))
-
-        if not plus_boxes or not self._ctx.target.nickname:
-            return None
-
-        row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
-        return find_target_search_plus_box(
-            ocr_results=ocr_results,
-            target_nickname=self._ctx.target.nickname,
-            search_plus_boxes=plus_boxes,
-            row_threshold_y=row_threshold_y,
-        )
-
-    def _find_exchange_box_for_verified_target(
-        self, ocr_results: list[dict]
-    ) -> Optional[tuple[int, int, int, int]]:
-        """在好友列表中定位目标行的交换按钮。"""
-        if not self._ctx.target.nickname:
-            return None
-        return find_send_button_for_target(
-            ocr_results=ocr_results,
-            target_nickname=self._ctx.target.nickname,
-            send_text_patterns=get_text_patterns("exchange_send_button"),
-        )
+        return self._action_cache.get(action_name, False)
 
     def _select_target_rarity_group(self, page_info: dict) -> Optional[ActionResult]:
         """在筛选弹窗中按目标稀有度点选图标分组。"""
@@ -884,17 +729,14 @@ class ExchangeCardsTask(Task):
         """通过 YOLO+Hash 扫描定位目标卡牌。"""
         if not detected:
             return None
-        if (
-            self._ctx.target.card_set_code is None
-            or self._ctx.target.card_number is None
-        ):
+        if self._ctx.card.set_code is None or self._ctx.card.number is None:
             return None
 
         candidates = [
             item
             for item in detected
-            if item.set_code == self._ctx.target.card_set_code
-            and item.card_number == self._ctx.target.card_number
+            if item.set_code == self._ctx.card.set_code
+            and item.card_number == self._ctx.card.number
         ]
         if not candidates:
             return None

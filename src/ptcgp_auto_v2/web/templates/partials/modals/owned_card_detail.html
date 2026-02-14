@@ -100,7 +100,6 @@
                                         class="brutal-btn text-xs px-2 py-1"
                                         data-action="show-exchange-form"
                                         data-account-id="{{ item.account_id }}"
-                                        data-friend-id="{{ item.friend_id or '' }}"
                                         data-nickname="{{ item.nickname or '' }}"
                                         data-has-active="{{ item.has_active_request | default(false) }}">
                                     {{ t.exchange_entry_action or '交换' }}
@@ -124,7 +123,6 @@
                     hx-swap="none">
                     <input type="hidden" name="from_account_id" id="exchange-from-account-id">
                     <input type="hidden" name="to_account_id" value="">
-                    <input type="hidden" name="to_nickname" id="exchange-to-nickname">
                     <input type="hidden" name="target_card_id" value="{{ card.id }}">
                     <input type="hidden" name="target_card_rarity" value="{{ card.rarity }}">
 
