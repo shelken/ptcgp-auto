@@ -387,6 +387,24 @@ class SendCardDailyTask(Task):
             )
         return ActionResult.ok(wait=0.3)
 
+    def _skip_without_send(
+        self,
+        skip_reason: str,
+        record_status: Optional[str] = None,
+        error_code: Optional[str] = None,
+    ) -> ActionResult:
+        """在无需继续尝试时以跳过态收敛任务，同时保留必要状态落库。"""
+        self._skip_reason = skip_reason
+        logger.info("send_card_daily 跳过收敛: %s", skip_reason)
+        if self._record and record_status:
+            GiftRecordService.update_status(
+                self._record,
+                status=record_status,
+                error_code=error_code,
+                error_message=skip_reason,
+            )
+        return ActionResult.ok(wait=0.3)
+
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群入口。"""
         if self._completed:
@@ -434,6 +452,17 @@ class SendCardDailyTask(Task):
         """好友选择页：先点加号核验 friend_id，再点击对应分送。"""
         ocr_results = page_info.get("ocr_results", [])
 
+        if is_text_visible(
+            ocr_results,
+            get_text_patterns("gift_choose_friend_empty"),
+            exact=False,
+        ):
+            return self._skip_without_send(
+                skip_reason="好友列表为空，无法分送卡牌",
+                record_status="completed_no_target",
+                error_code="NO_FRIENDS",
+            )
+
         friend_signature = build_ocr_signature(ocr_results)
         if friend_signature == self._last_friend_signature:
             self._friend_stable_rounds += 1
@@ -447,11 +476,11 @@ class SendCardDailyTask(Task):
             if self._is_action_done("friend_plus_clicked"):
                 self._friend_plus_wait_rounds += 1
                 if self._friend_plus_wait_rounds <= MAX_FRIEND_PLUS_WAIT_ROUNDS:
-                    return ActionResult.wait(2)
+                    return ActionResult.wait(wait)
                 self._friend_plus_wait_rounds = 0
                 if self._last_clicked_plus_box:
                     return tap_box(self.adb, self._last_clicked_plus_box, wait=wait)
-                return ActionResult.wait(2)
+                return ActionResult.wait(wait)
 
             plus_box = self._find_target_search_plus_box(ocr_results)
             if plus_box:
@@ -477,8 +506,11 @@ class SendCardDailyTask(Task):
     def _continue_find_target_in_friend_list(self) -> ActionResult:
         """好友列表继续查找目标（滑动或收敛）。"""
         if self._friend_stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
-            self._skip_reason = "好友列表遍历完成未找到可送目标"
-            return ActionResult.ok(wait=0.3)
+            return self._skip_without_send(
+                skip_reason="好友列表遍历完成未找到可送目标",
+                record_status="completed_no_target",
+                error_code="TARGET_LIST_EXHAUSTED",
+            )
 
         self._friend_scroll_rounds += 1
         if self._friend_scroll_rounds > MAX_FRIEND_SCROLL_ROUNDS:
@@ -862,17 +894,15 @@ class SendCardDailyTask(Task):
             return
 
         if my_count > 0 and peer_count > 0 and my_id > peer_id:
-            if GiftRecordService.is_daily_scan_no_card(
+            if GiftRecordService.has_daily_attempt(
                 account_id=peer_id,
                 target_friend_id=my_friend_id,
             ):
-                logger.info(
-                    "对端今日扫描未找到目标卡，跳过稳定顺序等待，当前账号优先送卡"
-                )
+                logger.info("对端今日已尝试送卡，跳过稳定顺序等待，当前账号优先送卡")
                 return
             GiftRecordService.ensure_send_card_daily_pending(account_id=peer_id)
-            self._complete_without_send(
-                complete_reason="双方均有卡，按稳定顺序等待小ID账号先送",
+            self._skip_without_send(
+                skip_reason="双方均有卡，按稳定顺序等待小ID账号先送",
                 record_status="completed_wait_peer_first",
                 error_code="WAIT_STABLE_ORDER",
             )
