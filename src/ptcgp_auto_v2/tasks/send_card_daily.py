@@ -422,6 +422,7 @@ class SendCardDailyTask(Task):
             self._last_friend_signature = friend_signature
 
         # 第一阶段：必须先通过 icon_search_plus 进入详情页校验 friend_id。
+        wait = 3
         if not self._target_friend_verified:
             if self._is_action_done("friend_plus_clicked"):
                 self._friend_plus_wait_rounds += 1
@@ -429,7 +430,7 @@ class SendCardDailyTask(Task):
                     return ActionResult.wait(2)
                 self._friend_plus_wait_rounds = 0
                 if self._last_clicked_plus_box:
-                    return tap_box(self.adb, self._last_clicked_plus_box, wait=2)
+                    return tap_box(self.adb, self._last_clicked_plus_box, wait=wait)
                 return ActionResult.wait(2)
 
             plus_box = self._find_target_search_plus_box(ocr_results)
@@ -438,7 +439,7 @@ class SendCardDailyTask(Task):
                 self._friend_plus_wait_rounds = 0
                 self._last_clicked_plus_box = plus_box
                 self._mark_action_done("friend_plus_clicked")
-                return tap_box(self.adb, plus_box, wait=1.0)
+                return tap_box(self.adb, plus_box, wait=wait)
             return self._continue_find_target_in_friend_list()
 
         # 第二阶段：已核验 friend_id，回到列表后点击同一行分送。
