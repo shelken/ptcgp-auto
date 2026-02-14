@@ -127,6 +127,14 @@ COMMON_PAGES = [
         "action": "tap_text",
         "patterns_key": "text_cancel",
     },
+    {
+        # 通用 home_icon
+        # 放在常见弹窗处理（OK/继续/关闭等）之后，仅在系统提示前兜底点击
+        "name": "home_icon",
+        "templates": ["icon_home"],
+        "priority": 800,
+        "action": "tap_matched",
+    },
     # 打开模拟器弹出页面
     {
         "name": "_to_home",
