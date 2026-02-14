@@ -164,8 +164,6 @@ def _build_exchange_pages() -> list[dict]:
         {
             "name": "exchange_target_confirm_page",
             "identifiers": get_text_patterns("exchange_target_confirm_page"),
-            "match_all": True,
-            "exclude_identifiers": get_text_patterns("exchange_waiting_page"),
             "priority": 70,
         },
         {
