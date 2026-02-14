@@ -6,61 +6,6 @@ from __future__ import annotations
 from typing import Optional
 
 
-def extract_nickname_near_friend_id(
-    ocr_results: list[dict],
-    target_friend_id: str,
-    excluded_patterns: set[str],
-    row_threshold_y: int = 140,
-) -> Optional[str]:
-    """在包含目标 friend_id 的同一行提取昵称（用于搜索结果页面）。"""
-    normalized_target = "".join(ch for ch in (target_friend_id or "") if ch.isdigit())
-    if not normalized_target:
-        return None
-
-    anchor_box = None
-    for item in ocr_results:
-        text = str(item.get("text", ""))
-        digits = "".join(ch for ch in text if ch.isdigit())
-        if digits != normalized_target:
-            continue
-        box = item.get("box")
-        if box and len(box) == 4:
-            anchor_box = tuple(box)
-            break
-
-    if not anchor_box:
-        return None
-
-    anchor_cy = (anchor_box[1] + anchor_box[3]) // 2
-    anchor_x1 = anchor_box[0]
-    candidates: list[tuple[int, str]] = []
-    for item in ocr_results:
-        text = str(item.get("text", "")).strip()
-        compact = "".join(text.lower().split())
-        if not text or compact in excluded_patterns:
-            continue
-        box = item.get("box")
-        if not box or len(box) != 4:
-            continue
-        cy = (box[1] + box[3]) // 2
-        cx = (box[0] + box[2]) // 2
-        if cx >= anchor_x1:
-            continue
-        distance = abs(cy - anchor_cy)
-        if distance > row_threshold_y:
-            continue
-        if len(text) < 2:
-            continue
-        if text.replace(",", "").replace(".", "").isdigit():
-            continue
-        candidates.append((distance, text))
-
-    if not candidates:
-        return None
-    candidates.sort(key=lambda item: item[0])
-    return candidates[0][1]
-
-
 def extract_nickname_by_lv(
     ocr_results: list[dict],
     search_range_y: int,
