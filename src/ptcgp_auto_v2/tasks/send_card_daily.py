@@ -30,7 +30,17 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import GiftPairingService, GiftRecordService
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
-from ptcgp_auto_v2.tasks.utils.send_card_helpers import (
+from ptcgp_auto_v2.tasks.utils.constants import (
+    BASE_CARD_SCROLL_DISTANCE_Y,
+    BASE_FRIEND_ROW_THRESHOLD_Y,
+    BASE_FRIEND_SCROLL_DISTANCE_Y,
+    MAX_CARD_STABLE_ROUNDS,
+    MAX_FRIEND_PROFILE_READ_ROUNDS,
+    MAX_FRIEND_SCROLL_ROUNDS,
+    MAX_FRIEND_STABLE_ROUNDS,
+)
+from ptcgp_auto_v2.tasks.utils.friend_card_flow import (
+    build_detect_signature,
     build_ocr_signature,
     find_send_box_near_anchor,
     find_send_button_for_target,
@@ -54,24 +64,10 @@ from ptcgp_auto_v2.utils.gesture import (
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# 常量定义（基于 1080x1920）
-# ============================================================
-
+# 送卡特有常量
 FIXED_CARD_SET_CODE = "A1"
 FIXED_CARD_NUMBER = 153
-
-BASE_FRIEND_SCROLL_DISTANCE_Y = 520
-BASE_CARD_SCROLL_DISTANCE_Y = 500
-# 说明：好友列表行高与 OCR 抖动会造成约 130+ 的同一行偏差，
-# 轻度放宽到 150，避免误判同时不跨到下一行。
-BASE_FRIEND_ROW_THRESHOLD_Y = 150
-
-MAX_FRIEND_SCROLL_ROUNDS = 8
-MAX_FRIEND_STABLE_ROUNDS = 3
-MAX_CARD_STABLE_ROUNDS = 3
 MAX_FILTER_MODAL_STAY_ROUNDS = 2
-MAX_FRIEND_PROFILE_READ_ROUNDS = 3
 
 
 def _build_send_card_pages() -> list[dict]:
@@ -672,7 +668,7 @@ class SendCardDailyTask(Task):
                 GiftRecordService.update_status(self._record, status="card_selected")
             return scan_tap_result
 
-        signature = self._build_detect_signature(detected)
+        signature = build_detect_signature(detected)
         if signature == self._last_card_signature:
             self._card_stable_rounds += 1
         else:
@@ -710,20 +706,6 @@ class SendCardDailyTask(Task):
 
         best = max(candidates, key=lambda item: (item.similarity, item.confidence))
         return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=1.0)
-
-    @staticmethod
-    def _build_detect_signature(detected) -> str:
-        """构建扫描结果签名，用于判断列表是否变化。"""
-        if not detected:
-            return "__EMPTY__"
-        items: list[str] = []
-        for item in detected:
-            if not item.set_code:
-                continue
-            items.append(f"{item.set_code}:{item.card_number}")
-        if not items:
-            return "__EMPTY__"
-        return "|".join(sorted(items))
 
     def _handle_filter_modal(self, page_info: dict) -> ActionResult:
         """筛选弹窗：清空 -> 输入关键字 -> 确认，若仍停留则重复该循环。"""

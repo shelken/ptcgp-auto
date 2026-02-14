@@ -7,7 +7,10 @@ from typing import Any, Optional
 from sqlmodel import Session, select
 
 from ptcgp_auto_v2.db.models import Account
-from ptcgp_auto_v2.db.repositories import ExchangeCardRequestRepository
+from ptcgp_auto_v2.db.repositories import (
+    ExchangeCardRequestRepository,
+    TaskInstanceRepository,
+)
 from ptcgp_auto_v2.web.queries.exchange_card_queries import list_exchange_requests
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
@@ -69,8 +72,18 @@ def cancel_exchange_request(request_id: int, reason: str = "web_cancel") -> bool
         return False
     if request.status not in {"sending", "sended"}:
         return False
-    request.status = "canceled"
+    if request.status == "sending":
+        repo.mark_canceled(request, reason=reason)
+        return True
+
     request.cancel_reason = reason
+    request.next_check_at = datetime.now()
     request.updated_at = datetime.now()
     repo.update(request)
+
+    TaskInstanceRepository().ensure_pending(
+        account_id=request.from_account_id,
+        task_type="exchange_cards",
+        reset_type="once",
+    )
     return True

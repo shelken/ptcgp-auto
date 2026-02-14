@@ -378,6 +378,7 @@ function searchExchangeAccounts(query) {
 function showExchangeForm(button) {
     const container = document.getElementById('exchange-form-container');
     const fromAccountIdInput = document.getElementById('exchange-from-account-id');
+    const toNicknameInput = document.getElementById('exchange-to-nickname');
     const fromAccountDisplay = document.getElementById('exchange-from-account-display');
     const toFriendIdInput = document.getElementById('exchange-to-friend-id');
     const submitBtn = document.getElementById('exchange-submit-btn');
@@ -391,6 +392,7 @@ function showExchangeForm(button) {
     const hasActive = button.dataset.hasActive === 'true';
     
     fromAccountIdInput.value = accountId;
+    if (toNicknameInput) toNicknameInput.value = nickname;
     fromAccountDisplay.textContent = nickname ? `#${accountId} · ${nickname}` : `#${accountId}`;
     toFriendIdInput.value = friendId;
     

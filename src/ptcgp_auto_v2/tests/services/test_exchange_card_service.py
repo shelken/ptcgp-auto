@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -68,3 +70,104 @@ def test_create_request_rejects_im_and_ur_rarity():
 
         assert created is None
         repo_cls.return_value.create.assert_not_called()
+
+
+def test_has_active_request_returns_true_for_sending_or_sended(engine, mock_get_engine):
+    """sending/sended 状态应被识别为活跃请求。"""
+    repo = ExchangeCardRequestRepository()
+    created = repo.create(
+        from_account_id=301,
+        to_account_id=302,
+        to_friend_id="1111222233334444",
+        target_card_id=7001,
+        target_card_rarity="R",
+        status="sending",
+    )
+    assert created is not None
+    assert repo.has_active_request(301) is True
+
+    created.status = "sended"
+    repo.update(created)
+    assert repo.has_active_request(301) is True
+
+    created.status = "completed"
+    repo.update(created)
+    assert repo.has_active_request(301) is False
+
+
+def test_list_due_sended_requests_only_returns_due_rows(engine, mock_get_engine):
+    """仅返回 next_check_at <= now 的 sended 请求。"""
+    repo = ExchangeCardRequestRepository()
+    now = datetime.now()
+
+    due = repo.create(
+        from_account_id=401,
+        to_account_id=402,
+        to_friend_id="1111000011110000",
+        target_card_id=7101,
+        target_card_rarity="RR",
+        status="sended",
+    )
+    future = repo.create(
+        from_account_id=403,
+        to_account_id=404,
+        to_friend_id="2222000022220000",
+        target_card_id=7102,
+        target_card_rarity="RR",
+        status="sended",
+    )
+    assert due is not None
+    assert future is not None
+
+    due.next_check_at = now - timedelta(minutes=1)
+    future.next_check_at = now + timedelta(minutes=10)
+    repo.update(due)
+    repo.update(future)
+
+    rows = repo.list_due_sended_requests(now)
+    assert [row.from_account_id for row in rows] == [401]
+
+
+def test_create_request_rejects_active_account_request():
+    """服务层应拒绝已存在活跃请求的账号再次创建请求。"""
+    with patch(
+        "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+    ) as repo_cls:
+        repo = repo_cls.return_value
+        repo.has_active_request.return_value = True
+
+        created = ExchangeCardService.create_request(
+            from_account_id=601,
+            to_account_id=602,
+            to_friend_id="1234567890123456",
+            target_card_id=8001,
+            target_card_rarity="R",
+        )
+
+        assert created is None
+        repo.create.assert_not_called()
+
+
+def test_create_request_sets_expire_at_when_created():
+    """创建请求后应写入过期时间窗口。"""
+    with patch(
+        "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+    ) as repo_cls:
+        repo = repo_cls.return_value
+        repo.has_active_request.return_value = False
+
+        row = SimpleNamespace(expire_at=None)
+        repo.create.return_value = row
+        repo.update.return_value = row
+
+        created = ExchangeCardService.create_request(
+            from_account_id=611,
+            to_account_id=612,
+            to_friend_id="1234567890123456",
+            target_card_id=8101,
+            target_card_rarity="RR",
+        )
+
+        assert created is row
+        assert row.expire_at is not None
+        repo.update.assert_called_once_with(row)

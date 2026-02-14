@@ -21,6 +21,7 @@ class FriendRequestRepository:
         from_account_id: int,
         to_friend_id: Optional[str],
         to_account_id: Optional[int] = None,
+        to_nickname: Optional[str] = None,
         request_type: str = "add",
         status: str = "sending",
     ) -> AccountFriendRequest:
@@ -40,6 +41,7 @@ class FriendRequestRepository:
                 from_account_id=from_account_id,
                 to_friend_id=to_friend_id,
                 to_account_id=to_account_id,
+                to_nickname=to_nickname,
                 request_type=request_type,
                 status=status,
             )
@@ -163,6 +165,19 @@ class FriendRequestRepository:
             session.commit()
             session.refresh(request)
             return request
+
+    def update_nickname(self, request_id: int, nickname: str) -> bool:
+        """更新请求目标昵称。"""
+        if not nickname:
+            return False
+        with Session(get_engine()) as session:
+            request = session.get(AccountFriendRequest, request_id)
+            if request is None:
+                return False
+            request.to_nickname = nickname
+            session.add(request)
+            session.commit()
+            return True
 
     def delete_pending(self, request_id: int) -> bool:
         """删除待处理请求（仅 sending/sended/deleting）。"""

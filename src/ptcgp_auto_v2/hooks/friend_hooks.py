@@ -20,15 +20,32 @@ class FriendPreHook(Hook):
     如果不是，创建添加好友请求并触发 ManageFriendshipTask。
     """
 
-    def __init__(self, target_friend_id: str, target_account_id: Optional[int] = None):
+    def __init__(
+        self,
+        target_friend_id: str,
+        target_account_id: Optional[int] = None,
+        target_nickname: Optional[str] = None,
+    ):
         """初始化前置 Hook"""
         self.target_friend_id = target_friend_id
         self.target_account_id = target_account_id
+        self.target_nickname = target_nickname
 
     def run(self, context: HookContext) -> tuple[HookResult, dict]:
-        """执行前置检查"""
+        """
+        执行前置检查
+
+        三种场景：
+        1. 无请求 → 创建请求 + INSERT_TASK
+        2. 请求 status=sending → INSERT_TASK（还没发送）
+        3. 请求 status=sended → 唤醒对方账号 + SKIP（等待对方接受）
+        """
+        if context.account.id is None:
+            return HookResult.ABORT, {"error": "账号ID为空"}
+        account_id = int(context.account.id)
+
         is_friend = FriendshipService.is_friend(
-            account_id=context.account.id,
+            account_id=account_id,
             friend_id=self.target_friend_id,
         )
 
@@ -36,27 +53,55 @@ class FriendPreHook(Hook):
             return HookResult.CONTINUE, {}
 
         existing = FriendRequestRepository().get_pending_request(
-            from_account_id=context.account.id,
+            from_account_id=account_id,
             to_friend_id=self.target_friend_id,
         )
 
-        if existing:
+        if existing is None:
+            # 场景1：无请求，创建并发送
+            FriendshipService.create_add_request(
+                from_account_id=account_id,
+                to_friend_id=self.target_friend_id,
+                to_account_id=self.target_account_id,
+                to_nickname=self.target_nickname,
+            )
             return HookResult.INSERT_TASK, {
                 "task_type": "manage_friendship",
                 "priority": "high",
-                "reason": "已有好友请求待处理",
+                "reason": "需要建立好友关系",
             }
 
+        if existing.status == "sending":
+            # 场景2：请求存在但还没发送
+            return HookResult.INSERT_TASK, {
+                "task_type": "manage_friendship",
+                "priority": "high",
+                "reason": "好友请求待发送",
+            }
+
+        if existing.status == "sended":
+            # 场景3：已发送，等待对方接受
+            # 唤醒对方账号处理
+            if existing.to_account_id:
+                FriendshipService.ensure_manage_friendship_pending(
+                    account_id=existing.to_account_id
+                )
+            # 跳过当前任务，让出调度机会
+            return HookResult.SKIP, {
+                "reason": "等待对方接受好友请求",
+            }
+
+        # 其他状态（completed/failed/canceled），重新创建请求
         FriendshipService.create_add_request(
-            from_account_id=context.account.id,
+            from_account_id=account_id,
             to_friend_id=self.target_friend_id,
             to_account_id=self.target_account_id,
+            to_nickname=self.target_nickname,
         )
-
         return HookResult.INSERT_TASK, {
             "task_type": "manage_friendship",
             "priority": "high",
-            "reason": "需要建立好友关系",
+            "reason": "需要重新建立好友关系",
         }
 
 
@@ -74,8 +119,12 @@ class DeleteFriendPostHook(Hook):
 
     def run(self, context: HookContext) -> tuple[HookResult, dict]:
         """执行后置删除"""
+        if context.account.id is None:
+            return HookResult.CONTINUE, {}
+        account_id = int(context.account.id)
+
         FriendshipService.create_delete_request(
-            account_id=context.account.id,
+            account_id=account_id,
             friend_id=self.target_friend_id,
         )
 

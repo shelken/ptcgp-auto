@@ -86,8 +86,7 @@ def build_owned_card_modal_context(
         account_id = item.get("account_id")
         has_active = False
         if account_id:
-            active_request = exchange_repo.get_active_by_account(account_id)
-            has_active = active_request is not None
+            has_active = exchange_repo.has_active_request(account_id)
         item["has_active_request"] = has_active
         accounts_with_status.append(item)
 
