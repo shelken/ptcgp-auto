@@ -67,7 +67,7 @@ TEXT_PATTERNS = {
     "exchange_proposed_done_popup": ["已將卡牌提議給對方"],
     "exchange_waiting_page": ["正在等待對方回應", "取消交換"],
     "exchange_receive_confirm_page": ["要和這張卡牌交換嗎", "拒絕", "交換"],
-    "exchange_receive_start_popup": ["要確定並開始交換", "OK"],
+    "exchange_receive_start_popup": ["要確定並開始交換"],
     "exchange_cancel_confirm_popup": ["要取消並結束交換嗎", "OK"],
     "exchange_canceled_done_popup": ["交換已取消", "OK"],
     "exchange_send_button": ["交換"],
