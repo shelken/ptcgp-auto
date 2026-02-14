@@ -18,6 +18,7 @@ from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
     CardRepository,
     ExchangeCardRequestRepository,
+    FriendshipRepository,
 )
 from ptcgp_auto_v2.hooks import ExchangeDelayPostHook
 from ptcgp_auto_v2.hooks.friend_hooks import FriendPreHook
@@ -43,6 +44,7 @@ from ptcgp_auto_v2.tasks.utils.constants import (
 from ptcgp_auto_v2.tasks.utils.friend_card_flow import (
     build_detect_signature,
     build_ocr_signature,
+    find_all_search_plus_boxes,
     find_send_button_for_target,
     find_target_search_plus_box,
 )
@@ -97,6 +99,9 @@ class ExchangeFlowState:
     last_friend_signature: Optional[str] = None
     last_card_signature: Optional[str] = None
     action_cache: dict[str, bool] = field(default_factory=dict)
+    # 无 nickname 时的探测状态
+    probe_plus_index: int = 0  # 当前探测的 plus 索引
+    probe_boxes: list = field(default_factory=list)  # 所有 plus boxes 缓存
 
 
 @dataclass
@@ -275,6 +280,19 @@ class ExchangeCardsTask(Task):
         request_nickname = getattr(request, "to_nickname", None)
         if request_nickname:
             self._ctx.target.nickname = request_nickname
+        else:
+            # 尝试从 AccountFriendship 读取已记录的昵称
+            friendship = FriendshipRepository().get_friendship(
+                account_id=self.account.id,
+                friend_id=request.to_friend_id,
+            )
+            if friendship and friendship.friend_nickname:
+                self._ctx.target.nickname = friendship.friend_nickname
+                logger.info(
+                    "从好友关系读取昵称: %s -> %s",
+                    request.to_friend_id,
+                    friendship.friend_nickname,
+                )
 
         card = self._card_repo.get_by_id(request.target_card_id)
         if card is not None:
@@ -308,9 +326,10 @@ class ExchangeCardsTask(Task):
             self._fail_request(f"不支持的目标稀有度: {rarity_code}")
             return
 
-        if not self._ctx.target.nickname:
-            self._fail_request("目标昵称缺失，请先完成加好友并抓取昵称")
-            return
+        # nickname 非必须，缺失时会遍历探测获取
+        # if not self._ctx.target.nickname:
+        #     self._fail_request("目标昵称缺失，请先完成加好友并抓取昵称")
+        #     return
 
         if not self._ctx.target.card_set_code or self._ctx.target.card_number is None:
             self._fail_request("目标卡牌不存在，无法执行交换")
@@ -451,7 +470,15 @@ class ExchangeCardsTask(Task):
             self._ctx.flow.friend_stable_rounds = 0
             self._ctx.flow.last_friend_signature = signature
 
-        if not self._ctx.target.friend_verified:
+        # 已验证好友，直接点击交换按钮
+        if self._ctx.target.friend_verified:
+            exchange_box = self._find_exchange_box_for_verified_target(ocr_results)
+            if exchange_box:
+                return tap_box(self.adb, exchange_box, wait=1.0)
+            return self._continue_find_target_in_friend_list()
+
+        # 有 nickname，通过 nickname 定位
+        if self._ctx.target.nickname:
             if not self._is_action_done("friend_plus_clicked"):
                 plus_box = self._find_target_search_plus_box(ocr_results)
                 if plus_box:
@@ -459,9 +486,32 @@ class ExchangeCardsTask(Task):
                     return tap_box(self.adb, plus_box, wait=1.0)
             return self._continue_find_target_in_friend_list()
 
-        exchange_box = self._find_exchange_box_for_verified_target(ocr_results)
-        if exchange_box:
-            return tap_box(self.adb, exchange_box, wait=1.0)
+        # 无 nickname，遍历探测
+        return self._probe_friend_by_plus_boxes(ocr_results)
+
+    def _probe_friend_by_plus_boxes(self, ocr_results: list[dict]) -> ActionResult:
+        """无 nickname 时遍历探测 friend_id。"""
+        # 收集所有 plus boxes（仅首次）
+        if not self._ctx.flow.probe_boxes:
+            self._ctx.flow.probe_boxes = find_all_search_plus_boxes(self.page_detector)
+            self._ctx.flow.probe_plus_index = 0
+            logger.info("开始遍历探测，共 %d 个 plus", len(self._ctx.flow.probe_boxes))
+
+        # 逐个点击探测
+        if self._ctx.flow.probe_plus_index < len(self._ctx.flow.probe_boxes):
+            box = self._ctx.flow.probe_boxes[self._ctx.flow.probe_plus_index]
+            self._ctx.flow.probe_plus_index += 1
+            logger.info(
+                "探测第 %d/%d 个 plus",
+                self._ctx.flow.probe_plus_index,
+                len(self._ctx.flow.probe_boxes),
+            )
+            return tap_box(self.adb, box, wait=1.0)
+
+        # 本页遍历完，重置状态并滑动继续
+        logger.info("本页遍历完成，滑动继续")
+        self._ctx.flow.probe_boxes = []
+        self._ctx.flow.probe_plus_index = 0
         return self._continue_find_target_in_friend_list()
 
     def _continue_find_target_in_friend_list(self) -> ActionResult:
@@ -487,6 +537,8 @@ class ExchangeCardsTask(Task):
             return ActionResult.wait(0.6)
 
         ocr_results = page_info.get("ocr_results", [])
+        target_friend_id = self._ctx.runtime.current_request.to_friend_id or ""
+
         extracted_friend_id: Optional[str] = None
         for item in ocr_results:
             extracted_friend_id = extract_friend_id_from_text(str(item.get("text", "")))
@@ -500,24 +552,95 @@ class ExchangeCardsTask(Task):
                 < MAX_FRIEND_PROFILE_READ_ROUNDS
             ):
                 return ActionResult.wait(0.6)
-            self._ctx.flow.action_cache.pop("friend_plus_clicked", None)
-        elif extracted_friend_id == (
-            self._ctx.runtime.current_request.to_friend_id or ""
-        ):
+            # 读取失败，关闭返回继续探测
+            self._ctx.flow.friend_profile_read_rounds = 0
+            click_close(
+                self.adb, self.page_detector, ocr_results, get_text_patterns("text_x")
+            )
+            return ActionResult.wait(0.5)
+
+        if extracted_friend_id == target_friend_id:
+            # 匹配成功
             self._ctx.target.friend_verified = True
             self._ctx.flow.action_cache.pop("friend_plus_clicked", None)
+
+            # 提取 nickname（如果没有的话）
+            if not self._ctx.target.nickname:
+                nickname = self._extract_nickname_from_profile(ocr_results)
+                if nickname and self.account.id:
+                    self._ctx.target.nickname = nickname
+                    logger.info("探测到好友昵称: %s -> %s", target_friend_id, nickname)
+                    # 持久化到 AccountFriendship
+                    FriendshipRepository().update_nickname(
+                        account_id=self.account.id,
+                        friend_id=target_friend_id,
+                        nickname=nickname,
+                    )
         else:
+            # 不匹配，继续探测
             self._ctx.target.friend_verified = False
             self._ctx.flow.action_cache.pop("friend_plus_clicked", None)
+            logger.debug(
+                "friend_id 不匹配: %s != %s",
+                extracted_friend_id,
+                target_friend_id,
+            )
 
         self._ctx.flow.friend_profile_read_rounds = 0
-        close_result = click_close(
-            self.adb,
-            self.page_detector,
-            ocr_results,
-            get_text_patterns("text_x"),
+        click_close(
+            self.adb, self.page_detector, ocr_results, get_text_patterns("text_x")
         )
-        return close_result or ActionResult.wait(0.8)
+        return ActionResult.wait(0.5)
+
+    def _extract_nickname_from_profile(self, ocr_results: list[dict]) -> Optional[str]:
+        """从好友详情页 OCR 提取昵称（friend_id 上方或附近的文本）。"""
+        if self._ctx.runtime.current_request is None:
+            return None
+
+        target_friend_id = self._ctx.runtime.current_request.to_friend_id or ""
+        normalized_target = "".join(ch for ch in target_friend_id if ch.isdigit())
+
+        # 找到 friend_id 的位置
+        anchor_box = None
+        for item in ocr_results:
+            text = str(item.get("text", ""))
+            digits = "".join(ch for ch in text if ch.isdigit())
+            if digits == normalized_target:
+                box = item.get("box")
+                if box and len(box) == 4:
+                    anchor_box = tuple(box)
+                    break
+
+        if not anchor_box:
+            return None
+
+        anchor_cy = (anchor_box[1] + anchor_box[3]) // 2
+        excluded = {"Lv", "lv", "ID", "id"}
+
+        # 在 friend_id 上方找候选昵称
+        candidates: list[tuple[int, str]] = []
+        for item in ocr_results:
+            text = str(item.get("text", "")).strip()
+            if not text or len(text) < 2:
+                continue
+            if any(text.startswith(p) for p in excluded):
+                continue
+            if text.replace("-", "").isdigit():
+                continue
+            box = item.get("box")
+            if not box or len(box) != 4:
+                continue
+            cy = (box[1] + box[3]) // 2
+            # 在 friend_id 上方 200 像素范围内
+            if anchor_cy - cy > 200 or cy >= anchor_cy:
+                continue
+            candidates.append((anchor_cy - cy, text))
+
+        if not candidates:
+            return None
+        # 选最近的
+        candidates.sort(key=lambda x: x[0])
+        return candidates[0][1]
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：筛选稀有度，扫描目标卡并点击。"""
