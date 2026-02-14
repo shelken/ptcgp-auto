@@ -9,7 +9,6 @@
 """
 
 import logging
-import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -21,6 +20,7 @@ from ptcgp_auto_v2.db.repositories import (
     FriendshipRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.tasks.utils.nickname_utils import (
     extract_nickname_by_lv,
     extract_nickname_near_friend_id,
@@ -37,7 +37,6 @@ from ptcgp_auto_v2.utils.gesture import (
 )
 
 logger = logging.getLogger(__name__)
-FRIEND_ID_PATTERN = re.compile(r"\d{4}-\d{4}-\d{4}-\d{4}")
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.core.hooks import Hook
@@ -306,17 +305,10 @@ class ManageFriendshipTask(Task):
                 return target.friend_id
         return None
 
-    def _extract_friend_id_from_text(self, text: str) -> Optional[str]:
-        """从文本提取标准 friend_id。"""
-        match = FRIEND_ID_PATTERN.search(text)
-        if not match:
-            return None
-        return match.group().replace("-", "")
-
     def _extract_friend_id_from_ocr(self, ocr_results: list[dict]) -> Optional[str]:
         """从 OCR 结果中提取首个 friend_id。"""
         for item in ocr_results:
-            friend_id = self._extract_friend_id_from_text(str(item.get("text", "")))
+            friend_id = extract_friend_id_from_text(str(item.get("text", "")))
             if friend_id:
                 return friend_id
         return None
@@ -425,7 +417,7 @@ class ManageFriendshipTask(Task):
 
         candidates: list[tuple[int, str]] = []
         for item in ocr_results:
-            friend_id = self._extract_friend_id_from_text(str(item.get("text", "")))
+            friend_id = extract_friend_id_from_text(str(item.get("text", "")))
             if not friend_id:
                 continue
             box = item.get("box")

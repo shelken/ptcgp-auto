@@ -12,7 +12,7 @@ def extract_nickname_near_friend_id(
     excluded_patterns: set[str],
     row_threshold_y: int = 140,
 ) -> Optional[str]:
-    """在包含目标 friend_id 的同一行提取昵称。"""
+    """在包含目标 friend_id 的同一行提取昵称（用于搜索结果页面）。"""
     normalized_target = "".join(ch for ch in (target_friend_id or "") if ch.isdigit())
     if not normalized_target:
         return None
@@ -66,7 +66,10 @@ def extract_nickname_by_lv(
     search_range_y: int,
     excluded_contains: list[str],
 ) -> Optional[str]:
-    """按 fetch_account_info 逻辑从 Lv 下方提取昵称。"""
+    """从 Lv 下方提取昵称（用于详情页面）。
+
+    好友详情页布局：Lv 在上方，昵称在 Lv 下方。
+    """
     lv_y = None
     for item in ocr_results:
         text = str(item.get("text", ""))
