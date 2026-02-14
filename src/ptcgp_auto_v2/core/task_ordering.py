@@ -52,9 +52,9 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
 
     if normalized_sort_by == TASK_SORT_BY_NEXT_RUN:
         if normalized_sort_order == "asc":
-            return [next_run_col.asc().nulls_last()]
-        return [next_run_col.desc().nulls_last()]
+            return [next_run_col.asc().nulls_first()]
+        return [next_run_col.desc().nulls_first()]
 
     if normalized_sort_order == "asc":
-        return [last_completed_col.asc().nulls_last()]
-    return [last_completed_col.desc().nulls_last()]
+        return [last_completed_col.asc().nulls_first()]
+    return [last_completed_col.desc().nulls_first()]
