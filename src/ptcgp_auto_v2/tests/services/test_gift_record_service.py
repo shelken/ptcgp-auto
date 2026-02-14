@@ -58,6 +58,26 @@ class TestGiftRecordService(unittest.TestCase):
         self.assertTrue(saved["called"])
 
     @patch("ptcgp_auto_v2.services.gift_record_service.TaskInstanceRepository")
+    def test_ensure_send_card_daily_pending_clear_next_run_at_when_already_pending(
+        self, repo_cls
+    ):
+        repo = repo_cls.return_value
+        saved = {"called": False}
+
+        def _save():
+            saved["called"] = True
+
+        instance = SimpleNamespace(status="pending", next_run_at=object(), save=_save)
+        repo.get_by_account_and_type.return_value = instance
+
+        result = GiftRecordService.ensure_send_card_daily_pending(account_id=8)
+
+        self.assertTrue(result)
+        self.assertEqual("pending", instance.status)
+        self.assertIsNone(instance.next_run_at)
+        self.assertTrue(saved["called"])
+
+    @patch("ptcgp_auto_v2.services.gift_record_service.TaskInstanceRepository")
     def test_ensure_claim_gifts_pending_create_when_missing(self, repo_cls):
         repo = repo_cls.return_value
         repo.get_by_account_and_type.return_value = None
@@ -90,6 +110,53 @@ class TestGiftRecordService(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual("pending", instance.status)
         self.assertTrue(saved["called"])
+
+    @patch("ptcgp_auto_v2.services.gift_record_service.TaskInstanceRepository")
+    def test_ensure_claim_gifts_pending_clear_next_run_at_when_already_pending(
+        self, repo_cls
+    ):
+        repo = repo_cls.return_value
+        saved = {"called": False}
+
+        def _save():
+            saved["called"] = True
+
+        instance = SimpleNamespace(status="pending", next_run_at=object(), save=_save)
+        repo.get_by_account_and_type.return_value = instance
+
+        result = GiftRecordService.ensure_claim_gifts_pending(account_id=8)
+
+        self.assertTrue(result)
+        self.assertEqual("pending", instance.status)
+        self.assertIsNone(instance.next_run_at)
+        self.assertTrue(saved["called"])
+
+    @patch("ptcgp_auto_v2.services.gift_record_service.AccountGiftRecordRepository")
+    def test_has_daily_attempt_false_when_record_missing(self, record_repo_cls):
+        record_repo = record_repo_cls.return_value
+        record_repo.get_daily_record.return_value = None
+
+        result = GiftRecordService.has_daily_attempt(account_id=1, target_friend_id="f")
+
+        self.assertFalse(result)
+
+    @patch("ptcgp_auto_v2.services.gift_record_service.AccountGiftRecordRepository")
+    def test_has_daily_attempt_false_when_status_init(self, record_repo_cls):
+        record_repo = record_repo_cls.return_value
+        record_repo.get_daily_record.return_value = SimpleNamespace(status="init")
+
+        result = GiftRecordService.has_daily_attempt(account_id=1, target_friend_id="f")
+
+        self.assertFalse(result)
+
+    @patch("ptcgp_auto_v2.services.gift_record_service.AccountGiftRecordRepository")
+    def test_has_daily_attempt_true_when_status_not_init(self, record_repo_cls):
+        record_repo = record_repo_cls.return_value
+        record_repo.get_daily_record.return_value = SimpleNamespace(status="failed")
+
+        result = GiftRecordService.has_daily_attempt(account_id=1, target_friend_id="f")
+
+        self.assertTrue(result)
 
     @patch("ptcgp_auto_v2.services.gift_record_service.AccountGiftRecordRepository")
     @patch("ptcgp_auto_v2.services.gift_record_service.AccountCardRepository")
