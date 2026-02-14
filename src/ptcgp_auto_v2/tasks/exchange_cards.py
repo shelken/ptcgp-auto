@@ -96,8 +96,21 @@ class ExchangeTaskContext:
 
 
 def _build_exchange_pages() -> list[dict]:
-    """构建交换任务页面识别规则。"""
+    """构建交换任务页面识别规则。
+
+    页面流转顺序（priority 越小越先匹配）：
+
+    sending 流程：
+      主页(10/20) → 社群(30) → 交换主页(40) → 选择好友(50) → 好友详情(55) →
+      选卡(60) → 筛选(65) → 确认页(70) → 发送弹窗(75) → 仅剩弹窗(76) → 提议完成(77)
+
+    sended 流程：
+      主页(10/20) → 社群(30) → 交换主页sended(41) → 点击確認 →
+        对方已送：receive_confirm(81) → receive_start(82)
+        对方未送：waiting_page(80) → cancel_confirm(83) → canceled_done(84)
+    """
     return [
+        # ===== 通用入口页面 =====
         {
             "name": "home_with_community_icon",
             "templates": ["icon_community"],
@@ -115,6 +128,7 @@ def _build_exchange_pages() -> list[dict]:
             "match_all": True,
             "priority": 30,
         },
+        # ===== sending 流程 =====
         {
             "name": "exchange_page_main",
             "identifiers": get_text_patterns("exchange_page"),
@@ -151,7 +165,7 @@ def _build_exchange_pages() -> list[dict]:
             "name": "exchange_target_confirm_page",
             "identifiers": get_text_patterns("exchange_target_confirm_page"),
             "match_all": True,
-            "exclude_identifiers": get_text_patterns("exchange_confirm_send_popup"),
+            "exclude_identifiers": get_text_patterns("exchange_waiting_page"),
             "priority": 70,
         },
         {
@@ -169,6 +183,7 @@ def _build_exchange_pages() -> list[dict]:
             "identifiers": get_text_patterns("exchange_proposed_done_popup"),
             "priority": 77,
         },
+        # ===== sended 流程 =====
         {
             "name": "exchange_waiting_page",
             "identifiers": get_text_patterns("exchange_waiting_page"),
