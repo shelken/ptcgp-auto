@@ -144,7 +144,7 @@
   "modal_title_reset_completed": "重置已完成任务",
   "desc_reset_completed_warning": "该操作会根据当前筛选条件，将已完成任务重置为待执行。",
   "desc_reset_completed_ignore_init": "初始化账号任务将被自动忽略。",
-  "desc_reset_completed_disabled": "仅在状态为"全部"或"已完成"时可用。",
+  "desc_reset_completed_disabled": "仅在状态为「全部」或「已完成」时可用。",
   "msg_reset_completed_done": "已重置 {count} 个任务",
   "msg_reset_completed_empty": "没有需要重置的任务",
   "label_task_config": "任务配置 (拖拽调整顺序)",
