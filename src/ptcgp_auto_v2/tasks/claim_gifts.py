@@ -23,7 +23,6 @@ from ptcgp_auto_v2.utils.gesture import (
     normalize_text,
     quick_tap,
     tap_box,
-    tap_home_icon,
     tap_text,
 )
 
@@ -81,12 +80,6 @@ def _build_claim_gifts_pages() -> list[dict]:
             "name": "gift_box_page",
             "identifiers": get_text_patterns("gift_box_page"),
             "priority": 15,
-        },
-        {
-            # 通用 home_icon：可点击回主页
-            "name": "home_icon",
-            "templates": ["icon_home"],
-            "priority": 50,
         },
     ]
 
@@ -149,7 +142,6 @@ class ClaimGiftsTask(Task):
             "card_register_page": self._handle_card_register,
             "popup_send_thanks": self._handle_send_thanks,
             "gift_box_page": self._handle_gift_box,
-            "home_icon": self._handle_home_icon,
         }
 
         handler = handlers.get(page_name)
@@ -286,8 +278,3 @@ class ClaimGiftsTask(Task):
                     return tap_box(self.adb, box, wait=1.5)
 
         return None
-
-    def _handle_home_icon(self, page_info: dict) -> ActionResult:
-        """点击主页图标回到游戏主页"""
-        logger.debug("  -> 点击主页图标回到游戏主页")
-        return tap_home_icon(self.adb, self.page_detector, wait=3.0)
