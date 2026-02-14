@@ -48,6 +48,7 @@ from ptcgp_auto_v2.tasks.utils.friend_card_flow import (
     find_send_button_for_target,
     find_target_search_plus_box,
 )
+from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
@@ -566,7 +567,11 @@ class ExchangeCardsTask(Task):
 
             # 提取 nickname（如果没有的话）
             if not self._ctx.target.nickname:
-                nickname = self._extract_nickname_from_profile(ocr_results)
+                nickname = extract_nickname_by_lv(
+                    ocr_results,
+                    search_range_y=self.adb.scaled_y(300),
+                    excluded_contains=list(get_text_patterns("profile_exclude")),
+                )
                 if nickname and self.account.id:
                     self._ctx.target.nickname = nickname
                     logger.info("探测到好友昵称: %s -> %s", target_friend_id, nickname)
@@ -591,56 +596,6 @@ class ExchangeCardsTask(Task):
             self.adb, self.page_detector, ocr_results, get_text_patterns("text_x")
         )
         return ActionResult.wait(0.5)
-
-    def _extract_nickname_from_profile(self, ocr_results: list[dict]) -> Optional[str]:
-        """从好友详情页 OCR 提取昵称（friend_id 上方或附近的文本）。"""
-        if self._ctx.runtime.current_request is None:
-            return None
-
-        target_friend_id = self._ctx.runtime.current_request.to_friend_id or ""
-        normalized_target = "".join(ch for ch in target_friend_id if ch.isdigit())
-
-        # 找到 friend_id 的位置
-        anchor_box = None
-        for item in ocr_results:
-            text = str(item.get("text", ""))
-            digits = "".join(ch for ch in text if ch.isdigit())
-            if digits == normalized_target:
-                box = item.get("box")
-                if box and len(box) == 4:
-                    anchor_box = tuple(box)
-                    break
-
-        if not anchor_box:
-            return None
-
-        anchor_cy = (anchor_box[1] + anchor_box[3]) // 2
-        excluded = {"Lv", "lv", "ID", "id"}
-
-        # 在 friend_id 上方找候选昵称
-        candidates: list[tuple[int, str]] = []
-        for item in ocr_results:
-            text = str(item.get("text", "")).strip()
-            if not text or len(text) < 2:
-                continue
-            if any(text.startswith(p) for p in excluded):
-                continue
-            if text.replace("-", "").isdigit():
-                continue
-            box = item.get("box")
-            if not box or len(box) != 4:
-                continue
-            cy = (box[1] + box[3]) // 2
-            # 在 friend_id 上方 200 像素范围内
-            if anchor_cy - cy > 200 or cy >= anchor_cy:
-                continue
-            candidates.append((anchor_cy - cy, text))
-
-        if not candidates:
-            return None
-        # 选最近的
-        candidates.sort(key=lambda x: x[0])
-        return candidates[0][1]
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：筛选稀有度，扫描目标卡并点击。"""
