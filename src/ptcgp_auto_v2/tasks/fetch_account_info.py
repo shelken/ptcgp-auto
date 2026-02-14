@@ -21,7 +21,6 @@ from ptcgp_auto_v2.core.task_base import (
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
-from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     quick_tap,
@@ -381,12 +380,43 @@ class FetchAccountInfoTask(Task):
         return None
 
     def _extract_nickname(self, ocr: list) -> Optional[str]:
-        """从 Lv. 下方提取昵称。"""
-        return extract_nickname_by_lv(
-            ocr_results=ocr,
-            search_range_y=self.adb.scaled_y(300),
-            excluded_contains=list(get_text_patterns("profile_exclude")),
-        )
+        """从 Lv. 下方提取昵称"""
+        lv_y = None
+        for item in ocr:
+            if item["text"].startswith("Lv"):
+                box = item["box"]
+                lv_y = (box[1] + box[3]) // 2
+                break
+        if not lv_y:
+            return None
+
+        exclude = get_text_patterns("profile_exclude")
+        search_range = self.adb.scaled_y(300)
+        candidates = []
+
+        for item in ocr:
+            text, box = item["text"], item["box"]
+            y = (box[1] + box[3]) // 2
+            if lv_y < y < lv_y + search_range:
+                if any(p in text for p in exclude):
+                    continue
+                if (
+                    "/" in text
+                    and text.replace(",", "")
+                    .replace("/", "")
+                    .replace(".", "")
+                    .isdigit()
+                ):
+                    continue
+                if text.replace(",", "").replace(".", "").isdigit():
+                    continue
+                if len(text) >= 2:
+                    candidates.append((text, y))
+
+        if candidates:
+            candidates.sort(key=lambda x: x[1])
+            return candidates[0][0]
+        return None
 
     def _extract_holdings_values(
         self, ocr: list
