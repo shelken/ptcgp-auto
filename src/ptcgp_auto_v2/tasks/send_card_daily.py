@@ -9,6 +9,7 @@
 """
 
 import logging
+from datetime import datetime, timedelta
 from typing import Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
@@ -243,6 +244,9 @@ class SendCardDailyTask(Task):
             return
 
         if not GiftPairingService.is_account_past_cooldown(self.account.created_at):
+            if self._is_same_day_pending_cooldown(self.account.created_at):
+                self._skip_reason = "账号未过14天冷冻期（同日待到期）"
+                return
             self._complete_reason = "账号未过14天冷冻期"
             self._completed = True
             return
@@ -284,6 +288,17 @@ class SendCardDailyTask(Task):
         )
 
         self._maybe_complete_for_pair_ordering()
+
+    def _is_same_day_pending_cooldown(self, created_at: Optional[datetime]) -> bool:
+        """判断账号是否同日待过冷冻期（未到时间但到期日与今天相同）。"""
+        if created_at is None:
+            return False
+        cooldown_days = getattr(GiftPairingService, "COOLDOWN_DAYS", 14)
+        if not isinstance(cooldown_days, int):
+            cooldown_days = 14
+        cooldown_at = created_at + timedelta(days=cooldown_days)
+        now = datetime.now()
+        return now < cooldown_at and now.date() == cooldown_at.date()
 
     def is_completed(self) -> bool:
         """任务是否完成。"""
