@@ -110,6 +110,37 @@ def _build_exchange_pages() -> list[dict]:
         对方未送：waiting_page(80) → cancel_confirm(83) → canceled_done(84)
     """
     return [
+        {
+            "name": "exchange_receive_start_popup",
+            "identifiers": get_text_patterns("exchange_receive_start_popup"),
+            "priority": 1,
+        },
+        {
+            "name": "exchange_cancel_confirm_popup",
+            "identifiers": get_text_patterns("exchange_cancel_confirm_popup"),
+            "priority": 2,
+        },
+        {
+            "name": "exchange_canceled_done_popup",
+            "identifiers": get_text_patterns("exchange_canceled_done_popup"),
+            "priority": 3,
+        },
+        
+        {
+            "name": "exchange_confirm_send_popup",
+            "identifiers": get_text_patterns("exchange_confirm_send_popup"),
+            "priority": 4,
+        },
+        {
+            "name": "exchange_confirm_last_popup",
+            "identifiers": get_text_patterns("exchange_confirm_last_card_popup"),
+            "priority": 5,
+        },
+        {
+            "name": "exchange_proposed_done_popup",
+            "identifiers": get_text_patterns("exchange_proposed_done_popup"),
+            "priority": 6,
+        },
         # ===== 通用入口页面 =====
         {
             "name": "home_with_community_icon",
@@ -166,21 +197,6 @@ def _build_exchange_pages() -> list[dict]:
             "identifiers": get_text_patterns("exchange_target_confirm_page"),
             "priority": 70,
         },
-        {
-            "name": "exchange_confirm_send_popup",
-            "identifiers": get_text_patterns("exchange_confirm_send_popup"),
-            "priority": 75,
-        },
-        {
-            "name": "exchange_confirm_last_popup",
-            "identifiers": get_text_patterns("exchange_confirm_last_card_popup"),
-            "priority": 76,
-        },
-        {
-            "name": "exchange_proposed_done_popup",
-            "identifiers": get_text_patterns("exchange_proposed_done_popup"),
-            "priority": 77,
-        },
         # ===== sended 流程 =====
         {
             "name": "exchange_waiting_page",
@@ -194,21 +210,7 @@ def _build_exchange_pages() -> list[dict]:
             "match_all": True,
             "priority": 81,
         },
-        {
-            "name": "exchange_receive_start_popup",
-            "identifiers": get_text_patterns("exchange_receive_start_popup"),
-            "priority": 82,
-        },
-        {
-            "name": "exchange_cancel_confirm_popup",
-            "identifiers": get_text_patterns("exchange_cancel_confirm_popup"),
-            "priority": 83,
-        },
-        {
-            "name": "exchange_canceled_done_popup",
-            "identifiers": get_text_patterns("exchange_canceled_done_popup"),
-            "priority": 84,
-        },
+        
     ]
 
 
