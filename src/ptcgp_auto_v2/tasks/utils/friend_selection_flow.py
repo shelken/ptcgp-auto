@@ -144,13 +144,21 @@ class FriendSelectionHelper:
         ocr_results: list[dict],
     ) -> Optional[tuple[int, int, int, int]]:
         """按锚点找发送/交换按钮。"""
+        return self.find_box_by_anchor(ocr_results, self.send_text_patterns)
+
+    def find_box_by_anchor(
+        self,
+        ocr_results: list[dict],
+        text_patterns: list[str],
+    ) -> Optional[tuple[int, int, int, int]]:
+        """按锚点在同一行查找指定文本框。"""
         if self.flow.verified_row_anchor_y is None:
             return None
 
         row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
         return find_send_box_near_anchor(
             ocr_results=ocr_results,
-            send_text_patterns=self.send_text_patterns,
+            send_text_patterns=text_patterns,
             anchor_y=self.flow.verified_row_anchor_y,
             row_threshold_y=row_threshold_y,
         )

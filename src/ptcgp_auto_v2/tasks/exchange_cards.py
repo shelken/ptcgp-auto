@@ -37,6 +37,7 @@ from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
     FriendSelectionFlow,
     FriendSelectionHelper,
 )
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.tasks.utils.rarity_filter import (
     FilterPanelState,
     handle_filter_panel,
@@ -60,7 +61,7 @@ from ptcgp_auto_v2.utils.gesture import (
 
 logger = logging.getLogger(__name__)
 
-RECHECK_DELAY_SECONDS = 300
+EXCHANGE_WINDOW_SECONDS = 300
 
 
 @dataclass
@@ -72,6 +73,7 @@ class ExchangeRuntimeState:
     complete_reason: Optional[str] = None
     delay_seconds: Optional[float] = None
     delay_reason: Optional[str] = None
+    recover_before_send: bool = False
 
 
 @dataclass
@@ -121,6 +123,11 @@ def _build_exchange_pages() -> list[dict]:
         {
             "name": "exchange_receive_start_popup",
             "identifiers": get_text_patterns("exchange_receive_start_popup"),
+            "priority": 2,
+        },
+        {
+            "name": "exchange_swipe_page",
+            "identifiers": get_text_patterns("exchange_swipe_to_send"),
             "priority": 2,
         },
         {
@@ -224,7 +231,7 @@ class ExchangeCardsTask(Task):
     reset_type = ResetType.ONCE
     pages = _build_exchange_pages()
     max_unknown_pages = 20
-    max_iterations = 220
+    max_iterations = 700
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
@@ -278,7 +285,7 @@ class ExchangeCardsTask(Task):
                 self._ctx.runtime.complete_reason = "交换请求已过期（未送出）"
                 return
             if request.status == "sended" and not request.cancel_reason:
-                request.cancel_reason = "等待对方回应超时，自动取消"
+                request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
                 request.updated_at = now
                 self._request_repo.update(request)
 
@@ -431,36 +438,29 @@ class ExchangeCardsTask(Task):
         return self._skipped
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """按页面分发处理。"""
+        """按页面分发处理（页面优先，状态判断下沉到各 handler）。"""
         if self._ctx.runtime.current_request is None:
             self._ctx.runtime.completed = True
             return ActionResult.ok(wait=0.2)
 
-        if page_name == "exchange_locked_popup":
-            return self._handle_exchange_locked_popup(page_info)
+        # 恢复重发流程：只有离开“取消完成”页面后才清除恢复标记。
+        if (
+            self._ctx.runtime.recover_before_send
+            and self._is_action_done("recover_cancel_done_clicked")
+            and page_name != "exchange_canceled_done_popup"
+        ):
+            self._ctx.runtime.recover_before_send = False
+            logger.info("已退出取消完成页面，进入重发流程")
 
-        if page_name in {"home_with_community_icon", "game_home_main"}:
-            return self._handle_home(page_info)
-        if page_name == "community_page":
-            return self._handle_community(page_info)
-        if page_name == "exchange_page_main":
-            return self._handle_exchange_page_main(page_info)
-
-        if self._ctx.runtime.current_request.status == "sending":
-            return self._handle_sending_pages(page_name, page_info)
-
-        if self._ctx.runtime.current_request.status == "sended":
-            return self._handle_sended_pages(page_name, page_info)
-
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = (
-            f"请求状态不可处理: {self._ctx.runtime.current_request.status}"
-        )
-        return ActionResult.ok(wait=0.2)
-
-    def _handle_sending_pages(self, page_name: str, page_info: dict) -> ActionResult:
-        """sending 阶段页面处理。"""
+        # 所有页面 handler 平级注册，不按 status 拦截
         handlers = {
+            # 通用入口
+            "exchange_locked_popup": self._handle_exchange_locked_popup,
+            "home_with_community_icon": self._handle_home,
+            "game_home_main": self._handle_home,
+            "community_page": self._handle_community,
+            "exchange_page_main": self._handle_exchange_page_main,
+            # sending 流程页面
             "exchange_choose_friend": self._handle_choose_friend,
             "exchange_select_card": self._handle_select_card,
             "exchange_filter_modal": self._handle_filter_modal,
@@ -468,24 +468,20 @@ class ExchangeCardsTask(Task):
             "exchange_confirm_send_popup": self._tap_ok_popup,
             "exchange_confirm_last_popup": self._tap_ok_popup,
             "exchange_proposed_done_popup": self._handle_proposed_done_popup,
-        }
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-        return ActionResult.wait(0.6)
-
-    def _handle_sended_pages(self, page_name: str, page_info: dict) -> ActionResult:
-        """sended 阶段页面处理。"""
-        handlers = {
+            # sended/取消/接受流程页面（全部放开，不限状态）
             "exchange_waiting_page": self._handle_waiting_page,
             "exchange_receive_confirm_page": self._handle_receive_confirm_page,
             "exchange_receive_start_popup": self._handle_receive_start_popup,
+            "exchange_swipe_page": self._handle_exchange_swipe_page,
             "exchange_cancel_confirm_popup": self._tap_ok_popup,
             "exchange_canceled_done_popup": self._handle_canceled_done_popup,
         }
+
         handler = handlers.get(page_name)
         if handler:
             return handler(page_info)
+
+        # 未知页面等待
         return ActionResult.wait(0.6)
 
     def _handle_home(self, page_info: dict) -> ActionResult:
@@ -504,11 +500,30 @@ class ExchangeCardsTask(Task):
         return result or ActionResult.wait(3)
 
     def _handle_exchange_page_main(self, page_info: dict) -> ActionResult:
-        """交换主页：sending 点击交换，sended 点击确认。"""
+        """交换主页：sending 点击交换，sended 优先点确认，其次点交换进入详情。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
         ocr_results = page_info.get("ocr_results", [])
         request = self._ctx.runtime.current_request
+        has_confirm = is_text_visible(
+            ocr_results, get_text_patterns("exchange_confirm_button"), exact=False
+        )
+        has_waiting = is_text_visible(
+            ocr_results, get_text_patterns("exchange_waiting_page"), exact=False
+        )
+
+        if request.status == "sending" and (has_confirm or has_waiting):
+            self._ctx.runtime.recover_before_send = True
+            logger.info("sending 阶段检测到已有提议，先走取消链路再重发")
+            if has_confirm:
+                confirm_result = tap_text_exact(
+                    self.adb,
+                    ocr_results,
+                    get_text_patterns("exchange_confirm_button"),
+                    wait=0.8,
+                )
+                return confirm_result or ActionResult.wait(0.6)
+            return ActionResult.wait(0.8)
 
         if request.status == "sending":
             result = tap_text_exact(
@@ -520,9 +535,6 @@ class ExchangeCardsTask(Task):
             return result or ActionResult.wait(0.6)
 
         if request.status == "sended":
-            has_confirm = is_text_visible(
-                ocr_results, get_text_patterns("exchange_confirm_button"), exact=False
-            )
             if has_confirm:
                 result = tap_text_exact(
                     self.adb,
@@ -531,12 +543,18 @@ class ExchangeCardsTask(Task):
                     wait=0.8,
                 )
                 return result or ActionResult.wait(0.6)
-            else:
-                logger.info("sended 状态但未看到確認按钮，交换已失效，标记取消")
-                self._request_repo.mark_canceled(request, reason="交换已失效")
-                self._ctx.runtime.completed = True
-                self._ctx.runtime.complete_reason = "交换已失效"
-                return ActionResult.ok(wait=0.3)
+
+            open_result = tap_text_exact(
+                self.adb,
+                ocr_results,
+                get_text_patterns("exchange_send_button"),
+                wait=0.8,
+            )
+            if open_result:
+                return open_result
+
+            logger.debug("sended 状态暂未识别到入口，等待后重试（避免过早OCR误判）")
+            return ActionResult.wait(1.0)
 
         logger.warning("请求状态不可处理: %s", request.status)
         return ActionResult.wait(0.6)
@@ -560,6 +578,12 @@ class ExchangeCardsTask(Task):
             send_box = self._friend_helper.find_send_box_by_anchor(ocr_results)
             if send_box:
                 return tap_box(self.adb, send_box, wait=1.0)
+            in_progress_box = self._friend_helper.find_box_by_anchor(
+                ocr_results,
+                get_text_patterns("exchange_in_progress"),
+            )
+            if in_progress_box:
+                return self._fail_and_complete("目标好友正在交换中，无法发起交换")
             return self._friend_helper.scroll_or_fail()
 
         if self._ctx.friend_flow.nickname:
@@ -724,52 +748,92 @@ class ExchangeCardsTask(Task):
         return result or ActionResult.wait(0.6)
 
     def _handle_proposed_done_popup(self, page_info: dict) -> ActionResult:
-        """提议完成弹窗：确认后写入 sended 并延时复查。"""
+        """提议完成弹窗：确认后写入 sended，并在当前任务内进入等待窗口。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
         if not result:
             return ActionResult.wait(0.6)
 
+        self._ctx.runtime.current_request.expire_at = None
+        self._ctx.runtime.current_request.cancel_reason = None
         self._request_repo.mark_sended(
             self._ctx.runtime.current_request,
-            next_check_at=datetime.now() + timedelta(seconds=RECHECK_DELAY_SECONDS),
+            next_check_at=None,
         )
-        self._set_delay("交换请求已送出，等待复查")
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = "交换请求已送出，等待复查"
-        return result
+        logger.info("交换已送出，进入 5 分钟等待窗口内持续检查")
+        return ActionResult.ok(wait=1.0)
 
     def _handle_waiting_page(self, page_info: dict) -> ActionResult:
-        """等待对方回应页面：超时/取消走取消链路，否则延后复查。"""
+        """等待对方回应页面：窗口内持续轮询，超时后走取消链路。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
         now = datetime.now()
 
-        cancel_reason = self._ctx.runtime.current_request.cancel_reason
-
-        if cancel_reason:
+        request = self._ctx.runtime.current_request
+        cancel_reason = request.cancel_reason
+        cancel_mode = self._ctx.runtime.recover_before_send or bool(cancel_reason)
+        logger.debug(
+            "[waiting_page] cancel_mode=%s, recover=%s, cancel_reason=%s, action_done=%s",
+            cancel_mode,
+            self._ctx.runtime.recover_before_send,
+            cancel_reason,
+            self._is_action_done("waiting_cancel_clicked"),
+        )
+        if cancel_mode:
             if not self._is_action_done("waiting_cancel_clicked"):
+                has_cancel = is_text_visible(
+                    page_info.get("ocr_results", []),
+                    get_text_patterns("exchange_cancel_button"),
+                    exact=True,
+                )
+                logger.debug("[waiting_page] 取消按钮可见: %s", has_cancel)
                 cancel_result = tap_text_exact(
                     self.adb,
                     page_info.get("ocr_results", []),
                     get_text_patterns("exchange_cancel_button"),
                     wait=0.8,
                 )
+                logger.debug("[waiting_page] 点击取消结果: %s", cancel_result)
                 if cancel_result:
                     self._mark_action_done("waiting_cancel_clicked")
                     return cancel_result
+                else:
+                    logger.warning("[waiting_page] 取消模式但点击失败，继续等待")
             return ActionResult.wait(0.6)
 
-        self._ctx.runtime.current_request.next_check_at = now + timedelta(
-            seconds=RECHECK_DELAY_SECONDS
+        if not self._is_action_done("waiting_window_started"):
+            request.expire_at = now + timedelta(seconds=EXCHANGE_WINDOW_SECONDS)
+            request.updated_at = now
+            self._request_repo.update(request)
+            self._mark_action_done("waiting_window_started")
+            logger.info(
+                "进入等待页，启动5分钟交换窗口: request_id=%s, expire_at=%s",
+                request.id,
+                request.expire_at,
+            )
+
+        if (
+            not cancel_reason
+            and request.expire_at is not None
+            and now >= request.expire_at
+        ):
+            request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
+            request.updated_at = now
+            self._request_repo.update(request)
+            cancel_reason = request.cancel_reason
+            logger.info("等待窗口超时，开始取消交换: request_id=%s", request.id)
+
+        if cancel_reason:
+            return ActionResult.wait(0.6)
+
+        refresh_result = tap_template(
+            self.adb, self.page_detector, "btn_close", wait=0.8
         )
-        self._ctx.runtime.current_request.updated_at = now
-        self._request_repo.update(self._ctx.runtime.current_request)
-        self._set_delay("等待对方回应，延时复查")
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = "等待对方回应，延时复查"
-        return ActionResult.ok(wait=0.4)
+        if refresh_result:
+            logger.debug("等待窗口轮询：返回交换主页后重新点击确认刷新状态")
+            return refresh_result
+        return ActionResult.wait(1.0)
 
     def _handle_receive_confirm_page(self, page_info: dict) -> ActionResult:
         """对方已回应页面：确认交换或拒绝。"""
@@ -800,16 +864,57 @@ class ExchangeCardsTask(Task):
         return exchange_result or ActionResult.wait(0.6)
 
     def _handle_receive_start_popup(self, page_info: dict) -> ActionResult:
-        """开始交换确认弹窗：OK 后标记 completed。"""
+        """开始交换确认弹窗：点击 OK 后进入滑卡完成页。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
         if not result:
             return ActionResult.wait(0.6)
-        self._request_repo.mark_completed(self._ctx.runtime.current_request)
+        return ActionResult.ok(wait=0.8)
+
+    def _handle_exchange_swipe_page(self, page_info: dict) -> ActionResult:
+        """交换完成滑卡页：上滑后再落库 completed。"""
+        if self._ctx.runtime.current_request is None:
+            return ActionResult.wait(0.6)
+        if self._is_action_done("exchange_swiped"):
+            return ActionResult.ok(wait=0.5)
+
+        swipe_result = swipe_card_register(self.adb, wait=1.0)
+        if not swipe_result.success:
+            return swipe_result
+
+        self._mark_action_done("exchange_swiped")
+        self._finalize_exchange_success()
         self._ctx.runtime.completed = True
         self._ctx.runtime.complete_reason = "交换完成"
-        return result
+        return ActionResult.ok(wait=0.8)
+
+    def _finalize_exchange_success(self):
+        """交换成功后同步请求状态与发送方库存。"""
+        request = self._ctx.runtime.current_request
+        if request is None:
+            return
+
+        self._request_repo.mark_completed(request)
+
+        if self.account.id is None:
+            return
+        card_id = request.target_card_id
+        if card_id is None:
+            return
+
+        row = self._account_card_repo.get(self.account.id, card_id)
+        if row is None:
+            return
+
+        new_count = max(int(row.count) - 1, 0)
+        self._account_card_repo.upsert(
+            account_id=self.account.id,
+            card_id=card_id,
+            count=new_count,
+            yolo_conf=getattr(row, "yolo_conf", None),
+            hash_similarity=getattr(row, "hash_similarity", None),
+        )
 
     def _handle_canceled_done_popup(self, page_info: dict) -> ActionResult:
         """取消完成弹窗：点击 OK 并落库 canceled。"""
@@ -819,17 +924,34 @@ class ExchangeCardsTask(Task):
         if not result:
             return ActionResult.wait(0.6)
 
+        if self._ctx.runtime.recover_before_send:
+            if not self._is_action_done("recover_cancel_done_clicked"):
+                self._ctx.runtime.current_request.cancel_reason = None
+                self._ctx.runtime.current_request.expire_at = None
+                self._ctx.runtime.current_request.next_check_at = None
+                self._ctx.runtime.current_request.updated_at = datetime.now()
+                self._request_repo.update(self._ctx.runtime.current_request)
+                self._mark_action_done("recover_cancel_done_clicked")
+                logger.info("旧提议已取消，等待页面退出后继续重发")
+            else:
+                logger.debug("取消完成页仍停留，继续点击 OK 等待退出")
+            return ActionResult.ok(wait=1.0)
+
         reason = self._ctx.runtime.current_request.cancel_reason or "交换已取消"
-        self._request_repo.mark_canceled(
-            self._ctx.runtime.current_request, reason=reason
-        )
+        if "超时" in reason:
+            self._request_repo.mark_failed(self._ctx.runtime.current_request, reason)
+            self._ctx.runtime.complete_reason = "交换超时失败"
+        else:
+            self._request_repo.mark_canceled(
+                self._ctx.runtime.current_request, reason=reason
+            )
+            self._ctx.runtime.complete_reason = "交换已取消"
         self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = "交换已取消"
         return result
 
     def _set_delay(self, reason: str):
         """设置后置 Hook 使用的延时信息。"""
-        self._ctx.runtime.delay_seconds = float(RECHECK_DELAY_SECONDS)
+        self._ctx.runtime.delay_seconds = float(EXCHANGE_WINDOW_SECONDS)
         self._ctx.runtime.delay_reason = reason
 
     def _mark_skipped(self, reason: str):
