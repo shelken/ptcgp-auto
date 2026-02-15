@@ -38,6 +38,7 @@ class TestFriendPreHookDelay(unittest.TestCase):
             to_account_id=7,
         )
         service_mock.is_friend.return_value = False
+        service_mock.expire_add_request_if_needed.return_value = False
 
         result, data = self.hook.run(self.context)
 
@@ -56,6 +57,7 @@ class TestFriendPreHookDelay(unittest.TestCase):
             to_account_id=None,
         )
         service_mock.is_friend.return_value = False
+        service_mock.expire_add_request_if_needed.return_value = False
 
         result, data = self.hook.run(self.context)
 

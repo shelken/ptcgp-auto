@@ -20,6 +20,7 @@ from ptcgp_auto_v2.db.repositories import (
     FriendshipRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.services import FriendshipService
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
@@ -139,6 +140,8 @@ class ManageFriendshipTask(Task):
         self._accept_whitelist = self._collect_accept_whitelist()
 
         self.requests_to_process = self._get_pending_requests()
+        if self._expire_stale_add_requests():
+            self.requests_to_process = self._get_pending_requests()
         self._log_pending_request_order("start")
         logger.info(
             "manage_friendship 待处理请求: sending=%s, sended=%s, deleting=%s",
@@ -167,6 +170,16 @@ class ManageFriendshipTask(Task):
         if not self.requests_to_process:
             self._completed = True
             logger.info("没有待处理的好友请求，任务完成")
+
+    def _expire_stale_add_requests(self) -> bool:
+        """启动时清理已过期的 add 请求，避免长期卡住。"""
+        changed = False
+        now = datetime.now()
+        for req in self.requests_to_process:
+            if FriendshipService.expire_add_request_if_needed(req, now=now):
+                logger.info("好友请求已过期并标记失败: id=%s", getattr(req, "id", None))
+                changed = True
+        return changed
 
     def is_completed(self) -> bool:
         """返回任务是否完成。"""

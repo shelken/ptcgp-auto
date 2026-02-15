@@ -6,7 +6,7 @@
 """
 
 from typing import Optional, TYPE_CHECKING
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
@@ -27,6 +27,53 @@ class FriendshipService:
     供 Hook 和外部任务调用的开放接口。
     通过创建数据库记录 + 触发 TaskInstance 来实现任务调度。
     """
+
+    EXTERNAL_ADD_REQUEST_EXPIRE_MINUTES = 10
+    INTERNAL_ADD_REQUEST_EXPIRE_MINUTES = 30
+
+    @staticmethod
+    def _get_add_request_expire_minutes(to_account_id: Optional[int]) -> int:
+        """根据目标类型返回 add 请求过期分钟数。"""
+        if to_account_id is None:
+            return FriendshipService.EXTERNAL_ADD_REQUEST_EXPIRE_MINUTES
+        return FriendshipService.INTERNAL_ADD_REQUEST_EXPIRE_MINUTES
+
+    @staticmethod
+    def is_add_request_expired(
+        request: "AccountFriendRequest",
+        now: Optional[datetime] = None,
+    ) -> bool:
+        """判断 add 请求是否已过期。"""
+        if request.request_type != "add" or request.status not in {"sending", "sended"}:
+            return False
+
+        created_at = getattr(request, "created_at", None)
+        if not isinstance(created_at, datetime):
+            return False
+
+        current = now or datetime.now()
+        expire_minutes = FriendshipService._get_add_request_expire_minutes(
+            getattr(request, "to_account_id", None)
+        )
+        return created_at <= current - timedelta(minutes=expire_minutes)
+
+    @staticmethod
+    def expire_add_request_if_needed(
+        request: "AccountFriendRequest",
+        now: Optional[datetime] = None,
+    ) -> bool:
+        """若 add 请求过期则标记 failed 并持久化。"""
+        if not FriendshipService.is_add_request_expired(request, now=now):
+            return False
+
+        expire_minutes = FriendshipService._get_add_request_expire_minutes(
+            getattr(request, "to_account_id", None)
+        )
+        request.status = "failed"
+        request.failed_reason = f"好友请求超时未处理（{expire_minutes}分钟）"
+        request.updated_at = now or datetime.now()
+        FriendRequestRepository().update(request)
+        return True
 
     @staticmethod
     def create_add_request(
@@ -75,10 +122,13 @@ class FriendshipService:
         ):
             return None
 
-        # 待处理 add 请求去重（sending/sended）
-        if FriendRequestRepository().has_pending_add_request(
+        # 待处理 add 请求去重（sending/sended），过期请求先自动置 failed。
+        existing = FriendRequestRepository().get_pending_request(
             from_account_id=from_account_id,
             to_friend_id=normalized_friend_id,
+        )
+        if existing is not None and not FriendshipService.expire_add_request_if_needed(
+            existing
         ):
             return None
 
