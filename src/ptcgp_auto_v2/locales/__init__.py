@@ -9,6 +9,7 @@ import importlib
 import logging
 from typing import List, Dict, Any
 
+from ptcgp_auto_v2.config.constants import DEFAULT_LOCALE
 from ptcgp_auto_v2.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -26,22 +27,24 @@ def get_locale_module():
         return _loaded_locales[locale_name]
 
     try:
-        # 动态导入模块，例如 ptcgp_auto_v2.locales.zh_Hant
+        # 动态导入模块，例如 ptcgp_auto_v2.locales.en_US
         module_path = f"ptcgp_auto_v2.locales.{locale_name}"
         module = importlib.import_module(module_path)
         _loaded_locales[locale_name] = module
         logger.debug(f"已加载语言包: {locale_name}")
         return module
     except ImportError:
-        logger.error(f"无法加载语言包: {locale_name}，回退到 zh_Hant")
+        logger.error(f"无法加载语言包: {locale_name}，回退到 {DEFAULT_LOCALE}")
         # 回退机制
-        if locale_name != "zh_Hant":
+        if locale_name != DEFAULT_LOCALE:
             try:
-                fallback_module = importlib.import_module("ptcgp_auto_v2.locales.zh_Hant")
-                _loaded_locales["zh_Hant"] = fallback_module
+                fallback_module = importlib.import_module(
+                    f"ptcgp_auto_v2.locales.{DEFAULT_LOCALE}"
+                )
+                _loaded_locales[DEFAULT_LOCALE] = fallback_module
                 return fallback_module
             except ImportError:
-                logger.critical("无法加载默认语言包 zh_Hant")
+                logger.critical(f"无法加载默认语言包 {DEFAULT_LOCALE}")
                 raise
         raise
 
@@ -50,6 +53,7 @@ def get_all_text_patterns() -> dict:
     """获取完整的 TEXT_PATTERNS 字典"""
     module = get_locale_module()
     return getattr(module, "TEXT_PATTERNS", {})
+
 
 def get_text_patterns(key: str) -> List[str]:
     """
