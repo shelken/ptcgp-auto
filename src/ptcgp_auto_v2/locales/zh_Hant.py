@@ -5,8 +5,6 @@
 
 TEXT_PATTERNS = {
     # 开包入口
-    "pack_entry": ["卡包", "擴充包", "扩充包"],
-    # 系列切换
     "series": {
         "A": ["A系列"],
         "B": ["B系列"],
@@ -23,14 +21,10 @@ TEXT_PATTERNS = {
         "縮短開封卡牌包的等待時間嗎",
         "使用道具立刻開封擴充包",
     ],
-    "pack_hourglass_title": ["開包沙漏"],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
     "pack_card_register": ["向上輕滑卡牌"],
-    "pack_collection_result": ["繼續"],
-    "pack_collection_exclude": ["開封結果", "點擊來繼續", "點擊以繼續"],
-    # 个人资料页
     "profile_page": ["朋友ID"],
     "profile_exclude": [
         "朋友ID",
@@ -76,10 +70,7 @@ TEXT_PATTERNS = {
     # 通用页面
     "popup_ok": ["OK", "ОК"],  # 支持英文OK和俄文ОК（西里尔字母）
     "text_cancel": ["取消"],
-    "text_ok": ["OK", "ОК"],  # 支持英文OK和俄文ОК（西里尔字母）
-    "text_retry": ["再試一次"],
     "text_x": ["x"],
-    "text_task": ["任務"],
     "continue_button": ["繼續"],
     "tap_to_continue": ["點擊來繼續"],
     "game_open_page": ["點擊畫面開始遊戲"],
@@ -97,7 +88,6 @@ TEXT_PATTERNS = {
     "_to_home": ["首页", "重新加载"],
     "text_home": ["首页"],
     # 通用按钮
-    "confirm": ["確認", "确认", "OK"],
     "continue": ["繼續", "继续", "Continue"],
     "back_button": ["返回", "返回上一頁", "返回上一页", "Back"],
     "close_button": ["×"],
@@ -107,19 +97,6 @@ TEXT_PATTERNS = {
     # 任务奖励领取相关
     # ============================================================
     # 任务奖励页面识别：通过 Tab 栏识别（每日/圖鑑/牌組/掉落）
-    "rewards_page_tabs": ["每日", "圖鑑", "牌組", "掉落"],
-    # Tab 名称（用于点击切换）
-    "rewards_tab_daily": ["每日"],
-    "rewards_tab_collection": ["圖鑑"],
-    "rewards_tab_deck": ["牌組"],
-    "rewards_tab_drop": ["掉落"],
-    "rewards_tab_account_link": ["帳號連結"],
-    "rewards_tab_premium": ["特級"],
-    "rewards_tab_elite_deck": ["精英牌組"],
-    "rewards_tab_convenient_cards": ["便利卡牌"],
-    "rewards_tab_reward_week": ["獎勵週"],
-    "rewards_tab_medal": ["勳章"],
-    # 可点击的领取按钮（按优先级排序：全部領取 > 領取 > 達成）
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     # 需要颜色检查的"全部領取"按钮（用于避免点击置灰按钮）
     "reward_claim_all": ["全部領取"],
@@ -149,8 +126,6 @@ TEXT_PATTERNS = {
     "gift_page_main": ["紀錄", "分送"],
     "gift_choose_friend_title": ["請選擇朋友"],
     "gift_choose_friend_empty": ["沒有朋友"],
-    "gift_friend_unavailable_today": ["今天已分送過卡牌"],
-    "gift_friend_unavailable_limit": ["已達可領取分送卡牌的上限"],
     "gift_select_card_title": ["請選擇要分送的卡牌"],
     "gift_filter_modal_title": ["我的最愛", "清除", "OK"],
     "gift_filter_clear": ["清除"],
@@ -204,7 +179,6 @@ TEXT_PATTERNS = {
     "init_decide": ["決定"],
     "init_swipe_open": ["橫向滑動來開封"],
     "init_next_step": ["下一步"],
-    "init_mission": ["任務"],
     "init_open_pack": ["開封"],
     "init_enjoy": ["請好好享受", "隨意遊玩"],
     "init_tap_to_flip": ["點擊來翻開卡牌吧"],
@@ -213,24 +187,12 @@ TEXT_PATTERNS = {
     # 好友关系管理相关
     # ============================================================
     "friend_list": ["朋友數", "朋友", "申請中", "需回覆"],
-    "friend_search": ["搜尋玩家"],
-    "friend_add": ["新增好友"],
-    "send_friend_request_confirm": ["送出好友申請"],
-    "request_sent": ["申請已送出"],
-    "friend_requests": ["交友申請"],
     "accept": ["接受"],
     "friend_profile": ["朋友ID", "戰績"],
-    "remove_friend_confirm": ["要移除朋友嗎？"],
     "friend_page_list": ["朋友數", "朋友", "申請中", "需回覆"],
     "friend_page_search_result": ["搜尋結果"],
-    "friend_page_profile": ["朋友ID", "戰績"],
     "friend_tab_friends": ["朋友"],
-    "friend_tab_pending": ["申請中"],
-    "friend_tab_need_reply": ["需回覆"],
-    "friend_search_result": ["搜尋結果"],
     "friend_cancel_request": ["取消交友邀請"],
-    "friend_request_sent_done": ["已送出交友邀請", "已送出交友邀請。"],
     "friend_apply_button": ["申請"],
-    "friend_input_id": ["輸入朋友ID"],
     "friend_remove_confirm_title": ["要移除朋友嗎？"],
 }
