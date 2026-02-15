@@ -41,7 +41,10 @@ from ptcgp_auto_v2.tasks.utils.rarity_filter import (
     FilterPanelState,
     handle_filter_panel,
 )
-from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
+from ptcgp_auto_v2.utils.account_cooldown import (
+    is_account_past_days,
+    is_account_pending_same_day_cooldown,
+)
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
@@ -111,35 +114,39 @@ def _build_exchange_pages() -> list[dict]:
     """
     return [
         {
+            "name": "exchange_locked_popup",
+            "identifiers": get_text_patterns("exchange_locked_popup"),
+            "priority": 1,
+        },
+        {
             "name": "exchange_receive_start_popup",
             "identifiers": get_text_patterns("exchange_receive_start_popup"),
-            "priority": 1,
+            "priority": 2,
         },
         {
             "name": "exchange_cancel_confirm_popup",
             "identifiers": get_text_patterns("exchange_cancel_confirm_popup"),
-            "priority": 2,
+            "priority": 3,
         },
         {
             "name": "exchange_canceled_done_popup",
             "identifiers": get_text_patterns("exchange_canceled_done_popup"),
-            "priority": 3,
+            "priority": 4,
         },
-        
         {
             "name": "exchange_confirm_send_popup",
             "identifiers": get_text_patterns("exchange_confirm_send_popup"),
-            "priority": 4,
+            "priority": 5,
         },
         {
             "name": "exchange_confirm_last_popup",
             "identifiers": get_text_patterns("exchange_confirm_last_card_popup"),
-            "priority": 5,
+            "priority": 6,
         },
         {
             "name": "exchange_proposed_done_popup",
             "identifiers": get_text_patterns("exchange_proposed_done_popup"),
-            "priority": 6,
+            "priority": 7,
         },
         # ===== 通用入口页面 =====
         {
@@ -210,7 +217,6 @@ def _build_exchange_pages() -> list[dict]:
             "match_all": True,
             "priority": 81,
         },
-        
     ]
 
 
@@ -241,6 +247,8 @@ class ExchangeCardsTask(Task):
         self._action_cache: dict[str, bool] = {}
         self._filter_state = FilterPanelState()
         self._friend_helper: Optional[FriendSelectionHelper] = None
+        self._skipped = False
+        self._skip_reason: Optional[str] = None
 
     def on_start(self):
         """加载请求并执行前置校验。"""
@@ -249,6 +257,8 @@ class ExchangeCardsTask(Task):
         self._last_card_signature = None
         self._action_cache = {}
         self._filter_state = FilterPanelState()
+        self._skipped = False
+        self._skip_reason = None
 
         if self.account.id is None:
             self._ctx.runtime.completed = True
@@ -263,6 +273,9 @@ class ExchangeCardsTask(Task):
         self._ctx.runtime.current_request = request
 
         if not is_account_past_days(self.account.created_at, 14):
+            if is_account_pending_same_day_cooldown(self.account.created_at, 14):
+                self._mark_skipped("账号未过14天冷冻期（同日待到期）")
+                return
             self._fail_request("账号未过14天冷静期")
             return
 
@@ -329,7 +342,15 @@ class ExchangeCardsTask(Task):
         )
 
     def _on_scroll_exhausted(self, reason: str) -> ActionResult:
-        """滑动耗尽回调。"""
+        """滑动耗尽回调：删除好友关系后失败。"""
+        request = self._ctx.runtime.current_request
+        if request and self.account.id and request.to_friend_id:
+            FriendshipRepository().delete(self.account.id, request.to_friend_id)
+            logger.info(
+                "好友关系已删除: account=%s, friend_id=%s",
+                self.account.id,
+                request.to_friend_id,
+            )
         return self._fail_and_complete(reason)
 
     def _preflight_validate(self):
@@ -385,11 +406,18 @@ class ExchangeCardsTask(Task):
         """任务是否收敛。"""
         return self._ctx.runtime.completed
 
+    def was_skipped(self) -> bool:
+        """任务是否以跳过态收敛。"""
+        return self._skipped
+
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """按页面分发处理。"""
         if self._ctx.runtime.current_request is None:
             self._ctx.runtime.completed = True
             return ActionResult.ok(wait=0.2)
+
+        if page_name == "exchange_locked_popup":
+            return self._handle_exchange_locked_popup(page_info)
 
         if page_name in {"home_with_community_icon", "game_home_main"}:
             return self._handle_home(page_info)
@@ -507,16 +535,17 @@ class ExchangeCardsTask(Task):
         ):
             return self._fail_and_complete("好友列表为空，无法执行交换")
 
-        if self._friend_helper.update_signature_and_check_stable(ocr_results):
-            return self._friend_helper.scroll_or_fail()
-
         if self._ctx.friend_flow.friend_verified:
+            logger.debug("[选择好友] 已验证，寻找发送按钮")
             send_box = self._friend_helper.find_send_box_by_anchor(ocr_results)
             if send_box:
                 return tap_box(self.adb, send_box, wait=1.0)
             return self._friend_helper.scroll_or_fail()
 
         if self._ctx.friend_flow.nickname:
+            logger.debug(
+                "[选择好友] 有昵称，寻找对应 plus: %s", self._ctx.friend_flow.nickname
+            )
             plus_box = self._friend_helper.find_plus_for_nickname(
                 ocr_results, self._ctx.friend_flow.nickname
             )
@@ -524,9 +553,21 @@ class ExchangeCardsTask(Task):
                 return self._friend_helper.tap_plus_and_wait_profile(plus_box)
             return self._friend_helper.scroll_or_fail()
 
-        probe_box = self._friend_helper.get_next_probe_box()
-        if probe_box:
-            return self._friend_helper.tap_plus_and_wait_profile(probe_box)
+        if self._ctx.friend_flow.is_in_probe_mode():
+            if self._friend_helper.check_scroll_bottom():
+                return self._fail_and_complete("已滑到底部，未找到目标好友")
+            logger.debug(
+                "[选择好友] 探测模式，当前 probe_index=%d, probe_boxes=%d",
+                self._ctx.friend_flow.probe_index,
+                len(self._ctx.friend_flow.probe_boxes),
+            )
+            probe_box = self._friend_helper.get_next_probe_box()
+            if probe_box:
+                return self._friend_helper.tap_plus_and_wait_profile(probe_box)
+            logger.debug("[选择好友] 本页探测完成，准备滑动")
+            self._ctx.friend_flow.stable_rounds = 0
+            return self._friend_helper.scroll_or_fail()
+
         return self._friend_helper.scroll_or_fail()
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
@@ -771,6 +812,21 @@ class ExchangeCardsTask(Task):
         """设置后置 Hook 使用的延时信息。"""
         self._ctx.runtime.delay_seconds = float(RECHECK_DELAY_SECONDS)
         self._ctx.runtime.delay_reason = reason
+
+    def _mark_skipped(self, reason: str):
+        """将当前任务标记为跳过并结束。"""
+        self._skipped = True
+        self._skip_reason = reason
+        self._ctx.runtime.completed = True
+        self._ctx.runtime.complete_reason = reason
+
+    def _handle_exchange_locked_popup(self, page_info: dict) -> ActionResult:
+        """交换功能未解锁弹窗：点击 OK 并跳过。"""
+        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
+        if not result:
+            return ActionResult.wait(0.6)
+        self._mark_skipped("交换功能未解锁（14天冷冻期未到）")
+        return result
 
     def _fail_request(self, reason: str):
         """将当前请求标记失败并结束任务。"""

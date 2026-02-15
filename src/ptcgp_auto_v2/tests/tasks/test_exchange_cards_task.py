@@ -139,6 +139,58 @@ class TestExchangeCardsTask(unittest.TestCase):
         self.assertTrue(task.is_completed())
         repo.mark_failed.assert_called_once()
 
+    def test_on_start_skips_when_same_day_pending_cooldown(self):
+        """同日待过冷冻期时，应跳过而不是失败。"""
+        task = cast(Any, self.task)
+        request = SimpleNamespace(
+            id=21,
+            from_account_id=1,
+            to_account_id=2,
+            to_friend_id="1234567890123456",
+            target_card_id=2001,
+            target_card_rarity="R",
+            status="sended",
+            next_check_at=None,
+            expire_at=datetime.now() + timedelta(minutes=30),
+            updated_at=None,
+        )
+        repo = SimpleNamespace(
+            get_active_by_account=Mock(return_value=request),
+            mark_failed=Mock(return_value=request),
+        )
+        task._request_repo = repo
+
+        with (
+            patch(
+                "ptcgp_auto_v2.tasks.exchange_cards.is_account_past_days",
+                return_value=False,
+            ),
+            patch(
+                "ptcgp_auto_v2.tasks.exchange_cards.is_account_pending_same_day_cooldown",
+                return_value=True,
+            ),
+        ):
+            task.on_start()
+
+        self.assertTrue(task.is_completed())
+        self.assertTrue(task.was_skipped())
+        self.assertEqual("账号未过14天冷冻期（同日待到期）", task._skip_reason)
+        repo.mark_failed.assert_not_called()
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_ok")
+    def test_locked_popup_should_skip(self, tap_ok_mock):
+        """交换未解锁弹窗应点击 OK 并跳过。"""
+        task = cast(Any, self.task)
+        task._ctx.runtime.current_request = SimpleNamespace(id=1)
+        tap_ok_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task.handle_page("exchange_locked_popup", {"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertTrue(task.is_completed())
+        self.assertTrue(task.was_skipped())
+        self.assertEqual("交换功能未解锁（14天冷冻期未到）", task._skip_reason)
+
     @patch(
         "ptcgp_auto_v2.tasks.exchange_cards.resolve_card_name", return_value="妙蛙種子"
     )
