@@ -690,6 +690,16 @@ def ensure_rg_available():
         raise RuntimeError("未检测到 rg，请先安装 ripgrep")
 
 
+def resolve_include_dynamic(include_dynamic: bool, clean: bool) -> bool:
+    """决定是否启用动态 key 推断。
+
+    规则：
+    - 显式传入 --include-dynamic 时启用；
+    - 执行 --clean 时默认启用，避免误删动态 key（如 rewards_tab_*）。
+    """
+    return include_dynamic or clean
+
+
 def main():
     """脚本入口。"""
     args = parse_args()
@@ -700,11 +710,16 @@ def main():
     source_root = (project_root / args.source_root).resolve()
     templates_dir = (project_root / args.templates_dir).resolve()
 
+    include_dynamic = resolve_include_dynamic(
+        include_dynamic=args.include_dynamic,
+        clean=args.clean,
+    )
+
     locale_keys = extract_locale_keys(locale_file)
     locale_occ = collect_locale_key_occurrences(
         locale_keys,
         source_root,
-        include_dynamic=args.include_dynamic,
+        include_dynamic=include_dynamic,
     )
 
     template_names = extract_template_names(templates_dir)
@@ -724,7 +739,7 @@ def main():
         outside_v2=outside_v2,
         never_used=never_used,
         template_hits=template_hits,
-        strict_static=not args.include_dynamic,
+        strict_static=not include_dynamic,
     )
 
     used, removable = summarize_locale(locale_occ)

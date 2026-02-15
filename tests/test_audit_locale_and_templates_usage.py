@@ -213,3 +213,12 @@ def test_ensure_supported_locale_files(tmp_path: Path):
 
     assert (locales_dir / "en_US.py").exists()
     assert created and created[0].name == "en_US.py"
+
+
+def test_resolve_include_dynamic_should_enable_for_clean_mode():
+    """clean 模式应默认启用动态 key 推断，避免误删 rewards_tab_*。"""
+    module = _load_audit_module()
+
+    assert module.resolve_include_dynamic(include_dynamic=False, clean=False) is False
+    assert module.resolve_include_dynamic(include_dynamic=True, clean=False) is True
+    assert module.resolve_include_dynamic(include_dynamic=False, clean=True) is True
