@@ -39,6 +39,7 @@ class FriendPreHook(Hook):
         1. 无请求 → 创建请求 + INSERT_TASK
         2. 请求 status=sending → INSERT_TASK（还没发送）
         3. 请求 status=sended → 唤醒对方账号 + SKIP（等待对方接受）
+        4. 外部好友 sended → 触发本账号 manage_friendship + ABORT
         """
         if context.account.id is None:
             return HookResult.ABORT, {"error": "账号ID为空"}
@@ -80,16 +81,22 @@ class FriendPreHook(Hook):
             }
 
         if existing.status == "sended":
-            # 场景3：已发送，等待对方接受
-            # 唤醒对方账号处理
             if existing.to_account_id:
+                # 场景3���系统内好友，已发送，等待对方接受
                 FriendshipService.ensure_manage_friendship_pending(
                     account_id=existing.to_account_id
                 )
-            # 跳过当前任务，让出调度机会
-            return HookResult.SKIP, {
-                "reason": "等待对方接受好友请求",
-            }
+                return HookResult.SKIP, {
+                    "reason": "等待对方接受好友请求",
+                }
+            else:
+                # 场景4：外部好友，已发送，触发本账号检查确认
+                FriendshipService.ensure_manage_friendship_pending(
+                    account_id=account_id
+                )
+                return HookResult.ABORT, {
+                    "reason": "等待外部好友接受请求",
+                }
 
         # 其他状态（completed/failed/canceled），重新创建请求
         FriendshipService.create_add_request(

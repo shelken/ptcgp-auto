@@ -205,6 +205,7 @@ class ManageFriendshipTask(Task):
         repo = FriendRequestRepository()
         sending = repo.get_by_from_account_and_status(self.account.id, "sending")
         sended = repo.get_by_to_account_and_status(self.account.id, "sended")
+        external_sended = repo.get_external_sended_requests(self.account.id)
         canceling = repo.get_by_from_account_and_type(
             self.account.id, "add", "canceling"
         )
@@ -212,7 +213,11 @@ class ManageFriendshipTask(Task):
             self.account.id, "delete", "deleting"
         )
         pending_requests = (
-            list(sending) + list(sended) + list(canceling) + list(deleting)
+            list(sending)
+            + list(sended)
+            + list(external_sended)
+            + list(canceling)
+            + list(deleting)
         )
         pending_requests.sort(key=self._request_order_key)
         return pending_requests
@@ -572,17 +577,12 @@ class ManageFriendshipTask(Task):
             self._save_request(req, "sended")
             if req.to_account_id:
                 self._wake_account_ids.add(req.to_account_id)
-            else:
-                self._save_request(req, "completed")
-                if req.to_friend_id and self.account.id is not None:
-                    FriendshipRepository().create(
-                        self.account.id, req.to_friend_id, req.to_account_id
-                    )
+            # 外部好友不创建 FriendshipRepository，等待对方接受后再确认
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
         # 兜底场景：若结果页直接出现绿色勾，说明双方可能已是好友。
-        # 此时不再走发送流程，直接按“已完成加好友”处理，避免请求长期失败卡住。
+        # 此时不再走发送流程，直接按"已完成加好友"处理，避免请求长期失败卡住。
         green_match = self._find_green_yes_match()
         if green_match:
             logger.info("请求 %s 检测到绿色勾，按已是好友直接完成", req.id)
@@ -635,7 +635,14 @@ class ManageFriendshipTask(Task):
                 )
 
     def _handle_add_sended_result(self, req, page_info: dict) -> ActionResult:
-        """处理接受好友请求结果。"""
+        """处理接受好友请求结果（系统内）或确认外部好友是否已接受。"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        # 外部好友：to_account_id 为 null，检查是否已是好友
+        if req.to_account_id is None:
+            return self._handle_external_sended_result(req, page_info)
+
+        # 系统内好友：接受对方发来的请求
         if not self._is_action_done("accept_green_clicked"):
             green_match = self._find_green_yes_match()
             if green_match:
@@ -651,6 +658,37 @@ class ManageFriendshipTask(Task):
         self._accept_wait_rounds += 1
         if self._accept_wait_rounds >= 6:
             self._save_request(req, "failed", failed_reason="接受流程未找到绿色勾")
+            self._refresh_requests()
+            return self._close_modal(wait=0.8)
+        return ActionResult.wait(0.8)
+
+    def _handle_external_sended_result(self, req, page_info: dict) -> ActionResult:
+        """处理外部好友 sended 状态：检查是否已是好友。"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        # 看到绿色勾：对方已接受，成为好友
+        green_match = self._find_green_yes_match()
+        if green_match:
+            logger.info("外部好友请求 %s 检测到绿色勾，对方已接受", req.id)
+            self._save_request(req, "completed")
+            if req.to_friend_id and self.account.id is not None:
+                FriendshipRepository().create(
+                    self.account.id, req.to_friend_id, req.to_account_id
+                )
+            self._refresh_requests()
+            return self._close_modal(wait=0.8)
+
+        # 看到取消交友邀请：对方还没接受，保持 sended
+        if is_text_visible(
+            ocr_results, get_text_patterns("friend_cancel_request"), exact=True
+        ):
+            logger.debug("外部好友请求 %s 对方尚未接受，保持 sended", req.id)
+            self._refresh_requests()
+            return self._close_modal(wait=0.8)
+
+        self._accept_wait_rounds += 1
+        if self._accept_wait_rounds >= 6:
+            logger.debug("外部好友请求 %s 状态不明确，保持 sended", req.id)
             self._refresh_requests()
             return self._close_modal(wait=0.8)
         return ActionResult.wait(0.8)
