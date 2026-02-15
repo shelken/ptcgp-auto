@@ -208,6 +208,35 @@ class TestExchangeCardsTask(unittest.TestCase):
         cast(Any, self.task)._request_repo.update.assert_called_once()
         self.assertEqual(300.0, cast(Any, self.task)._ctx.runtime.delay_seconds)
 
+    @patch(
+        "ptcgp_auto_v2.tasks.exchange_cards.resolve_card_name", return_value="妙蛙種子"
+    )
+    def test_on_start_should_cancel_when_sending_expired(self, _resolve_name):
+        """sending 请求过期后应在 on_start 直接取消。"""
+        request = self._prepare_sending_request()
+        request.status = "sending"
+        request.expire_at = datetime.now() - timedelta(minutes=1)
+
+        self.task.on_start()
+
+        self.assertTrue(self.task.is_completed())
+        cast(Any, self.task)._request_repo.mark_canceled.assert_called_once()
+
+    @patch(
+        "ptcgp_auto_v2.tasks.exchange_cards.resolve_card_name", return_value="妙蛙種子"
+    )
+    def test_on_start_should_set_cancel_intent_when_sended_expired(self, _resolve_name):
+        """sended 请求过期后应在 on_start 写入 cancel_reason 并继续取消链路。"""
+        request = self._prepare_sending_request()
+        request.status = "sended"
+        request.expire_at = datetime.now() - timedelta(minutes=1)
+        request.cancel_reason = None
+
+        self.task.on_start()
+
+        self.assertEqual("等待对方回应超时，自动取消", request.cancel_reason)
+        cast(Any, self.task)._request_repo.update.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
