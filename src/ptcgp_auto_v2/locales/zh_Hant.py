@@ -104,6 +104,17 @@ TEXT_PATTERNS = {
     # 任务奖励领取相关
     # ============================================================
     # 任务奖励页面识别：通过 Tab 栏识别（每日/圖鑑/牌組/掉落）
+    # Tab 名称（用于点击切换）
+    "rewards_tab_daily": ["每日"],
+    "rewards_tab_collection": ["圖鑑"],
+    "rewards_tab_deck": ["牌組"],
+    "rewards_tab_drop": ["掉落"],
+    "rewards_tab_account_link": ["帳號連結"],
+    "rewards_tab_premium": ["特級"],
+    "rewards_tab_elite_deck": ["精英牌組"],
+    "rewards_tab_convenient_cards": ["便利卡牌"],
+    "rewards_tab_reward_week": ["獎勵週"],
+    "rewards_tab_medal": ["勳章"],
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     # 需要颜色检查的"全部領取"按钮（用于避免点击置灰按钮）
     "reward_claim_all": ["全部領取"],
