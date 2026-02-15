@@ -69,7 +69,12 @@ class TestExchangeCardsTask(unittest.TestCase):
             update=Mock(return_value=request),
         )
         task._account_card_repo = SimpleNamespace(
-            get=Mock(return_value=SimpleNamespace(count=1))
+            get=Mock(
+                return_value=SimpleNamespace(
+                    count=1, yolo_conf=None, hash_similarity=None
+                )
+            ),
+            upsert=Mock(),
         )
         task._card_repo = SimpleNamespace(
             get_by_id=Mock(
@@ -90,7 +95,7 @@ class TestExchangeCardsTask(unittest.TestCase):
     def test_proposed_done_popup_marks_sended_and_delay(
         self, tap_ok_mock, _resolve_name
     ):
-        """提议完成弹窗应写入 sended 并设置延时复查。"""
+        """提议完成弹窗应写入 sended 并进入当前任务等待窗口。"""
         request = self._prepare_sending_request()
         tap_ok_mock.return_value = ActionResult.ok(wait=0.1)
 
@@ -98,14 +103,10 @@ class TestExchangeCardsTask(unittest.TestCase):
         result = cast(Any, self.task)._handle_proposed_done_popup({"ocr_results": []})
 
         self.assertTrue(result.success)
-        self.assertTrue(self.task.is_completed())
+        self.assertFalse(self.task.is_completed())
         cast(Any, self.task)._request_repo.mark_sended.assert_called_once()
-        self.assertEqual(300.0, cast(Any, self.task)._ctx.runtime.delay_seconds)
-        self.assertEqual(
-            "交换请求已送出，等待复查",
-            cast(Any, self.task)._ctx.runtime.delay_reason,
-        )
         self.assertEqual("sending", request.status)
+        self.assertIsNone(request.expire_at)
 
     def test_on_start_fails_when_account_not_past_14_days(self):
         """账号未过14天冷静期时，请求应失败并结束任务。"""
@@ -194,19 +195,50 @@ class TestExchangeCardsTask(unittest.TestCase):
     @patch(
         "ptcgp_auto_v2.tasks.exchange_cards.resolve_card_name", return_value="妙蛙種子"
     )
-    def test_waiting_page_sets_delay_when_not_expired(self, _resolve_name):
-        """等待页未超时时应更新 next_check_at 并设置 delay。"""
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_template")
+    def test_waiting_page_sets_window_and_refresh_to_main(
+        self,
+        tap_template_mock,
+        _resolve_name,
+    ):
+        """进入等待页应启动5分钟窗口，并返回主页刷新状态。"""
         request = self._prepare_sending_request()
         request.status = "sended"
-        request.expire_at = datetime.now() + timedelta(minutes=10)
+        request.expire_at = None
+        tap_template_mock.return_value = ActionResult.ok(wait=0.1)
 
         self.task.on_start()
         result = cast(Any, self.task)._handle_waiting_page({"ocr_results": []})
 
         self.assertTrue(result.success)
-        self.assertTrue(self.task.is_completed())
+        self.assertFalse(self.task.is_completed())
+        self.assertIsNotNone(request.expire_at)
         cast(Any, self.task)._request_repo.update.assert_called_once()
-        self.assertEqual(300.0, cast(Any, self.task)._ctx.runtime.delay_seconds)
+
+    @patch(
+        "ptcgp_auto_v2.tasks.exchange_cards.resolve_card_name", return_value="妙蛙種子"
+    )
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_template")
+    def test_waiting_page_timeout_should_set_cancel_intent(
+        self,
+        tap_template_mock,
+        _resolve_name,
+    ):
+        """等待超时后应写入取消意图，不再走刷新。"""
+        request = self._prepare_sending_request()
+        request.status = "sended"
+        request.expire_at = datetime.now() - timedelta(seconds=1)
+        request.cancel_reason = None
+        tap_template_mock.return_value = None
+        cast(Any, self.task)._action_cache["waiting_window_started"] = True
+
+        self.task.on_start()
+        result = cast(Any, self.task)._handle_waiting_page({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertIsNotNone(request.cancel_reason)
+        self.assertIn("超时", cast(str, request.cancel_reason))
+        cast(Any, self.task)._request_repo.update.assert_called_once()
 
     @patch(
         "ptcgp_auto_v2.tasks.exchange_cards.resolve_card_name", return_value="妙蛙種子"
@@ -234,8 +266,172 @@ class TestExchangeCardsTask(unittest.TestCase):
 
         self.task.on_start()
 
-        self.assertEqual("等待对方回应超时，自动取消", request.cancel_reason)
+        self.assertEqual("等待对方回应超时（5分钟），自动取消", request.cancel_reason)
         cast(Any, self.task)._request_repo.update.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_ok")
+    def test_canceled_done_popup_should_mark_failed_when_timeout(self, tap_ok_mock):
+        """超时取消完成后应标记 failed。"""
+        task = cast(Any, self.task)
+        request = self._prepare_sending_request()
+        request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
+        task._ctx.runtime.current_request = request
+        tap_ok_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_canceled_done_popup({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        task._request_repo.mark_failed.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_ok")
+    def test_receive_start_popup_should_not_complete_immediately(self, tap_ok_mock):
+        """开始交换弹窗点击OK后不应立即完成，应等待滑卡页完成。"""
+        task = cast(Any, self.task)
+        request = self._prepare_sending_request()
+        request.status = "sended"
+        task._ctx.runtime.current_request = request
+        tap_ok_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_receive_start_popup({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertFalse(task.is_completed())
+        task._request_repo.mark_completed.assert_not_called()
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.swipe_card_register")
+    def test_exchange_swipe_page_should_finalize_success(self, swipe_mock):
+        """交换滑卡页完成后应标记completed并扣减发送方库存。"""
+        task = cast(Any, self.task)
+        request = self._prepare_sending_request()
+        request.status = "sended"
+        request.target_card_id = 1001
+        request.from_account_id = 1
+        request.to_account_id = 2
+        task._ctx.runtime.current_request = request
+        swipe_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_exchange_swipe_page({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertTrue(task.is_completed())
+        task._request_repo.mark_completed.assert_called_once()
+        task._account_card_repo.upsert.assert_called_once()
+
+    def test_choose_friend_should_fail_when_target_row_is_in_exchange(self):
+        """已验证好友若同行显示交换中，应直接失败本次交换请求。"""
+        task = cast(Any, self.task)
+        request = self._prepare_sending_request()
+        task._ctx.runtime.current_request = request
+        task._ctx.friend_flow.friend_verified = True
+        task._friend_helper = SimpleNamespace(
+            find_send_box_by_anchor=Mock(return_value=None),
+            find_box_by_anchor=Mock(return_value=(800, 1100, 860, 1180)),
+            scroll_or_fail=Mock(return_value=ActionResult.wait(0.5)),
+        )
+
+        result = task._handle_choose_friend({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        task._request_repo.mark_failed.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_text_exact")
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.is_text_visible")
+    def test_sending_with_sended_ui_should_enter_cancel_flow_first(
+        self,
+        is_text_visible_mock,
+        tap_text_exact_mock,
+    ):
+        """sending 若检测到已在等待回应，应先进入取消链路。"""
+        request = self._prepare_sending_request()
+        request.status = "sending"
+        task = cast(Any, self.task)
+        task._ctx.runtime.current_request = request
+        is_text_visible_mock.side_effect = [True, True]
+        tap_text_exact_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_exchange_page_main({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertTrue(task._ctx.runtime.recover_before_send)
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_ok")
+    def test_canceled_done_popup_should_continue_when_recover_before_send(
+        self, tap_ok_mock
+    ):
+        """恢复重发场景取消完成后不应结束任务，应继续后续发送流程。"""
+        task = cast(Any, self.task)
+        request = self._prepare_sending_request()
+        request.status = "sending"
+        request.cancel_reason = "dummy"
+        task._ctx.runtime.current_request = request
+        task._ctx.runtime.recover_before_send = True
+        tap_ok_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_canceled_done_popup({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertFalse(task.is_completed())
+        self.assertTrue(task._ctx.runtime.recover_before_send)
+        self.assertTrue(task._is_action_done("recover_cancel_done_clicked"))
+        task._request_repo.update.assert_called_once()
+
+    def test_handle_page_should_clear_recover_flag_after_exit_canceled_done(self):
+        """离开取消完成页面后应清理恢复标记，进入正常重发流程。"""
+        task = cast(Any, self.task)
+        request = self._prepare_sending_request()
+        request.status = "sending"
+        task._ctx.runtime.current_request = request
+        task._ctx.runtime.recover_before_send = True
+        task._action_cache["recover_cancel_done_clicked"] = True
+
+        with patch.object(
+            task, "_handle_exchange_page_main", return_value=ActionResult.ok(wait=0.1)
+        ):
+            result = task.handle_page("exchange_page_main", {"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertFalse(task._ctx.runtime.recover_before_send)
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_text_exact")
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.is_text_visible")
+    def test_sended_on_main_should_click_exchange_when_confirm_missing(
+        self,
+        is_text_visible_mock,
+        tap_text_exact_mock,
+    ):
+        """sended 在主页缺少确认时，应点击交换进入详情页刷新状态。"""
+        request = self._prepare_sending_request()
+        request.status = "sended"
+        task = cast(Any, self.task)
+        task._ctx.runtime.current_request = request
+        is_text_visible_mock.return_value = False
+        tap_text_exact_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_exchange_page_main({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        task._request_repo.mark_canceled.assert_not_called()
+
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.tap_text_exact")
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.is_text_visible")
+    def test_sended_on_main_should_wait_when_no_entry_found(
+        self,
+        is_text_visible_mock,
+        tap_text_exact_mock,
+    ):
+        """sended 在主页无入口时，应等待重试而不是直接取消。"""
+        request = self._prepare_sending_request()
+        request.status = "sended"
+        task = cast(Any, self.task)
+        task._ctx.runtime.current_request = request
+        is_text_visible_mock.return_value = False
+        tap_text_exact_mock.return_value = None
+
+        result = task._handle_exchange_page_main({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        task._request_repo.mark_canceled.assert_not_called()
+        task._request_repo.update.assert_not_called()
 
 
 if __name__ == "__main__":
