@@ -9,7 +9,7 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
@@ -39,6 +39,7 @@ from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
     FriendSelectionHelper,
 )
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
+from ptcgp_auto_v2.utils.account_cooldown import is_account_pending_same_day_cooldown
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     input_text,
@@ -64,6 +65,11 @@ MAX_FILTER_MODAL_STAY_ROUNDS = 2
 def _build_send_card_pages() -> list[dict]:
     """构建送卡任务页面规则。"""
     return [
+        {
+            "name": "exchange_locked_popup",
+            "identifiers": get_text_patterns("exchange_locked_popup"),
+            "priority": 5,
+        },
         {
             "name": "home_with_community_icon",
             "templates": ["icon_community"],
@@ -178,6 +184,11 @@ class SendCardDailyTask(Task):
         """任务是否被跳过（不更新 last_completed_at）。"""
         return self._skip_reason is not None
 
+    def _mark_skipped(self, skip_reason: str):
+        """统一设置跳过态并结束任务。"""
+        self._skip_reason = skip_reason
+        self._completed = True
+
     def _is_action_done(self, key: str) -> bool:
         """检查动作缓存。"""
         return self._action_cache.get(key, False)
@@ -215,8 +226,14 @@ class SendCardDailyTask(Task):
             return
 
         if not GiftPairingService.is_account_past_cooldown(self.account.created_at):
-            if self._is_same_day_pending_cooldown(self.account.created_at):
-                self._skip_reason = "账号未过14天冷冻期（同日待到期）"
+            cooldown_days = getattr(GiftPairingService, "COOLDOWN_DAYS", 14)
+            if not isinstance(cooldown_days, int):
+                cooldown_days = 14
+            if is_account_pending_same_day_cooldown(
+                self.account.created_at,
+                cooldown_days,
+            ):
+                self._mark_skipped("账号未过14天冷冻期（同日待到期）")
                 return
             self._complete_reason = "账号未过14天冷冻期"
             self._completed = True
@@ -224,7 +241,7 @@ class SendCardDailyTask(Task):
 
         pair = GiftPairingService.ensure_pairs_for_account(self.account.id)
         if pair is None:
-            self._skip_reason = "无可用送卡目标"
+            self._mark_skipped("无可用送卡目标")
             return
 
         self._target_friend_id = pair.target_friend_id
@@ -289,23 +306,19 @@ class SendCardDailyTask(Task):
         )
 
     def _on_scroll_exhausted(self, reason: str) -> ActionResult:
-        """滑动耗尽回调。"""
+        """滑动耗尽回调：删除好友关系后跳过。"""
+        if self.account.id and self._target_friend_id:
+            FriendshipRepository().delete(self.account.id, self._target_friend_id)
+            logger.info(
+                "好友关系已删除: account=%s, friend_id=%s",
+                self.account.id,
+                self._target_friend_id,
+            )
         return self._skip_without_send(
             skip_reason=reason,
             record_status="completed_no_target",
             error_code="TARGET_NOT_FOUND",
         )
-
-    def _is_same_day_pending_cooldown(self, created_at: Optional[datetime]) -> bool:
-        """判断账号是否同日待过冷冻期。"""
-        if created_at is None:
-            return False
-        cooldown_days = getattr(GiftPairingService, "COOLDOWN_DAYS", 14)
-        if not isinstance(cooldown_days, int):
-            cooldown_days = 14
-        cooldown_at = created_at + timedelta(days=cooldown_days)
-        now = datetime.now()
-        return now < cooldown_at and now.date() == cooldown_at.date()
 
     def is_completed(self) -> bool:
         """任务是否完成。"""
@@ -347,6 +360,7 @@ class SendCardDailyTask(Task):
             "home_with_community_icon": self._handle_home,
             "game_home_main": self._handle_home,
             "community_page": self._handle_community,
+            "exchange_locked_popup": self._handle_exchange_locked_popup,
             "gift_page_main": self._handle_gift_page_main,
             "gift_choose_friend": self._handle_choose_friend,
             "gift_select_card": self._handle_select_card,
@@ -399,7 +413,7 @@ class SendCardDailyTask(Task):
         error_code: Optional[str] = None,
     ) -> ActionResult:
         """以跳过态收敛任务。"""
-        self._skip_reason = skip_reason
+        self._mark_skipped(skip_reason)
         logger.info("send_card_daily 跳过收敛: %s", skip_reason)
         if self._record and record_status:
             GiftRecordService.update_status(
@@ -409,6 +423,17 @@ class SendCardDailyTask(Task):
                 error_message=skip_reason,
             )
         return ActionResult.ok(wait=0.3)
+
+    def _handle_exchange_locked_popup(self, page_info: dict) -> ActionResult:
+        """交换/分送未解锁弹窗：点击 OK 并跳过本次任务。"""
+        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
+        if not result:
+            return ActionResult.wait(0.6)
+        return self._skip_without_send(
+            skip_reason="分送功能未解锁（14天冷冻期未到）",
+            record_status="completed_no_target",
+            error_code="FEATURE_LOCKED",
+        )
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群入口。"""
@@ -487,6 +512,13 @@ class SendCardDailyTask(Task):
             if plus_box:
                 return self._friend_helper.tap_plus_and_wait_profile(plus_box)
             return self._friend_helper.scroll_or_fail()
+
+        if self._friend_helper.check_scroll_bottom():
+            return self._skip_without_send(
+                skip_reason="已滑到底部，未找到目标好友",
+                record_status="completed_no_target",
+                error_code="SCROLL_BOTTOM",
+            )
 
         probe_box = self._friend_helper.get_next_probe_box()
         if probe_box:
