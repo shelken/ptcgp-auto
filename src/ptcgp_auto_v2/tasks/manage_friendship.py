@@ -245,6 +245,27 @@ class ManageFriendshipTask(Task):
         if not self.requests_to_process:
             self._completed = True
 
+    def _defer_current_request(self, req, stage: str):
+        """本轮暂缓当前请求，避免同一轮重复查询同一请求。"""
+        req_id = getattr(req, "id", None)
+        if req_id is not None:
+            self.requests_to_process = [
+                item
+                for item in self.requests_to_process
+                if getattr(item, "id", None) != req_id
+            ]
+        self.current_request = None
+        self._active_request_id = None
+        self._submitted_request_id = None
+        self._reset_action_cache()
+        self._add_apply_wait_rounds = 0
+        self._cancel_wait_rounds = 0
+        self._accept_wait_rounds = 0
+        self._delete_wait_rounds = 0
+        self._log_pending_request_order(stage)
+        if not self.requests_to_process:
+            self._completed = True
+
     def _log_pending_request_order(self, stage: str):
         """输出当前待处理请求顺序，便于排查是否按创建时间执行。"""
         if not self.requests_to_process:
@@ -683,13 +704,13 @@ class ManageFriendshipTask(Task):
             ocr_results, get_text_patterns("friend_cancel_request"), exact=True
         ):
             logger.debug("外部好友请求 %s 对方尚未接受，保持 sended", req.id)
-            self._refresh_requests()
+            self._defer_current_request(req, "defer_external_pending")
             return self._close_modal(wait=0.8)
 
         self._accept_wait_rounds += 1
         if self._accept_wait_rounds >= 6:
             logger.debug("外部好友请求 %s 状态不明确，保持 sended", req.id)
-            self._refresh_requests()
+            self._defer_current_request(req, "defer_external_unclear")
             return self._close_modal(wait=0.8)
         return ActionResult.wait(0.8)
 
