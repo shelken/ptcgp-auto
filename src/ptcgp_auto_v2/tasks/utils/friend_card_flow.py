@@ -219,7 +219,7 @@ def find_all_search_plus_boxes(
     template_name: str = "icon_search_plus",
     threshold: float = 0.8,
 ) -> list[tuple[int, int, int, int]]:
-    """查找页面上所有搜索加号图标。"""
+    """查找页面上所有搜索加号图标，按 Y 轴从上到下排序。"""
     if not hasattr(page_detector, "find_all_templates"):
         return []
     matches = page_detector.find_all_templates(
@@ -230,4 +230,5 @@ def find_all_search_plus_boxes(
         box = getattr(match, "box", None)
         if box and len(box) == 4:
             boxes.append(tuple(box))
+    boxes.sort(key=lambda b: (b[1] + b[3]) // 2)
     return boxes

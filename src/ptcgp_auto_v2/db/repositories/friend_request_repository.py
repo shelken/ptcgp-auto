@@ -192,3 +192,16 @@ class FriendRequestRepository:
             session.delete(request)
             session.commit()
             return True
+
+    def get_external_sended_requests(
+        self, from_account_id: int
+    ) -> List[AccountFriendRequest]:
+        """获取发送方的外部好友 sended 请求（to_account_id 为 null）。"""
+        with Session(get_engine()) as session:
+            statement = select(AccountFriendRequest).where(
+                AccountFriendRequest.from_account_id == from_account_id,
+                AccountFriendRequest.to_account_id == None,
+                AccountFriendRequest.status == "sended",
+                AccountFriendRequest.request_type == "add",
+            )
+            return list(session.exec(statement).all())
