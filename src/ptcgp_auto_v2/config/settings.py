@@ -20,6 +20,7 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_SCROLL_ATTEMPTS,
     DEFAULT_MAX_WORKERS,
+    DEFAULT_LOCALE,
     DEFAULT_OCR_LANGUAGES,
     DEFAULT_OCR_LEVEL,
     DEFAULT_POLL_INTERVAL,
@@ -106,7 +107,7 @@ class Settings:
     template_threshold: float = DEFAULT_TEMPLATE_THRESHOLD
 
     # 语言配置
-    locale: str = "zh_Hant"  # 默认界面语言 (对应 locales/ 下的文件名)
+    locale: str = DEFAULT_LOCALE  # 默认界面语言 (对应 locales/ 下的文件名)
 
     # 未配置开包目标时的自动选包策略
     # 可选值: latest / hash_balance / least_used
@@ -179,22 +180,27 @@ class Settings:
         settings = cls()
 
         # 从环境变量覆盖配置
-        if os.getenv("PTCGP_DEVICES"):
-            settings.device_addresses = os.getenv("PTCGP_DEVICES").split(",")
+        devices_env = os.getenv("PTCGP_DEVICES")
+        if devices_env:
+            settings.device_addresses = devices_env.split(",")
 
-        if os.getenv("PTCGP_DEBUG"):
-            settings.debug = os.getenv("PTCGP_DEBUG").lower() in ("true", "1", "yes")
+        debug_env = os.getenv("PTCGP_DEBUG")
+        if debug_env:
+            settings.debug = debug_env.lower() in ("true", "1", "yes")
             if settings.debug:
                 settings.log_level = "DEBUG"
 
-        if os.getenv("PTCGP_MAX_WORKERS"):
-            settings.max_workers = int(os.getenv("PTCGP_MAX_WORKERS"))
+        max_workers_env = os.getenv("PTCGP_MAX_WORKERS")
+        if max_workers_env:
+            settings.max_workers = int(max_workers_env)
 
-        if os.getenv("PTCGP_WEB_HOST"):
-            settings.web_host = os.getenv("PTCGP_WEB_HOST")
+        web_host_env = os.getenv("PTCGP_WEB_HOST")
+        if web_host_env:
+            settings.web_host = web_host_env
 
-        if os.getenv("PTCGP_WEB_PORT"):
-            settings.web_port = int(os.getenv("PTCGP_WEB_PORT"))
+        web_port_env = os.getenv("PTCGP_WEB_PORT")
+        if web_port_env:
+            settings.web_port = int(web_port_env)
 
         return settings
 
