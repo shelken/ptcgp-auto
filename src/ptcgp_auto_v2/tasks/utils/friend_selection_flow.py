@@ -55,6 +55,9 @@ class FriendSelectionFlow:
     probe_index: int = 0
     friend_verified: bool = False
     nickname: Optional[str] = None
+    probed_friend_ids: set[str] = field(default_factory=set)
+    page_probe_start_count: int = 0
+    scroll_stable_rounds: int = 0
 
     def reset_scroll_state(self):
         """重置滑动状态。"""
@@ -150,25 +153,66 @@ class FriendSelectionHelper:
             row_threshold_y=row_threshold_y,
         )
 
+    def check_scroll_bottom(self) -> bool:
+        """检查是否滑到底部。基于已探测 friend_id 判断。"""
+        return self.flow.scroll_stable_rounds >= 2
+
+    def mark_scroll_bottom_detected(self):
+        """标记检测到底部。"""
+        self.flow.scroll_stable_rounds += 1
+        logger.debug(
+            "[到底检测] 本页好友均已探测，scroll_stable_rounds=%d",
+            self.flow.scroll_stable_rounds,
+        )
+
     def get_next_probe_box(self) -> Optional[tuple[int, int, int, int]]:
-        """获取下一个探测用的 plus box。"""
+        """获取下一个探测用的 plus box（过滤已失败的行）。"""
         if not self.flow.probe_boxes:
             self.flow.probe_boxes = find_all_search_plus_boxes(self.page_detector)
             self.flow.probe_index = 0
+            self.flow.page_probe_start_count = len(self.flow.probed_friend_ids)
             if self.flow.probe_boxes:
-                logger.info("开始遍历探测，共 %d 个 plus", len(self.flow.probe_boxes))
+                logger.debug("找到 %d 个 icon_search_plus", len(self.flow.probe_boxes))
+                logger.debug(
+                    "开始遍历探测，共 %d 个 plus，已探测=%d",
+                    len(self.flow.probe_boxes),
+                    self.flow.page_probe_start_count,
+                )
 
-        if self.flow.probe_index < len(self.flow.probe_boxes):
+        row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
+
+        while self.flow.probe_index < len(self.flow.probe_boxes):
             box = self.flow.probe_boxes[self.flow.probe_index]
             self.flow.probe_index += 1
-            logger.info(
-                "探测第 %d/%d 个 plus",
+            box_cy = (box[1] + box[3]) // 2
+            if any(
+                abs(box_cy - failed_y) < row_threshold_y
+                for failed_y in self.flow.failed_rows
+            ):
+                logger.debug(
+                    "跳过已失败的行，probe_index=%d, box_cy=%d",
+                    self.flow.probe_index - 1,
+                    box_cy,
+                )
+                continue
+            logger.debug(
+                "探测第 %d/%d 个 plus (y=%d)",
                 self.flow.probe_index,
                 len(self.flow.probe_boxes),
+                box_cy,
             )
             return box
 
-        logger.info("本页遍历完成，滑动继续")
+        logger.debug("本页遍历完成，需要滑动继续")
+        if len(self.flow.probed_friend_ids) == self.flow.page_probe_start_count:
+            self.flow.scroll_stable_rounds += 1
+            logger.debug(
+                "[到底检测] 本页无新好友，已探测=%d，scroll_stable_rounds=%d",
+                len(self.flow.probed_friend_ids),
+                self.flow.scroll_stable_rounds,
+            )
+        else:
+            self.flow.scroll_stable_rounds = 0
         self.flow.reset_probe_state()
         return None
 
@@ -206,6 +250,11 @@ class FriendSelectionHelper:
     ) -> ActionResult:
         """处理详情页验证。"""
         extracted_friend_id = self._extract_friend_id(ocr_results)
+        logger.debug(
+            "[详情页验证] 提取 friend_id=%s, 目标=%s",
+            extracted_friend_id,
+            self.target_friend_id,
+        )
 
         if not extracted_friend_id:
             self.flow.profile_read_rounds += 1
@@ -220,12 +269,14 @@ class FriendSelectionHelper:
             )
             return ActionResult.wait(0.5)
 
+        self.flow.probed_friend_ids.add(extracted_friend_id)
+
         if extracted_friend_id == self.target_friend_id:
             self.flow.friend_verified = True
             self._try_extract_and_persist_nickname(ocr_results, account_id)
             if self.on_success:
                 self.on_success()
-            logger.info("好友详情核验成功：friend_id=%s", extracted_friend_id)
+            logger.debug("好友详情核验成功：friend_id=%s", extracted_friend_id)
         else:
             self.flow.friend_verified = False
             self.flow.record_failed_row()
@@ -259,10 +310,21 @@ class FriendSelectionHelper:
 
     def scroll_or_fail(self) -> ActionResult:
         """滑动或失败回调。"""
+        logger.debug(
+            "[滑动检查] stable_rounds=%d, scroll_rounds=%d, scroll_stable_rounds=%d",
+            self.flow.stable_rounds,
+            self.flow.scroll_rounds,
+            self.flow.scroll_stable_rounds,
+        )
         if self.flow.stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
             if self.on_scroll_exhausted:
                 return self.on_scroll_exhausted("好友列表遍历完成未找到目标")
             return ActionResult.fail("好友列表遍历完成未找到目标")
+
+        if self.flow.scroll_stable_rounds >= 1:
+            if self.on_scroll_exhausted:
+                return self.on_scroll_exhausted("已滑到底部，未找到目标好友")
+            return ActionResult.fail("已滑到底部，未找到目标好友")
 
         self.flow.scroll_rounds += 1
         if self.flow.scroll_rounds > MAX_FRIEND_SCROLL_ROUNDS:
@@ -271,6 +333,13 @@ class FriendSelectionHelper:
             return ActionResult.fail("好友列表遍历达到上限")
 
         self.flow.failed_rows.clear()
+        self.flow.probe_boxes = []
+        self.flow.probe_index = 0
+        logger.debug(
+            "[滑动] 执行滑动，当前轮数=%d, 已探测=%d",
+            self.flow.scroll_rounds,
+            len(self.flow.probed_friend_ids),
+        )
         return scroll_friend_list(self.adb)
 
     def _extract_friend_id(self, ocr_results: list[dict]) -> Optional[str]:
@@ -299,7 +368,7 @@ class FriendSelectionHelper:
             return
 
         self.flow.nickname = nickname
-        logger.info("探测到好友昵称: %s -> %s", self.target_friend_id, nickname)
+        logger.debug("探测到好友昵称: %s -> %s", self.target_friend_id, nickname)
 
         if self.on_nickname_found and account_id is not None:
             self.on_nickname_found(account_id, self.target_friend_id, nickname)
