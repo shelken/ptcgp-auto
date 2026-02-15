@@ -241,8 +241,8 @@ def handle_filter_panel(
         adb=adb,
         page_detector=page_detector,
         icon_detector=icon_detector,
-        state=state or FilterPanelState(),
-        action_cache=action_cache or {},
+        state=state if state is not None else FilterPanelState(),
+        action_cache=action_cache if action_cache is not None else {},
     )
     return handler.handle(page_info, rarity_codes)
 
