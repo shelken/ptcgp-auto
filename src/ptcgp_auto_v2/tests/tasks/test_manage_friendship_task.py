@@ -169,6 +169,48 @@ class TestManageFriendshipTask(unittest.TestCase):
 
         self.assertEqual([1, 2, 3], [item.id for item in requests])
 
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.FriendshipService")
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.FriendRequestRepository")
+    def test_on_start_should_filter_expired_add_requests(
+        self,
+        request_repo_cls,
+        friendship_service_mock,
+    ):
+        """启动时应将过期 add 请求置 failed 并从待处理列表移除。"""
+        request_repo = request_repo_cls.return_value
+        expired_req = SimpleNamespace(
+            id=1,
+            request_type="add",
+            status="sended",
+            created_at=datetime(2026, 2, 10, 9, 0, 0),
+        )
+        fresh_req = SimpleNamespace(
+            id=2,
+            request_type="delete",
+            status="deleting",
+            created_at=datetime(2026, 2, 10, 10, 0, 0),
+        )
+
+        request_repo.get_by_from_account_and_status.side_effect = [[expired_req], []]
+        request_repo.get_by_to_account_and_status.side_effect = [[], [], []]
+        request_repo.get_external_sended_requests.side_effect = [[], []]
+        request_repo.get_by_from_account_and_type.side_effect = [
+            [],
+            [fresh_req],
+            [],
+            [fresh_req],
+        ]
+
+        def _expire(req, now=None):
+            return req.id == 1
+
+        friendship_service_mock.expire_add_request_if_needed.side_effect = _expire
+
+        self.task.on_start()
+
+        self.assertFalse(self.task.is_completed())
+        self.assertEqual([2], [item.id for item in self.task.requests_to_process])
+
     @patch("ptcgp_auto_v2.tasks.manage_friendship.is_text_visible")
     def test_external_sended_pending_should_defer_without_refresh_loop(
         self,

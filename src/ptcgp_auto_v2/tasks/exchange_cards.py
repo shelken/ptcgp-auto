@@ -146,6 +146,7 @@ def _build_exchange_pages() -> list[dict]:
         {
             "name": "exchange_proposed_done_popup",
             "identifiers": get_text_patterns("exchange_proposed_done_popup"),
+            "match_all": True,
             "priority": 7,
         },
         # ===== 通用入口页面 =====
@@ -169,14 +170,9 @@ def _build_exchange_pages() -> list[dict]:
         # ===== sending 流程 =====
         {
             "name": "exchange_page_main",
-            "identifiers": get_text_patterns("exchange_page"),
-            "match_all": True,
+            "identifiers": get_text_patterns("exchange_record_tab"),
+            "exact_match": True,
             "priority": 40,
-        },
-        {
-            "name": "exchange_page_sended",
-            "identifiers": get_text_patterns("exchange_page_sended"),
-            "priority": 41,
         },
         {
             "name": "exchange_choose_friend",
@@ -271,6 +267,29 @@ class ExchangeCardsTask(Task):
             self._ctx.runtime.complete_reason = "无活跃交换请求"
             return
         self._ctx.runtime.current_request = request
+
+        now = datetime.now()
+        if request.expire_at and now >= request.expire_at:
+            if request.status == "sending":
+                self._request_repo.mark_canceled(
+                    request, reason="交换请求已过期（未送出）"
+                )
+                self._ctx.runtime.completed = True
+                self._ctx.runtime.complete_reason = "交换请求已过期（未送出）"
+                return
+            if request.status == "sended" and not request.cancel_reason:
+                request.cancel_reason = "等待对方回应超时，自动取消"
+                request.updated_at = now
+                self._request_repo.update(request)
+
+        cancel_reason = getattr(request, "cancel_reason", None)
+        if cancel_reason:
+            logger.debug(
+                "on_start 检测到取消意图: request_id=%s, status=%s, reason=%s",
+                request.id,
+                request.status,
+                cancel_reason,
+            )
 
         if not is_account_past_days(self.account.created_at, 14):
             if is_account_pending_same_day_cooldown(self.account.created_at, 14):
@@ -424,7 +443,7 @@ class ExchangeCardsTask(Task):
             return self._handle_home(page_info)
         if page_name == "community_page":
             return self._handle_community(page_info)
-        if page_name in {"exchange_page_main", "exchange_page_sended"}:
+        if page_name == "exchange_page_main":
             return self._handle_exchange_page_main(page_info)
 
         if self._ctx.runtime.current_request.status == "sending":
@@ -480,9 +499,9 @@ class ExchangeCardsTask(Task):
             self.adb,
             ocr_results,
             get_text_patterns("community_exchange_btn"),
-            wait=1.0,
+            wait=5,
         )
-        return result or ActionResult.wait(0.8)
+        return result or ActionResult.wait(3)
 
     def _handle_exchange_page_main(self, page_info: dict) -> ActionResult:
         """交换主页：sending 点击交换，sended 点击确认。"""
@@ -728,12 +747,6 @@ class ExchangeCardsTask(Task):
         now = datetime.now()
 
         cancel_reason = self._ctx.runtime.current_request.cancel_reason
-        if (
-            not cancel_reason
-            and self._ctx.runtime.current_request.expire_at
-            and now >= self._ctx.runtime.current_request.expire_at
-        ):
-            cancel_reason = "等待对方回应超时，自动取消"
 
         if cancel_reason:
             if not self._is_action_done("waiting_cancel_clicked"):
@@ -765,6 +778,11 @@ class ExchangeCardsTask(Task):
         ocr_results = page_info.get("ocr_results", [])
 
         if self._ctx.runtime.current_request.cancel_reason:
+            logger.debug(
+                "确认页执行拒绝分支: request_id=%s, reason=%s",
+                self._ctx.runtime.current_request.id,
+                self._ctx.runtime.current_request.cancel_reason,
+            )
             reject_result = tap_text_exact(
                 self.adb,
                 ocr_results,

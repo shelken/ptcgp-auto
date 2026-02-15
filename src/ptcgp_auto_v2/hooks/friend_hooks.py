@@ -61,6 +61,11 @@ class FriendPreHook(Hook):
             to_friend_id=self.target_friend_id,
         )
 
+        if existing is not None and FriendshipService.expire_add_request_if_needed(
+            existing
+        ):
+            existing = None
+
         if existing is None:
             # 场景1：无请求，创建并发送
             FriendshipService.create_add_request(
