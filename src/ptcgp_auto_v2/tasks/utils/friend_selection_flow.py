@@ -92,6 +92,7 @@ class FriendSelectionHelper:
         target_friend_id: str,
         profile_page_name: str,
         send_text_patterns: list[str],
+        account_id: Optional[int] = None,
         on_success: Optional[Callable[[], None]] = None,
         on_nickname_found: Optional[Callable[[int, str, str], None]] = None,
         on_scroll_exhausted: Optional[Callable[[str], ActionResult]] = None,
@@ -102,6 +103,7 @@ class FriendSelectionHelper:
         self.target_friend_id = target_friend_id
         self.profile_page_name = profile_page_name
         self.send_text_patterns = send_text_patterns
+        self.account_id = account_id
         self.on_success = on_success
         self.on_nickname_found = on_nickname_found
         self.on_scroll_exhausted = on_scroll_exhausted
@@ -229,7 +231,7 @@ class FriendSelectionHelper:
             if page_name == self.profile_page_name:
                 return self.handle_profile_verification(
                     ocr_results=page_info.get("ocr_results", []),
-                    account_id=getattr(self.adb, "account_id", None),
+                    account_id=self.account_id,
                 )
             time.sleep(0.5)
 

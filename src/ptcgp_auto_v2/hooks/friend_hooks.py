@@ -11,6 +11,9 @@ from ptcgp_auto_v2.core.hooks import Hook, HookContext, HookResult
 from ptcgp_auto_v2.db.repositories import FriendRequestRepository
 from ptcgp_auto_v2.services.friendship_service import FriendshipService
 
+INTERNAL_SENDED_DELAY_SECONDS = 180
+EXTERNAL_SENDED_DELAY_SECONDS = 600
+
 
 class FriendPreHook(Hook):
     """
@@ -38,8 +41,8 @@ class FriendPreHook(Hook):
         三种场景：
         1. 无请求 → 创建请求 + INSERT_TASK
         2. 请求 status=sending → INSERT_TASK（还没发送）
-        3. 请求 status=sended → 唤醒对方账号 + SKIP（等待对方接受）
-        4. 外部好友 sended → 触发本账号 manage_friendship + ABORT
+        3. 请求 status=sended（系统内）→ 唤醒对方账号 + DELAY（延后重试原任务）
+        4. 请求 status=sended（外部）→ 触发本账号检查 + DELAY（延后重试原任务）
         """
         if context.account.id is None:
             return HookResult.ABORT, {"error": "账号ID为空"}
@@ -82,11 +85,12 @@ class FriendPreHook(Hook):
 
         if existing.status == "sended":
             if existing.to_account_id:
-                # 场景3���系统内好友，已发送，等待对方接受
+                # 场景3：系统内好友，已发送，等待对方接受
                 FriendshipService.ensure_manage_friendship_pending(
                     account_id=existing.to_account_id
                 )
-                return HookResult.SKIP, {
+                return HookResult.DELAY, {
+                    "delay_seconds": INTERNAL_SENDED_DELAY_SECONDS,
                     "reason": "等待对方接受好友请求",
                 }
             else:
@@ -94,7 +98,8 @@ class FriendPreHook(Hook):
                 FriendshipService.ensure_manage_friendship_pending(
                     account_id=account_id
                 )
-                return HookResult.ABORT, {
+                return HookResult.DELAY, {
+                    "delay_seconds": EXTERNAL_SENDED_DELAY_SECONDS,
                     "reason": "等待外部好友接受请求",
                 }
 

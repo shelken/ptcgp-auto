@@ -287,6 +287,7 @@ class SendCardDailyTask(Task):
             target_friend_id=self._target_friend_id or "",
             profile_page_name="friend_profile",
             send_text_patterns=get_text_patterns("gift_send_button"),
+            account_id=self.account.id,
             on_success=self._on_friend_verified,
             on_nickname_found=self._on_nickname_found,
             on_scroll_exhausted=self._on_scroll_exhausted,

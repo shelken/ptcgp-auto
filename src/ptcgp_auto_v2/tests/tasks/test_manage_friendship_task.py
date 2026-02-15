@@ -169,6 +169,35 @@ class TestManageFriendshipTask(unittest.TestCase):
 
         self.assertEqual([1, 2, 3], [item.id for item in requests])
 
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.is_text_visible")
+    def test_external_sended_pending_should_defer_without_refresh_loop(
+        self,
+        is_text_visible_mock,
+    ):
+        """外部 sended 未接受时，应当本轮暂缓而不是刷新后继续同一请求。"""
+        is_text_visible_mock.return_value = True
+        req = SimpleNamespace(
+            id=50,
+            request_type="add",
+            status="sended",
+            to_account_id=None,
+            to_friend_id="5231700486153177",
+        )
+        self.task.requests_to_process = [req]
+        self.task.current_request = req
+
+        with (
+            patch.object(self.task, "_find_green_yes_match", return_value=None),
+            patch.object(self.task, "_defer_current_request") as defer_mock,
+            patch.object(
+                self.task, "_close_modal", return_value=ActionResult.ok(wait=0.1)
+            ),
+        ):
+            result = self.task._handle_external_sended_result(req, {"ocr_results": []})
+
+        self.assertTrue(result.success)
+        defer_mock.assert_called_once_with(req, "defer_external_pending")
+
 
 if __name__ == "__main__":
     unittest.main()
