@@ -306,7 +306,10 @@ class TaskInstanceRepository:
             return count
 
     def reset_stale_tasks(
-        self, stale_timeout_seconds: int, skipped_timeout_seconds: int
+        self,
+        stale_timeout_seconds: int,
+        skipped_timeout_seconds: int,
+        exclude_account_ids: Optional[List[int]] = None,
     ) -> int:
         """重置超时的异常状态任务（用于 daemon 模式定期清理）
 
@@ -345,6 +348,10 @@ class TaskInstanceRepository:
                     & (TaskInstance.updated_at < skipped_threshold)
                 )
             )
+            if exclude_account_ids:
+                statement = statement.where(
+                    col(TaskInstance.account_id).notin_(exclude_account_ids)
+                )
             instances = session.exec(statement).all()
             count = 0
             for instance in instances:

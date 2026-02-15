@@ -111,6 +111,7 @@ class Scheduler:
         self._last_stale_check = datetime.min  # 上次异常任务检查时间
         self._last_auto_scale_check = datetime.min  # 上次扩缩容检查时间
         self._lock = threading.Lock()
+        self._active_account_ids: set[int] = set()  # 进程内活跃账号防重
 
         # 延迟初始化的仓库
         self._task_instance_repo: Optional["TaskInstanceRepository"] = None
@@ -181,12 +182,61 @@ class Scheduler:
             return
 
         self._last_stale_check = datetime.now()
+        active_account_ids = self._snapshot_active_account_ids()
         reset_count = self._task_instance_repo.reset_stale_tasks(
             stale_timeout_seconds=int(self.config.stale_task_timeout),
             skipped_timeout_seconds=int(self.config.skipped_reset_timeout),
+            exclude_account_ids=active_account_ids,
         )
         if reset_count > 0:
             logger.info(f"已重置 {reset_count} 个超时/异常状态的任务为待执行")
+
+    def _snapshot_active_account_ids(self) -> list[int]:
+        """获取当前活跃账号快照（线程安全）。"""
+        with self._lock:
+            return list(self._active_account_ids)
+
+    def _is_account_active(self, account_id: int) -> bool:
+        """检查账号是否已被当前调度器占用。"""
+        with self._lock:
+            return account_id in self._active_account_ids
+
+    def _mark_account_active(self, account_id: Optional[int]):
+        """标记账号为活跃状态，防止重复派发。"""
+        if account_id is None:
+            return
+        with self._lock:
+            self._active_account_ids.add(account_id)
+
+    def _unmark_account_active(self, account_id: Optional[int]):
+        """解除账号活跃标记。"""
+        if account_id is None:
+            return
+        with self._lock:
+            self._active_account_ids.discard(account_id)
+
+    def _bind_account_release_on_future(self, future, account_id: Optional[int]):
+        """为 Future 绑定账号释放回调。"""
+        if account_id is None:
+            return
+
+        def _done_callback(done_future):
+            try:
+                exc = None
+                if hasattr(done_future, "exception"):
+                    exc = done_future.exception()
+                if exc:
+                    logger.exception(
+                        "账号任务执行异常 (account_id=%s): %s", account_id, exc
+                    )
+            except Exception:
+                logger.exception(
+                    "读取账号任务 Future 结果失败 (account_id=%s)", account_id
+                )
+            finally:
+                self._unmark_account_active(account_id)
+
+        future.add_done_callback(_done_callback)
 
     def _count_pending_tasks(self) -> int:
         """统计 pending 任务数量"""
@@ -503,6 +553,9 @@ class Scheduler:
         ordered_account_ids = init_account_ids + other_account_ids
 
         for account_id in ordered_account_ids:
+            if self._is_account_active(account_id):
+                continue
+
             # 检查该账号是否已经有正在执行的任务
             if self._task_instance_repo.has_running_tasks(account_id):
                 continue
@@ -726,6 +779,9 @@ class Scheduler:
         account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
 
         for account_id in account_ids:
+            if self._is_account_active(account_id):
+                continue
+
             # 检查该账号是否已经有正在执行的任务
             if self._task_instance_repo.has_running_tasks(account_id):
                 continue
@@ -814,6 +870,8 @@ class Scheduler:
 
     def _submit_task_executor(self, device: Device, task_instance: "TaskInstance"):
         """提交单任务执行"""
+        self._mark_account_active(task_instance.account_id)
+
         # 【关键】在提交到线程池之前，立即将状态改为 running
         # 防止同一账号的任务被分配到多个设备
         task_instance.status = TaskStatus.RUNNING.value
@@ -826,13 +884,18 @@ class Scheduler:
         )
 
         executor_config = self._build_executor_config()
-        self._executor_pool.submit(
-            run_executor,
-            device=device,
-            task_instance=task_instance,
-            device_pool=self.device_pool,
-            config=executor_config,
-        )
+        try:
+            future = self._executor_pool.submit(
+                run_executor,
+                device=device,
+                task_instance=task_instance,
+                device_pool=self.device_pool,
+                config=executor_config,
+            )
+        except Exception:
+            self._unmark_account_active(task_instance.account_id)
+            raise
+        self._bind_account_release_on_future(future, task_instance.account_id)
 
     def _submit_account_batch_executor(
         self,
@@ -841,6 +904,8 @@ class Scheduler:
         task_instances: list["TaskInstance"],
     ):
         """提交批量任务执行"""
+        self._mark_account_active(account.id)
+
         # 将所有任务状态改为 running，防止被其他线程分配
         for task_instance in task_instances:
             task_instance.status = TaskStatus.RUNNING.value
@@ -853,14 +918,19 @@ class Scheduler:
         )
 
         executor_config = self._build_executor_config()
-        self._executor_pool.submit(
-            run_account_batch_executor,
-            device=device,
-            account=account,
-            task_instances=task_instances,
-            device_pool=self.device_pool,
-            config=executor_config,
-        )
+        try:
+            future = self._executor_pool.submit(
+                run_account_batch_executor,
+                device=device,
+                account=account,
+                task_instances=task_instances,
+                device_pool=self.device_pool,
+                config=executor_config,
+            )
+        except Exception:
+            self._unmark_account_active(account.id)
+            raise
+        self._bind_account_release_on_future(future, account.id)
 
     def _main_loop(self):
         """调度器主循环（批量任务调度）"""
