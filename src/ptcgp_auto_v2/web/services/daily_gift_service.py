@@ -11,6 +11,7 @@ from typing import Any
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.models import AccountGiftPair
+from ptcgp_auto_v2.utils.game_time import get_game_biz_date_str
 from ptcgp_auto_v2.web.queries.daily_gift_queries import (
     list_accounts_by_ids,
     list_active_gift_pairs,
@@ -20,8 +21,8 @@ from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
 
 def _today_local_date() -> str:
-    """返回本地业务日期 YYYY-MM-DD。"""
-    return datetime.now().strftime("%Y-%m-%d")
+    """返回游戏业务日期 YYYY-MM-DD。"""
+    return get_game_biz_date_str()
 
 
 def _normalize_biz_date_local(raw_date: str | None) -> str:
@@ -227,6 +228,7 @@ def build_daily_gift_context(
     current_lang = normalize_lang(lang)
     t = get_translations(current_lang)
     selected_date = _normalize_biz_date_local(biz_date_local)
+    current_biz_date_local = _today_local_date()
 
     records = list_daily_gift_records(session=session, biz_date_local=selected_date)
     pairs = list_active_gift_pairs(session=session)
@@ -312,6 +314,7 @@ def build_daily_gift_context(
             "waiting": wait_count,
         },
         "selected_biz_date_local": selected_date,
+        "current_biz_date_local": current_biz_date_local,
         "recent_biz_dates": _build_recent_dates(selected_date),
         "t": t,
         "current_lang": current_lang,
