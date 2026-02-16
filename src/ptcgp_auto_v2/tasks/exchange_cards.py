@@ -188,6 +188,7 @@ def _build_exchange_pages() -> list[dict]:
         },
         {
             "name": "friend_profile",
+            "match_all": True,
             "identifiers": get_text_patterns("friend_profile"),
             "priority": 55,
         },
