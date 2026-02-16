@@ -38,6 +38,9 @@ SUPPORTED_LOCALES = list(LOCALE_TO_OCR_LANGUAGE.keys())
 OCR_LANGUAGE_TO_LOCALE = {value: key for key, value in LOCALE_TO_OCR_LANGUAGE.items()}
 DEFAULT_OCR_LANGUAGES = list(LOCALE_TO_OCR_LANGUAGE.values())  # 默认 OCR 语言
 
+# 游戏刷新时间配置（游戏固定 UTC 06:00 刷新；通过偏移换算本地刷新时刻）
+GAME_UTC_OFFSET_HOURS = 8
+
 if DEFAULT_LOCALE not in SUPPORTED_LOCALES:
     raise ValueError(f"DEFAULT_LOCALE={DEFAULT_LOCALE} 不在 SUPPORTED_LOCALES 中")
 
