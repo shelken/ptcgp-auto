@@ -36,7 +36,7 @@
                         <div class="daily-date-weekdays" data-role="weekdays"></div>
                         <div class="daily-date-grid" data-role="days"></div>
                         <div class="flex justify-end mt-3">
-                            <button type="button" class="brutal-btn text-xs" data-role="today">{{ t.btn_today or 'Today' }}</button>
+                            <button type="button" class="brutal-btn text-xs" data-role="today" data-biz-date="{{ current_biz_date_local }}">{{ t.btn_today or 'Today' }}</button>
                         </div>
                     </div>
                 </div>

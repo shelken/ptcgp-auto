@@ -209,6 +209,7 @@ src/ptcgp_auto_v2/web/
 - **Modal 成功关闭规范**：提交成功后关闭弹窗统一使用 `data-close-modal-on-success="true" + bootstrap.js(hx-afterRequest)`，不要在模板里写 `hx-on:...closeModal()`。
 - **任务手动重置优先级**：`reset-completed` 把任务改回 `pending` 时必须同时清空 `next_run_at`（设为 `NULL`），否则未来时间会导致重置任务被已到期任务长期抢占。
 - **管理页 hash 白名单同步**：新增管理子页（如 `exchange-cards`）时，必须同时更新 `tabs.js` 与 `bootstrap.js` 中的 hash 白名单，否则刷新/直达时不会自动加载对应页面。
+- **业务日期一致性**：`daily-gift` 的默认日期与“Today”按钮必须使用后端下发的游戏业务日期（如 UTC06:00+offset 计算），不能直接用前端自然日 `new Date()`。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录
