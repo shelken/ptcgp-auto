@@ -486,6 +486,58 @@ class ManageFriendshipTask(Task):
             "icon_green_yes", scale=0.8, threshold=0.8
         )
 
+    def _find_green_yes_match_by_scale(self, scale: float):
+        """按指定缩放比例查找绿色勾模板。"""
+        return self.page_detector.find_template_with_scale(
+            "icon_green_yes", scale=scale, threshold=0.8
+        )
+
+    def _find_red_no_match(self):
+        """查找红色叉模板。"""
+        match = self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=1.0, threshold=0.8
+        )
+        if match:
+            return match
+        return self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=0.8, threshold=0.8
+        )
+
+    def _find_red_no_match_by_scale(self, scale: float):
+        """按指定缩放比例查找红色叉模板。"""
+        return self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=scale, threshold=0.8
+        )
+
+    def _is_pending_reply_by_icons(self) -> bool:
+        """1.0 模板下同时有绿色勾和红色叉，判定为待回复状态。"""
+        green_1x = self._find_green_yes_match_by_scale(1.0)
+        red_1x = self._find_red_no_match_by_scale(1.0)
+        return green_1x is not None and red_1x is not None
+
+    def _is_already_friend_by_icons(self) -> bool:
+        """0.8 模板下命中绿色勾，判定为已是好友状态。"""
+        green_08 = self._find_green_yes_match_by_scale(0.8)
+        return green_08 is not None
+
+    def _is_friend_confirmed_by_icons(self, request_id: Optional[int] = None) -> bool:
+        """仅当存在绿色勾且不存在红叉时，判定为已确认好友。"""
+        green_match = self._find_green_yes_match()
+        red_match = self._find_red_no_match()
+
+        if green_match and not red_match:
+            return True
+
+        if green_match and red_match:
+            if request_id is not None:
+                logger.debug(
+                    "请求 %s 同时检测到绿色勾和红叉，判定为待处理状态",
+                    request_id,
+                )
+            else:
+                logger.debug("同时检测到绿色勾和红叉，判定为待处理状态")
+        return False
+
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群。"""
         if self._completed:
@@ -615,21 +667,36 @@ class ManageFriendshipTask(Task):
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        # 兜底场景：若结果页直接出现绿色勾，说明双方可能已是好友。
-        # 此时不再走发送流程，直接按"已完成加好友"处理，避免请求长期失败卡住。
-        green_match = self._find_green_yes_match()
-        if green_match:
-            logger.info("请求 %s 检测到绿色勾，按已是好友直接完成", req.id)
+        if self._is_pending_reply_by_icons():
+            logger.warning(
+                "请求 %s 检测到待回复状态（1.0命中红叉+绿勾），当前先不自动处理",
+                req.id,
+            )
+            self._defer_current_request(req, "defer_sending_pending_reply")
+            return self._close_modal(wait=0.8)
+
+        if self._is_already_friend_by_icons():
+            logger.info("请求 %s 检测到已是好友状态（0.8绿色勾）", req.id)
             self._complete_add_already_friend_request(req)
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        if not self._is_action_done("add_apply_clicked"):
+        apply_visible = is_text_visible(
+            ocr_results, get_text_patterns("friend_apply_button"), exact=True
+        )
+        if apply_visible:
             apply_result = self._tap_apply_button(ocr_results)
             if apply_result:
+                logger.debug("请求 %s 检测到申请按钮，执行申请点击", req.id)
                 self._mark_action_done("add_apply_clicked")
                 self._add_apply_wait_rounds = 0
                 return apply_result
+            logger.debug("请求 %s 检测到申请按钮，但点击未成功", req.id)
+            return ActionResult.wait(0.6)
+
+        if not self._is_action_done("add_apply_clicked"):
+            # 尚未进入发送态，且当前未识别到申请按钮，继续等待刷新。
+            return ActionResult.wait(0.6)
 
         self._add_apply_wait_rounds += 1
         if self._add_apply_wait_rounds >= 6:
@@ -701,9 +768,8 @@ class ManageFriendshipTask(Task):
         ocr_results = page_info.get("ocr_results", [])
 
         # 看到绿色勾：对方已接受，成为好友
-        green_match = self._find_green_yes_match()
-        if green_match:
-            logger.info("外部好友请求 %s 检测到绿色勾，对方已接受", req.id)
+        if self._is_friend_confirmed_by_icons(req.id):
+            logger.info("外部好友请求 %s 仅检测到绿色勾，对方已接受", req.id)
             self._save_request(req, "completed")
             if req.to_friend_id and self.account.id is not None:
                 FriendshipRepository().create(
