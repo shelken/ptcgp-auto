@@ -5,18 +5,18 @@
 用于记录每日送卡执行状态、目标和库存同步信息。
 """
 
-from datetime import datetime
 from typing import Optional, ClassVar
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from .base import TimestampMixin
+from ptcgp_auto_v2.utils.game_time import get_game_biz_date_str
 
 
 def _today_local_date() -> str:
-    """返回本地日期字符串 YYYY-MM-DD。"""
-    return datetime.now().strftime("%Y-%m-%d")
+    """返回游戏业务日期字符串 YYYY-MM-DD（按 UTC06:00 换算本地切日）。"""
+    return get_game_biz_date_str()
 
 
 class AccountGiftRecord(SQLModel, TimestampMixin, table=True):
