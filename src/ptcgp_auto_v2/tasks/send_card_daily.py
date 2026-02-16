@@ -9,7 +9,6 @@
 """
 
 import logging
-from datetime import datetime
 from typing import Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
@@ -369,25 +368,13 @@ class SendCardDailyTask(Task):
             "gift_filter_modal": self._handle_filter_modal,
             "gift_target_page": self._handle_target_page,
             "gift_confirm_popup": self._handle_confirm_popup,
-            "gift_confirm_last_popup": self._handle_confirm_last_popup,
+            "gift_confirm_last_popup": self._handle_confirm_popup,
             "gift_swipe_page": self._handle_swipe_page,
         }
         handler = handlers.get(page_name)
         if handler:
             return handler(page_info)
         return ActionResult.wait(0.8)
-
-    def _fail(self, error_code: str, message: str) -> ActionResult:
-        """统一失败处理。"""
-        logger.warning("send_card_daily 失败: %s - %s", error_code, message)
-        if self._record:
-            GiftRecordService.update_status(
-                self._record,
-                status="failed",
-                error_code=error_code,
-                error_message=message,
-            )
-        return ActionResult.fail(f"{error_code}: {message}")
 
     def _complete_without_send(
         self,
@@ -690,11 +677,6 @@ class SendCardDailyTask(Task):
 
     def _handle_confirm_popup(self, page_info: dict) -> ActionResult:
         """确认弹窗点击 OK。"""
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        return result or ActionResult.wait(0.6)
-
-    def _handle_confirm_last_popup(self, page_info: dict) -> ActionResult:
-        """仅剩一张弹窗点击 OK。"""
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
         return result or ActionResult.wait(0.6)
 
