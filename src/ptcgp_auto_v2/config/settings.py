@@ -17,10 +17,10 @@ from ptcgp_auto_v2.config.constants import (
     BASE_SCREEN_WIDTH,
     DEFAULT_ADB_ADDRESS,
     DEFAULT_DB_NAME,
+    DEFAULT_LOCALE,
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_SCROLL_ATTEMPTS,
     DEFAULT_MAX_WORKERS,
-    DEFAULT_LOCALE,
     DEFAULT_OCR_LANGUAGES,
     DEFAULT_OCR_LEVEL,
     DEFAULT_POLL_INTERVAL,
@@ -113,7 +113,7 @@ class Settings:
     # 可选值: latest / hash_balance / least_used
     # latest 自动选最新包
     # hash_balance 一致性hash均衡所有包的选择
-    pack_auto_strategy: str = "latest"
+    pack_auto_strategy: str = "hash_balance"
 
     # 调度配置
     poll_interval: float = DEFAULT_POLL_INTERVAL
