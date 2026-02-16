@@ -8,6 +8,7 @@ from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import PackCard, PackRecord
+from ptcgp_auto_v2.utils.game_time import get_game_day_window
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,13 @@ class PackRecordRepository:
     def get_today(self, account_id: int) -> Optional[PackRecord]:
         """获取账号今日的开包记录"""
         with Session(get_engine()) as session:
-            today = datetime.now().date()
+            day_start, day_end = get_game_day_window()
             statement = (
                 select(PackRecord)
                 .where(
                     PackRecord.account_id == account_id,
-                    func.date(PackRecord.opened_at) == today,
+                    PackRecord.opened_at >= day_start,
+                    PackRecord.opened_at < day_end,
                 )
                 .order_by(col(PackRecord.opened_at).desc())
                 .limit(1)
