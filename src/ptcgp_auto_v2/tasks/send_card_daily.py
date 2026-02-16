@@ -100,6 +100,7 @@ def _build_send_card_pages() -> list[dict]:
         },
         {
             "name": "friend_profile",
+            "match_all": True,
             "identifiers": get_text_patterns("friend_profile"),
             "priority": 65,
         },
