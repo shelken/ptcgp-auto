@@ -26,6 +26,11 @@ async def get_management_friendships(
     lang: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     from_account_id: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染好友关系管理页面。"""
@@ -37,6 +42,11 @@ async def get_management_friendships(
         lang=current_lang,
         account_id=selected_account_id,
         from_account_id=selected_from_account_id,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=max(page, 0),
+        page_size=min(max(page_size, 1), 100),
     )
     context["request"] = request
     templates = get_templates()
@@ -58,6 +68,11 @@ async def post_add_friend_request(
     selected_from_account_id = (
         parse_optional_int(form.get("selected_from_account_id")) or from_account_id
     )
+    q = safe_get_string(form, "q") or ""
+    sort_by = safe_get_string(form, "sort_by") or "created_at"
+    sort_order = safe_get_string(form, "sort_order") or "desc"
+    page = parse_optional_int(form.get("page")) or 0
+    page_size = parse_optional_int(form.get("page_size")) or 10
 
     # 系统内账号可不手动填写 friend_id，后端自动补全
     if not to_friend_id and to_account_id:
@@ -83,6 +98,11 @@ async def post_add_friend_request(
         from_account_id=str(selected_from_account_id)
         if selected_from_account_id is not None
         else None,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
         session=session,
     )
 
@@ -115,6 +135,11 @@ async def post_delete_friend_request(
     selected_from_account_id = (
         parse_optional_int(form.get("selected_from_account_id")) or from_account_id
     )
+    q = safe_get_string(form, "q") or ""
+    sort_by = safe_get_string(form, "sort_by") or "created_at"
+    sort_order = safe_get_string(form, "sort_order") or "desc"
+    page = parse_optional_int(form.get("page")) or 0
+    page_size = parse_optional_int(form.get("page_size")) or 10
 
     # 删除时可直接选择系统账号，后端自动补全 friend_id
     if not friend_id and to_account_id:
@@ -140,6 +165,11 @@ async def post_delete_friend_request(
         from_account_id=str(selected_from_account_id)
         if selected_from_account_id is not None
         else None,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
         session=session,
     )
 
@@ -166,6 +196,11 @@ async def post_cancel_friend_request(
     lang: str | None = Query(default=None),
     selected_account_id: str | None = Query(default=None),
     selected_from_account_id: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """取消尚未执行的好友请求记录。"""
@@ -175,6 +210,11 @@ async def post_cancel_friend_request(
         lang=lang,
         account_id=selected_account_id,
         from_account_id=selected_from_account_id,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
         session=session,
     )
 

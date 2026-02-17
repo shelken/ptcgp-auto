@@ -80,7 +80,7 @@ async def get_owned_card_modal_exchange_accounts(
     request: Request,
     card_id: int,
     page: int = Query(default=0),
-    page_size: int = Query(default=12),
+    page_size: int = Query(default=10),
     q: str = Query(default=""),
     sort_by: str = Query(default="account_id"),
     sort_order: str = Query(default="asc"),

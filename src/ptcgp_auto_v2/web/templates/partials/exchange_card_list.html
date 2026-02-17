@@ -5,42 +5,32 @@
 <form id="exchange-card-state-form" class="hidden">
     <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
     <input type="hidden" name="status" value="{{ selected_status or '' }}">
+    <input type="hidden" name="q" value="{{ q or '' }}">
+    <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+    <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+    <input type="hidden" name="page" value="{{ page or 0 }}">
+    <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
 </form>
 
-<div class="brutal-card p-6 space-y-6">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_exchange_cards or 'EXCHANGE REQUESTS' }}</h2>
+{% call data_table_card(t.title_exchange_cards or 'EXCHANGE REQUESTS') %}
         <form
-            class="flex flex-wrap items-end gap-3"
+            class="table-filters-row"
             hx-get="/management/exchange-cards?lang={{ current_lang }}"
             hx-target="#management-content"
             hx-swap="innerHTML">
-            <div>
-                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.filter_account }}</label>
-                <select name="account_id" class="brutal-input min-w-56 js-custom-select">
-                    <option value="">{{ t.label_all or 'All' }}</option>
-                    {% for account in accounts %}
-                    <option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %}>
-                        #{{ account.id }} · {{ account_name_map.get(account.id, account.game_id) }}
-                    </option>
-                    {% endfor %}
-                </select>
+            <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
+            <input type="hidden" name="status" value="{{ selected_status or '' }}">
+            <input type="hidden" name="page" value="0">
+            <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
+            <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+            <div class="table-filter-item">
+                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_search or 'Search' }}</label>
+                <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.exchange_search_accounts or 'Search by Account ID / Nickname / Friend ID' }}">
             </div>
-            <div>
-                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.col_status or 'Status' }}</label>
-                <select name="status" class="brutal-input min-w-40 js-custom-select">
-                    <option value="">{{ t.label_all or 'All' }}</option>
-                    {% for item in ['sending', 'sended', 'completed', 'failed', 'canceled'] %}
-                    <option value="{{ item }}" {% if selected_status == item %}selected{% endif %}>{{ t.get('exchange_request_status_' ~ item, item) }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button type="submit" class="brutal-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+            <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
         </form>
-    </div>
-</div>
 
-{% call data_table_card('', 'brutal-card p-6 space-y-4') %}
     {% call table_container([
         {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.label_from_account or 'From Account', 'class_name': 'whitespace-nowrap'},
@@ -77,7 +67,7 @@
             <td class="p-3 text-right">
                 {% if row.can_cancel %}
                 <form
-                    hx-post="/api/exchange-cards/requests/{{ row.id }}/cancel?lang={{ current_lang }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}"
+                    hx-post="/api/exchange-cards/requests/{{ row.id }}/cancel?lang={{ current_lang }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}&page={{ page or 0 }}&page_size={{ page_size or 10 }}"
                     hx-target="#management-content"
                     hx-swap="innerHTML"
                     class="inline">
@@ -90,5 +80,24 @@
         </tr>
         {% endfor %}
     {% endcall %}
+
+    <div class="flex items-center justify-between mt-4">
+        <div class="text-xs text-muted font-mono">{{ t.label_total_records or 'Total' }}: {{ total_items or 0 }}</div>
+        <div class="flex items-center gap-2">
+            <button type="button"
+                    class="brutal-btn text-xs px-3 py-1"
+                    {% if not has_prev %}disabled{% endif %}
+                    hx-get="/management/exchange-cards?lang={{ current_lang }}&page={{ (page or 0) - 1 }}&page_size={{ page_size or 10 }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}"
+                    hx-target="#management-content"
+                    hx-swap="innerHTML">{{ t.btn_prev_page or '上一页' }}</button>
+            <span class="text-xs text-muted font-mono">{{ (page or 0) + 1 }}</span>
+            <button type="button"
+                    class="brutal-btn text-xs px-3 py-1"
+                    {% if not has_next %}disabled{% endif %}
+                    hx-get="/management/exchange-cards?lang={{ current_lang }}&page={{ (page or 0) + 1 }}&page_size={{ page_size or 10 }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}"
+                    hx-target="#management-content"
+                    hx-swap="innerHTML">{{ t.btn_next_page or '下一页' }}</button>
+        </div>
+    </div>
 {% endcall %}
 {% endcall %}
