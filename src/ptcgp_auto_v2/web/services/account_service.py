@@ -19,23 +19,76 @@ from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_ac
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
 
-def get_accounts_context(session: Session, lang: str) -> dict:
-    """获取账号管理列表视图数据。"""
+def get_accounts_context(
+    session: Session,
+    lang: str,
+    q: str = "",
+    sort_by: str = "id",
+    sort_order: str = "asc",
+    page: int = 0,
+    page_size: int = 10,
+) -> dict:
+    """获取账号管理列表视图数据（统一列表协议：q/sort/page）。"""
     current_lang = normalize_lang(lang)
     t = get_translations(current_lang)
     repo = AccountRepository()
     accounts = repo.get_all()
+
+    normalized_q = (q or "").strip().lower()
+    allowed_sort_fields = {"id", "nickname", "friend_id"}
+    normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
+    normalized_sort_order = "desc" if str(sort_order).lower() == "desc" else "asc"
+    normalized_page = max(page, 0)
+    normalized_page_size = min(max(page_size, 1), 100)
+
+    if normalized_q:
+
+        def _match_account(item: Account) -> bool:
+            account_id_text = str(item.id or "")
+            nickname_text = (item.nickname or "").lower()
+            display_name_text = (item.display_name or "").lower()
+            friend_id_text = (item.friend_id or "").lower()
+            game_id_text = (item.game_id or "").lower()
+            return (
+                normalized_q in account_id_text
+                or normalized_q in nickname_text
+                or normalized_q in display_name_text
+                or normalized_q in friend_id_text
+                or normalized_q in game_id_text
+            )
+
+        accounts = [item for item in accounts if _match_account(item)]
+
+    def _sort_value(item: Account):
+        if normalized_sort_by == "nickname":
+            return (item.nickname or item.display_name or "").lower()
+        if normalized_sort_by == "friend_id":
+            return (item.friend_id or "").lower()
+        return item.id or 0
+
+    accounts = sorted(
+        accounts,
+        key=_sort_value,
+        reverse=(normalized_sort_order == "desc"),
+    )
+
+    total_items = len(accounts)
+    start = normalized_page * normalized_page_size
+    end = start + normalized_page_size
+    accounts_page = accounts[start:end]
+    has_prev = normalized_page > 0
+    has_next = end < total_items
 
     config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
     all_configs = session.exec(config_stm).all()
     pack_configs_map = {item.account_id: item for item in all_configs}
 
     auto_pack_map: dict[int, dict] = {}
-    if accounts:
+    if accounts_page:
         settings = get_settings()
         card_repo = CardRepository()
         record_repo = PackRecordRepository()
-        for account in accounts:
+        for account in accounts_page:
             if account.id is None or account.id in pack_configs_map:
                 continue
             selected = select_pack_for_account(
@@ -49,9 +102,17 @@ def get_accounts_context(session: Session, lang: str) -> dict:
                 auto_pack_map[account.id] = selected
 
     return {
-        "accounts": accounts,
+        "accounts": accounts_page,
         "pack_configs": pack_configs_map,
         "auto_pack_map": auto_pack_map,
+        "q": q,
+        "sort_by": normalized_sort_by,
+        "sort_order": normalized_sort_order,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": has_prev,
+        "has_next": has_next,
+        "total_items": total_items,
         "t": t,
         "current_lang": current_lang,
     }

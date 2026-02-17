@@ -18,34 +18,42 @@
             <tr class="text-left border-b border-subtle">
                 <th class="py-2 px-2">
                     {{ data_table_sort_button(
-                        t.col_account_id,
-                        '/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=account_id&sort_order=' ~ next_order_account,
-                        sort_by == 'account_id',
-                        sort_order
+                        label=t.col_account_id,
+                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=account_id&sort_order=' ~ next_order_account,
+                        target='#owned-card-exchange-table',
+                        active=(sort_by == 'account_id'),
+                        order=sort_order,
+                        class_name='font-bold inline-flex items-center gap-1'
                     ) }}
                 </th>
                 <th class="py-2 px-2">
                     {{ data_table_sort_button(
-                        t.col_friend_id,
-                        '/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=friend_id&sort_order=' ~ next_order_friend,
-                        sort_by == 'friend_id',
-                        sort_order
+                        label=t.col_friend_id,
+                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=friend_id&sort_order=' ~ next_order_friend,
+                        target='#owned-card-exchange-table',
+                        active=(sort_by == 'friend_id'),
+                        order=sort_order,
+                        class_name='font-bold inline-flex items-center gap-1'
                     ) }}
                 </th>
                 <th class="py-2 px-2">
                     {{ data_table_sort_button(
-                        t.col_nickname,
-                        '/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=nickname&sort_order=' ~ next_order_nickname,
-                        sort_by == 'nickname',
-                        sort_order
+                        label=t.col_nickname,
+                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=nickname&sort_order=' ~ next_order_nickname,
+                        target='#owned-card-exchange-table',
+                        active=(sort_by == 'nickname'),
+                        order=sort_order,
+                        class_name='font-bold inline-flex items-center gap-1'
                     ) }}
                 </th>
                 <th class="py-2 px-2 text-right">
                     {{ data_table_sort_button(
-                        t.col_count,
-                        '/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=count&sort_order=' ~ next_order_count,
-                        sort_by == 'count',
-                        sort_order
+                        label=t.col_count,
+                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=count&sort_order=' ~ next_order_count,
+                        target='#owned-card-exchange-table',
+                        active=(sort_by == 'count'),
+                        order=sort_order,
+                        class_name='font-bold inline-flex items-center gap-1'
                     ) }}
                 </th>
                 <th class="py-2 px-2 text-right w-32">{{ t.col_actions or 'Actions' }}</th>
@@ -86,6 +94,6 @@
     </table>
 </div>
 
-{% call data_table_pager(card.id, current_lang, page, page_size, q, sort_by, sort_order, has_prev, has_next, t) %}
-{{ total_items }}
-{% endcall %}
+{% set prev_url = '/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=' ~ (page - 1) ~ '&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=' ~ sort_by ~ '&sort_order=' ~ sort_order %}
+{% set next_url = '/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=' ~ (page + 1) ~ '&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=' ~ sort_by ~ '&sort_order=' ~ sort_order %}
+{{ data_table_pager(page, has_prev, has_next, prev_url, next_url, '#owned-card-exchange-table', total_items, t) }}
