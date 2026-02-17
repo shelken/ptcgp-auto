@@ -77,6 +77,18 @@ class FriendRequestRepository:
             )
             return list(session.exec(statement).all())
 
+    def get_add_requests_by_to_account_and_status(
+        self, to_account_id: int, status: str
+    ) -> List[AccountFriendRequest]:
+        """获取接收方的指定状态 add 类型请求"""
+        with Session(get_engine()) as session:
+            statement = select(AccountFriendRequest).where(
+                AccountFriendRequest.to_account_id == to_account_id,
+                AccountFriendRequest.status == status,
+                AccountFriendRequest.request_type == "add",
+            )
+            return list(session.exec(statement).all())
+
     def get_by_from_account_and_type(
         self, from_account_id: int, request_type: str, status: str
     ) -> List[AccountFriendRequest]:

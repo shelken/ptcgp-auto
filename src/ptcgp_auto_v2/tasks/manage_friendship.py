@@ -87,6 +87,17 @@ def _build_manage_friendship_pages() -> list[dict]:
     ]
 
 
+# ============================================================
+# 常量定义
+# ============================================================
+
+MAX_WAIT_ROUNDS_ADD_APPLY = 6
+MAX_WAIT_ROUNDS_ACCEPT = 6
+MAX_WAIT_ROUNDS_CANCEL_CLICK = 12
+MAX_WAIT_ROUNDS_CANCEL_RESULT = 10
+MAX_WAIT_ROUNDS_DELETE = 6
+
+
 @TaskRegistry.register("manage_friendship")
 class ManageFriendshipTask(Task):
     """好友请求统一处理任务。"""
@@ -217,7 +228,9 @@ class ManageFriendshipTask(Task):
             return []
         repo = FriendRequestRepository()
         sending = repo.get_by_from_account_and_status(self.account.id, "sending")
-        sended = repo.get_by_to_account_and_status(self.account.id, "sended")
+        sended = repo.get_add_requests_by_to_account_and_status(
+            self.account.id, "sended"
+        )
         external_sended = repo.get_external_sended_requests(self.account.id)
         canceling = repo.get_by_from_account_and_type(
             self.account.id, "add", "canceling"
@@ -699,7 +712,7 @@ class ManageFriendshipTask(Task):
             return ActionResult.wait(0.6)
 
         self._add_apply_wait_rounds += 1
-        if self._add_apply_wait_rounds >= 6:
+        if self._add_apply_wait_rounds >= MAX_WAIT_ROUNDS_ADD_APPLY:
             self._save_request(req, "failed", failed_reason="发送后未出现取消交友邀请")
             self._refresh_requests()
             return self._close_modal(wait=0.8)
@@ -757,7 +770,7 @@ class ManageFriendshipTask(Task):
             return close_result
 
         self._accept_wait_rounds += 1
-        if self._accept_wait_rounds >= 6:
+        if self._accept_wait_rounds >= MAX_WAIT_ROUNDS_ACCEPT:
             self._save_request(req, "failed", failed_reason="接受流程未找到绿色勾")
             self._refresh_requests()
             return self._close_modal(wait=0.8)
@@ -787,7 +800,7 @@ class ManageFriendshipTask(Task):
             return self._close_modal(wait=0.8)
 
         self._accept_wait_rounds += 1
-        if self._accept_wait_rounds >= 6:
+        if self._accept_wait_rounds >= MAX_WAIT_ROUNDS_ACCEPT:
             logger.debug("外部好友请求 %s 状态不明确，保持 sended", req.id)
             self._defer_current_request(req, "defer_external_unclear")
             return self._close_modal(wait=0.8)
@@ -825,7 +838,7 @@ class ManageFriendshipTask(Task):
                 return cancel_result
 
             self._cancel_wait_rounds += 1
-            if self._cancel_wait_rounds >= 12:
+            if self._cancel_wait_rounds >= MAX_WAIT_ROUNDS_CANCEL_CLICK:
                 self._save_request(
                     req, "failed", failed_reason="取消邀请按钮可见但点击失败"
                 )
@@ -835,7 +848,7 @@ class ManageFriendshipTask(Task):
 
         # 看不到取消按钮也没看到申请按钮，先等待一轮再判定
         self._cancel_wait_rounds += 1
-        if self._cancel_wait_rounds >= 10:
+        if self._cancel_wait_rounds >= MAX_WAIT_ROUNDS_CANCEL_RESULT:
             self._save_request(req, "failed", failed_reason="取消邀请结果页状态不明确")
             self._refresh_requests()
             return self._close_modal(wait=0.8)
@@ -863,7 +876,7 @@ class ManageFriendshipTask(Task):
             return ActionResult.wait(0.6)
 
         self._delete_wait_rounds += 1
-        if self._delete_wait_rounds >= 6:
+        if self._delete_wait_rounds >= MAX_WAIT_ROUNDS_DELETE:
             self._save_request(
                 req, "failed", failed_reason="删除结果页未出现绿色勾或申请"
             )
