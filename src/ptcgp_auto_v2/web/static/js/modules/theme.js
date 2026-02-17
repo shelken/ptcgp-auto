@@ -141,12 +141,16 @@ export function cycleThemeMode() {
 }
 
 /**
- * 手动选择具体主题（进入manual模式）
+ * 手动选择具体主题（根据分组显示对应图标）
  */
 export function setManualTheme(theme) {
-    localStorage.setItem(STORAGE_KEY_THEME_MODE, 'manual');
+    // 根据主题分组确定模式：亮色主题用'light'，暗色主题用'dark'
+    const group = getThemeGroup(theme);
+    const mode = group; // 'light' 或 'dark'
+
+    localStorage.setItem(STORAGE_KEY_THEME_MODE, mode);
     applyTheme(theme);
-    updateThemeUI('manual', theme);
+    updateThemeUI(mode, theme);
 }
 
 /**
