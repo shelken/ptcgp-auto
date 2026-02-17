@@ -93,12 +93,14 @@ SKIP_REASON_NO_PACK_CONFIG = "未配置开包目标"
 def _build_pack_pages() -> list[dict]:
     """构建开包任务页面规则"""
     return [
+        # 選擇擴充組
         {
             "name": "pack_series_select",
             "identifiers": get_text_patterns("pack_series_select"),
             "priority": 99,
             "exact_match": True,
         },
+        # 提供比例 / 其他擴充包
         {
             "name": "pack_list",
             "identifiers": get_text_patterns("pack_list"),
@@ -106,31 +108,37 @@ def _build_pack_pages() -> list[dict]:
             "exclude_identifiers": get_text_patterns("pack_list_exclude"),
             "priority": 99,
         },
+        # 橫向滑動來開封
         {
             "name": "pack_opening_swipe",
             "identifiers": get_text_patterns("pack_opening_swipe"),
             "priority": 99,
         },
+        # 點擊想开封的擴充包
         {
             "name": "pack_opening_select",
             "identifiers": get_text_patterns("pack_opening_select"),
             "priority": 99,
         },
+        # 長按开封
         {
             "name": "pack_opening_card",
             "identifiers": get_text_patterns("long_press"),
             "priority": 99,
         },
+        # 開封結果 / 開包點數 / 閃亮沙子
         {
             "name": "pack_opening_result",
             "identifiers": get_text_patterns("pack_opening_result"),
             "priority": 99,
         },
+        # 向上輕滑卡牌
         {
             "name": "pack_card_register",
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 99,
         },
+        # 開封
         {
             "name": "pack_detail",
             "identifiers": get_text_patterns("open_pack"),
@@ -138,17 +146,20 @@ def _build_pack_pages() -> list[dict]:
             "priority": 99,
             "exact_match": True,
         },
+        # 要使用道具縮短等待時間
         {
             "name": "pack_hourglass_popup",
             "identifiers": get_text_patterns("pack_hourglass_popup"),
             "priority": 99,
         },
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "match_all": True,
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 99,
         },
+        # 快进按钮
         {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
     ]
 

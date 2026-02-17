@@ -48,41 +48,47 @@ WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"
 
 def _build_challenge_pages() -> list[dict]:
     return [
+        # 剩餘遊玩次數
         {
             "name": "card_challenge_popup",
             "identifiers": get_text_patterns("card_challenge_remaining_plays"),
             "exact_match": False,
             "priority": 5,
         },
+        # 選1張喜歡的卡牌吧
         {
             "name": "init_select_favorite_card",
             "identifiers": get_text_patterns("init_select_favorite_card"),
             "exact_match": True,
             "priority": 8,
         },
+        # 要送出「謝謝！」嗎
         {
-            # 送出谢谢弹窗：朋友礼物需要点击"謝謝！"确认
             "name": "popup_send_thanks",
             "identifiers": get_text_patterns("popup_send_thanks"),
             "priority": 9,
         },
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),
             "match_all": True,
             "priority": 10,
         },
+        # 向上輕滑卡牌
         {
             "name": "pack_card_register",
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 12,
         },
+        # 得卡挑戰
         {
             "name": "card_challenge_list",
             "identifiers": get_text_patterns("card_challenge_title"),
             "exact_match": True,
             "priority": 20,
         },
+        # GET!
         {
             "name": "card_challenge_get",
             "identifiers": get_text_patterns("card_challenge_get"),

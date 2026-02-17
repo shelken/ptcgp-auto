@@ -50,33 +50,33 @@ MAX_EMPTY_CHECK_ATTEMPTS = 2
 def _build_claim_gifts_pages() -> list[dict]:
     """构建礼物盒领取页面规则"""
     return [
+        # 沒有可領取的道具
         {
-            # 礼物盒无可领取：任务完成
             "name": "gift_box_empty",
             "identifiers": get_text_patterns("gift_empty"),
             "priority": 5,
         },
+        # 商店 / 得卡挑戰
         {
-            # 游戏主页：检测是否有礼物图标的起点
             "name": "game_home_main",
             "match_all": True,
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 10,
         },
+        # 向上輕滑卡牌
         {
-            # 卡牌登录页面：领取礼物后展示卡牌，需要向上滑动
             "name": "card_register_page",
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 12,
         },
+        # 要送出「謝謝！」嗎
         {
-            # 送出谢谢弹窗：朋友礼物需要点击"謝謝！"确认
             "name": "popup_send_thanks",
             "identifiers": get_text_patterns("popup_send_thanks"),
             "priority": 13,
         },
+        # 禮物盒
         {
-            # 礼物盒页面：有"禮物盒"标题
             "name": "gift_box_page",
             "identifiers": get_text_patterns("gift_box_page"),
             "priority": 15,

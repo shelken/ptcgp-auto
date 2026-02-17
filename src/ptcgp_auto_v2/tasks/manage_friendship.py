@@ -44,41 +44,46 @@ if TYPE_CHECKING:
 def _build_manage_friendship_pages() -> list[dict]:
     """构建好友任务页面规则。"""
     return [
+        # 社群图标
         {
-            # 优先使用底部社群图标识别可进入社群的页面，避免 OCR 漏识别导致误走通用返回。
-            # 点击后会进入社群页，该模板场景自然消失，不会持续命中。
             "name": "home_with_community_icon",
             "templates": ["icon_community"],
             "priority": 10,
         },
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),
             "match_all": True,
             "priority": 20,
         },
+        # 社群 / 他人的收藏
         {
             "name": "community_page",
             "identifiers": get_text_patterns("community_page"),
             "match_all": True,
             "priority": 40,
         },
+        # 朋友數 / 朋友 / 申請中 / 需回覆
         {
             "name": "friend_list",
             "identifiers": get_text_patterns("friend_page_list"),
             "match_all": True,
             "priority": 90,
         },
+        # 搜索图标
         {
             "name": "friend_search_modal",
             "templates": ["icon_search"],
             "priority": 90,
         },
+        # 搜尋結果
         {
             "name": "friend_search_result_modal",
             "identifiers": get_text_patterns("friend_page_search_result"),
             "priority": 91,
         },
+        # 要移除朋友嗎？
         {
             "name": "friend_remove_confirm",
             "identifiers": get_text_patterns("friend_remove_confirm_title"),
