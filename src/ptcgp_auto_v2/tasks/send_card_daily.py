@@ -67,72 +67,74 @@ def _build_send_card_pages() -> list[dict]:
         {
             "name": "exchange_locked_popup",
             "identifiers": get_text_patterns("exchange_locked_popup"),
-            "priority": 5,
-        },
-        {
-            "name": "home_with_community_icon",
-            "templates": ["icon_community"],
             "priority": 10,
         },
         {
-            "name": "game_home_main",
-            "identifiers": get_text_patterns("game_home_main"),
-            "match_all": True,
-            "priority": 20,
+            "name": "gift_confirm_popup",
+            "identifiers": get_text_patterns("gift_confirm_send_popup"),
+            "priority": 10,
         },
         {
-            "name": "community_page",
-            "identifiers": get_text_patterns("community_page"),
-            "match_all": True,
-            "priority": 40,
+            "name": "gift_confirm_last_popup",
+            "identifiers": get_text_patterns("gift_confirm_last_card_popup"),
+            "priority": 10,
         },
         {
-            "name": "gift_page_main",
-            "identifiers": get_text_patterns("gift_page_main"),
-            "match_all": True,
+            "name": "gift_target_page",
+            "identifiers": get_text_patterns("gift_target_page"),
             "priority": 50,
+            "exact_match": True,
+        },
+        {
+            "name": "gift_select_card",
+            "identifiers": get_text_patterns("gift_select_card_title"),
+            "priority": 55,
+            "exact_match": True,
+        },
+        {
+            "name": "gift_swipe_page",
+            "identifiers": get_text_patterns("gift_swipe_to_send"),
+            "priority": 99,
         },
         {
             "name": "gift_choose_friend",
             "identifiers": get_text_patterns("gift_choose_friend_title"),
-            "priority": 60,
+            "priority": 99,
         },
         {
             "name": "friend_profile",
             "match_all": True,
             "identifiers": get_text_patterns("friend_profile"),
-            "priority": 65,
-        },
-        {
-            "name": "gift_select_card",
-            "identifiers": get_text_patterns("gift_select_card_title"),
-            "priority": 70,
+            "priority": 99,
         },
         {
             "name": "gift_filter_modal",
             "identifiers": get_text_patterns("gift_filter_modal_title"),
             "match_all": True,
-            "priority": 71,
+            "priority": 99,
         },
         {
-            "name": "gift_target_page",
-            "identifiers": get_text_patterns("gift_target_page"),
-            "priority": 80,
+            "name": "gift_page_main",
+            "identifiers": get_text_patterns("gift_page_main"),
+            "match_all": True,
+            "priority": 99,
         },
         {
-            "name": "gift_confirm_popup",
-            "identifiers": get_text_patterns("gift_confirm_send_popup"),
-            "priority": 90,
+            "name": "community_page",
+            "identifiers": get_text_patterns("community_page"),
+            "match_all": True,
+            "priority": 99,
         },
         {
-            "name": "gift_confirm_last_popup",
-            "identifiers": get_text_patterns("gift_confirm_last_card_popup"),
-            "priority": 91,
+            "name": "home_with_community_icon",
+            "templates": ["icon_community"],
+            "priority": 99,
         },
         {
-            "name": "gift_swipe_page",
-            "identifiers": get_text_patterns("gift_swipe_to_send"),
-            "priority": 95,
+            "name": "game_home_main",
+            "identifiers": get_text_patterns("game_home_main"),
+            "match_all": True,
+            "priority": 99,
         },
     ]
 
@@ -573,7 +575,7 @@ class SendCardDailyTask(Task):
             return None
 
         best = max(candidates, key=lambda item: (item.similarity, item.confidence))
-        return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=1.0)
+        return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=2.5)
 
     def _handle_filter_modal(self, page_info: dict) -> ActionResult:
         """筛选弹窗：清空 -> 输入关键字 -> 确认。"""
