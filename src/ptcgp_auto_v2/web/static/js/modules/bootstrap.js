@@ -25,10 +25,10 @@ import { addPlan, removePlan, savePlans } from './plans.js';
 import { cardPreviewState, closeCardPreview, openCardPreview, initInlineCardDrag } from './card_preview.js';
 import { restoreTab, currentTabName, switchTab, updateSidebarState } from './tabs.js';
 import { initDailyGiftDatePickers } from './daily_gift.js';
+import { initTheme, cycleThemeMode, setManualTheme, getThemeList } from './theme.js';
 
 const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
-const STORAGE_KEY_THEME = 'ptcgp_theme';
 const STORAGE_KEY_RECORD_FILTER_PANEL = 'ptcgp_records_filter_panel_open';
 const htmxLoadingButtons = new WeakMap();
 
@@ -166,23 +166,6 @@ export function setViewMode(mode) {
 export function restoreViewMode() {
     const mode = localStorage.getItem(STORAGE_KEY_VIEW_MODE) || 'grid';
     setViewMode(mode);
-}
-
-// --- 主题设置 ---
-export function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem(STORAGE_KEY_THEME, theme);
-}
-
-// --- 恢复主题 ---
-export function restoreTheme() {
-    const theme = localStorage.getItem(STORAGE_KEY_THEME) || 'brutalist';
-    document.documentElement.setAttribute('data-theme', theme);
-
-    const selector = document.getElementById('theme-selector');
-    if (selector) {
-        selector.value = theme;
-    }
 }
 
 function setRecordFilterPanelOpen(open) {
@@ -415,6 +398,17 @@ function cancelExchangeForm() {
 function handleActionClick(event) {
     const target = event.target;
     if (!(target instanceof Element)) return;
+
+    // 点击浮层外部时关闭主题浮层
+    const popover = document.getElementById('theme-popover');
+    if (popover && !popover.classList.contains('hidden')) {
+        const isInsidePopover = target.closest('#theme-popover');
+        const isToggleBtn = target.closest('#theme-picker-btn');
+        if (!isInsidePopover && !isToggleBtn) {
+            popover.classList.add('hidden');
+        }
+    }
+
     const actionButton = target.closest('[data-action]');
     if (!actionButton) return;
     const { action } = actionButton.dataset;
@@ -431,6 +425,27 @@ function handleActionClick(event) {
 
     if (action === 'set-view-mode' && actionButton.dataset.mode) {
         setViewMode(actionButton.dataset.mode);
+        return;
+    }
+
+    if (action === 'cycle-theme-mode') {
+        cycleThemeMode();
+        return;
+    }
+
+    if (action === 'toggle-theme-popover') {
+        const popover = document.getElementById('theme-popover');
+        if (popover) {
+            const isHidden = popover.classList.contains('hidden');
+            popover.classList.toggle('hidden', !isHidden);
+        }
+        return;
+    }
+
+    if (action === 'select-theme' && actionButton.dataset.themeValue) {
+        setManualTheme(actionButton.dataset.themeValue);
+        const popover = document.getElementById('theme-popover');
+        if (popover) popover.classList.add('hidden');
         return;
     }
 
@@ -556,7 +571,7 @@ function handleActionClick(event) {
 export function initApp() {
     document.addEventListener('DOMContentLoaded', () => {
         initLang();
-        restoreTheme();
+        initTheme();
         document.body.addEventListener('click', handleActionClick);
         restoreTab();
         if (currentTabName === 'records') {
@@ -623,11 +638,6 @@ export function initApp() {
             const actionElement = target.closest('[data-action]');
             if (!actionElement) return;
             const action = actionElement.dataset.action;
-            if (action === 'set-theme') {
-                if (!(actionElement instanceof HTMLSelectElement)) return;
-                setTheme(actionElement.value);
-                return;
-            }
             if (action === 'save-record-filters') {
                 saveFilters();
                 return;

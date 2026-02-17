@@ -1,0 +1,135 @@
+/**
+ * Motion
+ * 动效与 Reduced Motion 支持
+ */
+
+/* Default Transitions */
+.transition-fast {
+    transition-duration: 0.1s;
+    transition-timing-function: ease;
+}
+
+.transition-base {
+    transition-duration: 0.2s;
+    transition-timing-function: ease;
+}
+
+.transition-slow {
+    transition-duration: 0.3s;
+    transition-timing-function: ease;
+}
+
+/* Common Transition Properties */
+.transition-colors {
+    transition-property: background-color, border-color, color, fill, stroke;
+}
+
+.transition-opacity {
+    transition-property: opacity;
+}
+
+.transition-transform {
+    transition-property: transform;
+}
+
+.transition-shadow {
+    transition-property: box-shadow;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+}
+
+/* Animation Keyframes */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Animation Classes */
+.animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+}
+
+.animate-fade-out {
+    animation: fadeOut 0.2s ease-out;
+}
+
+.animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+}
+
+.animate-slide-down {
+    animation: slideDown 0.3s ease-out;
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Animation Utilities */
+.animation-paused {
+    animation-play-state: paused;
+}
+
+.animation-running {
+    animation-play-state: running;
+}

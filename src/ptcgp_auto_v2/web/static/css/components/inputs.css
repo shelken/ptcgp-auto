@@ -1,0 +1,31 @@
+/* Input Styles */
+
+.brutal-input {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius);
+  font-family: var(--font-family);
+  font-weight: bold;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.brutal-input:focus {
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.brutal-input:focus-visible {
+  outline: 2px solid var(--border-color);
+  outline-offset: 2px;
+}
+
+[data-theme="retro"] .brutal-input:focus {
+  box-shadow: 0 0 8px var(--border-color);
+}
+
+[data-theme="luxury"] .brutal-input:focus {
+  border-color: var(--active-color);
+  box-shadow: 0 0 10px var(--shadow-color);
+}

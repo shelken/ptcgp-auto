@@ -1,0 +1,41 @@
+/* Theme: Soft/Pastel */
+[data-theme="pastel"] {
+  --bg-color: #fdf2f8;
+  --text-color: #5e6c84;
+  --border-color: #f9a8d4;
+  --shadow-color: #f3e8ff;
+  --accent-color: #f472b6;
+  --active-color: #db2777;
+  --font-family: 'Quicksand', sans-serif;
+  --border-width: 2px;
+  --shadow-offset: 4px;
+  --radius: 16px;
+  --card-bg: #ffffff;
+
+  --bg-overlay: rgba(94, 108, 132, 0.75);
+  --bg-subtle: rgba(244, 114, 182, 0.12);
+  --bg-surface: #ffffff;
+  --border-subtle: rgba(249, 168, 212, 0.5);
+  --border-subtle-light: rgba(249, 168, 212, 0.25);
+  --text-muted: rgba(94, 108, 132, 0.65);
+
+  --tag-bg: var(--border-color);
+  --tag-text: var(--card-bg);
+
+  --status-success-bg: rgba(52, 211, 153, 0.18);
+  --status-success-border: rgba(52, 211, 153, 0.5);
+  --status-failed-bg: rgba(219, 39, 119, 0.18);
+  --status-failed-border: rgba(219, 39, 119, 0.5);
+  --status-waiting-bg: rgba(167, 139, 250, 0.15);
+  --status-waiting-border: rgba(167, 139, 250, 0.4);
+
+  --btn-bg: var(--card-bg);
+  --btn-text: var(--text-color);
+  --btn-border: var(--border-color);
+  --btn-hover-bg: rgba(244, 114, 182, 0.1);
+  --btn-hover-border: var(--active-color);
+  --btn-active-bg: var(--active-color);
+  --btn-active-text: var(--card-bg);
+  --btn-active-border: var(--active-color);
+  --btn-focus-ring: var(--active-color);
+}

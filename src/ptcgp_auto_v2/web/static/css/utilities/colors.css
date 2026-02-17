@@ -1,0 +1,95 @@
+/**
+ * Color Utilities
+ * 颜色工具类
+ */
+
+/* Background Colors */
+.bg-theme { background-color: var(--bg-color) !important; }
+.bg-card { background-color: var(--card-bg) !important; }
+.bg-surface { background-color: var(--bg-surface) !important; }
+.bg-overlay { background-color: var(--bg-overlay) !important; }
+.bg-subtle { background-color: var(--bg-subtle) !important; }
+.bg-separator { background-color: var(--border-subtle) !important; }
+
+/* Border Colors */
+.border-theme { border-color: var(--border-color) !important; }
+.border-subtle { border-color: var(--border-subtle) !important; }
+.border-subtle-light { border-color: var(--border-subtle-light) !important; }
+
+/* Text Colors */
+.text-theme { color: var(--text-color) !important; }
+.text-muted {
+    color: var(--text-color) !important;
+    opacity: 0.6 !important;
+}
+
+/* Status Colors */
+.status-success {
+    background-color: var(--status-success-bg);
+    border-color: var(--status-success-border) !important;
+}
+
+.status-failed {
+    background-color: var(--status-failed-bg);
+    border-color: var(--status-failed-border) !important;
+}
+
+.status-waiting {
+    background-color: var(--status-waiting-bg);
+    border-color: var(--status-waiting-border) !important;
+}
+
+/* Accent Color */
+.accent-theme {
+    accent-color: var(--active-color);
+}
+
+/* Hover States */
+.hover-bg-subtle:hover {
+    background-color: var(--bg-subtle) !important;
+}
+
+.hover-border-theme:hover {
+    border-color: var(--border-color) !important;
+}
+
+/* Row Hover */
+.hover-row:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+[data-theme="retro"] .hover-row:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+[data-theme="luxury"] .hover-row:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+}
+
+/* Sidebar Button Hover */
+.sidebar-btn:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+[data-theme="retro"] .sidebar-btn:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+[data-theme="luxury"] .sidebar-btn:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+    color: var(--active-color);
+}
+
+/* Language Link */
+.lang-link {
+    text-decoration: none;
+    font-weight: bold;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    color: var(--text-color);
+}
+
+.lang-link.active {
+    opacity: 1;
+    text-decoration: underline;
+}
