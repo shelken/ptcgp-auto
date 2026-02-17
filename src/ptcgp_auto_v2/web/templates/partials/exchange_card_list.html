@@ -1,0 +1,109 @@
+{% from "partials/macros/tables.html" import table_container, auto_refresh_container, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
+
+{% call auto_refresh_container("/management/exchange-cards?lang=" ~ current_lang, '#exchange-card-state-form', 'outerHTML', 'space-y-6') %}
+<form id="exchange-card-state-form" class="hidden" hidden>
+    <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
+    <input type="hidden" name="status" value="{{ selected_status or '' }}">
+    <input type="hidden" name="q" value="{{ q or '' }}">
+    <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+    <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+    <input type="hidden" name="page" value="{{ page or 0 }}">
+    <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
+</form>
+
+{% call data_table_card(t.title_exchange_cards or 'EXCHANGE REQUESTS') %}
+        <form
+            id="exchange-card-filter-form"
+            hx-get="/management/exchange-cards?lang={{ current_lang }}"
+            hx-target="#management-content"
+            hx-swap="innerHTML">
+            <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
+            <input type="hidden" name="status" value="{{ selected_status or '' }}">
+            <input type="hidden" name="page" value="0">
+            <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
+            <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+            {% set toolbar_layout = {
+                'left_items': [
+                    {
+                        'key': 'q',
+                        'label': t.label_search or 'Search',
+                        'order': 10,
+                        'min_width': 'clamp(12rem, 32vw, 24rem)',
+                        'grow': 1
+                    }
+                ],
+                'right_items': [
+                    {
+                        'key': 'refresh',
+                        'label': '',
+                        'order': 20,
+                        'min_width': 'clamp(7rem, 10vw, 9rem)'
+                    }
+                ]
+            } %}
+            {% call(field, zone) data_table_toolbar_layout(toolbar_layout, 'normal') %}
+                {% if field.key == 'q' %}
+                <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.exchange_search_accounts or 'Search by Account ID / Nickname / Friend ID' }}">
+                {% elif field.key == 'refresh' %}
+                <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+                {% endif %}
+            {% endcall %}
+        </form>
+
+    {% call table_container([
+        {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.label_from_account or 'From Account', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_card or 'Card', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_status or 'Status', 'class_name': 'whitespace-nowrap'},
+        {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
+        {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
+    ], t, (t.empty_exchange_requests or '暂无交换请求') if not requests else '') %}
+        {% for row in requests %}
+        <tr class="border-b border-subtle hover-bg-subtle transition-colors">
+            <td class="p-3">#{{ row.id }}</td>
+            <td class="p-3">
+                <div>{{ account_name_map.get(row.from_account_id, t.unknown_account or 'Unknown') }}</div>
+                <div class="text-xs text-muted">#{{ row.from_account_id }}</div>
+            </td>
+            <td class="p-3">
+                <div>{{ row.to_friend_id or '-' }}</div>
+                {% if row.to_account_id %}
+                    <div class="text-xs text-muted">{{ account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown') }} · #{{ row.to_account_id }}</div>
+                {% endif %}
+            </td>
+            <td class="p-3">#{{ row.target_card_id }} · {{ row.target_card_rarity }}</td>
+            <td class="p-3">
+                {{ status_chip(row.status, t, key_prefix='exchange_request_status_', reason=row.failed_reason or '') }}
+            </td>
+            <td class="p-3">
+                <span class="tooltip-text relative-time"
+                      data-iso="{{ row.updated_at.isoformat(timespec='seconds') }}"
+                      data-tooltip="{{ (t.label_created_time or '创建时间') ~ '：' ~ (row.created_at|datetime) }}">
+                    {{ row.updated_at|datetime }}
+                </span>
+            </td>
+            <td class="p-3 text-right">
+                {% if row.can_cancel %}
+                <form
+                    hx-post="/api/exchange-cards/requests/{{ row.id }}/cancel?lang={{ current_lang }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}&page={{ page or 0 }}&page_size={{ page_size or 10 }}"
+                    hx-target="#management-content"
+                    hx-swap="innerHTML"
+                    class="inline">
+                    <button type="submit" class="brutal-btn text-xs px-3 py-1">{{ t.btn_cancel_exchange_request or '取消请求' }}</button>
+                </form>
+                {% else %}
+                <span class="text-muted text-xs">-</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    {% endcall %}
+
+    {% set exchange_prev_url = "/management/exchange-cards?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ ("&account_id=" ~ selected_account_id if selected_account_id else "") ~ ("&status=" ~ selected_status if selected_status else "") ~ ("&q=" ~ (q|urlencode) if q else "") ~ "&sort_by=" ~ (sort_by or 'created_at') ~ "&sort_order=" ~ (sort_order or 'desc') %}
+    {% set exchange_next_url = "/management/exchange-cards?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ ("&account_id=" ~ selected_account_id if selected_account_id else "") ~ ("&status=" ~ selected_status if selected_status else "") ~ ("&q=" ~ (q|urlencode) if q else "") ~ "&sort_by=" ~ (sort_by or 'created_at') ~ "&sort_order=" ~ (sort_order or 'desc') %}
+    {{ data_table_pager(page or 0, has_prev, has_next, exchange_prev_url, exchange_next_url, '#management-content', total_items or 0, t) }}
+{% endcall %}
+{% endcall %}

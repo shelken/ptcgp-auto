@@ -37,6 +37,7 @@ class AccountFriendRequest(SQLModel, table=True):
         index=True,
         description="接收方friend_id（外部账号只有这个）",
     )
+    to_nickname: Optional[str] = Field(default=None, description="接收方昵称")
 
     # 请求类型: add(添加) / delete(删除)
     request_type: str = Field(default="add", description="add 或 delete")

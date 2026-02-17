@@ -146,7 +146,8 @@ function initSinglePicker(picker) {
     });
 
     todayBtn.addEventListener('click', () => {
-        const today = new Date();
+        const presetBizDate = parseYmd(todayBtn.dataset.bizDate);
+        const today = presetBizDate || new Date();
         const todayYmd = formatYmd(today);
         valueInput.value = todayYmd;
         picker.__currentMonth = startOfMonth(today);

@@ -9,17 +9,20 @@
 """
 
 import logging
-import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
+    ExchangeCardRequestRepository,
     FriendRequestRepository,
     FriendshipRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.services import FriendshipService
+from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
+from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     input_text,
@@ -32,7 +35,6 @@ from ptcgp_auto_v2.utils.gesture import (
 )
 
 logger = logging.getLogger(__name__)
-FRIEND_ID_PATTERN = re.compile(r"\d{4}-\d{4}-\d{4}-\d{4}")
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.core.hooks import Hook
@@ -105,6 +107,7 @@ class ManageFriendshipTask(Task):
         self._submitted_request_id: Optional[int] = None
         self._completed = False
         self._wake_account_ids: set[int] = set()
+        self._accept_whitelist: dict[str, "AccountFriendRequest"] = {}
 
         self._add_apply_wait_rounds = 0
         self._cancel_wait_rounds = 0
@@ -134,8 +137,11 @@ class ManageFriendshipTask(Task):
         self._accept_wait_rounds = 0
         self._delete_wait_rounds = 0
         self._wake_account_ids = set()
+        self._accept_whitelist = self._collect_accept_whitelist()
 
         self.requests_to_process = self._get_pending_requests()
+        if self._expire_stale_add_requests():
+            self.requests_to_process = self._get_pending_requests()
         self._log_pending_request_order("start")
         logger.info(
             "manage_friendship 待处理请求: sending=%s, sended=%s, deleting=%s",
@@ -164,6 +170,16 @@ class ManageFriendshipTask(Task):
         if not self.requests_to_process:
             self._completed = True
             logger.info("没有待处理的好友请求，任务完成")
+
+    def _expire_stale_add_requests(self) -> bool:
+        """启动时清理已过期的 add 请求，避免长期卡住。"""
+        changed = False
+        now = datetime.now()
+        for req in self.requests_to_process:
+            if FriendshipService.expire_add_request_if_needed(req, now=now):
+                logger.info("好友请求已过期并标记失败: id=%s", getattr(req, "id", None))
+                changed = True
+        return changed
 
     def is_completed(self) -> bool:
         """返回任务是否完成。"""
@@ -202,6 +218,7 @@ class ManageFriendshipTask(Task):
         repo = FriendRequestRepository()
         sending = repo.get_by_from_account_and_status(self.account.id, "sending")
         sended = repo.get_by_to_account_and_status(self.account.id, "sended")
+        external_sended = repo.get_external_sended_requests(self.account.id)
         canceling = repo.get_by_from_account_and_type(
             self.account.id, "add", "canceling"
         )
@@ -209,7 +226,11 @@ class ManageFriendshipTask(Task):
             self.account.id, "delete", "deleting"
         )
         pending_requests = (
-            list(sending) + list(sended) + list(canceling) + list(deleting)
+            list(sending)
+            + list(sended)
+            + list(external_sended)
+            + list(canceling)
+            + list(deleting)
         )
         pending_requests.sort(key=self._request_order_key)
         return pending_requests
@@ -234,6 +255,27 @@ class ManageFriendshipTask(Task):
         self.current_request = None
         self._active_request_id = None
         self._submitted_request_id = None
+        if not self.requests_to_process:
+            self._completed = True
+
+    def _defer_current_request(self, req, stage: str):
+        """本轮暂缓当前请求，避免同一轮重复查询同一请求。"""
+        req_id = getattr(req, "id", None)
+        if req_id is not None:
+            self.requests_to_process = [
+                item
+                for item in self.requests_to_process
+                if getattr(item, "id", None) != req_id
+            ]
+        self.current_request = None
+        self._active_request_id = None
+        self._submitted_request_id = None
+        self._reset_action_cache()
+        self._add_apply_wait_rounds = 0
+        self._cancel_wait_rounds = 0
+        self._accept_wait_rounds = 0
+        self._delete_wait_rounds = 0
+        self._log_pending_request_order(stage)
         if not self.requests_to_process:
             self._completed = True
 
@@ -299,12 +341,69 @@ class ManageFriendshipTask(Task):
                 return target.friend_id
         return None
 
-    def _extract_friend_id_from_text(self, text: str) -> Optional[str]:
-        """从文本提取标准 friend_id。"""
-        match = FRIEND_ID_PATTERN.search(text)
-        if not match:
-            return None
-        return match.group().replace("-", "")
+    def _extract_friend_id_from_ocr(self, ocr_results: list[dict]) -> Optional[str]:
+        """从 OCR 结果中提取首个 friend_id。"""
+        for item in ocr_results:
+            friend_id = extract_friend_id_from_text(str(item.get("text", "")))
+            if friend_id:
+                return friend_id
+        return None
+
+    def _extract_nickname_from_ocr(
+        self,
+        ocr_results: list[dict],
+        target_friend_id: Optional[str],
+    ) -> Optional[str]:
+        """从搜索结果 OCR 中提取目标昵称（Lv 下方）。"""
+        return extract_nickname_by_lv(
+            ocr_results=ocr_results,
+            search_range_y=self.adb.scaled_y(300),
+            excluded_contains=get_text_patterns("profile_exclude"),
+        )
+
+    def _save_target_nickname(self, req, ocr_results: list[dict]):
+        """保存好友请求与交换请求的目标昵称。"""
+        if req.request_type != "add" or req.status != "sending":
+            return
+        target_friend_id = self._resolve_request_friend_id(req)
+        nickname = self._extract_nickname_from_ocr(ocr_results, target_friend_id)
+        if not nickname:
+            return
+        if req.to_nickname == nickname:
+            return
+
+        req.to_nickname = nickname
+        FriendRequestRepository().update(req)
+
+        if target_friend_id and self.account.id is not None:
+            ExchangeCardRequestRepository().update_active_nickname(
+                from_account_id=self.account.id,
+                to_friend_id=target_friend_id,
+                to_nickname=nickname,
+            )
+
+    def _collect_accept_whitelist(self) -> dict[str, "AccountFriendRequest"]:
+        """构建可自动接受的 friend_id 白名单。"""
+        if self.account.id is None:
+            return {}
+
+        repo = FriendRequestRepository()
+        requests = repo.get_by_to_account_and_status(self.account.id, "sended")
+        whitelist: dict[str, "AccountFriendRequest"] = {}
+        account_repo = AccountRepository()
+
+        for req in requests:
+            sender = account_repo.get_by_id(req.from_account_id)
+            sender_friend_id = getattr(sender, "friend_id", None)
+            if sender_friend_id:
+                whitelist[sender_friend_id] = req
+        return whitelist
+
+    def _decide_reply_action(self, friend_id: Optional[str]) -> str:
+        """根据白名单决定回复动作（accept/reject）。"""
+        if friend_id and friend_id in self._accept_whitelist:
+            return "accept"
+        return "reject"
 
     def _get_search_icon_box(self) -> Optional[tuple[int, int, int, int]]:
         """获取搜索按钮模板框。"""
@@ -336,7 +435,7 @@ class ManageFriendshipTask(Task):
 
         candidates: list[tuple[int, str]] = []
         for item in ocr_results:
-            friend_id = self._extract_friend_id_from_text(str(item.get("text", "")))
+            friend_id = extract_friend_id_from_text(str(item.get("text", "")))
             if not friend_id:
                 continue
             box = item.get("box")
@@ -386,6 +485,58 @@ class ManageFriendshipTask(Task):
         return self.page_detector.find_template_with_scale(
             "icon_green_yes", scale=0.8, threshold=0.8
         )
+
+    def _find_green_yes_match_by_scale(self, scale: float):
+        """按指定缩放比例查找绿色勾模板。"""
+        return self.page_detector.find_template_with_scale(
+            "icon_green_yes", scale=scale, threshold=0.8
+        )
+
+    def _find_red_no_match(self):
+        """查找红色叉模板。"""
+        match = self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=1.0, threshold=0.8
+        )
+        if match:
+            return match
+        return self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=0.8, threshold=0.8
+        )
+
+    def _find_red_no_match_by_scale(self, scale: float):
+        """按指定缩放比例查找红色叉模板。"""
+        return self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=scale, threshold=0.8
+        )
+
+    def _is_pending_reply_by_icons(self) -> bool:
+        """1.0 模板下同时有绿色勾和红色叉，判定为待回复状态。"""
+        green_1x = self._find_green_yes_match_by_scale(1.0)
+        red_1x = self._find_red_no_match_by_scale(1.0)
+        return green_1x is not None and red_1x is not None
+
+    def _is_already_friend_by_icons(self) -> bool:
+        """0.8 模板下命中绿色勾，判定为已是好友状态。"""
+        green_08 = self._find_green_yes_match_by_scale(0.8)
+        return green_08 is not None
+
+    def _is_friend_confirmed_by_icons(self, request_id: Optional[int] = None) -> bool:
+        """仅当存在绿色勾且不存在红叉时，判定为已确认好友。"""
+        green_match = self._find_green_yes_match()
+        red_match = self._find_red_no_match()
+
+        if green_match and not red_match:
+            return True
+
+        if green_match and red_match:
+            if request_id is not None:
+                logger.debug(
+                    "请求 %s 同时检测到绿色勾和红叉，判定为待处理状态",
+                    request_id,
+                )
+            else:
+                logger.debug("同时检测到绿色勾和红叉，判定为待处理状态")
+        return False
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群。"""
@@ -508,33 +659,44 @@ class ManageFriendshipTask(Task):
         if is_text_visible(
             ocr_results, get_text_patterns("friend_cancel_request"), exact=True
         ):
+            self._save_target_nickname(req, ocr_results)
             self._save_request(req, "sended")
             if req.to_account_id:
                 self._wake_account_ids.add(req.to_account_id)
-            else:
-                self._save_request(req, "completed")
-                if req.to_friend_id and self.account.id is not None:
-                    FriendshipRepository().create(
-                        self.account.id, req.to_friend_id, req.to_account_id
-                    )
+            # 外部好友不创建 FriendshipRepository，等待对方接受后再确认
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        # 兜底场景：若结果页直接出现绿色勾，说明双方可能已是好友。
-        # 此时不再走发送流程，直接按“已完成加好友”处理，避免请求长期失败卡住。
-        green_match = self._find_green_yes_match()
-        if green_match:
-            logger.info("请求 %s 检测到绿色勾，按已是好友直接完成", req.id)
+        if self._is_pending_reply_by_icons():
+            logger.warning(
+                "请求 %s 检测到待回复状态（1.0命中红叉+绿勾），当前先不自动处理",
+                req.id,
+            )
+            self._defer_current_request(req, "defer_sending_pending_reply")
+            return self._close_modal(wait=0.8)
+
+        if self._is_already_friend_by_icons():
+            logger.info("请求 %s 检测到已是好友状态（0.8绿色勾）", req.id)
             self._complete_add_already_friend_request(req)
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        if not self._is_action_done("add_apply_clicked"):
+        apply_visible = is_text_visible(
+            ocr_results, get_text_patterns("friend_apply_button"), exact=True
+        )
+        if apply_visible:
             apply_result = self._tap_apply_button(ocr_results)
             if apply_result:
+                logger.debug("请求 %s 检测到申请按钮，执行申请点击", req.id)
                 self._mark_action_done("add_apply_clicked")
                 self._add_apply_wait_rounds = 0
                 return apply_result
+            logger.debug("请求 %s 检测到申请按钮，但点击未成功", req.id)
+            return ActionResult.wait(0.6)
+
+        if not self._is_action_done("add_apply_clicked"):
+            # 尚未进入发送态，且当前未识别到申请按钮，继续等待刷新。
+            return ActionResult.wait(0.6)
 
         self._add_apply_wait_rounds += 1
         if self._add_apply_wait_rounds >= 6:
@@ -574,7 +736,14 @@ class ManageFriendshipTask(Task):
                 )
 
     def _handle_add_sended_result(self, req, page_info: dict) -> ActionResult:
-        """处理接受好友请求结果。"""
+        """处理接受好友请求结果（系统内）或确认外部好友是否已接受。"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        # 外部好友：to_account_id 为 null，检查是否已是好友
+        if req.to_account_id is None:
+            return self._handle_external_sended_result(req, page_info)
+
+        # 系统内好友：接受对方发来的请求
         if not self._is_action_done("accept_green_clicked"):
             green_match = self._find_green_yes_match()
             if green_match:
@@ -591,6 +760,36 @@ class ManageFriendshipTask(Task):
         if self._accept_wait_rounds >= 6:
             self._save_request(req, "failed", failed_reason="接受流程未找到绿色勾")
             self._refresh_requests()
+            return self._close_modal(wait=0.8)
+        return ActionResult.wait(0.8)
+
+    def _handle_external_sended_result(self, req, page_info: dict) -> ActionResult:
+        """处理外部好友 sended 状态：检查是否已是好友。"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        # 看到绿色勾：对方已接受，成为好友
+        if self._is_friend_confirmed_by_icons(req.id):
+            logger.info("外部好友请求 %s 仅检测到绿色勾，对方已接受", req.id)
+            self._save_request(req, "completed")
+            if req.to_friend_id and self.account.id is not None:
+                FriendshipRepository().create(
+                    self.account.id, req.to_friend_id, req.to_account_id
+                )
+            self._refresh_requests()
+            return self._close_modal(wait=0.8)
+
+        # 看到取消交友邀请：对方还没接受，保持 sended
+        if is_text_visible(
+            ocr_results, get_text_patterns("friend_cancel_request"), exact=True
+        ):
+            logger.debug("外部好友请求 %s 对方尚未接受，保持 sended", req.id)
+            self._defer_current_request(req, "defer_external_pending")
+            return self._close_modal(wait=0.8)
+
+        self._accept_wait_rounds += 1
+        if self._accept_wait_rounds >= 6:
+            logger.debug("外部好友请求 %s 状态不明确，保持 sended", req.id)
+            self._defer_current_request(req, "defer_external_unclear")
             return self._close_modal(wait=0.8)
         return ActionResult.wait(0.8)
 

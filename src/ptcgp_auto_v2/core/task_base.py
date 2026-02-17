@@ -214,6 +214,9 @@ class Task(ABC):
             if result == HookResult.ABORT:
                 error_msg = data.get("error", "PreHook aborted")
                 return TaskResult.fail(error_msg)
+            if result == HookResult.SKIP:
+                reason = data.get("reason", "前置条件不满足")
+                return TaskResult.skip(reason=reason)
             if result == HookResult.INSERT_TASK:
                 task_type = data.get("task_type")
                 if (
@@ -222,6 +225,14 @@ class Task(ABC):
                     and task_type not in pre_task_types
                 ):
                     pre_task_types.append(task_type)
+            if result == HookResult.DELAY:
+                requeue_at = self._extract_requeue_time(data)
+                if requeue_at is not None:
+                    return TaskResult.ok(
+                        requeue_at=requeue_at,
+                        requeue_reason=data.get("reason", "前置 Hook 延时"),
+                    )
+                return TaskResult.fail("前置 Hook 延时参数无效")
 
         if pre_task_types:
             return TaskResult.skip(
@@ -232,15 +243,36 @@ class Task(ABC):
 
         return None
 
-    def _run_post_hooks(self):
-        """执行后置 Hook（无论主任务成功失败）"""
+    def _extract_requeue_time(self, data: dict) -> Optional[datetime]:
+        """从 Hook 数据提取下次执行时间。"""
+        run_at = data.get("run_at")
+        if isinstance(run_at, datetime):
+            return run_at
+
+        delay_seconds = data.get("delay_seconds")
+        if isinstance(delay_seconds, (int, float)) and delay_seconds >= 0:
+            return datetime.now() + timedelta(seconds=float(delay_seconds))
+        return None
+
+    def _run_post_hooks(self) -> dict:
+        """执行后置 Hook（无论主任务成功失败），返回附加结果。"""
+        from ptcgp_auto_v2.core.hooks import HookResult
+
         post_hooks = self.get_post_hooks()
         if not post_hooks:
-            return
+            return {}
         if self._hook_context is None:
-            return
+            return {}
+
+        post_data: dict = {}
         for hook in post_hooks:
-            hook.run(self._hook_context)
+            result, data = hook.run(self._hook_context)
+            if result == HookResult.DELAY:
+                requeue_at = self._extract_requeue_time(data)
+                if requeue_at is not None:
+                    post_data["requeue_at"] = requeue_at
+                    post_data["requeue_reason"] = data.get("reason", "后置 Hook 延时")
+        return post_data
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """
@@ -355,7 +387,9 @@ class Task(ABC):
                 iterations=self.max_iterations,
             )
 
-        self._run_post_hooks()
+        post_data = self._run_post_hooks()
+        if result.success and not result.skipped and post_data:
+            result.data.update(post_data)
         self.on_complete(result)
         return result
 

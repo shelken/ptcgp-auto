@@ -8,6 +8,13 @@ from ptcgp_auto_v2.services.gift_record_service import GiftRecordService
 
 
 class TestGiftRecordService(unittest.TestCase):
+    @patch(
+        "ptcgp_auto_v2.services.gift_record_service.get_game_biz_date_str",
+        return_value="2026-02-15",
+    )
+    def test_today_local_date_should_use_game_biz_date(self, _mock_biz_date):
+        self.assertEqual("2026-02-15", GiftRecordService.today_local_date())
+
     def test_parse_count_transition_success(self):
         before_count, after_count = GiftRecordService.parse_count_transition("12>11")
         self.assertEqual(before_count, 12)

@@ -1,45 +1,19 @@
-{% from "partials/macros/tables.html" import table_container, table_row, auto_refresh_container %}
+{% from "partials/macros/tables.html" import table_container, table_row, auto_refresh_container, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
 
 {% call auto_refresh_container("/management/friendships?lang=" ~ current_lang, '#friendship-state-form', 'outerHTML', 'space-y-6') %}
-<form id="friendship-state-form" class="hidden">
+<form id="friendship-state-form" class="hidden" hidden>
     <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
     <input type="hidden" name="from_account_id" value="{{ selected_from_account_id or '' }}">
+    <input type="hidden" name="q" value="{{ q or '' }}">
+    <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+    <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+    <input type="hidden" name="page" value="{{ page or 0 }}">
+    <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
 </form>
 <div class="brutal-card p-6 space-y-6">
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="table-title-row">
         <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_friendships or 'FRIENDSHIP MANAGEMENT' }}</h2>
-        <form
-            class="flex flex-wrap items-end gap-3"
-            hx-get="/management/friendships?lang={{ current_lang }}"
-            hx-target="#management-content"
-            hx-swap="innerHTML">
-            <input type="hidden" name="from_account_id" value="{{ selected_from_account_id or '' }}">
-            <div>
-                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.filter_account }}</label>
-                <select
-                    name="account_id"
-                    data-action="sync-friendship-state"
-                    data-state-name="account_id"
-                    class="brutal-input min-w-56 js-custom-select"
-                    {% if accounts|length > 10 %}
-                    data-searchable="true"
-                    data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
-                    {% endif %}
-                    >
-                    <option value="">{{ t.label_all or 'All' }}</option>
-                    {% for account in accounts %}
-                    {% set account_label = (account.nickname or account.display_name or ('#' ~ account.id)) ~ ' #' ~ account.id %}
-                    <option
-                        value="{{ account.id }}"
-                        data-search="{{ account_label }}"
-                        {% if selected_account_id == account.id %}selected{% endif %}>
-                        #{{ account.id }} · {{ account_name_map.get(account.id, account.game_id) }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button type="submit" class="brutal-btn">{{ t.btn_refresh or 'Refresh' }}</button>
-        </form>
     </div>
 
     <div class="grid gap-4 lg:grid-cols-2">
@@ -51,13 +25,18 @@
             <h3 class="font-bold uppercase tracking-widest text-sm">{{ t.title_friend_request_add or 'ADD REQUEST' }}</h3>
             <input type="hidden" name="selected_account_id" value="{{ selected_account_id or '' }}">
             <input type="hidden" name="selected_from_account_id" value="{{ selected_from_account_id or '' }}">
+            <input type="hidden" name="q" value="{{ q or '' }}">
+            <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+            <input type="hidden" name="page" value="{{ page or 0 }}">
+            <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
             <div>
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_from_account or 'From Account' }}</label>
                 <select
                     name="from_account_id"
                     data-action="sync-friendship-state"
                     data-state-name="from_account_id"
-                    class="brutal-input w-full js-custom-select"
+                    class="brutal-input panel-control w-full js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -79,15 +58,15 @@
                 <input
                     type="text"
                     name="to_friend_id"
-                    class="brutal-input w-full"
+                    class="brutal-input panel-control w-full"
                     maxlength="24"
-                    placeholder="{{ t.placeholder_friend_id or '输入目标 friend_id（系统账号可留空）' }}">
+                    placeholder="{{ t.placeholder_friend_id or '输入目标朋友id（系统账号可留空）' }}">
             </div>
             <div>
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_target_account_optional or 'Target Account (Optional)' }}</label>
                 <select
                     name="to_account_id"
-                    class="brutal-input w-full js-custom-select"
+                    class="brutal-input panel-control w-full js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -101,7 +80,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <button type="submit" class="brutal-btn w-full">{{ t.btn_create_add_request or 'Create Add Request' }}</button>
+            <button type="submit" class="brutal-btn panel-action-btn w-full">{{ t.btn_create_add_request or 'Create Add Request' }}</button>
         </form>
 
         <form
@@ -112,13 +91,18 @@
             <h3 class="font-bold uppercase tracking-widest text-sm">{{ t.title_friend_request_delete or 'DELETE REQUEST' }}</h3>
             <input type="hidden" name="selected_account_id" value="{{ selected_account_id or '' }}">
             <input type="hidden" name="selected_from_account_id" value="{{ selected_from_account_id or '' }}">
+            <input type="hidden" name="q" value="{{ q or '' }}">
+            <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+            <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+            <input type="hidden" name="page" value="{{ page or 0 }}">
+            <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
             <div>
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_from_account or 'From Account' }}</label>
                 <select
                     name="from_account_id"
                     data-action="sync-friendship-state"
                     data-state-name="from_account_id"
-                    class="brutal-input w-full js-custom-select"
+                    class="brutal-input panel-control w-full js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -140,15 +124,15 @@
                 <input
                     type="text"
                     name="friend_id"
-                    class="brutal-input w-full"
+                    class="brutal-input panel-control w-full"
                     maxlength="24"
-                    placeholder="{{ t.placeholder_friend_id_for_delete or '输入要删除的 friend_id（系统账号可留空）' }}">
+                    placeholder="{{ t.placeholder_friend_id_for_delete or '输入要删除的朋友id（系统账号可留空）' }}">
             </div>
             <div>
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_target_account_optional or 'Target Account (Optional)' }}</label>
                 <select
                     name="to_account_id"
-                    class="brutal-input w-full js-custom-select"
+                    class="brutal-input panel-control w-full js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -163,18 +147,54 @@
                 </select>
             </div>
             <p class="text-xs text-muted">{{ t.desc_delete_request_hint or '将先更新关系表，再触发一次同步删除任务。' }}</p>
-            <button type="submit" class="brutal-btn w-full">{{ t.btn_create_delete_request or 'Create Delete Request' }}</button>
+            <button type="submit" class="brutal-btn panel-action-btn w-full">{{ t.btn_create_delete_request or 'Create Delete Request' }}</button>
         </form>
     </div>
 </div>
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_friend_requests or 'FRIEND REQUESTS' }}</h3>
+{% call data_table_card(t.section_friend_requests or 'FRIEND REQUESTS') %}
+    <form id="friendship-filter-form"
+          hx-get="/management/friendships?lang={{ current_lang }}"
+          hx-target="#management-content"
+          hx-swap="innerHTML">
+        <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
+        <input type="hidden" name="from_account_id" value="{{ selected_from_account_id or '' }}">
+        <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
+        <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
+        <input type="hidden" name="page" value="0">
+        <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
+        {% set toolbar_layout = {
+            'left_items': [
+                {
+                    'key': 'q',
+                    'label': t.label_search or 'Search',
+                    'order': 10,
+                    'min_width': 'clamp(12rem, 30vw, 24rem)',
+                    'grow': 1
+                }
+            ],
+            'right_items': [
+                {
+                    'key': 'refresh',
+                    'label': '',
+                    'order': 20,
+                    'min_width': 'clamp(7rem, 10vw, 9rem)'
+                }
+            ]
+        } %}
+        {% call(field, zone) data_table_toolbar_layout(toolbar_layout, 'normal') %}
+            {% if field.key == 'q' %}
+            <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.col_friend_id or 'Friend ID' }} / ID">
+            {% elif field.key == 'refresh' %}
+            <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+            {% endif %}
+        {% endcall %}
+    </form>
+
     <div class="friendship-table-wrap friendship-requests-table">
     {% call table_container([
         {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.label_from_account or 'From Account', 'class_name': 'whitespace-nowrap'},
-        {'label': t.col_to_account_id or 'To Account', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_type or 'Type', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_status or 'Status', 'class_name': 'whitespace-nowrap'},
@@ -184,22 +204,32 @@
         {% for row in requests %}
             <tr class="border-b border-subtle hover-bg-subtle transition-colors">
                 <td class="p-3">#{{ row.id }}</td>
-                <td class="p-3">#{{ row.from_account_id }} · {{ account_name_map.get(row.from_account_id, t.unknown_account or 'Unknown') }}</td>
                 <td class="p-3">
+                    <div>{{ account_name_map.get(row.from_account_id, t.unknown_account or 'Unknown') }}</div>
+                    <div class="text-xs text-muted">#{{ row.from_account_id }}</div>
+                </td>
+                <td class="p-3">
+                    <div>{{ row.to_friend_id or '-' }}</div>
                     {% if row.to_account_id %}
-                        #{{ row.to_account_id }} · {{ account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown') }}
-                    {% else %}
-                        -
+                        <div class="text-xs text-muted">{{ account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown') }} · #{{ row.to_account_id }}</div>
                     {% endif %}
                 </td>
-                <td class="p-3">{{ row.to_friend_id or '-' }}</td>
-                <td class="p-3">{{ row.request_type }}</td>
-                <td class="p-3">{{ row.status }}</td>
-                <td class="p-3">{{ row.created_at|datetime }}</td>
+                {% set request_type_text = t.get('friend_request_type_' ~ row.request_type, row.request_type) %}
+                <td class="p-3">{{ request_type_text }}</td>
+                <td class="p-3">
+                    {{ status_chip(row.status, t, key_prefix='friend_request_status_', reason=row.failed_reason or '') }}
+                </td>
+                <td class="p-3">
+                    <span class="tooltip-text relative-time"
+                          data-iso="{{ row.updated_at.isoformat(timespec='seconds') }}"
+                          data-tooltip="{{ (t.label_created_time or '创建时间') ~ '：' ~ (row.created_at|datetime) }}">
+                        {{ row.updated_at|datetime }}
+                    </span>
+                </td>
                 <td class="p-3">
                     {% if row.status in ['sending', 'sended', 'deleting'] %}
                     <form
-                        hx-post="/api/friendships/requests/{{ row.id }}/cancel?lang={{ current_lang }}{% if selected_account_id %}&selected_account_id={{ selected_account_id }}{% endif %}{% if selected_from_account_id %}&selected_from_account_id={{ selected_from_account_id }}{% endif %}"
+                        hx-post="/api/friendships/requests/{{ row.id }}/cancel?lang={{ current_lang }}{% if selected_account_id %}&selected_account_id={{ selected_account_id }}{% endif %}{% if selected_from_account_id %}&selected_from_account_id={{ selected_from_account_id }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}&page={{ page or 0 }}&page_size={{ page_size or 10 }}"
                         hx-target="#management-content"
                         hx-swap="innerHTML"
                         class="inline">
@@ -213,32 +243,40 @@
         {% endfor %}
     {% endcall %}
     </div>
-</div>
+    {% set friendship_prev_url = "/management/friendships?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ ("&account_id=" ~ selected_account_id if selected_account_id else "") ~ ("&from_account_id=" ~ selected_from_account_id if selected_from_account_id else "") ~ ("&q=" ~ (q|urlencode) if q else "") ~ "&sort_by=" ~ (sort_by or 'created_at') ~ "&sort_order=" ~ (sort_order or 'desc') %}
+    {% set friendship_next_url = "/management/friendships?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ ("&account_id=" ~ selected_account_id if selected_account_id else "") ~ ("&from_account_id=" ~ selected_from_account_id if selected_from_account_id else "") ~ ("&q=" ~ (q|urlencode) if q else "") ~ "&sort_by=" ~ (sort_by or 'created_at') ~ "&sort_order=" ~ (sort_order or 'desc') %}
+    {{ data_table_pager(page or 0, has_prev, has_next, friendship_prev_url, friendship_next_url, '#management-content', request_total or 0, t) }}
+{% endcall %}
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_friendships or 'FRIENDSHIPS' }}</h3>
+{% call data_table_card(t.section_friendships or 'FRIENDSHIPS') %}
     <div class="friendship-table-wrap friendship-records-table">
     {% call table_container([
         {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_account_id or 'Account ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
-        {'label': t.col_friend_account_id or 'Friend Account ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
     ], t, (t.empty_friendships or '暂无好友关系') if not friendships else '') %}
         {% for row in friendships %}
             <tr class="border-b border-subtle hover-bg-subtle transition-colors">
                 <td class="p-3">#{{ row.id }}</td>
-                <td class="p-3">#{{ row.account_id }} · {{ account_name_map.get(row.account_id, t.unknown_account or 'Unknown') }}</td>
-                <td class="p-3">{{ row.friend_id }}</td>
                 <td class="p-3">
+                    <div>{{ account_name_map.get(row.account_id, t.unknown_account or 'Unknown') }}</div>
+                    <div class="text-xs text-muted">#{{ row.account_id }}</div>
+                </td>
+                <td class="p-3">
+                    <div>{{ row.friend_id }}</div>
                     {% if row.friend_account_id %}
-                        #{{ row.friend_account_id }} · {{ account_name_map.get(row.friend_account_id, t.unknown_account or 'Unknown') }}
-                    {% else %}
-                        -
+                        <div class="text-xs text-muted">{{ account_name_map.get(row.friend_account_id, t.unknown_account or 'Unknown') }} · #{{ row.friend_account_id }}</div>
                     {% endif %}
                 </td>
-                <td class="p-3">{{ row.created_at|datetime }}</td>
+                <td class="p-3">
+                    <span class="tooltip-text relative-time"
+                          data-iso="{{ row.created_at.isoformat(timespec='seconds') }}"
+                          data-tooltip="{{ row.created_at|datetime }}">
+                        {{ row.created_at|datetime }}
+                    </span>
+                </td>
                 <td class="p-3">
                     <form
                         hx-post="/api/friendships/requests/delete?lang={{ current_lang }}"
@@ -257,5 +295,6 @@
         {% endfor %}
     {% endcall %}
     </div>
-</div>
+    <div class="text-xs text-muted font-mono mt-2">{{ t.label_total_records or 'Total' }}: {{ friendship_total or 0 }}</div>
+{% endcall %}
 {% endcall %}

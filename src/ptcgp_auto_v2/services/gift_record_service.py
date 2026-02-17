@@ -6,7 +6,6 @@
 """
 
 import re
-from datetime import datetime
 from typing import Optional
 
 from ptcgp_auto_v2.db.models import AccountGiftRecord
@@ -16,6 +15,7 @@ from ptcgp_auto_v2.db.repositories import (
     AccountGiftRecordRepository,
     TaskInstanceRepository,
 )
+from ptcgp_auto_v2.utils.game_time import get_game_biz_date_str
 
 
 COUNT_TRANSITION_PATTERN = re.compile(r"(\d+)\s*>\s*(\d+)")
@@ -26,8 +26,8 @@ class GiftRecordService:
 
     @staticmethod
     def today_local_date() -> str:
-        """返回本地日期（YYYY-MM-DD）。"""
-        return datetime.now().strftime("%Y-%m-%d")
+        """返回游戏业务日期（YYYY-MM-DD，按 UTC06:00 换算本地切日）。"""
+        return get_game_biz_date_str()
 
     @staticmethod
     def parse_count_transition(text: str) -> tuple[Optional[int], Optional[int]]:

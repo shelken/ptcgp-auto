@@ -95,3 +95,16 @@ class FriendshipRepository:
                         session.delete(reverse)
 
             session.commit()
+
+    def update_nickname(self, account_id: int, friend_id: str, nickname: str) -> bool:
+        """更新好友昵称（系统外账号从游戏获取）。"""
+        if not nickname:
+            return False
+        with Session(get_engine()) as session:
+            friendship = self._get_by_account_and_friend(session, account_id, friend_id)
+            if friendship is None:
+                return False
+            friendship.friend_nickname = nickname
+            session.add(friendship)
+            session.commit()
+            return True

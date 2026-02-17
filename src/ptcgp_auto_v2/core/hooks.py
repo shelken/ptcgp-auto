@@ -21,8 +21,10 @@ class HookResult(Enum):
     """Hook 执行结果"""
 
     CONTINUE = "continue"  # 继续执行主任务
-    ABORT = "abort"  # 中断执行
+    ABORT = "abort"  # 中断执行，任务标记为失败
     INSERT_TASK = "insert"  # 需要插入并执行前置任务，暂停当前任务
+    DELAY = "delay"  # 延后当前任务下一次执行时间
+    SKIP = "skip"  # 跳过当前任务，释放调度机会（不重试）
 
 
 @dataclass
@@ -55,5 +57,7 @@ class Hook(ABC):
             - HookResult.CONTINUE: data 为空
             - HookResult.ABORT: data 包含 error 信息
             - HookResult.INSERT_TASK: data 包含 task_type, priority 等
+            - HookResult.DELAY: data 包含 delay_seconds 或 run_at
+            - HookResult.SKIP: data 包含 reason，任务跳过但不失败
         """
         raise NotImplementedError

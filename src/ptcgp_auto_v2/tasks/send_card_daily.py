@@ -9,7 +9,6 @@
 """
 
 import logging
-from datetime import datetime, timedelta
 from typing import Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
@@ -17,6 +16,7 @@ from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
     AccountRepository,
     CardRepository,
+    FriendshipRepository,
 )
 from ptcgp_auto_v2.hooks import (
     ClaimGiftsPreHook,
@@ -28,17 +28,19 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import GiftPairingService, GiftRecordService
-from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
-from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
-from ptcgp_auto_v2.tasks.utils.send_card_helpers import (
-    build_ocr_signature,
-    find_send_box_near_anchor,
-    find_send_button_for_target,
-    find_target_search_plus_box,
+from ptcgp_auto_v2.tasks.utils.constants import (
+    BASE_CARD_SCROLL_DISTANCE_Y,
+    MAX_CARD_STABLE_ROUNDS,
 )
+from ptcgp_auto_v2.tasks.utils.friend_card_flow import build_detect_signature
+from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
+    FriendSelectionFlow,
+    FriendSelectionHelper,
+)
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
+from ptcgp_auto_v2.utils.account_cooldown import is_account_pending_same_day_cooldown
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
-    click_close,
     input_text,
     is_text_visible,
     quick_tap,
@@ -54,29 +56,19 @@ from ptcgp_auto_v2.utils.gesture import (
 
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# 常量定义（基于 1080x1920）
-# ============================================================
-
 FIXED_CARD_SET_CODE = "A1"
 FIXED_CARD_NUMBER = 153
-
-BASE_FRIEND_SCROLL_DISTANCE_Y = 520
-BASE_CARD_SCROLL_DISTANCE_Y = 500
-# 说明：好友列表行高与 OCR 抖动会造成约 130+ 的同一行偏差，
-# 轻度放宽到 150，避免误判同时不跨到下一行。
-BASE_FRIEND_ROW_THRESHOLD_Y = 150
-
-MAX_FRIEND_SCROLL_ROUNDS = 8
-MAX_FRIEND_STABLE_ROUNDS = 3
-MAX_CARD_STABLE_ROUNDS = 3
 MAX_FILTER_MODAL_STAY_ROUNDS = 2
-MAX_FRIEND_PROFILE_READ_ROUNDS = 3
 
 
 def _build_send_card_pages() -> list[dict]:
     """构建送卡任务页面规则。"""
     return [
+        {
+            "name": "exchange_locked_popup",
+            "identifiers": get_text_patterns("exchange_locked_popup"),
+            "priority": 5,
+        },
         {
             "name": "home_with_community_icon",
             "templates": ["icon_community"],
@@ -106,8 +98,9 @@ def _build_send_card_pages() -> list[dict]:
             "priority": 60,
         },
         {
-            "name": "gift_friend_profile",
-            "identifiers": get_text_patterns("gift_friend_profile"),
+            "name": "friend_profile",
+            "match_all": True,
+            "identifiers": get_text_patterns("friend_profile"),
             "priority": 65,
         },
         {
@@ -167,18 +160,14 @@ class SendCardDailyTask(Task):
 
         self._completed = False
         self._complete_reason: Optional[str] = None
+        self._skip_reason: Optional[str] = None
 
         self._target_friend_id: Optional[str] = None
         self._target_account_id: Optional[int] = None
-        self._target_nickname: Optional[str] = None
         self._fixed_card_id: Optional[int] = None
-
         self._record = None
 
-        self._friend_scroll_rounds = 0
-        self._friend_stable_rounds = 0
         self._card_stable_rounds = 0
-        self._last_friend_signature: Optional[str] = None
         self._last_card_signature: Optional[str] = None
 
         self._before_count: Optional[int] = None
@@ -188,16 +177,17 @@ class SendCardDailyTask(Task):
         self._filter_opened = False
         self._filter_modal_stay_rounds = 0
 
-        self._target_friend_verified = False
-        self._verified_row_anchor_y: Optional[int] = None
-        self._friend_profile_read_rounds = 0
-        self._failed_plus_rows: set[int] = set()
-
-        self._skip_reason: Optional[str] = None
+        self._friend_flow = FriendSelectionFlow()
+        self._friend_helper: Optional[FriendSelectionHelper] = None
 
     def was_skipped(self) -> bool:
         """任务是否被跳过（不更新 last_completed_at）。"""
         return self._skip_reason is not None
+
+    def _mark_skipped(self, skip_reason: str):
+        """统一设置跳过态并结束任务。"""
+        self._skip_reason = skip_reason
+        self._completed = True
 
     def _is_action_done(self, key: str) -> bool:
         """检查动作缓存。"""
@@ -215,10 +205,8 @@ class SendCardDailyTask(Task):
         """任务启动初始化。"""
         self._completed = False
         self._complete_reason = None
-        self._friend_scroll_rounds = 0
-        self._friend_stable_rounds = 0
+        self._skip_reason = None
         self._card_stable_rounds = 0
-        self._last_friend_signature = None
         self._last_card_signature = None
         self._before_count = None
         self._after_count = None
@@ -227,13 +215,10 @@ class SendCardDailyTask(Task):
         self._filter_applied = False
         self._filter_opened = False
         self._filter_modal_stay_rounds = 0
-
-        self._target_friend_verified = False
-        self._verified_row_anchor_y = None
-        self._friend_profile_read_rounds = 0
-        self._failed_plus_rows: set[int] = set()
         self._prev_page_name = None
         self._reset_action_cache()
+
+        self._friend_flow = FriendSelectionFlow()
 
         if self.account.id is None:
             self._complete_reason = "账号ID为空"
@@ -241,8 +226,14 @@ class SendCardDailyTask(Task):
             return
 
         if not GiftPairingService.is_account_past_cooldown(self.account.created_at):
-            if self._is_same_day_pending_cooldown(self.account.created_at):
-                self._skip_reason = "账号未过14天冷冻期（同日待到期）"
+            cooldown_days = getattr(GiftPairingService, "COOLDOWN_DAYS", 14)
+            if not isinstance(cooldown_days, int):
+                cooldown_days = 14
+            if is_account_pending_same_day_cooldown(
+                self.account.created_at,
+                cooldown_days,
+            ):
+                self._mark_skipped("账号未过14天冷冻期（同日待到期）")
                 return
             self._complete_reason = "账号未过14天冷冻期"
             self._completed = True
@@ -250,7 +241,7 @@ class SendCardDailyTask(Task):
 
         pair = GiftPairingService.ensure_pairs_for_account(self.account.id)
         if pair is None:
-            self._skip_reason = "无可用送卡目标"
+            self._mark_skipped("无可用送卡目标")
             return
 
         self._target_friend_id = pair.target_friend_id
@@ -258,7 +249,7 @@ class SendCardDailyTask(Task):
         if pair.target_account_id is not None:
             target_account = AccountRepository().get_by_id(pair.target_account_id)
             if target_account:
-                self._target_nickname = target_account.nickname
+                self._friend_flow.nickname = target_account.nickname
 
         if not self._target_friend_id:
             self._complete_reason = "目标 friend_id 为空"
@@ -284,18 +275,51 @@ class SendCardDailyTask(Task):
             card_number=FIXED_CARD_NUMBER,
         )
 
+        self._init_friend_helper()
         self._maybe_complete_for_pair_ordering()
 
-    def _is_same_day_pending_cooldown(self, created_at: Optional[datetime]) -> bool:
-        """判断账号是否同日待过冷冻期（未到时间但到期日与今天相同）。"""
-        if created_at is None:
-            return False
-        cooldown_days = getattr(GiftPairingService, "COOLDOWN_DAYS", 14)
-        if not isinstance(cooldown_days, int):
-            cooldown_days = 14
-        cooldown_at = created_at + timedelta(days=cooldown_days)
-        now = datetime.now()
-        return now < cooldown_at and now.date() == cooldown_at.date()
+    def _init_friend_helper(self):
+        """初始化好友选择辅助类。"""
+        self._friend_helper = FriendSelectionHelper(
+            adb=self.adb,
+            page_detector=self.page_detector,
+            flow=self._friend_flow,
+            target_friend_id=self._target_friend_id or "",
+            profile_page_name="friend_profile",
+            send_text_patterns=get_text_patterns("gift_send_button"),
+            account_id=self.account.id,
+            on_success=self._on_friend_verified,
+            on_nickname_found=self._on_nickname_found,
+            on_scroll_exhausted=self._on_scroll_exhausted,
+        )
+
+    def _on_friend_verified(self):
+        """好友验证成功回调。"""
+        if self._record:
+            GiftRecordService.update_status(self._record, status="target_found")
+
+    def _on_nickname_found(self, account_id: int, friend_id: str, nickname: str):
+        """发现 nickname 回调：持久化到好友关系。"""
+        FriendshipRepository().update_nickname(
+            account_id=account_id,
+            friend_id=friend_id,
+            nickname=nickname,
+        )
+
+    def _on_scroll_exhausted(self, reason: str) -> ActionResult:
+        """滑动耗尽回调：删除好友关系后跳过。"""
+        if self.account.id and self._target_friend_id:
+            FriendshipRepository().delete(self.account.id, self._target_friend_id)
+            logger.info(
+                "好友关系已删除: account=%s, friend_id=%s",
+                self.account.id,
+                self._target_friend_id,
+            )
+        return self._skip_without_send(
+            skip_reason=reason,
+            record_status="completed_no_target",
+            error_code="TARGET_NOT_FOUND",
+        )
 
     def is_completed(self) -> bool:
         """任务是否完成。"""
@@ -319,21 +343,12 @@ class SendCardDailyTask(Task):
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """页面分发处理。"""
-        # 极简方案：点击加号等详情页加载时，吞掉其他页面匹配
-        if (
-            self._is_action_done("friend_plus_clicked")
-            and not self._target_friend_verified
-            and page_name not in ("gift_friend_profile", "gift_choose_friend")
-        ):
-            return ActionResult.wait(1.5)
-
         previous_page_name = self._last_page_name
         if page_name != self._last_page_name:
             self._prev_page_name = previous_page_name
             self._last_page_name = page_name
             self._reset_action_cache()
 
-        # 兜底：筛选弹窗返回选卡页时，视为筛选流程已应用。
         if (
             page_name == "gift_select_card"
             and self._prev_page_name == "gift_filter_modal"
@@ -346,14 +361,14 @@ class SendCardDailyTask(Task):
             "home_with_community_icon": self._handle_home,
             "game_home_main": self._handle_home,
             "community_page": self._handle_community,
+            "exchange_locked_popup": self._handle_exchange_locked_popup,
             "gift_page_main": self._handle_gift_page_main,
             "gift_choose_friend": self._handle_choose_friend,
-            "gift_friend_profile": self._handle_friend_profile,
             "gift_select_card": self._handle_select_card,
             "gift_filter_modal": self._handle_filter_modal,
             "gift_target_page": self._handle_target_page,
             "gift_confirm_popup": self._handle_confirm_popup,
-            "gift_confirm_last_popup": self._handle_confirm_last_popup,
+            "gift_confirm_last_popup": self._handle_confirm_popup,
             "gift_swipe_page": self._handle_swipe_page,
         }
         handler = handlers.get(page_name)
@@ -361,25 +376,13 @@ class SendCardDailyTask(Task):
             return handler(page_info)
         return ActionResult.wait(0.8)
 
-    def _fail(self, error_code: str, message: str) -> ActionResult:
-        """统一失败处理。"""
-        logger.warning("send_card_daily 失败: %s - %s", error_code, message)
-        if self._record:
-            GiftRecordService.update_status(
-                self._record,
-                status="failed",
-                error_code=error_code,
-                error_message=message,
-            )
-        return ActionResult.fail(f"{error_code}: {message}")
-
     def _complete_without_send(
         self,
         complete_reason: str,
         record_status: str,
         error_code: Optional[str] = None,
     ) -> ActionResult:
-        """在无需继续尝试时以完成态收敛任务。"""
+        """以完成态收敛任务。"""
         self._complete_reason = complete_reason
         self._completed = True
         logger.info("send_card_daily 完成收敛: %s", complete_reason)
@@ -398,8 +401,8 @@ class SendCardDailyTask(Task):
         record_status: Optional[str] = None,
         error_code: Optional[str] = None,
     ) -> ActionResult:
-        """在无需继续尝试时以跳过态收敛任务，同时保留必要状态落库。"""
-        self._skip_reason = skip_reason
+        """以跳过态收敛任务。"""
+        self._mark_skipped(skip_reason)
         logger.info("send_card_daily 跳过收敛: %s", skip_reason)
         if self._record and record_status:
             GiftRecordService.update_status(
@@ -410,6 +413,17 @@ class SendCardDailyTask(Task):
             )
         return ActionResult.ok(wait=0.3)
 
+    def _handle_exchange_locked_popup(self, page_info: dict) -> ActionResult:
+        """交换/分送未解锁弹窗：点击 OK 并跳过本次任务。"""
+        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
+        if not result:
+            return ActionResult.wait(0.6)
+        return self._skip_without_send(
+            skip_reason="分送功能未解锁（14天冷冻期未到）",
+            record_status="completed_no_target",
+            error_code="FEATURE_LOCKED",
+        )
+
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群入口。"""
         if self._completed:
@@ -419,7 +433,6 @@ class SendCardDailyTask(Task):
     def _handle_community(self, page_info: dict) -> ActionResult:
         """社群页面点击分送入口。"""
         ocr_results = page_info.get("ocr_results", [])
-        # 防止教程
         quick_tap(self.adb)
         result = tap_text_exact(
             self.adb,
@@ -455,6 +468,9 @@ class SendCardDailyTask(Task):
 
     def _handle_choose_friend(self, page_info: dict) -> ActionResult:
         """好友选择页：先点加号核验 friend_id，再点击对应分送。"""
+        if self._friend_helper is None:
+            return ActionResult.wait(0.6)
+
         ocr_results = page_info.get("ocr_results", [])
 
         if is_text_visible(
@@ -468,189 +484,38 @@ class SendCardDailyTask(Task):
                 error_code="NO_FRIENDS",
             )
 
-        friend_signature = build_ocr_signature(ocr_results)
-        if friend_signature == self._last_friend_signature:
-            self._friend_stable_rounds += 1
-        else:
-            self._friend_stable_rounds = 0
-            self._last_friend_signature = friend_signature
+        if self._friend_helper.update_signature_and_check_stable(ocr_results):
+            return self._friend_helper.scroll_or_fail()
 
-        # 第一阶段：必须先通过 icon_search_plus 进入详情页校验 friend_id。
-        if not self._target_friend_verified:
-            plus_box = self._find_target_search_plus_box(ocr_results)
-            if plus_box:
-                self._verified_row_anchor_y = (plus_box[1] + plus_box[3]) // 2
-                self._mark_action_done("friend_plus_clicked")
-                return tap_box(self.adb, plus_box, wait=3)
-            return self._continue_find_target_in_friend_list()
-
-        # 第二阶段：已核验 friend_id，回到列表后点击同一行分送。
-        send_box = self._find_send_box_for_verified_target(ocr_results)
-        if send_box:
-            if self._record:
-                GiftRecordService.update_status(self._record, status="target_found")
-            self._friend_scroll_rounds = 0
-            self._friend_stable_rounds = 0
-            self._last_friend_signature = None
-            return tap_box(self.adb, send_box, wait=1.0)
-
-        return self._continue_find_target_in_friend_list()
-
-    def _continue_find_target_in_friend_list(self) -> ActionResult:
-        """好友列表继续查找目标（滑动或收敛）。"""
-        if self._friend_stable_rounds >= MAX_FRIEND_STABLE_ROUNDS:
-            return self._skip_without_send(
-                skip_reason="好友列表遍历完成未找到可送目标",
-                record_status="completed_no_target",
-                error_code="TARGET_LIST_EXHAUSTED",
-            )
-
-        self._friend_scroll_rounds += 1
-        if self._friend_scroll_rounds > MAX_FRIEND_SCROLL_ROUNDS:
-            return self._complete_without_send(
-                complete_reason="好友列表遍历达到上限，未定位到可送目标",
-                record_status="completed_no_target",
-                error_code="TARGET_NOT_FOUND",
-            )
-
-        # 滑动前清空已失败的行记录（新页面行位置重置）
-        if self._failed_plus_rows:
-            logger.debug("滑动前清空已失败行记录: %s", self._failed_plus_rows)
-            self._failed_plus_rows.clear()
-
-        start, end = scroll_points(
-            self.adb,
-            base_distance_y=BASE_FRIEND_SCROLL_DISTANCE_Y,
-            direction="up",
-        )
-        swipe(self.adb, start, end, wait=0.9)
-        return ActionResult.ok(wait=0.8)
-
-    def _handle_friend_profile(self, page_info: dict) -> ActionResult:
-        """好友详情页：提取 friend_id 核验目标后返回列表。"""
-        # 已进入详情页，清除上次“已点击加号”状态，回到列表后可重新点击。
-        self._action_cache.pop("friend_plus_clicked", None)
-        ocr_results = page_info.get("ocr_results", [])
-        extracted_friend_id: Optional[str] = None
-        for item in ocr_results:
-            text = str(item.get("text", ""))
-            extracted_friend_id = extract_friend_id_from_text(text)
-            if extracted_friend_id:
-                break
-
-        if not extracted_friend_id:
-            self._friend_profile_read_rounds += 1
-            if self._friend_profile_read_rounds < MAX_FRIEND_PROFILE_READ_ROUNDS:
-                return ActionResult.wait(0.6)
-            logger.warning("送卡详情页连续未识别到 friend_id，返回好友列表重试")
-        elif self._target_friend_id and extracted_friend_id == self._target_friend_id:
-            self._target_friend_verified = True
-            self._mark_action_done("friend_verified")
-            logger.info("好友详情核验成功：friend_id=%s", extracted_friend_id)
-        else:
-            self._target_friend_verified = False
-            # 记录失败的行，避免重复点击同名好友
-            if self._verified_row_anchor_y is not None:
-                self._failed_plus_rows.add(self._verified_row_anchor_y)
-            self._verified_row_anchor_y = None
-            logger.info(
-                "好友详情核验失败：识别到 %s，目标 %s，已记录失败行",
-                extracted_friend_id,
-                self._target_friend_id,
-            )
-
-        self._friend_profile_read_rounds = 0
-        close_result = click_close(
-            self.adb,
-            self.page_detector,
-            ocr_results,
-            get_text_patterns("text_x"),
-        )
-        return close_result or ActionResult.wait(0.8)
-
-    def _find_target_search_plus_box(
-        self, ocr_results: list[dict]
-    ) -> Optional[tuple[int, int, int, int]]:
-        """在好友列表中查找目标昵称同一行的 icon_search_plus。"""
-        if not self._target_nickname:
-            logger.debug("目标昵称为空，无法执行昵称匹配")
-            return None
-        if not hasattr(self.page_detector, "find_all_templates"):
-            logger.debug("page_detector 不支持 find_all_templates，无法定位加号")
-            return None
-
-        matches = self.page_detector.find_all_templates(
-            "icon_search_plus",
-            threshold=0.8,
-            scale=1.0,
-        )
-        search_plus_boxes: list[tuple[int, int, int, int]] = []
-        for match in matches:
-            box = getattr(match, "box", None)
-            if box and len(box) == 4:
-                search_plus_boxes.append(tuple(box))
-
-        logger.debug(
-            "昵称匹配目标=%s，当前检测到 icon_search_plus=%d，已失败行=%s",
-            self._target_nickname,
-            len(search_plus_boxes),
-            self._failed_plus_rows,
-        )
-
-        row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
-
-        # 过滤掉已失败的行（比较中心点 Y 坐标）
-        available_boxes = [
-            box
-            for box in search_plus_boxes
-            if not any(
-                abs((box[1] + box[3]) // 2 - failed_y) < row_threshold_y
-                for failed_y in self._failed_plus_rows
-            )
-        ]
-
-        matched_box = find_target_search_plus_box(
-            ocr_results=ocr_results,
-            target_nickname=self._target_nickname,
-            search_plus_boxes=available_boxes,
-            row_threshold_y=row_threshold_y,
-        )
-        if matched_box is None:
-            logger.debug(
-                "昵称匹配未命中任何加号行（过滤后剩余%d个），row_threshold_y=%s",
-                len(available_boxes),
-                row_threshold_y,
-            )
-        return matched_box
-
-    def _find_send_box_for_verified_target(
-        self, ocr_results: list[dict]
-    ) -> Optional[tuple[int, int, int, int]]:
-        """核验通过后按同一行锚点优先定位分送按钮。"""
-        row_threshold_y = self.adb.scaled_y(BASE_FRIEND_ROW_THRESHOLD_Y)
-
-        if self._verified_row_anchor_y is not None:
-            send_box = find_send_box_near_anchor(
-                ocr_results=ocr_results,
-                send_text_patterns=get_text_patterns("gift_send_button"),
-                anchor_y=self._verified_row_anchor_y,
-                row_threshold_y=row_threshold_y,
-            )
+        if self._friend_flow.friend_verified:
+            send_box = self._friend_helper.find_send_box_by_anchor(ocr_results)
             if send_box:
-                return send_box
+                self._friend_flow.reset_scroll_state()
+                return tap_box(self.adb, send_box, wait=1.0)
+            return self._friend_helper.scroll_or_fail()
 
-        if not self._target_nickname:
-            return None
+        if self._friend_flow.nickname:
+            plus_box = self._friend_helper.find_plus_for_nickname(
+                ocr_results, self._friend_flow.nickname
+            )
+            if plus_box:
+                return self._friend_helper.tap_plus_and_wait_profile(plus_box)
+            return self._friend_helper.scroll_or_fail()
 
-        return find_send_button_for_target(
-            ocr_results=ocr_results,
-            target_nickname=self._target_nickname,
-            send_text_patterns=get_text_patterns("gift_send_button"),
-        )
+        if self._friend_helper.check_scroll_bottom():
+            return self._skip_without_send(
+                skip_reason="已滑到底部，未找到目标好友",
+                record_status="completed_no_target",
+                error_code="SCROLL_BOTTOM",
+            )
+
+        probe_box = self._friend_helper.get_next_probe_box()
+        if probe_box:
+            return self._friend_helper.tap_plus_and_wait_profile(probe_box)
+        return self._friend_helper.scroll_or_fail()
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：必须先筛选，再通过扫描定位固定卡牌。"""
-
         if not self._filter_applied and not self._is_action_done("open_filter_clicked"):
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
             if result:
@@ -658,7 +523,6 @@ class SendCardDailyTask(Task):
                 self._mark_action_done("open_filter_clicked")
                 return result
 
-        # 约束：未完成筛选前，不进行任何 OCR 选卡与滑动找卡。
         if not self._filter_applied:
             return ActionResult.wait(0.6)
 
@@ -672,7 +536,7 @@ class SendCardDailyTask(Task):
                 GiftRecordService.update_status(self._record, status="card_selected")
             return scan_tap_result
 
-        signature = self._build_detect_signature(detected)
+        signature = build_detect_signature(detected)
         if signature == self._last_card_signature:
             self._card_stable_rounds += 1
         else:
@@ -711,25 +575,10 @@ class SendCardDailyTask(Task):
         best = max(candidates, key=lambda item: (item.similarity, item.confidence))
         return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=1.0)
 
-    @staticmethod
-    def _build_detect_signature(detected) -> str:
-        """构建扫描结果签名，用于判断列表是否变化。"""
-        if not detected:
-            return "__EMPTY__"
-        items: list[str] = []
-        for item in detected:
-            if not item.set_code:
-                continue
-            items.append(f"{item.set_code}:{item.card_number}")
-        if not items:
-            return "__EMPTY__"
-        return "|".join(sorted(items))
-
     def _handle_filter_modal(self, page_info: dict) -> ActionResult:
-        """筛选弹窗：清空 -> 输入关键字 -> 确认，若仍停留则重复该循环。"""
+        """筛选弹窗：清空 -> 输入关键字 -> 确认。"""
         ocr_results = page_info.get("ocr_results", [])
 
-        # 若连续停留在筛选弹窗，重置流程，强制再次「清除 -> 输入 -> OK」。
         if self._is_action_done("filter_keyword_input"):
             self._filter_modal_stay_rounds += 1
         else:
@@ -772,7 +621,6 @@ class SendCardDailyTask(Task):
         ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
         if ok_result:
             self._filter_applied = True
-            # 允许在“点击 OK 后仍停留弹窗”的情况下，下次再次执行完整清除+输入流程。
             self._action_cache.pop("filter_clear_clicked", None)
             self._action_cache.pop("filter_keyword_input", None)
             self._filter_modal_stay_rounds = 0
@@ -829,11 +677,6 @@ class SendCardDailyTask(Task):
 
     def _handle_confirm_popup(self, page_info: dict) -> ActionResult:
         """确认弹窗点击 OK。"""
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        return result or ActionResult.wait(0.6)
-
-    def _handle_confirm_last_popup(self, page_info: dict) -> ActionResult:
-        """仅剩一张弹窗点击 OK。"""
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
         return result or ActionResult.wait(0.6)
 

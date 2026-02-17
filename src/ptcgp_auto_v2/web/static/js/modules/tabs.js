@@ -4,7 +4,10 @@ import {
     updateOwnedFilterGroupsState,
     getStoredTasksFilters,
     buildQueryParts,
-} from './filters.js';
+} from './features/filters/index.js';
+import { buildAutoRefreshUrl } from './auto_refresh.js';
+import { isManagementHash } from './constants.js';
+import { isElementInActiveTab } from './utils.js';
 
 const STORAGE_KEY_TAB = 'ptcgp_active_tab';
 const STORAGE_KEY_MANAGEMENT_HASH = 'ptcgp_management_hash';
@@ -23,7 +26,7 @@ export function switchTab(tabName, options = {}) {
     let initialHash = preferHash !== null ? preferHash : currentHash;
     if (
         tabName === 'management'
-        && !['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(initialHash)
+        && !isManagementHash(initialHash)
     ) {
         const rememberedHash = localStorage.getItem(STORAGE_KEY_MANAGEMENT_HASH);
         if (rememberedHash) {
@@ -99,7 +102,7 @@ export function switchTab(tabName, options = {}) {
         if (!hasContent) {
             const hash = initialHash;
             let targetBtn = null;
-            if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+            if (hash && isManagementHash(hash)) {
                 targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
             }
             if (!targetBtn) {
@@ -114,38 +117,8 @@ function triggerAutoRefresh(container) {
     if (!container) return;
     if (!isElementInActiveTab(container)) return;
 
-    const baseUrl = container.dataset.autoRefresh;
-    const includeSelector = container.dataset.refreshInclude;
-    let url = baseUrl;
-
-    if (includeSelector) {
-        const params = new URLSearchParams();
-        params.set('page', '0');
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const lang = urlParams.get('lang') || 'en';
-        params.set('lang', lang);
-
-        const selectors = includeSelector.split(',').map((item) => item.trim()).filter(Boolean);
-        selectors.forEach((selector) => {
-            const element = document.querySelector(selector);
-            if (!element) return;
-
-            if (element.tagName === 'FORM') {
-                const formData = new FormData(element);
-                formData.forEach((value, key) => {
-                    params.append(key, value);
-                });
-                return;
-            }
-
-            if (element.name) {
-                params.append(element.name, element.value || '');
-            }
-        });
-
-        url = `${baseUrl}?${params.toString()}`;
-    }
+    const url = buildAutoRefreshUrl(container);
+    if (!url) return;
 
     htmx.ajax('GET', url, {
         target: container,
@@ -162,7 +135,7 @@ export function updateSidebarState(btn) {
         applyTaskFiltersToSidebar(btn);
     }
     if (hash) {
-        if (['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+        if (isManagementHash(hash)) {
             localStorage.setItem(STORAGE_KEY_MANAGEMENT_HASH, hash);
         }
         window.location.hash = hash;
@@ -207,7 +180,7 @@ export function restoreTab() {
 
     if (hash === 'records' || hash === 'management' || hash === 'owned-cards') {
         tabName = hash;
-    } else if (['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+    } else if (isManagementHash(hash)) {
         tabName = 'management';
     } else {
         tabName = localStorage.getItem(STORAGE_KEY_TAB);
@@ -216,7 +189,7 @@ export function restoreTab() {
     if (!tabName) {
         tabName = 'records';
     }
-    if (hash && ['accounts', 'plans', 'tasks', 'metadata', 'friendships', 'daily-gift'].includes(hash)) {
+    if (hash && isManagementHash(hash)) {
         switchTab('management', { preserveHash: true, preferHash: hash });
         return;
     }

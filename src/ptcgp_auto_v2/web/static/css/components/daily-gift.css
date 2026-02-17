@@ -1,0 +1,141 @@
+/**
+ * Daily Gift Components
+ * 每日赠礼组件样式
+ */
+
+/* Date Scroll Container */
+.daily-gift-date-scroll {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+}
+
+.daily-gift-date-scroll::-webkit-scrollbar {
+    height: 6px;
+}
+
+.daily-gift-date-scroll::-webkit-scrollbar-thumb {
+    background: var(--border-subtle);
+    border-radius: 999px;
+}
+
+/* Date Chip */
+.daily-gift-date-chip {
+    flex: 0 0 auto;
+    min-width: 7.25rem;
+    min-height: 2.25rem;
+}
+
+/* Stats Grid */
+.daily-gift-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+/* Stat Card */
+.daily-gift-stat-card {
+    background-color: var(--bg-surface);
+}
+
+.daily-gift-stat-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.daily-gift-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    line-height: 1;
+}
+
+/* Status Variants */
+.daily-gift-stat-card.status-success {
+    background-color: var(--status-success-bg);
+    border-color: var(--status-success-border) !important;
+}
+
+.daily-gift-stat-card.status-failed {
+    background-color: var(--status-failed-bg);
+    border-color: var(--status-failed-border) !important;
+}
+
+.daily-gift-stat-card.status-waiting {
+    background-color: var(--status-waiting-bg);
+    border-color: var(--status-waiting-border) !important;
+}
+
+/* Date Picker */
+.daily-date-picker {
+    position: relative;
+}
+
+.daily-date-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 60;
+    min-width: 20rem;
+    max-width: min(24rem, 92vw);
+}
+
+.daily-date-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.25rem;
+    margin-bottom: 0.35rem;
+}
+
+.daily-date-weekday {
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: bold;
+    letter-spacing: 0.03em;
+    color: var(--text-color);
+    opacity: 0.65;
+}
+
+.daily-date-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.25rem;
+}
+
+.daily-date-day {
+    width: 100%;
+    min-height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.daily-date-cell-empty {
+    min-height: 2rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .daily-gift-date-chip {
+        min-width: 6.75rem;
+    }
+
+    .daily-gift-stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .daily-date-panel {
+        left: auto;
+        right: 0;
+        min-width: 18rem;
+    }
+}

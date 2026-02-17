@@ -276,7 +276,7 @@ class AdbController:
 
         try:
             self.device.click(x, y)
-            # logger.debug(f"点击: ({x}, {y})")
+            logger.debug("点击: (%s, %s)", x, y)
             time.sleep(self.wait_after_click)
 
         except (RuntimeError, OSError) as e:

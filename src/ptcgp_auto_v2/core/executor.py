@@ -386,6 +386,40 @@ class BaseExecutor(ABC):
         set_context(task=current_task_type)
         return result
 
+    def _reschedule_task(
+        self,
+        task_instance: "TaskInstance",
+        when: datetime,
+        reason: Optional[str] = None,
+    ):
+        """将任务重新排队到指定时间执行（通用机制）。"""
+        task_instance.status = TaskStatus.PENDING.value
+        task_instance.next_run_at = when
+        if reason:
+            task_instance.error_message = f"等待复查: {reason}"
+        task_instance.updated_at = datetime.now()
+        task_instance.save()
+
+    def _handle_requeue_in_result(
+        self,
+        result: "TaskResult",
+        task_instance: "TaskInstance",
+    ) -> bool:
+        """处理结果中的重排请求，返回是否已处理。"""
+        requeue_at = result.data.get("requeue_at")
+        if isinstance(requeue_at, datetime):
+            complete_reason = result.data.get("requeue_reason") or result.data.get(
+                "complete_reason"
+            )
+            self._reschedule_task(
+                task_instance=task_instance,
+                when=requeue_at,
+                reason=complete_reason,
+            )
+            logger.info("任务重排: %s -> %s", task_instance.task_type, requeue_at)
+            return True
+        return False
+
     @abstractmethod
     def run(self):
         """执行任务（子类实现）"""
@@ -511,6 +545,10 @@ class TaskExecutor(BaseExecutor):
                                 clear_error_on_success=False,
                             )
                         else:
+                            if self._handle_requeue_in_result(
+                                result, self.task_instance
+                            ):
+                                return
                             complete_reason = result.data.get("complete_reason")
                             if complete_reason:
                                 logger.info(
@@ -648,6 +686,8 @@ class AccountBatchExecutor(BaseExecutor):
                         clear_error_on_success=False,
                     )
                 else:
+                    if self._handle_requeue_in_result(result, task_instance):
+                        return True
                     complete_reason = result.data.get("complete_reason")
                     if complete_reason:
                         logger.info(
