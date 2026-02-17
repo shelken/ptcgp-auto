@@ -22,7 +22,8 @@ description: 当我们需要添加某个任务时，我们需要获取页面ocr�
 
 - 使用已经编写的`debug_tool.py`来运行ocr和模板匹配进行发现元素和点击
 - `python debug_tool.py -a [ADB_PORT] --ocr` 直接输出模拟器上的ocr内容
-- `python debug_tool.py -a [ADB_PORT] --template [template_name]` 直接输出模拟器上要寻找的模板位置以及所有文本ocr内容，template_name 是 当前项目根目录`templates/`下一级子文件。
+- `python debug_tool.py -a [ADB_PORT] --template [template_name] --scale 1.0` 直接输出模拟器上要寻找的模板位置以及所有文本ocr内容，template_name 是 当前项目根目录`templates/`下一级子文件。带上scale是为了防止进入自动缩放逻辑。
 - 当需要点击某个页面去发现元素时，使用shell命令执行`adb -s 127.0.0.1:[ADB_PORT] shell ""`，必要时带上`su`
 - 滑动使用`shell input swipe`
 - 切换账号`python main_v2.py --switch-account [数据库accountid] -d [ADB_PORT]`
+- 当需要返回时直接匹配模板`btn_back`和`btn_close`，`python debug_tool.py -a [ADB_PORT] --template btn_back --scale 1.0 && python debug_tool.py -a [ADB_PORT] --template btn_close --scale 1.0`，然后点击出现的返回或者关闭。
