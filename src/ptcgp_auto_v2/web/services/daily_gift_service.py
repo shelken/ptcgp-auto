@@ -223,6 +223,11 @@ def build_daily_gift_context(
     session: Session,
     lang: str,
     biz_date_local: str | None = None,
+    q: str = "",
+    sort_by: str = "updated_at",
+    sort_order: str = "desc",
+    page: int = 0,
+    page_size: int = 10,
 ) -> dict[str, Any]:
     """构建每日送卡页面上下文。"""
     current_lang = normalize_lang(lang)
@@ -255,7 +260,7 @@ def build_daily_gift_context(
         if isinstance(account.id, int)
     }
 
-    record_rows: list[dict[str, Any]] = []
+    record_rows_all: list[dict[str, Any]] = []
     success_count = 0
     failed_count = 0
     wait_count = 0
@@ -272,7 +277,7 @@ def build_daily_gift_context(
         if isinstance(row.target_account_id, int):
             target_name = account_name_map.get(row.target_account_id, "-")
 
-        record_rows.append(
+        record_rows_all.append(
             {
                 "id": row.id,
                 "account_id": row.account_id,
@@ -298,17 +303,68 @@ def build_daily_gift_context(
         account_friend_id_map=account_friend_id_map,
     )
     pair_send_status_rows = _build_pair_send_status_rows(
-        records=record_rows,
+        records=record_rows_all,
         pair_cards=pair_cards,
     )
 
+    q_text = q.strip().lower()
+    filtered_records = []
+    for row in record_rows_all:
+        if not q_text:
+            filtered_records.append(row)
+            continue
+        account_id_text = str(row.get("account_id") or "").lower()
+        target_account_id_text = str(row.get("target_account_id") or "").lower()
+        target_friend_id_text = str(row.get("target_friend_id") or "").lower()
+        account_name_text = str(row.get("account_name") or "").lower()
+        target_name_text = str(row.get("target_name") or "").lower()
+        if (
+            q_text in account_id_text
+            or q_text in target_account_id_text
+            or q_text in target_friend_id_text
+            or q_text in account_name_text
+            or q_text in target_name_text
+        ):
+            filtered_records.append(row)
+
+    sort_direction_desc = sort_order != "asc"
+    if sort_by == "account_id":
+        filtered_records.sort(
+            key=lambda item: int(item.get("account_id") or 0),
+            reverse=sort_direction_desc,
+        )
+    elif sort_by == "status":
+        filtered_records.sort(
+            key=lambda item: str(item.get("status") or ""), reverse=sort_direction_desc
+        )
+    else:
+        filtered_records.sort(
+            key=lambda item: item.get("updated_at") or datetime.min,
+            reverse=sort_direction_desc,
+        )
+
+    normalized_page = max(page, 0)
+    normalized_page_size = min(max(page_size, 1), 100)
+    records_total = len(filtered_records)
+    start = normalized_page * normalized_page_size
+    end = start + normalized_page_size
+    paged_records = filtered_records[start:end]
+
     return {
-        "records": record_rows,
+        "records": paged_records,
+        "records_total": records_total,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": normalized_page > 0,
+        "has_next": end < records_total,
+        "q": q,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
         "pair_cards": pair_cards,
         "pair_send_status_rows": pair_send_status_rows,
         "pair_anomalies": pair_anomalies,
         "stats": {
-            "total": len(record_rows),
+            "total": len(record_rows_all),
             "success": success_count,
             "failed": failed_count,
             "waiting": wait_count,

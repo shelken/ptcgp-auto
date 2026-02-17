@@ -2,3 +2,68 @@
  * Status styles moved to components/status-chip.css
  * .status-badge, .status-chip, .status-tone-* now unified there
  */
+
+/* Unified management list layout */
+.table-page-card {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.table-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.table-filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.table-filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.table-control {
+    min-width: clamp(10rem, 20vw, 13rem);
+    min-height: 2.5rem;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.table-action-btn {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+/* Operation panel controls (non-table sections) */
+.panel-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.panel-control {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.panel-action-btn {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
