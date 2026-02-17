@@ -1,0 +1,41 @@
+/* Theme: Editorial/Magazine */
+[data-theme="editorial"] {
+  --bg-color: #ffffff;
+  --text-color: #111111;
+  --border-color: #111111;
+  --shadow-color: transparent;
+  --accent-color: #d93025;
+  --active-color: #1a73e8;
+  --font-family: 'Bodoni Moda', serif;
+  --border-width: 1px;
+  --shadow-offset: 0px;
+  --radius: 0px;
+  --card-bg: #ffffff;
+
+  --bg-overlay: rgba(0, 0, 0, 0.75);
+  --bg-subtle: rgba(0, 0, 0, 0.04);
+  --bg-surface: #ffffff;
+  --border-subtle: rgba(0, 0, 0, 0.15);
+  --border-subtle-light: rgba(0, 0, 0, 0.08);
+  --text-muted: rgba(0, 0, 0, 0.55);
+
+  --tag-bg: var(--border-color);
+  --tag-text: var(--card-bg);
+
+  --status-success-bg: rgba(26, 115, 232, 0.12);
+  --status-success-border: rgba(26, 115, 232, 0.4);
+  --status-failed-bg: rgba(217, 48, 37, 0.12);
+  --status-failed-border: rgba(217, 48, 37, 0.4);
+  --status-waiting-bg: rgba(0, 0, 0, 0.06);
+  --status-waiting-border: rgba(0, 0, 0, 0.2);
+
+  --btn-bg: var(--card-bg);
+  --btn-text: var(--text-color);
+  --btn-border: var(--border-color);
+  --btn-hover-bg: rgba(0, 0, 0, 0.04);
+  --btn-hover-border: var(--active-color);
+  --btn-active-bg: var(--active-color);
+  --btn-active-text: var(--card-bg);
+  --btn-active-border: var(--active-color);
+  --btn-focus-ring: var(--active-color);
+}
