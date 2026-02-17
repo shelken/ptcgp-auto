@@ -71,28 +71,33 @@ LEVEL_PATTERN = re.compile(r"Lv\.?\s*(\d+)")
 def _build_fetch_pages() -> list[dict]:
     """构建账号信息获取页面规则"""
     return [
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "match_all": True,
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 10,
         },
+        # 朋友ID
         {
             "name": "profile_page",
             "identifiers": get_text_patterns("profile_page"),
             "priority": 20,
         },
+        # 商店 / 禮物盒
         {
             "name": "more_menu_modal",
             "identifiers": get_text_patterns("more_menu_modal"),
             "match_all": True,
             "priority": 22,
         },
+        # 持有物 / 寶可金塊（免費）
         {
             "name": "holdings_page",
             "identifiers": get_text_patterns("holdings_page"),
             "priority": 24,
         },
+        # 開包沙漏 / 挑戰沙漏
         {
             "name": "holdings_page_scrolled",
             "identifiers": get_text_patterns("holdings_page_scrolled"),

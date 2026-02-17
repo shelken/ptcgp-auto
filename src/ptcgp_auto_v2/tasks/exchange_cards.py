@@ -115,41 +115,49 @@ def _build_exchange_pages() -> list[dict]:
         对方未送：waiting_page(80) → cancel_confirm(83) → canceled_done(84)
     """
     return [
+        # 開放條件 / 距離開放還剩
         {
             "name": "exchange_locked_popup",
             "identifiers": get_text_patterns("exchange_locked_popup"),
             "priority": 1,
         },
+        # 要確定並開始交換
         {
             "name": "exchange_receive_start_popup",
             "identifiers": get_text_patterns("exchange_receive_start_popup"),
             "priority": 2,
         },
+        # 向上輕滑卡牌
         {
             "name": "exchange_swipe_page",
             "identifiers": get_text_patterns("exchange_swipe_to_send"),
             "priority": 2,
         },
+        # 要取消並結束交換嗎 / 要拒絕並結束交換嗎
         {
             "name": "exchange_cancel_confirm_popup",
             "identifiers": get_text_patterns("exchange_cancel_confirm_popup"),
             "priority": 3,
         },
+        # 交換已取消
         {
             "name": "exchange_canceled_done_popup",
             "identifiers": get_text_patterns("exchange_canceled_done_popup"),
             "priority": 4,
         },
+        # 確定要送給對方這張卡牌嗎
         {
             "name": "exchange_confirm_send_popup",
             "identifiers": get_text_patterns("exchange_confirm_send_popup"),
             "priority": 5,
         },
+        # 將交換僅剩的1張卡牌
         {
             "name": "exchange_confirm_last_popup",
             "identifiers": get_text_patterns("exchange_confirm_last_card_popup"),
             "priority": 6,
         },
+        # 已將卡牌提議給對方 / 處於提議階段的卡牌不會在
         {
             "name": "exchange_proposed_done_popup",
             "identifiers": get_text_patterns("exchange_proposed_done_popup"),
@@ -157,17 +165,20 @@ def _build_exchange_pages() -> list[dict]:
             "priority": 7,
         },
         # ===== 通用入口页面 =====
+        # 社群图标
         {
             "name": "home_with_community_icon",
             "templates": ["icon_community"],
             "priority": 10,
         },
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),
             "match_all": True,
             "priority": 20,
         },
+        # 社群 / 他人的收藏
         {
             "name": "community_page",
             "identifiers": get_text_patterns("community_page"),
@@ -175,46 +186,54 @@ def _build_exchange_pages() -> list[dict]:
             "priority": 30,
         },
         # ===== sending 流程 =====
+        # 紀錄
         {
             "name": "exchange_page_main",
             "identifiers": get_text_patterns("exchange_record_tab"),
             "exact_match": True,
             "priority": 40,
         },
+        # 請選擇朋友
         {
             "name": "exchange_choose_friend",
             "identifiers": get_text_patterns("exchange_choose_friend_title"),
             "priority": 50,
         },
+        # 朋友ID / 戰績
         {
             "name": "friend_profile",
             "match_all": True,
             "identifiers": get_text_patterns("friend_profile"),
             "priority": 55,
         },
+        # 請選擇要送給對方的卡牌
         {
             "name": "exchange_select_card",
             "identifiers": get_text_patterns("exchange_select_card_title"),
             "match_all": True,
             "priority": 60,
         },
+        # 稀有度
         {
             "name": "exchange_filter_modal",
             "identifiers": get_text_patterns("card_filter_title"),
             "priority": 65,
         },
+        # 編輯卡牌
         {
             "name": "exchange_target_confirm_page",
             "identifiers": get_text_patterns("exchange_target_confirm_page"),
             "priority": 70,
         },
         # ===== sended 流程 =====
+        # 正在等待對方回應
         {
             "name": "exchange_waiting_page",
             "identifiers": get_text_patterns("exchange_waiting_page"),
             "match_all": True,
             "priority": 80,
         },
+        # 要和這張卡牌交換嗎
         {
             "name": "exchange_receive_confirm_page",
             "identifiers": get_text_patterns("exchange_receive_confirm_page"),
