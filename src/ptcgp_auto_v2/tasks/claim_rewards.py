@@ -73,38 +73,38 @@ def _build_rewards_page_tabs_patterns() -> list[str]:
 def _build_claim_rewards_pages() -> list[dict]:
     """构建任务奖励领取页面规则"""
     return [
+        # 商店 / 得卡挑戰
         {
-            # 游戏主页：检测是否有奖励图标的起点
             "name": "game_home_main",
             "match_all": True,
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 10,
         },
+        # 每日 / 圖鑑 / 牌組 / 掉落 / 帳號連結 / 特級 / 精英牌組 / 便利卡牌 / 獎勵週 / 勳章
         {
-            # 任务奖励页面：底部有 Tab 栏
-            # 有些要精确，有些不应该精确。
             "name": "rewards_page",
             "identifiers": _build_rewards_page_tabs_patterns(),
             "exact_match": True,
             "priority": 15,
         },
+        # 報酬 / 達成！
         {
-            # 奖励详情页面
             "name": "reward_detail_page",
             "identifiers": get_text_patterns("reward_detail_page"),
             "match_all": True,
             "priority": 16,
         },
+        # 主題收藏
         {
-            # 主题收藏页面：有"主題收藏"标题，且没有 Tab 栏
             "name": "theme_collection_page",
             "identifiers": get_text_patterns("theme_collection"),
             "exclude_identifiers": _build_rewards_page_tabs_patterns(),
             "priority": 20,
         },
+        # 快进按钮
         {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 23},
+        # 向上輕滑卡牌
         {
-            # 卡牌登录图鉴页面（精英牌组奖励领取后）
             "name": "pack_card_register",
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 25,

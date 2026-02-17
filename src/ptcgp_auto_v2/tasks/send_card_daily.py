@@ -64,72 +64,85 @@ MAX_FILTER_MODAL_STAY_ROUNDS = 2
 def _build_send_card_pages() -> list[dict]:
     """构建送卡任务页面规则。"""
     return [
+        # 開放條件 / 距離開放還剩
         {
             "name": "exchange_locked_popup",
             "identifiers": get_text_patterns("exchange_locked_popup"),
             "priority": 10,
         },
+        # 確定要送給對方這張卡牌嗎
         {
             "name": "gift_confirm_popup",
             "identifiers": get_text_patterns("gift_confirm_send_popup"),
             "priority": 10,
         },
+        # 將分送僅剩的1張卡牌 / 確定要繼續嗎
         {
             "name": "gift_confirm_last_popup",
             "identifiers": get_text_patterns("gift_confirm_last_card_popup"),
             "priority": 10,
         },
+        # 要分送的對象
         {
             "name": "gift_target_page",
             "identifiers": get_text_patterns("gift_target_page"),
             "priority": 50,
             "exact_match": True,
         },
+        # 請選擇要分送的卡牌
         {
             "name": "gift_select_card",
             "identifiers": get_text_patterns("gift_select_card_title"),
             "priority": 55,
             "exact_match": True,
         },
+        # 向上輕滑卡牌
         {
             "name": "gift_swipe_page",
             "identifiers": get_text_patterns("gift_swipe_to_send"),
             "priority": 99,
         },
+        # 請選擇朋友
         {
             "name": "gift_choose_friend",
             "identifiers": get_text_patterns("gift_choose_friend_title"),
             "priority": 99,
         },
+        # 朋友ID / 戰績
         {
             "name": "friend_profile",
             "match_all": True,
             "identifiers": get_text_patterns("friend_profile"),
             "priority": 99,
         },
+        # 我的最愛 / 清除 / OK
         {
             "name": "gift_filter_modal",
             "identifiers": get_text_patterns("gift_filter_modal_title"),
             "match_all": True,
             "priority": 99,
         },
+        # 紀錄 / 分送
         {
             "name": "gift_page_main",
             "identifiers": get_text_patterns("gift_page_main"),
             "match_all": True,
             "priority": 99,
         },
+        # 社群 / 他人的收藏
         {
             "name": "community_page",
             "identifiers": get_text_patterns("community_page"),
             "match_all": True,
             "priority": 99,
         },
+        # 社群图标
         {
             "name": "home_with_community_icon",
             "templates": ["icon_community"],
             "priority": 99,
         },
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),

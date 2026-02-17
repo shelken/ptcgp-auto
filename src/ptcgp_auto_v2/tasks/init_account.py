@@ -102,107 +102,128 @@ class InitAccountPhase(Enum):
 def _build_init_pages() -> list[dict]:
     """构建新账号初始化任务页面规则"""
     return [
+        # 選擇國家 / 請選擇您居住的國家
         {
             "name": "init_select_country",
             "identifiers": get_text_patterns("init_select_country"),
             "priority": 99,
         },
+        # 使用條款 / 隱私權政策
         {
             "name": "init_terms_privacy",
             "identifiers": get_text_patterns("init_terms_privacy"),
             "priority": 99,
         },
+        # 關於資料使用
         {
             "name": "init_data_use",
             "identifiers": get_text_patterns("init_data_use"),
             "priority": 98,
         },
+        # 建立儲存資料
         {
             "name": "init_create_save",
             "identifiers": get_text_patterns("init_create_save"),
             "priority": 99,
         },
+        # 帳號連結
         {
             "name": "init_account_link",
             "identifiers": get_text_patterns("init_account_link"),
             "priority": 99,
         },
+        # 請設定頭像和玩家名稱
         {
             "name": "init_set_nickname",
             "identifiers": get_text_patterns("init_set_nickname"),
             "priority": 99,
         },
+        # 玩家名稱
         {
             "name": "init_nickname_input",
             "identifiers": get_text_patterns("init_nickname_title"),
             "exact_match": True,
             "priority": 99,
         },
+        # 確定要使用此設定嗎
         {
             "name": "init_confirm_settings",
             "identifiers": get_text_patterns("init_confirm_settings"),
             "priority": 99,
         },
+        # 請選擇喜歡的擴充包
         {
             "name": "init_select_pack",
             "identifiers": get_text_patterns("init_select_pack"),
             "priority": 99,
         },
+        # 決定
         {
             "name": "init_decide",
             "identifiers": get_text_patterns("init_decide"),
             "exact_match": True,
             "priority": 99,
         },
+        # 橫向滑動來開封
         {
             "name": "init_swipe_open",
             "identifiers": get_text_patterns("init_swipe_open"),
             "priority": 99,
         },
+        # 下一步
         {
             "name": "init_next_step",
             "identifiers": get_text_patterns("init_next_step"),
             "exact_match": True,
             "priority": 99,
         },
+        # 開封
         {
             "name": "init_open_pack",
             "identifiers": get_text_patterns("init_open_pack"),
             "exact_match": True,
             "priority": 99,
         },
+        # 請好好享受 / 隨意遊玩
         {
             "name": "init_enjoy",
             "identifiers": get_text_patterns("init_enjoy"),
             "priority": 99,
         },
+        # 商店 / 得卡挑戰
         {
             "name": "game_home_main",
             "identifiers": get_text_patterns("game_home_main"),
             "match_all": True,
             "priority": 90,
         },
+        # 點擊來翻開卡牌吧
         {
             "name": "init_tap_to_flip",
             "identifiers": get_text_patterns("init_tap_to_flip"),
             "priority": 99,
         },
+        # 選1張喜歡的卡牌吧
         {
             "name": "init_select_favorite_card",
             "identifiers": get_text_patterns("init_select_favorite_card"),
             "priority": 99,
         },
+        # 開封結果 / 開包點數 / 閃亮沙子
         {
             "name": "pack_opening_result",
             "identifiers": get_text_patterns("pack_opening_result"),
             "priority": 99,
         },
+        # 快进按钮
         {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
+        # 向上輕滑卡牌
         {
             "name": "pack_card_register",
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 99,
         },
+        # 長按 / 長按以跳過 / 長按開封
         {
             "name": "pack_opening_card",
             "identifiers": get_text_patterns("long_press"),
