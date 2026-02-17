@@ -1,0 +1,187 @@
+/**
+ * Card Preview Components
+ * 卡牌预览组件样式（3D预览效果）
+ */
+
+/* Overlay */
+.card-preview-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-overlay);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    cursor: pointer;
+}
+
+.card-preview-overlay.active {
+    opacity: 1;
+}
+
+/* Container */
+.card-preview-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    perspective: 1200px;
+    perspective-origin: center center;
+}
+
+.card-preview-container:active {
+    cursor: grabbing;
+}
+
+/* 3D Card */
+.card-preview-card {
+    width: 400px;
+    height: 560px;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.15s ease-out;
+    will-change: transform;
+    border-radius: 16px;
+}
+
+@media (max-width: 768px) {
+    .card-preview-card {
+        width: 280px;
+        height: 392px;
+    }
+}
+
+.card-preview-card.dragging {
+    transition: none;
+}
+
+/* Card Front */
+.card-preview-front {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow:
+        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    transform: translateZ(0);
+    background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+}
+
+/* Card Image */
+.card-preview-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 16px;
+    transform: translateZ(1px);
+}
+
+/* Shine Effect */
+.card-preview-shine {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    pointer-events: none;
+    background: linear-gradient(
+        115deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(255, 255, 255, 0.4) 50%,
+        rgba(255, 255, 255, 0) 60%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    transform: translateZ(2px);
+    mix-blend-mode: overlay;
+}
+
+/* Shadow Effect */
+.card-preview-card::after {
+    content: '';
+    position: absolute;
+    bottom: -20px;
+    left: 10%;
+    width: 80%;
+    height: 40px;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, transparent 70%);
+    transform: rotateX(90deg) translateZ(-280px);
+    filter: blur(20px);
+    pointer-events: none;
+}
+
+/* Info Panel */
+.card-preview-info {
+    text-align: center;
+    color: var(--text-color);
+    background-color: var(--bg-surface);
+    padding: 1rem 2rem;
+    border-radius: var(--radius);
+    border: var(--border-width) solid var(--border-color);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--shadow-color);
+    max-width: 400px;
+}
+
+.card-preview-name {
+    font-size: 1.25rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    word-break: break-word;
+}
+
+.card-preview-meta {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    opacity: 0.8;
+}
+
+.card-preview-rarity,
+.card-preview-set,
+.card-preview-number {
+    background-color: var(--bg-subtle);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+/* Hint Text */
+.card-preview-hint {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    color: var(--text-color);
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+/* Theme Variants */
+[data-theme="retro"] .card-preview-info {
+    background-color: #000;
+    border-color: var(--text-color);
+}
+
+[data-theme="luxury"] .card-preview-info {
+    background-color: #1a1a1a;
+    border-color: var(--border-color);
+}
+
+[data-theme="luxury"] .card-preview-front {
+    box-shadow: 0 20px 60px rgba(212, 175, 55, 0.3);
+}

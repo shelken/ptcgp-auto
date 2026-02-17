@@ -1,0 +1,102 @@
+/**
+ * Modal Components
+ * 模态框组件样式
+ */
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-overlay);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Modal Container */
+.modal-container {
+    position: relative;
+    width: min(600px, 92vw);
+    max-height: 90vh;
+    overflow: hidden;
+    background-color: var(--card-bg);
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--shadow-color);
+    transform: translateY(-10px);
+    transition: transform 0.25s ease;
+}
+
+.modal-overlay.active .modal-container {
+    transform: translateY(0);
+}
+
+/* Modal Header */
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: var(--border-width) solid var(--border-color);
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: bold;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem;
+    color: var(--text-color);
+    transition: opacity 0.2s;
+}
+
+.modal-close:hover {
+    opacity: 0.7;
+}
+
+/* Modal Body */
+.modal-body {
+    padding: 1.25rem;
+    overflow-y: auto;
+    max-height: calc(90vh - 120px);
+}
+
+/* Modal Footer */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-top: var(--border-width) solid var(--border-color);
+}
+
+/* Theme Variants */
+[data-theme="luxury"] .modal-container {
+    box-shadow: 0 8px 30px var(--shadow-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .modal-container {
+        width: 96vw;
+        max-height: 95vh;
+    }
+
+    .modal-body {
+        max-height: calc(95vh - 120px);
+    }
+}

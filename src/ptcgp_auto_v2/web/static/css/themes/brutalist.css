@@ -1,0 +1,42 @@
+/* Theme: Brutalist/Raw (Default) */
+[data-theme="brutalist"],
+:root {
+  --bg-color: #FDFBF7;
+  --text-color: #1a1a1a;
+  --border-color: #000000;
+  --shadow-color: #000000;
+  --accent-color: #FF4D4D;
+  --active-color: #FF4D4D;
+  --font-family: 'Space Grotesk', sans-serif;
+  --border-width: 3px;
+  --shadow-offset: 6px;
+  --radius: 0px;
+  --card-bg: #ffffff;
+
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --bg-subtle: rgba(0, 0, 0, 0.05);
+  --bg-surface: #ffffff;
+  --border-subtle: rgba(0, 0, 0, 0.2);
+  --border-subtle-light: rgba(0, 0, 0, 0.1);
+  --text-muted: rgba(0, 0, 0, 0.6);
+
+  --tag-bg: var(--border-color);
+  --tag-text: var(--bg-color);
+
+  --status-success-bg: rgba(50, 205, 50, 0.14);
+  --status-success-border: rgba(50, 205, 50, 0.45);
+  --status-failed-bg: rgba(255, 77, 77, 0.14);
+  --status-failed-border: rgba(255, 77, 77, 0.45);
+  --status-waiting-bg: rgba(0, 0, 0, 0.08);
+  --status-waiting-border: rgba(0, 0, 0, 0.25);
+
+  --btn-bg: var(--card-bg);
+  --btn-text: var(--text-color);
+  --btn-border: var(--border-color);
+  --btn-hover-bg: var(--bg-color);
+  --btn-hover-border: var(--active-color);
+  --btn-active-bg: var(--active-color);
+  --btn-active-text: var(--card-bg);
+  --btn-active-border: var(--active-color);
+  --btn-focus-ring: var(--active-color);
+}

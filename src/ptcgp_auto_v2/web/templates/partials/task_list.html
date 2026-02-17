@@ -1,4 +1,4 @@
-{% from "partials/macros/tables.html" import table_container, table_row, pagination, status_badge %}
+{% from "partials/macros/tables.html" import table_container, table_row, pagination, status_chip %}
 
 {% set table_headers = [
     t.col_account or 'Account',
@@ -8,8 +8,7 @@
     t.col_last_completed or 'Last Completed',
     t.col_next_run or 'Next Run',
     t.col_reset_type or 'Reset Type',
-    t.col_plan or 'Plan',
-    t.col_error or 'Error'
+    t.col_plan or 'Plan'
 ] %}
 
 {% set rows_content %}
@@ -27,7 +26,7 @@
             {% endif %}
         {% endset %}
         {% set status_cell %}
-            {{ status_badge(item.status, t) }}
+            {{ status_chip(item.status, t, reason=item.error_message or '') }}
         {% endset %}
         {% set dispatch_cell %}
             {% if item.reset_type == 'once' %}
@@ -90,13 +89,6 @@
                 <span class="text-muted">-</span>
             {% endif %}
         {% endset %}
-        {% set error_cell %}
-            {% if item.error_message %}
-                <span class="text-xs text-muted">{{ item.error_message }}</span>
-            {% else %}
-                <span class="text-muted">-</span>
-            {% endif %}
-        {% endset %}
         {{ table_row([
             account_cell,
             task_cell,
@@ -105,8 +97,7 @@
             last_completed_cell,
             next_run_cell,
             reset_cell,
-            plan_cell,
-            error_cell
+            plan_cell
         ]) }}
     {% endfor %}
 
@@ -250,7 +241,6 @@
                         </th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_reset_type or 'Reset Type' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_plan or 'Plan' }}</th>
-                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_error or 'Error' }}</th>
                     </tr>
                 </thead>
                 <tbody id="task-table-body"
