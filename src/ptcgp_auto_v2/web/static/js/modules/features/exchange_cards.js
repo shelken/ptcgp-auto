@@ -51,7 +51,16 @@ export function showExchangeForm(button) {
 // --- 取消交换表单 ---
 export function cancelExchangeForm() {
     const container = document.getElementById('exchange-form-container');
-    if (container) {
-        container.classList.add('hidden');
-    }
+    const fromAccountIdInput = document.getElementById('exchange-from-account-id');
+    const fromAccountDisplay = document.getElementById('exchange-from-account-display');
+    const toFriendIdInput = document.getElementById('exchange-to-friend-id');
+    const submitBtn = document.getElementById('exchange-submit-btn');
+    const warningEl = document.getElementById('exchange-active-warning');
+
+    if (fromAccountIdInput) fromAccountIdInput.value = '';
+    if (fromAccountDisplay) fromAccountDisplay.textContent = '-';
+    if (toFriendIdInput) toFriendIdInput.value = '';
+    if (submitBtn) submitBtn.disabled = true;
+    if (warningEl) warningEl.classList.add('hidden');
+    if (container) container.classList.add('hidden');
 }

@@ -204,8 +204,8 @@
     "owned_accounts_total": "Accounts",
     "owned_count_total": "Total Count",
     "owned_cards_not_found": "Card not found",
-    "exchange_entry_title": "Exchange Request",
-    "exchange_entry_action": "Create Request",
+    "exchange_entry_title": "Exchange Card",
+    "exchange_entry_action": "Exchange Card",
     "exchange_entry_no_available_accounts": "No eligible accounts (count must be greater than 0)",
     "exchange_entry_blocked_rarity": "This rarity cannot be exchanged",
     "msg_exchange_request_created": "Exchange request created",
@@ -341,6 +341,9 @@
     "exchange_search_accounts": "Search by Account ID / Nickname / Friend ID",
     "exchange_input_friend_id": "Target Friend ID",
     "exchange_confirm_send": "Confirm Send",
+    "btn_prev_page": "Previous",
+    "btn_next_page": "Next",
+    "empty_owned_accounts": "No exchangeable accounts",
     "exchange_has_active_request": "This account has an active exchange request. Cannot create a new one.",
     "label_from_account": "From Account"
 }

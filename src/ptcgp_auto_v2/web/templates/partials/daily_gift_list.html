@@ -1,4 +1,5 @@
 {% from "partials/macros/tables.html" import table_container, auto_refresh_container, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card %}
 
 {% call auto_refresh_container("/management/daily-gift?lang=" ~ current_lang, '#daily-gift-state-form', 'outerHTML', 'space-y-6') %}
 <form id="daily-gift-state-form" class="hidden">
@@ -89,8 +90,7 @@
     </div>
 </div>
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_pair_progress or 'PAIR SEND STATUS' }}</h3>
+{% call data_table_card(t.section_daily_gift_pair_progress or 'PAIR SEND STATUS') %}
     {% call table_container([
         t.col_pair or 'Pair',
         t.col_direction_left_to_right or 'A to B',
@@ -114,10 +114,9 @@
         </tr>
         {% endfor %}
     {% endcall %}
-</div>
+{% endcall %}
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_records or 'DAILY GIFT RECORDS' }}</h3>
+{% call data_table_card(t.section_daily_gift_records or 'DAILY GIFT RECORDS') %}
     {% call table_container([
         t.col_id or 'ID',
         t.col_account or 'Account',
@@ -155,7 +154,7 @@
         </tr>
         {% endfor %}
     {% endcall %}
-</div>
+{% endcall %}
 
 <div class="brutal-card p-6 space-y-4">
     <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_pairs or 'CURRENT PAIRS' }}</h3>
@@ -181,8 +180,7 @@
     {% endif %}
 </div>
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_daily_gift_pair_anomalies or 'PAIR ANOMALIES' }}</h3>
+{% call data_table_card(t.section_daily_gift_pair_anomalies or 'PAIR ANOMALIES') %}
     {% call table_container([
         t.col_account_id or 'Account ID',
         t.col_friend_id or '朋友id',
@@ -204,5 +202,5 @@
         </tr>
         {% endfor %}
     {% endcall %}
-</div>
+{% endcall %}
 {% endcall %}
