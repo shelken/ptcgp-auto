@@ -26,10 +26,22 @@ router = APIRouter()
 async def get_management_plans(
     request: Request,
     lang: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="id"),
+    sort_order: str = Query(default="asc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
 ):
     """渲染计划管理列表。"""
     current_lang = detect_lang(request, lang)
-    context = get_plans_context(current_lang)
+    context = get_plans_context(
+        lang=current_lang,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/plan_list.html", context)

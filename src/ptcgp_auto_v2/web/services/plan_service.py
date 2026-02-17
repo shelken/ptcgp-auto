@@ -8,13 +8,65 @@ from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
 
-def get_plans_context(lang: str) -> dict:
-    """获取计划列表视图数据。"""
+def get_plans_context(
+    lang: str,
+    q: str = "",
+    sort_by: str = "id",
+    sort_order: str = "asc",
+    page: int = 0,
+    page_size: int = 10,
+) -> dict:
+    """获取计划列表视图数据（统一列表协议：q/sort/page）。"""
     current_lang = normalize_lang(lang)
     t = get_translations(current_lang)
     repo = TaskPlanRepository()
     plans = repo.get_all()
-    return {"plans": plans, "t": t, "current_lang": current_lang}
+
+    normalized_q = (q or "").strip().lower()
+    allowed_sort_fields = {"id", "name"}
+    normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
+    normalized_sort_order = "desc" if str(sort_order).lower() == "desc" else "asc"
+    normalized_page = max(page, 0)
+    normalized_page_size = min(max(page_size, 1), 100)
+
+    if normalized_q:
+        plans = [
+            item
+            for item in plans
+            if normalized_q in str(item.id or "")
+            or normalized_q in (item.name or "").lower()
+            or normalized_q in (item.description or "").lower()
+        ]
+
+    def _sort_value(item: TaskPlan):
+        if normalized_sort_by == "name":
+            return (item.name or "").lower()
+        return item.id or 0
+
+    plans = sorted(
+        plans,
+        key=_sort_value,
+        reverse=(normalized_sort_order == "desc"),
+    )
+
+    total_items = len(plans)
+    start = normalized_page * normalized_page_size
+    end = start + normalized_page_size
+    plans_page = plans[start:end]
+
+    return {
+        "plans": plans_page,
+        "q": q,
+        "sort_by": normalized_sort_by,
+        "sort_order": normalized_sort_order,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": normalized_page > 0,
+        "has_next": end < total_items,
+        "total_items": total_items,
+        "t": t,
+        "current_lang": current_lang,
+    }
 
 
 def build_plan_edit_context(plan_id: int | None, lang: str) -> dict:

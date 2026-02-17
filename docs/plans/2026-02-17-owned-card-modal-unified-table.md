@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 修复 owned-card modal 的滚动/穿透与交互问题，并建设统一表格组件，逐步收敛管理类列表页面到统一能力。
+**Goal:** 修复 owned-card modal 的滚动/穿透与交互问题，并建设“能力统一、布局可差异”的表格组件体系，逐步收敛管理类列表页面到统一协议与交互。
 
-**Architecture:** 前端采用 `data_table` 宏抽象 toolbar/sort/pager/infinite 四类能力，页面按模式选择 `pager`（modal）或 `infinite`（页面流）。后端统一列表查询参数（`page/page_size/q/sort_by/sort_order`）并在服务层做白名单校验。owned-card modal 先行改造为固定高度 + 顶部交换操作区 + 传统分页，之后迁移 management 下表格类页面。
+**Architecture:** 前端采用 `data_table` 宏作为“能力组件”，统一提供 `toolbar/table/pager` 骨架与行为，不强制页面采用同一排版。页面通过 slot 与声明式筛选配置（`priority/span/min_width`）定义自身筛选组合与顺序，并按容器宽度自动换行。后端统一列表查询参数（`page/page_size/q/sort_by/sort_order`）并在服务层做白名单校验；视觉层允许按页面密度与场景差异化。
 
 **Tech Stack:** FastAPI, Jinja2 macros, HTMX, SQLModel, ES modules
 
@@ -57,7 +57,7 @@
 3. modal 采用“单滚动策略”：避免 header sticky + 负边距造成穿透。
 4. 人工验证：长列表下标题不穿透，表单无需滚到底。
 
-## Task 4: 抽取统一表格宏并接入第一批 management 页面
+## Task 4: 重构 data_table 为可插槽能力组件，并按页面差异化接入 management
 
 **Files:**
 - Create: `src/ptcgp_auto_v2/web/templates/partials/macros/data_table.html`
@@ -65,11 +65,16 @@
 - Modify: `src/ptcgp_auto_v2/web/templates/partials/friendship_list.html`
 - Modify: `src/ptcgp_auto_v2/web/templates/partials/task_list.html`
 - Modify: `src/ptcgp_auto_v2/web/templates/partials/daily_gift_list.html`
+- Modify: `src/ptcgp_auto_v2/web/templates/partials/account_list.html`
+- Modify: `src/ptcgp_auto_v2/web/templates/partials/plan_list.html`
 
 **Steps:**
-1. 提供统一 toolbar（搜索/刷新）与排序头宏。
-2. 提供 pager/infinite 两种分页宏。
-3. 将上述页面逐个迁移到统一宏，保持现有字段与业务行为不变。
+1. 将 `data_table` 改为可插槽能力组件，最少抽象 `toolbar/table/pager`，保证组件只负责骨架与交互，不强绑页面布局。
+2. 为筛选行引入声明式布局配置（如 `priority/span/min_width`），页面可自行定义筛选项顺序和组合，组件负责按容器宽度自动换行。
+3. 尺寸策略改为响应式 token（`clamp()` + 容器类 `compact/regular` + 密度模式 `dense/normal`），避免固定像素。
+4. 统一范围限定为“协议与交互”（`q/sort_by/sort_order/page/page_size` + 排序/分页/刷新/透传），视觉布局允许页面差异化。
+5. 按顺序迁移并验证：`exchange -> friendship -> daily_gift -> tasks`；每迁一页做 DevTools 对比，确保“布局可差异，交互统一”。
+6. 管理类页面排序交互统一使用“表头点击排序 + 隐藏字段透传”，禁止将排序降级为筛选区下拉框。
 
 ## Task 5: 文案、规则、回归
 
@@ -91,4 +96,11 @@
 - [x] Task 2：完成（新增 `/api/owned-cards/modal/exchange-accounts` 与服务层分页/搜索/排序）
 - [x] Task 3：完成（owned-card modal 去标题、固定模式、表单上移并默认隐藏、传统翻页）
 - [x] Task 5：完成（文案与 `web/AGENTS.md` 规则回填）
-- [~] Task 4：进行中（已新增 `data_table` 宏并完成 owned-card/exchange/friendship/daily_gift/task 首轮接入；`exchange/friendship/daily_gift` 已收口到统一查询协议，`task` 仍需从哨兵滚动进一步抽象为宏级双模式分页）
+- [x] Task 4：完成（`data_table` 已重构为可插槽能力组件并落地响应式 token；`exchange/friendship/daily_gift/tasks/account_list/plan_list` 全部迁移到统一交互协议与分页能力，页面布局保持可差异化）
+
+## 修正记录（2026-02-17）
+
+- 发现 `account_list` 与 `plan_list` 在迁移时把排序交互误改为筛选区下拉，偏离了 `tasks` 页面“表头点击排序”交互基线。
+- 修正策略：统一回退为表头点击排序（含升降序切换），并继续使用 `sort_by/sort_order` 隐藏字段透传协议。
+- 修正结果：`account_list` 与 `plan_list` 已改回表头排序交互；`PYTHONPATH=.:src pytest src/ptcgp_auto_v2/web/tests -v` 通过（7 passed）。
+- 工具栏重构：`data_table` 新增双区声明式工具栏布局（left/right + order + min_width + grow），并已接入 `account/plan/exchange/friendship/daily_gift/tasks`，支持长内容自动换行。
