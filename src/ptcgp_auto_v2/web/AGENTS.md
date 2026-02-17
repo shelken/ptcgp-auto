@@ -54,7 +54,8 @@ src/ptcgp_auto_v2/web/
 │       ├── macros/             # 宏定义（可复用组件）
 │       │   ├── modal.html      # 模态框宏
 │       │   ├── forms.html      # 表单宏
-│       │   └── tables.html     # 表格宏
+│       │   ├── tables.html     # 兼容表格宏
+│       │   └── data_table.html # 统一列表组件宏（排序/分页/工具栏）
 │       └── modals/             # 模态框模板
 │           ├── edit_account.html
 │           ├── edit_account_plans.html
@@ -182,6 +183,15 @@ src/ptcgp_auto_v2/web/
 - 统一通过 `data-auto-refresh` 与可选的 `data-refresh-include` 提供刷新 URL 与筛选参数
 - 需要替换整个容器时使用 `data-refresh-swap="outerHTML"`
 
+### Web 测试目录规范（强制）
+
+- Web 相关测试必须放在 `src/ptcgp_auto_v2/web/tests/` 下，禁止继续放在仓库根 `tests/`。
+- 测试目录结构必须镜像源码结构：
+  - `web/services/*.py` → `web/tests/services/test_*.py`
+  - `web/queries/*.py` → `web/tests/queries/test_*.py`
+  - `web/routers/*.py` → `web/tests/routers/test_*.py`
+- 新增或迁移测试时，优先先补对应模块路径，再写测试内容，避免后续分散与重复。
+
 ## 常见问题与注意点（经验总结）
 
 - **表单状态一致性**：界面上的启用/排序/选项变更要同步写回表单字段，确保提交数据与操作一致。
@@ -250,6 +260,9 @@ src/ptcgp_auto_v2/web/
 - **页面模块分层原则**：页面专属逻辑统一放在 `modules/features/`，根目录 `modules/` 仅保留编排、共享能力与跨页面路由/状态模块。
 - **筛选分层原则**：筛选逻辑按 `records/owned/tasks` 拆分到 `modules/features/filters/`，通用表单序列化能力放在 `shared_form.js`，禁止再次回退到单文件混写。
 - **显式依赖原则**：模块内禁止依赖 `window` 上的同名全局函数兜底（如 `isElementInActiveTab`），必须显式 `import` 保证可维护与可测试。
+- **Web 测试就近原则**：Web 功能改动必须优先在 `src/ptcgp_auto_v2/web/tests/` 编写/更新测试，且目录与源码一一对应，避免跨域测试文件散落。
+- **统一列表组件原则**：管理类表格页面优先复用 `macros/data_table.html`，排序/分页/刷新能力通过统一宏输出，禁止每页重复拼接按钮与分页逻辑。
+- **Modal 固定模式原则**：拥有卡牌弹窗使用固定模式（`data-modal-mode="owned-card-fixed"`），禁止再次引入双滚动（外层 `#modal-content` 与内层列表同时滚动）。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录

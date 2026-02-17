@@ -1,4 +1,5 @@
 {% from "partials/macros/tables.html" import table_container, table_row, pagination, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card %}
 
 {% set table_headers = [
     t.col_account or 'Account',
@@ -118,7 +119,7 @@
 {% if table_only %}
     {{ rows_content }}
 {% else %}
-    <div class="brutal-card p-6">
+    {% call data_table_card('', 'brutal-card p-6') %}
         <form id="task-filter-form"
               hx-get="/api/tasks?page=0&lang={{ current_lang }}"
               hx-target="#task-table-body"
@@ -258,5 +259,5 @@
                 </tbody>
             </table>
         </div>
-    </div>
+    {% endcall %}
 {% endif %}

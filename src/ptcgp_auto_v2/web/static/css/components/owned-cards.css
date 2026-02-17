@@ -199,3 +199,106 @@
         gap: 0.5rem;
     }
 }
+
+/* Owned Card Modal */
+.owned-card-modal-layout {
+    align-items: flex-start;
+    height: min(82vh, 760px);
+}
+
+.owned-card-modal-right {
+    min-height: 0;
+    height: 100%;
+}
+
+.owned-card-modal-table-shell {
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+}
+
+.owned-card-modal-root {
+    position: relative;
+    height: 100%;
+}
+
+.owned-card-modal-close {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    z-index: 20;
+    width: 2rem;
+    height: 2rem;
+    border: var(--border-width) solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-surface);
+    color: var(--text-color);
+    font-size: clamp(0.85rem, 1.5vw, 1rem);
+    line-height: 1;
+}
+
+.owned-card-modal-root .brutal-card {
+    padding: clamp(0.55rem, 1.25vw, 0.9rem);
+}
+
+.owned-card-modal-root h4 {
+    font-size: clamp(0.95rem, 1.4vw, 1.1rem);
+}
+
+.owned-card-modal-root h5 {
+    font-size: clamp(0.8rem, 1.1vw, 0.9rem);
+}
+
+.owned-card-modal-root .text-lg {
+    font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+}
+
+.owned-card-modal-root .text-sm,
+.owned-card-modal-root .text-xs,
+.owned-card-modal-root .brutal-btn,
+.owned-card-modal-root .brutal-input {
+    font-size: clamp(0.74rem, 1vw, 0.85rem);
+}
+
+.owned-card-modal-root #exchange-form-container {
+    margin-bottom: 0.65rem;
+}
+
+.owned-card-modal-root #exchange-form-container .space-y-3 > * + * {
+    margin-top: 0.45rem;
+}
+
+.owned-card-modal-root table {
+    table-layout: auto;
+}
+
+.owned-exchange-cell-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owned-card-modal-root th,
+.owned-card-modal-root td {
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+}
+
+@media (max-width: 900px) {
+    .owned-card-modal-layout {
+        height: min(84vh, 760px);
+    }
+}
+
+@media (max-width: 768px) {
+    .owned-card-modal-layout {
+        height: min(86vh, 760px);
+        gap: 0.5rem;
+    }
+
+    .owned-card-modal-root .owned-card-preview-wrap {
+        max-height: 34vh;
+        overflow: hidden;
+    }
+}

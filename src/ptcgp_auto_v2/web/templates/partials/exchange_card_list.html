@@ -1,4 +1,5 @@
 {% from "partials/macros/tables.html" import table_container, auto_refresh_container, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card %}
 
 {% call auto_refresh_container("/management/exchange-cards?lang=" ~ current_lang, '#exchange-card-state-form', 'outerHTML', 'space-y-6') %}
 <form id="exchange-card-state-form" class="hidden">
@@ -39,7 +40,7 @@
     </div>
 </div>
 
-<div class="brutal-card p-6 space-y-4">
+{% call data_table_card('', 'brutal-card p-6 space-y-4') %}
     {% call table_container([
         {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.label_from_account or 'From Account', 'class_name': 'whitespace-nowrap'},
@@ -89,5 +90,5 @@
         </tr>
         {% endfor %}
     {% endcall %}
-</div>
+{% endcall %}
 {% endcall %}

@@ -1,4 +1,5 @@
 {% from "partials/macros/tables.html" import table_container, table_row, auto_refresh_container, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card %}
 
 {% call auto_refresh_container("/management/friendships?lang=" ~ current_lang, '#friendship-state-form', 'outerHTML', 'space-y-6') %}
 <form id="friendship-state-form" class="hidden">
@@ -168,8 +169,7 @@
     </div>
 </div>
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_friend_requests or 'FRIEND REQUESTS' }}</h3>
+{% call data_table_card(t.section_friend_requests or 'FRIEND REQUESTS') %}
     <div class="friendship-table-wrap friendship-requests-table">
     {% call table_container([
         {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
@@ -222,10 +222,9 @@
         {% endfor %}
     {% endcall %}
     </div>
-</div>
+{% endcall %}
 
-<div class="brutal-card p-6 space-y-4">
-    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ t.section_friendships or 'FRIENDSHIPS' }}</h3>
+{% call data_table_card(t.section_friendships or 'FRIENDSHIPS') %}
     <div class="friendship-table-wrap friendship-records-table">
     {% call table_container([
         {'label': t.col_id or 'ID', 'class_name': 'whitespace-nowrap'},
@@ -272,5 +271,5 @@
         {% endfor %}
     {% endcall %}
     </div>
-</div>
+{% endcall %}
 {% endcall %}
