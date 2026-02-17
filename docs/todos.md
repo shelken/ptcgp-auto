@@ -2,9 +2,7 @@
 
 ## 进行中
 
-- [ ] 发起交换卡牌
-- [ ] wonder_pick 第一次滑动前没有扫描
-- [ ] 好友申请申请不一定是系统内好友
+
 
 ## 高优先级
 
@@ -84,3 +82,4 @@
 - [x] 双手指缩放(uiautomator2)
 - [x] `manage_friendship` - 管理好友关系任务
 - [x] `give_cards` - 每日送卡任务
+- [x] `exchange_card` - 发起交换卡牌
