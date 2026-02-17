@@ -10,6 +10,7 @@ from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.services.owned_card_service import (
     list_owned_cards,
     build_owned_card_modal_context,
+    build_owned_card_exchange_accounts_context,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int, safe_get_string
 from ptcgp_auto_v2.web.utils.i18n import detect_lang, get_translations
@@ -72,6 +73,37 @@ async def get_owned_card_modal(
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/modals/owned_card_detail.html", context)
+
+
+@router.get("/api/owned-cards/modal/exchange-accounts", response_class=HTMLResponse)
+async def get_owned_card_modal_exchange_accounts(
+    request: Request,
+    card_id: int,
+    page: int = Query(default=0),
+    page_size: int = Query(default=12),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="account_id"),
+    sort_order: str = Query(default="asc"),
+    lang: str | None = Query(default=None),
+    session: Session = Depends(get_fastapi_session),
+):
+    """获取已拥有卡牌弹窗中的交换账号分页表格。"""
+    current_lang = detect_lang(request, lang)
+    context = build_owned_card_exchange_accounts_context(
+        session=session,
+        card_id=card_id,
+        lang=current_lang,
+        page=page,
+        page_size=page_size,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    context["request"] = request
+    templates = get_templates()
+    return templates.TemplateResponse(
+        "partials/modals/owned_card_exchange_accounts_table.html", context
+    )
 
 
 @router.post("/api/exchange-cards/requests", response_class=HTMLResponse)

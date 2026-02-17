@@ -18,6 +18,22 @@ export class ModalManager {
                 }
             });
         }
+
+        this.contentModeClasses = [
+            'modal-content--owned-card-fixed',
+        ];
+    }
+
+    applyContentMode() {
+        if (!this.content) return;
+        this.content.classList.remove(...this.contentModeClasses);
+
+        const modeElement = this.content.querySelector('[data-modal-mode]');
+        if (!modeElement) return;
+        const mode = modeElement.getAttribute('data-modal-mode');
+        if (mode === 'owned-card-fixed') {
+            this.content.classList.add('modal-content--owned-card-fixed');
+        }
     }
 
     open(htmlContent) {
@@ -25,6 +41,7 @@ export class ModalManager {
         
         this.previousActiveElement = document.activeElement;
         this.content.innerHTML = htmlContent;
+        this.applyContentMode();
         
         // Process HTMX on new content
         if (typeof htmx !== 'undefined') {
@@ -54,6 +71,7 @@ export class ModalManager {
         this.container.removeAttribute('aria-modal');
         this.container.removeAttribute('role');
         this.content.innerHTML = '';
+        this.content.classList.remove(...this.contentModeClasses);
         this.isOpen = false;
 
         this.unlockBodyScroll();
@@ -87,6 +105,8 @@ export class ModalManager {
             this.isOpen = true;
             this.lockBodyScroll();
         }
+
+        this.applyContentMode();
 
         this.trapFocus();
         document.dispatchEvent(new CustomEvent('modal:opened', {

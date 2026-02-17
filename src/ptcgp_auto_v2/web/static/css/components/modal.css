@@ -75,6 +75,14 @@
     max-height: calc(90vh - 120px);
 }
 
+/* Owned-card fixed modal mode */
+#modal-content.modal-content--owned-card-fixed {
+    overflow: hidden;
+    padding: clamp(0.75rem, 1.8vw, 1rem);
+    width: min(1100px, 96vw);
+    max-height: min(88vh, 860px);
+}
+
 /* Modal Footer */
 .modal-footer {
     display: flex;
