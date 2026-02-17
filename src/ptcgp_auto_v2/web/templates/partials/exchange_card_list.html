@@ -1,8 +1,8 @@
 {% from "partials/macros/tables.html" import table_container, auto_refresh_container, status_chip %}
-{% from "partials/macros/data_table.html" import data_table_card %}
+{% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
 
 {% call auto_refresh_container("/management/exchange-cards?lang=" ~ current_lang, '#exchange-card-state-form', 'outerHTML', 'space-y-6') %}
-<form id="exchange-card-state-form" class="hidden">
+<form id="exchange-card-state-form" class="hidden" hidden>
     <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
     <input type="hidden" name="status" value="{{ selected_status or '' }}">
     <input type="hidden" name="q" value="{{ q or '' }}">
@@ -14,7 +14,7 @@
 
 {% call data_table_card(t.title_exchange_cards or 'EXCHANGE REQUESTS') %}
         <form
-            class="table-filters-row"
+            id="exchange-card-filter-form"
             hx-get="/management/exchange-cards?lang={{ current_lang }}"
             hx-target="#management-content"
             hx-swap="innerHTML">
@@ -24,11 +24,32 @@
             <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
             <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">
             <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
-            <div class="table-filter-item">
-                <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_search or 'Search' }}</label>
+            {% set toolbar_layout = {
+                'left_items': [
+                    {
+                        'key': 'q',
+                        'label': t.label_search or 'Search',
+                        'order': 10,
+                        'min_width': 'clamp(12rem, 32vw, 24rem)',
+                        'grow': 1
+                    }
+                ],
+                'right_items': [
+                    {
+                        'key': 'refresh',
+                        'label': '',
+                        'order': 20,
+                        'min_width': 'clamp(7rem, 10vw, 9rem)'
+                    }
+                ]
+            } %}
+            {% call(field, zone) data_table_toolbar_layout(toolbar_layout, 'normal') %}
+                {% if field.key == 'q' %}
                 <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.exchange_search_accounts or 'Search by Account ID / Nickname / Friend ID' }}">
-            </div>
-            <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+                {% elif field.key == 'refresh' %}
+                <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
+                {% endif %}
+            {% endcall %}
         </form>
 
     {% call table_container([
@@ -81,23 +102,8 @@
         {% endfor %}
     {% endcall %}
 
-    <div class="flex items-center justify-between mt-4">
-        <div class="text-xs text-muted font-mono">{{ t.label_total_records or 'Total' }}: {{ total_items or 0 }}</div>
-        <div class="flex items-center gap-2">
-            <button type="button"
-                    class="brutal-btn text-xs px-3 py-1"
-                    {% if not has_prev %}disabled{% endif %}
-                    hx-get="/management/exchange-cards?lang={{ current_lang }}&page={{ (page or 0) - 1 }}&page_size={{ page_size or 10 }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}"
-                    hx-target="#management-content"
-                    hx-swap="innerHTML">{{ t.btn_prev_page or '上一页' }}</button>
-            <span class="text-xs text-muted font-mono">{{ (page or 0) + 1 }}</span>
-            <button type="button"
-                    class="brutal-btn text-xs px-3 py-1"
-                    {% if not has_next %}disabled{% endif %}
-                    hx-get="/management/exchange-cards?lang={{ current_lang }}&page={{ (page or 0) + 1 }}&page_size={{ page_size or 10 }}{% if selected_account_id %}&account_id={{ selected_account_id }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}&sort_by={{ sort_by or 'created_at' }}&sort_order={{ sort_order or 'desc' }}"
-                    hx-target="#management-content"
-                    hx-swap="innerHTML">{{ t.btn_next_page or '下一页' }}</button>
-        </div>
-    </div>
+    {% set exchange_prev_url = "/management/exchange-cards?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ ("&account_id=" ~ selected_account_id if selected_account_id else "") ~ ("&status=" ~ selected_status if selected_status else "") ~ ("&q=" ~ (q|urlencode) if q else "") ~ "&sort_by=" ~ (sort_by or 'created_at') ~ "&sort_order=" ~ (sort_order or 'desc') %}
+    {% set exchange_next_url = "/management/exchange-cards?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ ("&account_id=" ~ selected_account_id if selected_account_id else "") ~ ("&status=" ~ selected_status if selected_status else "") ~ ("&q=" ~ (q|urlencode) if q else "") ~ "&sort_by=" ~ (sort_by or 'created_at') ~ "&sort_order=" ~ (sort_order or 'desc') %}
+    {{ data_table_pager(page or 0, has_prev, has_next, exchange_prev_url, exchange_next_url, '#management-content', total_items or 0, t) }}
 {% endcall %}
 {% endcall %}

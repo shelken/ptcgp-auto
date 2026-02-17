@@ -22,6 +22,16 @@ import { handleActionClick } from './action_handlers.js';
 
 const htmxLoadingButtons = new WeakMap();
 
+function shouldBlockSearchSubmit(form) {
+    if (!(form instanceof HTMLFormElement)) return false;
+    if (!form.matches('form[hx-get]')) return false;
+    if (!form.closest('#management-content')) return false;
+    const searchInput = form.querySelector('input[name="q"]');
+    if (!(searchInput instanceof HTMLInputElement)) return false;
+    const keyword = searchInput.value.trim();
+    return keyword.length === 1;
+}
+
 function resolveRequestButton(detail) {
     const elt = detail && detail.elt;
     if (!elt || !(elt instanceof Element)) return null;
@@ -130,6 +140,16 @@ function bindHtmxRequestEvents() {
     document.body.addEventListener('htmx:beforeRequest', (event) => {
         const elt = event.detail && event.detail.elt;
         const target = event.detail && event.detail.target;
+
+        const requestForm = elt instanceof HTMLFormElement
+            ? elt
+            : (elt instanceof Element ? elt.closest('form') : null);
+        if (shouldBlockSearchSubmit(requestForm)) {
+            event.preventDefault();
+            showToast('搜索关键字至少 2 个字符');
+            return;
+        }
+
         if (elt && !isElementInActiveTab(elt)) {
             event.preventDefault();
             return;
@@ -283,9 +303,32 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         }
     });
 
+    document.body.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        if (event.isComposing) return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (target.tagName === 'TEXTAREA') return;
+        if (target.classList.contains('custom-select-search')) return;
+
+        const form = target.closest('form[hx-get]');
+        if (!(form instanceof HTMLFormElement)) return;
+        if (!form.closest('#management-content')) return;
+
+        event.preventDefault();
+        form.requestSubmit();
+    });
+
     document.addEventListener('submit', (event) => {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
+
+        if (shouldBlockSearchSubmit(form)) {
+            event.preventDefault();
+            showToast('搜索关键字至少 2 个字符');
+            return;
+        }
+
         const action = form.dataset.action;
         if (!action) return;
 
