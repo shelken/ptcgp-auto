@@ -32,6 +32,8 @@ async def get_management_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
     sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
     sort_order: str = Query(default="asc"),
     session: Session = Depends(get_fastapi_session),
@@ -44,8 +46,8 @@ async def get_management_tasks(
     status_options = [status.value for status in TaskStatus]
     task_types = TaskRegistry.all_types()
 
-    page = 0
-    page_size = 50
+    page = max(page, 0)
+    page_size = min(max(page_size, 1), 100)
     normalized_status = [item for item in status if item]
     normalized_task_type = [item for item in task_type if item]
     sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
@@ -74,6 +76,15 @@ async def get_management_tasks(
         sort_by=sort_by,
         sort_order=sort_order,
     )
+    prev_page_url = build_tasks_page_url(
+        page - 1,
+        current_lang,
+        status=normalized_status,
+        task_type=normalized_task_type,
+        account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -82,7 +93,9 @@ async def get_management_tasks(
             "request": request,
             "tasks": tasks,
             "has_more": has_more,
+            "has_prev": page > 0,
             "next_page_url": next_page_url,
+            "prev_page_url": prev_page_url,
             "page": page,
             "page_size": page_size,
             "status_options": status_options,
@@ -161,10 +174,12 @@ async def reset_completed_tasks(
 
     current_lang = detect_lang(request, lang)
     t = get_translations(current_lang)
+    page = 0
+    page_size = 10
     tasks, has_more = list_task_status_view(
         session=session,
-        page=0,
-        page_size=50,
+        page=page,
+        page_size=page_size,
         status=status,
         task_type=task_type,
         account_id=parsed_account_id,
@@ -172,7 +187,16 @@ async def reset_completed_tasks(
         sort_order=sort_order,
     )
     next_page_url = build_tasks_page_url(
-        1,
+        page + 1,
+        current_lang,
+        status=status,
+        task_type=task_type,
+        account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    prev_page_url = build_tasks_page_url(
+        page - 1,
         current_lang,
         status=status,
         task_type=task_type,
@@ -188,9 +212,11 @@ async def reset_completed_tasks(
             "request": request,
             "tasks": tasks,
             "has_more": has_more,
+            "has_prev": page > 0,
             "next_page_url": next_page_url,
-            "page": 0,
-            "page_size": 50,
+            "prev_page_url": prev_page_url,
+            "page": page,
+            "page_size": page_size,
             "table_only": True,
             "t": t,
             "current_lang": current_lang,
@@ -211,7 +237,7 @@ async def reset_completed_tasks(
 async def get_tasks(
     request: Request,
     page: int = 0,
-    page_size: int = 50,
+    page_size: int = 10,
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
@@ -228,6 +254,8 @@ async def get_tasks(
     status_options = [status_item.value for status_item in TaskStatus]
     task_types = TaskRegistry.all_types()
 
+    page = max(page, 0)
+    page_size = min(max(page_size, 1), 100)
     normalized_status = [item for item in status if item]
     normalized_task_type = [item for item in task_type if item]
     sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
@@ -259,6 +287,15 @@ async def get_tasks(
         sort_by=sort_by,
         sort_order=sort_order,
     )
+    prev_page_url = build_tasks_page_url(
+        page - 1,
+        current_lang,
+        status=normalized_status,
+        task_type=normalized_task_type,
+        account_id=parsed_account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -267,7 +304,9 @@ async def get_tasks(
             "request": request,
             "tasks": tasks,
             "has_more": has_more,
+            "has_prev": page > 0,
             "next_page_url": next_page_url,
+            "prev_page_url": prev_page_url,
             "page": page,
             "page_size": page_size,
             "status_options": status_options,

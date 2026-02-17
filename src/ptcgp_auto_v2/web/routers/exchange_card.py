@@ -26,6 +26,11 @@ async def get_management_exchange_cards(
     lang: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染交换记录管理页面。"""
@@ -35,6 +40,11 @@ async def get_management_exchange_cards(
         lang=current_lang,
         account_id=parse_optional_int(account_id),
         status=status or None,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=max(page, 0),
+        page_size=min(max(page_size, 1), 100),
     )
     context["request"] = request
     templates = get_templates()
@@ -51,6 +61,11 @@ async def post_cancel_exchange_request(
     lang: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """取消交换请求。"""
@@ -60,6 +75,11 @@ async def post_cancel_exchange_request(
         lang=lang,
         account_id=account_id,
         status=status,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
         session=session,
     )
     context = build_exchange_card_context(

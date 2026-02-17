@@ -275,6 +275,7 @@
     "empty_friend_requests": "No friend requests",
     "empty_friendships": "No friendships",
     "label_created_time": "Created At",
+    "label_search": "Search",
     "placeholder_friend_id": "Enter target friend_id (optional for internal account)",
     "placeholder_friend_id_for_delete": "Enter friend_id to remove (optional for internal account)",
     "col_type": "Type",

@@ -107,13 +107,29 @@
         {{ table_row([empty_cell] + [''] * (table_headers|length - 1)) }}
     {% endif %}
 
-    {% if has_more %}
-        <tr class="border-theme" hx-get="{{ next_page_url }}" hx-trigger="revealed" hx-swap="outerHTML">
-            <td class="p-3" colspan="{{ table_headers|length }}">
-                <div class="h-10 w-full"></div>
-            </td>
-        </tr>
-    {% endif %}
+    <tr class="border-theme">
+        <td class="p-3" colspan="{{ table_headers|length }}">
+            <div class="flex items-center justify-end gap-2">
+                <button type="button"
+                        class="brutal-btn text-xs px-3 py-1"
+                        {% if not has_prev %}disabled{% endif %}
+                        hx-get="{{ prev_page_url }}"
+                        hx-target="#task-table-body"
+                        hx-swap="innerHTML">
+                    {{ t.btn_prev_page or '上一页' }}
+                </button>
+                <span class="text-xs text-muted font-mono">{{ page + 1 }}</span>
+                <button type="button"
+                        class="brutal-btn text-xs px-3 py-1"
+                        {% if not has_more %}disabled{% endif %}
+                        hx-get="{{ next_page_url }}"
+                        hx-target="#task-table-body"
+                        hx-swap="innerHTML">
+                    {{ t.btn_next_page or '下一页' }}
+                </button>
+            </div>
+        </td>
+    </tr>
 {% endset %}
 
 {% if table_only %}
@@ -121,48 +137,25 @@
 {% else %}
     {% call data_table_card('', 'brutal-card p-6') %}
         <form id="task-filter-form"
-              hx-get="/api/tasks?page=0&lang={{ current_lang }}"
+              hx-get="/api/tasks?lang={{ current_lang }}"
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
               data-action="save-tasks-filters"
               data-restore-trigger="true">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div class="table-title-row mb-4">
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
-                <div class="flex flex-wrap gap-3">
-                    {% set reset_disabled = (selected_status|length > 0) and ('completed' not in selected_status) %}
-                    <span id="task-reset-completed-wrapper"
-                          class="tooltip-text"
-                          data-disabled-tooltip="{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}"
-                          data-tooltip="{% if reset_disabled %}{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}{% endif %}">
-                    <button id="task-reset-completed-btn"
-                            class="brutal-btn {% if reset_disabled %}opacity-50 cursor-not-allowed{% endif %}"
-                            type="button"
-                            {% if reset_disabled %}disabled aria-disabled="true"{% endif %}
-                            hx-get="/management/tasks/reset-completed-modal?lang={{ current_lang }}"
-                            hx-target="#modal-content"
-                            hx-swap="innerHTML"
-                            hx-include="#task-filter-form">
-                        {{ t.btn_reset_completed or 'Reset Completed' }}
-                    </button>
-                    </span>
-                    <button class="brutal-btn"
-                            type="button"
-                            hx-get="/management/tasks?lang={{ current_lang }}"
-                            hx-target="#management-content"
-                            hx-include="#task-filter-form">
-                        {{ t.btn_refresh or 'Refresh' }}
-                    </button>
-                </div>
             </div>
 
             <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'dispatch_priority' }}">
             <input type="hidden" name="sort_order" id="task-sort-order" value="{{ selected_sort_order or 'asc' }}">
+            <input type="hidden" name="page" id="task-page" value="{{ page or 0 }}">
+            <input type="hidden" name="page_size" id="task-page-size" value="{{ page_size or 10 }}">
 
-            <div class="flex flex-col lg:flex-row flex-wrap gap-4 mb-6">
-                <div class="flex flex-col gap-1">
+            <div class="table-filters-row mb-6">
+                <div class="table-filter-item">
                 <label for="task-filter-status" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_status or 'Status' }}</label>
-                <select id="task-filter-status" name="status" class="js-custom-select brutal-input w-52">
+                <select id="task-filter-status" name="status" class="js-custom-select brutal-input table-control">
                     <option value="">{{ t.label_all or 'All' }}</option>
                     {% for status in status_options %}
                         <option value="{{ status }}" {% if status in selected_status %}selected{% endif %}>
@@ -172,9 +165,9 @@
                 </select>
             </div>
 
-            <div class="flex flex-col gap-1">
+            <div class="table-filter-item">
                 <label for="task-filter-type" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_task or 'Task' }}</label>
-                <select id="task-filter-type" name="task_type" class="js-custom-select brutal-input w-52">
+                <select id="task-filter-type" name="task_type" class="js-custom-select brutal-input table-control">
                     <option value="">{{ t.label_all or 'All' }}</option>
                     {% for task_type in task_types %}
                         <option value="{{ task_type }}" {% if task_type in selected_task_type %}selected{% endif %}>
@@ -184,12 +177,12 @@
                 </select>
             </div>
 
-            <div class="flex flex-col gap-1">
+            <div class="table-filter-item">
                 <label for="task-filter-account" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_account or 'Account' }}</label>
                 <select
                     id="task-filter-account"
                     name="account_id"
-                    class="js-custom-select brutal-input w-56"
+                    class="js-custom-select brutal-input table-control"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -203,6 +196,30 @@
                     {% endfor %}
                 </select>
             </div>
+
+            {% set reset_disabled = (selected_status|length > 0) and ('completed' not in selected_status) %}
+            <span id="task-reset-completed-wrapper"
+                  class="tooltip-text"
+                  data-disabled-tooltip="{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}"
+                  data-tooltip="{% if reset_disabled %}{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}{% endif %}">
+                <button id="task-reset-completed-btn"
+                        class="brutal-btn table-action-btn {% if reset_disabled %}opacity-50 cursor-not-allowed{% endif %}"
+                        type="button"
+                        {% if reset_disabled %}disabled aria-disabled="true"{% endif %}
+                        hx-get="/management/tasks/reset-completed-modal?lang={{ current_lang }}"
+                        hx-target="#modal-content"
+                        hx-swap="innerHTML"
+                        hx-include="#task-filter-form">
+                    {{ t.btn_reset_completed or 'Reset Completed' }}
+                </button>
+            </span>
+            <button class="brutal-btn table-action-btn"
+                    type="button"
+                    hx-get="/management/tasks?lang={{ current_lang }}"
+                    hx-target="#management-content"
+                    hx-include="#task-filter-form">
+                {{ t.btn_refresh or 'Refresh' }}
+            </button>
             </div>
         </form>
 

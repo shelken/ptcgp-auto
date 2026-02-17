@@ -280,6 +280,7 @@
   "empty_friend_requests": "暂无好友请求",
   "empty_friendships": "暂无好友关系",
   "label_created_time": "创建时间",
+  "label_search": "搜索",
   "placeholder_friend_id": "输入目标朋友id（系统账号可留空）",
   "placeholder_friend_id_for_delete": "输入要删除的朋友id（系统账号可留空）",
   "col_type": "类型",

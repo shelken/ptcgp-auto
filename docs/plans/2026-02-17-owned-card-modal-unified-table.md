@@ -82,3 +82,13 @@
 1. 统一“创建请求”相关文案为“交换卡牌”。
 2. 回填 AGENTS：统一列表组件规范、modal 禁止双滚动规范。
 3. 运行：`PYTHONPATH=src pytest tests -v`。
+
+---
+
+## 进度记录
+
+- [x] Task 1：完成（`web/tests` 新增并通过 owned-card exchange 表格测试）
+- [x] Task 2：完成（新增 `/api/owned-cards/modal/exchange-accounts` 与服务层分页/搜索/排序）
+- [x] Task 3：完成（owned-card modal 去标题、固定模式、表单上移并默认隐藏、传统翻页）
+- [x] Task 5：完成（文案与 `web/AGENTS.md` 规则回填）
+- [~] Task 4：进行中（已新增 `data_table` 宏并完成 owned-card/exchange/friendship/daily_gift/task 首轮接入；`exchange/friendship/daily_gift` 已收口到统一查询协议，`task` 仍需从哨兵滚动进一步抽象为宏级双模式分页）

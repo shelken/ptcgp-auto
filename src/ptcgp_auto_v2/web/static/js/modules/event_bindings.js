@@ -226,6 +226,10 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         }
         if (action === 'save-tasks-filters') {
             if (!(actionElement instanceof HTMLFormElement)) return;
+            const pageInput = actionElement.querySelector('#task-page');
+            if (pageInput instanceof HTMLInputElement) {
+                pageInput.value = '0';
+            }
             saveTasksFilters();
             updateTaskResetButtonState(actionElement);
             return;
