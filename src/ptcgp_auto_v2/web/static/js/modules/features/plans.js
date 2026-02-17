@@ -1,28 +1,5 @@
-import { showToast } from './utils.js';
-import { getModal } from './modal.js';
-
-function setButtonLoading(button, loading) {
-    if (!button) return;
-
-    if (loading) {
-        if (button.dataset.loadingActive === '1') return;
-        button.dataset.loadingActive = '1';
-        button.dataset.prevDisabled = button.disabled ? '1' : '0';
-        button.disabled = true;
-        button.classList.add('btn-loading');
-        button.setAttribute('aria-busy', 'true');
-        return;
-    }
-
-    if (button.dataset.loadingActive !== '1') return;
-    button.classList.remove('btn-loading');
-    button.removeAttribute('aria-busy');
-    if (button.dataset.prevDisabled !== '1') {
-        button.disabled = false;
-    }
-    delete button.dataset.loadingActive;
-    delete button.dataset.prevDisabled;
-}
+import { showToast, setButtonLoading } from '../utils.js';
+import { getModal } from '../modal.js';
 
 // --- 获取计划列表文本 ---
 export function getPlansMessages(list) {
