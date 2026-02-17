@@ -1,0 +1,112 @@
+{# 统一列表组件宏：统一协议与交互，保留页面布局差异化 #}
+
+{% macro data_table_card(title='', class_name='brutal-card table-page-card', size='regular') %}
+<div class="{{ class_name }} table-shell table-shell--{{ size }}">
+    {% if title %}
+    <h3 class="text-2xl font-bold uppercase tracking-tight">{{ title }}</h3>
+    {% endif %}
+    {{ caller() }}
+</div>
+{% endmacro %}
+
+{% macro data_table_toolbar_layout(layout={}, density='normal', class_name='') %}
+{% set toolbar_class = class_name or 'table-filters-row' %}
+{% set left_items = layout.left_items if layout.left_items is defined else [] %}
+{% set right_items = layout.right_items if layout.right_items is defined else [] %}
+<div class="{{ toolbar_class }} table-toolbar-layout table-toolbar--{{ density }}">
+    <div class="table-toolbar-zone table-toolbar-zone--left">
+    {% for field in left_items|sort(attribute='order') %}
+        <div
+            class="table-filter-item {{ field.class_name or '' }}"
+            style="--table-item-span: {{ field.span or 1 }}; --table-item-min-width: {{ field.min_width or 'clamp(10rem, 22vw, 16rem)' }}; --table-item-grow: {{ field.grow or 0 }};">
+            {% if field.label %}
+            <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ field.label }}</label>
+            {% endif %}
+            {{ caller(field, 'left') }}
+        </div>
+    {% endfor %}
+    </div>
+
+    <div class="table-toolbar-zone table-toolbar-zone--right">
+    {% for field in right_items|sort(attribute='order') %}
+        <div
+            class="table-filter-item {{ field.class_name or '' }}"
+            style="--table-item-span: {{ field.span or 1 }}; --table-item-min-width: {{ field.min_width or 'clamp(10rem, 22vw, 16rem)' }}; --table-item-grow: {{ field.grow or 0 }};">
+            {% if field.label %}
+            <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ field.label }}</label>
+            {% endif %}
+            {{ caller(field, 'right') }}
+        </div>
+    {% endfor %}
+    </div>
+</div>
+{% endmacro %}
+
+{% macro data_table_toolbar(schema=[], density='normal', class_name='') %}
+{% set layout = {'left_items': schema, 'right_items': []} %}
+{% call(field, _) data_table_toolbar_layout(layout, density, class_name) %}
+    {{ caller(field) }}
+{% endcall %}
+{% endmacro %}
+
+{% macro data_table_sort_button(label, url, target='#management-content', active=false, order='asc', class_name='font-bold flex items-center gap-1') %}
+<button type="button" class="{{ class_name }}" hx-get="{{ url }}" hx-target="{{ target }}" hx-swap="innerHTML">
+    <span>{{ label }}</span>
+    <span aria-hidden="true">{% if active %}{{ '↑' if order == 'asc' else '↓' }}{% endif %}</span>
+</button>
+{% endmacro %}
+
+{% macro data_table_pager(page, has_prev, has_next, prev_url, next_url, target='#management-content', total=None, t={}) %}
+<div class="table-pager-row flex items-center justify-between mt-4">
+    <div class="text-xs text-muted font-mono">
+        {% if total is not none %}
+        {{ t.label_total_records or 'Total' }}: {{ total }}
+        {% endif %}
+    </div>
+    <div class="flex items-center gap-2">
+        <button type="button"
+                class="brutal-btn text-xs px-3 py-1"
+                {% if not has_prev %}disabled{% endif %}
+                hx-get="{{ prev_url }}"
+                hx-target="{{ target }}"
+                hx-swap="innerHTML">
+            {{ t.btn_prev_page or '上一页' }}
+        </button>
+        <span class="text-xs text-muted font-mono">{{ page + 1 }}</span>
+        <button type="button"
+                class="brutal-btn text-xs px-3 py-1"
+                {% if not has_next %}disabled{% endif %}
+                hx-get="{{ next_url }}"
+                hx-target="{{ target }}"
+                hx-swap="innerHTML">
+            {{ t.btn_next_page or '下一页' }}
+        </button>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro data_table_pager_row(colspan, page, has_prev, has_next, prev_url, next_url, target='#task-table-body', t={}) %}
+<tr class="border-theme">
+    <td class="p-3" colspan="{{ colspan }}">
+        <div class="flex items-center justify-end gap-2">
+            <button type="button"
+                    class="brutal-btn text-xs px-3 py-1"
+                    {% if not has_prev %}disabled{% endif %}
+                    hx-get="{{ prev_url }}"
+                    hx-target="{{ target }}"
+                    hx-swap="innerHTML">
+                {{ t.btn_prev_page or '上一页' }}
+            </button>
+            <span class="text-xs text-muted font-mono">{{ page + 1 }}</span>
+            <button type="button"
+                    class="brutal-btn text-xs px-3 py-1"
+                    {% if not has_next %}disabled{% endif %}
+                    hx-get="{{ next_url }}"
+                    hx-target="{{ target }}"
+                    hx-swap="innerHTML">
+                {{ t.btn_next_page or '下一页' }}
+            </button>
+        </div>
+    </td>
+</tr>
+{% endmacro %}
