@@ -64,18 +64,33 @@ src/ptcgp_auto_v2/web/
 │   ├── css/
 │   │   └── main.css           # 主样式文件（CSS 变量 + 工具类）
 │   └── js/
-│       ├── main.js            # 主 JS 入口
-│       └── modules/           # ES6 模块
-│           ├── bootstrap.js   # 初始化与事件绑定
-│           ├── card_preview.js # 卡牌预览
-│           ├── filters.js     # 筛选/持久化
-│           ├── tabs.js        # Tab 切换
-│           ├── custom_select.js # 自定义下拉
-│           ├── plans.js       # 计划列表
-│           ├── tasks.js       # 任务排序与间隔
-│           ├── owned_cards.js # 已拥有卡牌
-│           ├── modal.js       # 模态框处理
-│           └── utils.js       # 工具函数（toast、throttle、debounce 等）
+│       ├── main.js             # 主 JS 入口
+│       └── modules/            # ES6 模块
+│           ├── bootstrap.js      # 启动编排（初始化顺序与首屏恢复）
+│           ├── event_bindings.js # 全局事件绑定（click/change/input/submit/htmx）
+│           ├── action_handlers.js # data-action 动作分发与业务入口
+│           ├── tabs.js           # Tab 切换
+│           ├── ui_preferences.js # 语言/视图/筛选面板偏好状态
+│           ├── relative_time.js  # 相对时间渲染
+│           ├── auto_refresh.js   # 自动刷新 URL 构造
+│           ├── constants.js      # 管理页 hash 等共享常量
+│           ├── custom_select.js  # 自定义下拉
+│           ├── modal.js          # 模态框处理
+│           ├── theme.js          # 主题与模式切换
+│           ├── utils.js          # 工具函数（toast、throttle、debounce 等）
+│           └── features/         # 页面/业务域模块
+│               ├── daily_gift.js
+│               ├── exchange_cards.js
+│               ├── owned_cards.js
+│               ├── plans.js
+│               ├── tasks.js
+│               ├── card_preview.js
+│               └── filters/
+│                   ├── index.js
+│                   ├── shared_form.js
+│                   ├── records_filters.js
+│                   ├── owned_filters.js
+│                   └── tasks_filters.js
 ├── locales/                    # 国际化文件
 │   ├── en.json                # 英文翻译
 │   └── zh_CN.json             # 中文翻译
@@ -101,8 +116,12 @@ src/ptcgp_auto_v2/web/
   - 使用 HTMX 进行局部页面更新
   - Tab 切换通过 `hx-get` 加载 `partials/` 下的模板
 - **JS 架构**: ES6 模块化
-  - `main.js`: 主入口，导入各模块
-  - `modules/modal.js`: 模态框显示/隐藏逻辑
+  - `main.js`: 主入口，仅调用 `bootstrap.initApp()`
+  - `modules/bootstrap.js`: 仅负责初始化编排，不承载动作分发细节
+  - `modules/event_bindings.js`: 集中管理全局事件绑定与 HTMX 生命周期监听
+  - `modules/action_handlers.js`: 处理模板 `data-action` 分发，保持模板无内联事件
+  - `modules/features/*`: 页面/业务域逻辑（daily-gift、exchange-cards、owned-cards、plans、tasks 等）
+  - `modules/features/filters/*`: 按 records/owned/tasks 分拆筛选逻辑，`shared_form.js` 负责通用序列化/回填
   - `modules/utils.js`: 工具函数（toast、throttle、debounce、元素可见性检测）
 - **CSS 架构**: CSS 变量驱动主题
   - `main.css` 定义主题变量和工具类
@@ -205,7 +224,7 @@ src/ptcgp_auto_v2/web/
 - **图片兜底规范**：禁止引用不存在的 `/static/*.png` 占位图；如果不需要占位背景，统一使用透明 data URI 作为最终兜底，避免额外静态资源依赖。
 - **onerror 防循环规范**：在图片 `onerror` 回退分支必须先 `this.onerror = null`，再改 `src`，避免 fallback 资源异常时产生无限 404 请求刷屏。
 - **旧缓存兼容规范**：当静态资源路径发生变更时，优先通过版本号更新与前端统一回退策略清除旧引用，避免继续依赖临时兼容路由。
-- **任务2.2 DOM 安全规范**：在 `plans.js`、`filters.js` 这类用户可触发的动态区域，禁止再使用字符串 `innerHTML` 拼接按钮/卡片；统一使用 `createElement + textContent + replaceChildren`。
+- **任务2.2 DOM 安全规范**：在 `features/plans.js`、`features/filters/*.js` 这类用户可触发的动态区域，禁止再使用字符串 `innerHTML` 拼接按钮/卡片；统一使用 `createElement + textContent + replaceChildren`。
 - **筛选组清空规范**：拥有卡牌页若提供“分组清空”，必须在前端一次性批量取消选中并只触发一次列表刷新，避免逐个 checkbox 触发多次 HTMX 请求。
 - **分段控件状态同步**：类似列数切换的 segmented 按钮，除视觉 `active` 外还要同步 `aria-pressed`，防止状态和实际值不一致。
 - **左栏滚动一致性**：当页面被定义为“左筛选 + 右内容”整体滚动时，不要给左栏卡片加 `sticky`；否则鼠标在左栏滚轮会触发页面滚动但左栏固定不动，造成两栏不同步的错觉。
@@ -223,6 +242,14 @@ src/ptcgp_auto_v2/web/
 - **跨列表一致性原则**：管理页新增展示规范后，需同步检查同类列表（如 friendship/exchange/daily-gift/tasks）并统一落地，避免同一概念在不同列表出现风格漂移。
 - **CSS 组件单一来源原则**：状态/标签等跨页面复用的组件样式必须集中到单一 CSS 文件（如 `status-chip.css`），禁止在多处重复定义。主题差异通过 CSS 变量（如 `--tag-bg`）而非硬编码选择器实现。
 - **Token 驱动主题原则**：新增组件颜色如需主题差异化，必须在 `base/tokens.css` 定义语义变量，在各主题文件赋值，组件代码只消费变量，禁止写死 `[data-theme="xxx"]` 选择器。
+- **白名单单一来源原则**：管理页 hash 白名单必须集中在单一常量模块（如 `constants.js`），`tabs/bootstrap` 统一引用，禁止多处硬编码。
+- **自动刷新 URL 复用原则**：自动刷新容器的查询参数拼装必须复用同一工具函数（如 `buildAutoRefreshUrl`），避免不同模块行为漂移。
+- **加载态复用原则**：按钮加载态统一复用 `utils.setButtonLoading`，禁止在 `bootstrap/filters/plans` 重复实现同名逻辑。
+- **Bootstrap 职责拆分原则**：`bootstrap.js` 仅保留初始化与事件绑定；动作分发、相对时间、偏好状态、交换卡牌交互必须拆到独立模块，避免单文件膨胀。
+- **事件绑定归口原则**：全局 `click/change/input/submit/htmx` 监听统一放在 `event_bindings.js`，`bootstrap.js` 仅调用绑定入口，避免初始化与事件细节耦合。
+- **页面模块分层原则**：页面专属逻辑统一放在 `modules/features/`，根目录 `modules/` 仅保留编排、共享能力与跨页面路由/状态模块。
+- **筛选分层原则**：筛选逻辑按 `records/owned/tasks` 拆分到 `modules/features/filters/`，通用表单序列化能力放在 `shared_form.js`，禁止再次回退到单文件混写。
+- **显式依赖原则**：模块内禁止依赖 `window` 上的同名全局函数兜底（如 `isElementInActiveTab`），必须显式 `import` 保证可维护与可测试。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录
