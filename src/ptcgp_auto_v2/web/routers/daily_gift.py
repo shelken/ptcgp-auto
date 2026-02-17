@@ -16,6 +16,11 @@ async def get_management_daily_gift(
     request: Request,
     lang: str | None = Query(default=None),
     biz_date_local: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染每日送卡管理页面。"""
@@ -24,6 +29,11 @@ async def get_management_daily_gift(
         session=session,
         lang=current_lang,
         biz_date_local=biz_date_local,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=max(page, 0),
+        page_size=min(max(page_size, 1), 100),
     )
     context["request"] = request
     templates = get_templates()

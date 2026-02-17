@@ -15,7 +15,7 @@
             {'label': 'Game ID', 'value': account.game_id[:12] ~ '...', 'truncate': true, 'title': account.game_id}
         ] %}
         {% if account.friend_id %}
-            {% set _ = info_items.append({'label': 'Friend ID', 'value': account.friend_id, 'full_width': true}) %}
+            {% set _ = info_items.append({'label': t.col_friend_id or '朋友id', 'value': account.friend_id, 'full_width': true}) %}
         {% endif %}
         {{ info_box(info_items, t) }}
 

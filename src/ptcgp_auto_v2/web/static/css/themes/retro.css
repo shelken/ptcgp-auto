@@ -1,0 +1,41 @@
+/* Theme: Retro-futuristic */
+[data-theme="retro"] {
+  --bg-color: #0a0a1a;
+  --text-color: #00ff9d;
+  --border-color: #ff00ff;
+  --shadow-color: #00ccff;
+  --accent-color: #ff0055;
+  --active-color: #ffff00;
+  --font-family: 'Space Mono', monospace;
+  --border-width: 2px;
+  --shadow-offset: 4px;
+  --radius: 0px;
+  --card-bg: #111111;
+
+  --bg-overlay: rgba(0, 20, 0, 0.85);
+  --bg-subtle: rgba(0, 255, 157, 0.1);
+  --bg-surface: #111111;
+  --border-subtle: rgba(255, 0, 255, 0.3);
+  --border-subtle-light: rgba(255, 0, 255, 0.15);
+  --text-muted: rgba(0, 255, 157, 0.6);
+
+  --tag-bg: var(--text-color);
+  --tag-text: #000;
+
+  --status-success-bg: rgba(0, 255, 157, 0.2);
+  --status-success-border: rgba(0, 255, 157, 0.5);
+  --status-failed-bg: rgba(255, 0, 85, 0.22);
+  --status-failed-border: rgba(255, 0, 255, 0.5);
+  --status-waiting-bg: rgba(0, 204, 255, 0.18);
+  --status-waiting-border: rgba(0, 204, 255, 0.5);
+
+  --btn-bg: #000;
+  --btn-text: var(--text-color);
+  --btn-border: var(--border-color);
+  --btn-hover-bg: rgba(0, 255, 157, 0.15);
+  --btn-hover-border: var(--active-color);
+  --btn-active-bg: var(--active-color);
+  --btn-active-text: var(--bg-color);
+  --btn-active-border: var(--active-color);
+  --btn-focus-ring: var(--active-color);
+}

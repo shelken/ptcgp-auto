@@ -98,6 +98,64 @@ class TestCardRepository:
 
 
 class TestPackRecordRepository:
+    def test_get_today_should_use_game_day_window(self, engine, mock_get_engine):
+        account_id = seed_data(engine)
+        assert account_id is not None
+        repo = PackRecordRepository()
+
+        with Session(engine) as session:
+            session.add(
+                PackRecord(
+                    account_id=account_id,
+                    pack_type="daily_free",
+                    opened_at=datetime(2026, 2, 15, 13, 30, 0),
+                )
+            )
+            session.add(
+                PackRecord(
+                    account_id=account_id,
+                    pack_type="daily_free",
+                    opened_at=datetime(2026, 2, 15, 14, 30, 0),
+                )
+            )
+            session.commit()
+
+        with patch(
+            "ptcgp_auto_v2.db.repositories.pack_record_repository.get_game_day_window",
+            return_value=(
+                datetime(2026, 2, 15, 14, 0, 0),
+                datetime(2026, 2, 16, 14, 0, 0),
+            ),
+        ):
+            record = repo.get_today(account_id)
+
+        assert record is not None
+        assert record.opened_at == datetime(2026, 2, 15, 14, 30, 0)
+
+    def test_has_opened_today_should_use_game_day_window(self, engine, mock_get_engine):
+        account_id = seed_data(engine)
+        assert account_id is not None
+        repo = PackRecordRepository()
+
+        with Session(engine) as session:
+            session.add(
+                PackRecord(
+                    account_id=account_id,
+                    pack_type="daily_free",
+                    opened_at=datetime(2026, 2, 15, 14, 1, 0),
+                )
+            )
+            session.commit()
+
+        with patch(
+            "ptcgp_auto_v2.db.repositories.pack_record_repository.get_game_day_window",
+            return_value=(
+                datetime(2026, 2, 15, 14, 0, 0),
+                datetime(2026, 2, 16, 14, 0, 0),
+            ),
+        ):
+            assert repo.has_opened_today(account_id) is True
+
     def test_create_for_account_with_cards(self, engine, mock_get_engine):
         account_id = seed_data(engine)
         repo = PackRecordRepository()

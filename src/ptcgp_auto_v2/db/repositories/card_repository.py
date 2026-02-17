@@ -22,6 +22,11 @@ class CardRepository:
         with Session(get_engine()) as session:
             return session.get(CardSet, code)
 
+    def get_by_id(self, card_id: int) -> Optional[Card]:
+        """根据主键获取卡牌。"""
+        with Session(get_engine()) as session:
+            return session.get(Card, card_id)
+
     def upsert_set(self, card_set: CardSet) -> CardSet:
         """更新或创建系列"""
         with Session(get_engine()) as session:

@@ -25,8 +25,24 @@ BASE_SCREEN_HEIGHT = 1920  # 基准分辨率高度
 TEMPLATE_BASE_WIDTH = 1080  # 模板基准宽度
 
 # OCR 配置
-DEFAULT_OCR_LANGUAGES = ["zh-Hant", "en-US"]  # 默认 OCR 语言
 DEFAULT_OCR_LEVEL = "accurate"  # 默认 OCR 识别级别 ("fast" or "accurate")
+
+# 语言配置（locale 文件名 <-> OCR 语言代码）
+# 单一真相来源：只维护这一个映射，其他常量全部由它派生
+LOCALE_TO_OCR_LANGUAGE = {
+    "zh_Hant": "zh-Hant",
+    "en_US": "en-US",
+}
+DEFAULT_LOCALE = "zh_Hant"
+SUPPORTED_LOCALES = list(LOCALE_TO_OCR_LANGUAGE.keys())
+OCR_LANGUAGE_TO_LOCALE = {value: key for key, value in LOCALE_TO_OCR_LANGUAGE.items()}
+DEFAULT_OCR_LANGUAGES = list(LOCALE_TO_OCR_LANGUAGE.values())  # 默认 OCR 语言
+
+# 游戏刷新时间配置（游戏固定 UTC 06:00 刷新；通过偏移换算本地刷新时刻）
+GAME_UTC_OFFSET_HOURS = 8
+
+if DEFAULT_LOCALE not in SUPPORTED_LOCALES:
+    raise ValueError(f"DEFAULT_LOCALE={DEFAULT_LOCALE} 不在 SUPPORTED_LOCALES 中")
 
 # 调度配置
 DEFAULT_POLL_INTERVAL = 5.0  # 默认轮询间隔 (秒)
