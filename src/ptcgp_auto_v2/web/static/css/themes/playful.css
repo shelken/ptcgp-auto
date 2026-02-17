@@ -1,0 +1,41 @@
+/* Theme: Playful/Toy-like */
+[data-theme="playful"] {
+  --bg-color: #fff9c4;
+  --text-color: #4a4a4a;
+  --border-color: #333333;
+  --shadow-color: #333333;
+  --accent-color: #ff6b6b;
+  --active-color: #e74c3c;
+  --font-family: 'Comic Neue', cursive;
+  --border-width: 4px;
+  --shadow-offset: 6px;
+  --radius: 20px;
+  --card-bg: #ffffff;
+
+  --bg-overlay: rgba(0, 0, 0, 0.75);
+  --bg-subtle: rgba(255, 107, 107, 0.15);
+  --bg-surface: #ffffff;
+  --border-subtle: rgba(51, 51, 51, 0.25);
+  --border-subtle-light: rgba(51, 51, 51, 0.12);
+  --text-muted: rgba(74, 74, 74, 0.65);
+
+  --tag-bg: var(--border-color);
+  --tag-text: var(--card-bg);
+
+  --status-success-bg: rgba(46, 204, 113, 0.2);
+  --status-success-border: rgba(46, 204, 113, 0.55);
+  --status-failed-bg: rgba(231, 76, 60, 0.2);
+  --status-failed-border: rgba(231, 76, 60, 0.55);
+  --status-waiting-bg: rgba(52, 152, 219, 0.15);
+  --status-waiting-border: rgba(52, 152, 219, 0.45);
+
+  --btn-bg: var(--card-bg);
+  --btn-text: var(--text-color);
+  --btn-border: var(--border-color);
+  --btn-hover-bg: rgba(255, 107, 107, 0.15);
+  --btn-hover-border: var(--active-color);
+  --btn-active-bg: var(--active-color);
+  --btn-active-text: var(--card-bg);
+  --btn-active-border: var(--active-color);
+  --btn-focus-ring: var(--active-color);
+}

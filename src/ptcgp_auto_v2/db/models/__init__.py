@@ -15,6 +15,7 @@ from .account_friend_request import AccountFriendRequest
 from .account_friendship import AccountFriendship
 from .account_gift_pair import AccountGiftPair
 from .account_gift_record import AccountGiftRecord
+from .exchange_card_request import ExchangeCardRequest
 from .base import TimestampMixin
 from .pack_record import PackRecord
 from .pack_card import PackCard
@@ -32,6 +33,7 @@ __all__ = [
     "AccountFriendship",
     "AccountGiftPair",
     "AccountGiftRecord",
+    "ExchangeCardRequest",
     "TaskInstance",
     "PackRecord",
     "PackCard",

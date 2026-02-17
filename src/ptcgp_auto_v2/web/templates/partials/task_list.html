@@ -1,4 +1,5 @@
-{% from "partials/macros/tables.html" import table_container, table_row, pagination, status_badge %}
+{% from "partials/macros/tables.html" import table_container, table_row, pagination, status_chip %}
+{% from "partials/macros/data_table.html" import data_table_card, data_table_pager_row, data_table_toolbar_layout %}
 
 {% set table_headers = [
     t.col_account or 'Account',
@@ -8,8 +9,7 @@
     t.col_last_completed or 'Last Completed',
     t.col_next_run or 'Next Run',
     t.col_reset_type or 'Reset Type',
-    t.col_plan or 'Plan',
-    t.col_error or 'Error'
+    t.col_plan or 'Plan'
 ] %}
 
 {% set rows_content %}
@@ -27,7 +27,7 @@
             {% endif %}
         {% endset %}
         {% set status_cell %}
-            {{ status_badge(item.status, t) }}
+            {{ status_chip(item.status, t, reason=item.error_message or '') }}
         {% endset %}
         {% set dispatch_cell %}
             {% if item.reset_type == 'once' %}
@@ -90,13 +90,6 @@
                 <span class="text-muted">-</span>
             {% endif %}
         {% endset %}
-        {% set error_cell %}
-            {% if item.error_message %}
-                <span class="text-xs text-muted">{{ item.error_message }}</span>
-            {% else %}
-                <span class="text-muted">-</span>
-            {% endif %}
-        {% endset %}
         {{ table_row([
             account_cell,
             task_cell,
@@ -105,8 +98,7 @@
             last_completed_cell,
             next_run_cell,
             reset_cell,
-            plan_cell,
-            error_cell
+            plan_cell
         ]) }}
     {% endfor %}
 
@@ -115,62 +107,70 @@
         {{ table_row([empty_cell] + [''] * (table_headers|length - 1)) }}
     {% endif %}
 
-    {% if has_more %}
-        <tr class="border-theme" hx-get="{{ next_page_url }}" hx-trigger="revealed" hx-swap="outerHTML">
-            <td class="p-3" colspan="{{ table_headers|length }}">
-                <div class="h-10 w-full"></div>
-            </td>
-        </tr>
-    {% endif %}
+    {{ data_table_pager_row(table_headers|length, page, has_prev, has_more, prev_page_url, next_page_url, '#task-table-body', t) }}
 {% endset %}
 
 {% if table_only %}
     {{ rows_content }}
 {% else %}
-    <div class="brutal-card p-6">
+    {% call data_table_card('', 'brutal-card p-6') %}
         <form id="task-filter-form"
-              hx-get="/api/tasks?page=0&lang={{ current_lang }}"
+              hx-get="/api/tasks?lang={{ current_lang }}"
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
               data-action="save-tasks-filters"
               data-restore-trigger="true">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div class="table-title-row mb-4">
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
-                <div class="flex flex-wrap gap-3">
-                    {% set reset_disabled = (selected_status|length > 0) and ('completed' not in selected_status) %}
-                    <span id="task-reset-completed-wrapper"
-                          class="tooltip-text"
-                          data-disabled-tooltip="{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}"
-                          data-tooltip="{% if reset_disabled %}{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}{% endif %}">
-                    <button id="task-reset-completed-btn"
-                            class="brutal-btn {% if reset_disabled %}opacity-50 cursor-not-allowed{% endif %}"
-                            type="button"
-                            {% if reset_disabled %}disabled aria-disabled="true"{% endif %}
-                            hx-get="/management/tasks/reset-completed-modal?lang={{ current_lang }}"
-                            hx-target="#modal-content"
-                            hx-swap="innerHTML"
-                            hx-include="#task-filter-form">
-                        {{ t.btn_reset_completed or 'Reset Completed' }}
-                    </button>
-                    </span>
-                    <button class="brutal-btn"
-                            type="button"
-                            hx-get="/management/tasks?lang={{ current_lang }}"
-                            hx-target="#management-content"
-                            hx-include="#task-filter-form">
-                        {{ t.btn_refresh or 'Refresh' }}
-                    </button>
-                </div>
             </div>
 
             <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'dispatch_priority' }}">
             <input type="hidden" name="sort_order" id="task-sort-order" value="{{ selected_sort_order or 'asc' }}">
+            <input type="hidden" name="page" id="task-page" value="{{ page or 0 }}">
+            <input type="hidden" name="page_size" id="task-page-size" value="{{ page_size or 10 }}">
 
-            <div class="flex flex-col lg:flex-row flex-wrap gap-4 mb-6">
-                <div class="flex flex-col gap-1">
-                <label for="task-filter-status" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_status or 'Status' }}</label>
-                <select id="task-filter-status" name="status" class="js-custom-select brutal-input w-52">
+            {% set toolbar_layout = {
+                'left_items': [
+                    {
+                        'key': 'status',
+                        'label': t.filter_status or 'Status',
+                        'order': 10,
+                        'min_width': 'clamp(10rem, 18vw, 14rem)'
+                    },
+                    {
+                        'key': 'task_type',
+                        'label': t.filter_task or 'Task',
+                        'order': 20,
+                        'min_width': 'clamp(10rem, 18vw, 14rem)'
+                    },
+                    {
+                        'key': 'account_id',
+                        'label': t.filter_account or 'Account',
+                        'order': 30,
+                        'min_width': 'clamp(12rem, 24vw, 18rem)'
+                    }
+                ],
+                'right_items': [
+                    {
+                        'key': 'reset_completed',
+                        'label': '',
+                        'order': 40,
+                        'min_width': 'clamp(9rem, 14vw, 12rem)'
+                    },
+                    {
+                        'key': 'refresh',
+                        'label': '',
+                        'order': 50,
+                        'min_width': 'clamp(7rem, 10vw, 9rem)'
+                    }
+                ]
+            } %}
+            {% set reset_disabled = (selected_status|length > 0) and ('completed' not in selected_status) %}
+            <div class="mb-6">
+            {% call(field, zone) data_table_toolbar_layout(toolbar_layout, 'normal') %}
+                {% if field.key == 'status' %}
+                <select id="task-filter-status" name="status" class="js-custom-select brutal-input table-control">
                     <option value="">{{ t.label_all or 'All' }}</option>
                     {% for status in status_options %}
                         <option value="{{ status }}" {% if status in selected_status %}selected{% endif %}>
@@ -178,11 +178,8 @@
                         </option>
                     {% endfor %}
                 </select>
-            </div>
-
-            <div class="flex flex-col gap-1">
-                <label for="task-filter-type" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_task or 'Task' }}</label>
-                <select id="task-filter-type" name="task_type" class="js-custom-select brutal-input w-52">
+                {% elif field.key == 'task_type' %}
+                <select id="task-filter-type" name="task_type" class="js-custom-select brutal-input table-control">
                     <option value="">{{ t.label_all or 'All' }}</option>
                     {% for task_type in task_types %}
                         <option value="{{ task_type }}" {% if task_type in selected_task_type %}selected{% endif %}>
@@ -190,14 +187,11 @@
                         </option>
                     {% endfor %}
                 </select>
-            </div>
-
-            <div class="flex flex-col gap-1">
-                <label for="task-filter-account" class="text-xs uppercase tracking-widest text-muted">{{ t.filter_account or 'Account' }}</label>
+                {% elif field.key == 'account_id' %}
                 <select
                     id="task-filter-account"
                     name="account_id"
-                    class="js-custom-select brutal-input w-56"
+                    class="js-custom-select brutal-input table-control"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
                     data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
@@ -210,7 +204,32 @@
                         </option>
                     {% endfor %}
                 </select>
-            </div>
+                {% elif field.key == 'reset_completed' %}
+                <span id="task-reset-completed-wrapper"
+                      class="tooltip-text"
+                      data-disabled-tooltip="{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}"
+                      data-tooltip="{% if reset_disabled %}{{ t.desc_reset_completed_disabled or 'Only available when status is All or Completed.' }}{% endif %}">
+                    <button id="task-reset-completed-btn"
+                            class="brutal-btn table-action-btn {% if reset_disabled %}opacity-50 cursor-not-allowed{% endif %}"
+                            type="button"
+                            {% if reset_disabled %}disabled aria-disabled="true"{% endif %}
+                            hx-get="/management/tasks/reset-completed-modal?lang={{ current_lang }}"
+                            hx-target="#modal-content"
+                            hx-swap="innerHTML"
+                            hx-include="#task-filter-form">
+                        {{ t.btn_reset_completed or 'Reset Completed' }}
+                    </button>
+                </span>
+                {% elif field.key == 'refresh' %}
+                <button class="brutal-btn table-action-btn"
+                        type="button"
+                        hx-get="/management/tasks?lang={{ current_lang }}"
+                        hx-target="#management-content"
+                        hx-include="#task-filter-form">
+                    {{ t.btn_refresh or 'Refresh' }}
+                </button>
+                {% endif %}
+            {% endcall %}
             </div>
         </form>
 
@@ -250,7 +269,6 @@
                         </th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_reset_type or 'Reset Type' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_plan or 'Plan' }}</th>
-                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_error or 'Error' }}</th>
                     </tr>
                 </thead>
                 <tbody id="task-table-body"
@@ -268,5 +286,5 @@
                 </tbody>
             </table>
         </div>
-    </div>
+    {% endcall %}
 {% endif %}

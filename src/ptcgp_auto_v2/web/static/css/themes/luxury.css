@@ -1,0 +1,42 @@
+/* Theme: Luxury/Refined */
+[data-theme="luxury"] {
+  --bg-color: #0f0f0f;
+  --text-color: #e0e0e0;
+  --border-color: #8a7029;
+  --shadow-color: rgba(212, 175, 55, 0.2);
+  --accent-color: #a83232;
+  --active-color: #f4d03f;
+  --font-family: 'Playfair Display', serif;
+  --border-width: 1px;
+  --shadow-offset: 0px;
+  --radius: 2px;
+  --card-bg: #1a1a1a;
+
+  --bg-overlay: rgba(15, 15, 15, 0.85);
+  --bg-subtle: rgba(212, 175, 55, 0.08);
+  --bg-surface: #1a1a1a;
+  --border-subtle: rgba(138, 112, 41, 0.35);
+  --border-subtle-light: rgba(138, 112, 41, 0.18);
+  --text-muted: rgba(224, 224, 224, 0.55);
+
+  --tag-bg: var(--border-color);
+  --tag-text: #000;
+
+  --status-success-bg: rgba(244, 208, 63, 0.15);
+  --status-success-border: rgba(244, 208, 63, 0.45);
+  --status-failed-bg: rgba(168, 50, 50, 0.25);
+  --status-failed-border: rgba(168, 50, 50, 0.55);
+  --status-waiting-bg: rgba(224, 224, 224, 0.08);
+  --status-waiting-border: rgba(224, 224, 224, 0.25);
+
+  --btn-bg: #000;
+  --btn-text: var(--text-color);
+  --btn-border: #555;
+  --btn-hover-bg: rgba(212, 175, 55, 0.1);
+  --btn-hover-border: var(--border-color);
+  --btn-hover-text: var(--border-color);
+  --btn-active-bg: var(--active-color);
+  --btn-active-text: #000;
+  --btn-active-border: var(--active-color);
+  --btn-focus-ring: var(--active-color);
+}

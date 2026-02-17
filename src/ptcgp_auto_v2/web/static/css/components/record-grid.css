@@ -1,0 +1,98 @@
+/**
+ * Record Grid Components
+ * 记录网格组件样式（开包记录等）
+ */
+
+/* Pack Grid */
+.pack-grid {
+    display: grid;
+    gap: 1.5rem;
+    width: 100%;
+    justify-content: center;
+    grid-template-columns: repeat(6, 1fr);
+}
+
+/* Card Item in Grid */
+.pack-grid > .card-item {
+    grid-column: span 2;
+}
+
+/* Layout Variants */
+.layout-6 > .card-item:nth-child(n) {
+    grid-column: span 2;
+}
+
+.layout-5 > .card-item:nth-child(4) {
+    grid-column: 2 / span 2;
+}
+
+.layout-5 > .card-item:nth-child(5) {
+    grid-column: 4 / span 2;
+}
+
+.layout-4 > .card-item:nth-child(odd) {
+    grid-column: 2 / span 2;
+}
+
+.layout-4 > .card-item:nth-child(even) {
+    grid-column: 4 / span 2;
+}
+
+/* layout-3: 3张卡牌一排显示，每张span 2，总6列，居中排列 */
+.layout-3 > .card-item:nth-child(1) {
+    grid-column: 1 / span 2;
+}
+
+.layout-3 > .card-item:nth-child(2) {
+    grid-column: 3 / span 2;
+}
+
+.layout-3 > .card-item:nth-child(3) {
+    grid-column: 5 / span 2;
+}
+
+/* Card Name Overlay */
+.card-name-overlay {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    line-height: 1.25;
+    min-height: 2.5em;
+    text-overflow: ellipsis;
+}
+
+/* Plans Empty State */
+.plans-empty-state {
+    border-style: dashed;
+}
+
+/* Sortable (Drag & Drop) */
+.sortable-ghost {
+    opacity: 0.35;
+    border-style: dashed !important;
+}
+
+.sortable-chosen {
+    background-color: var(--bg-subtle) !important;
+    box-shadow: 0 0 0 2px var(--border-color);
+}
+
+.sortable-drag {
+    transform: rotate(1deg);
+    box-shadow: 0 10px 24px var(--shadow-color);
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .pack-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+
+    .pack-grid > .card-item,
+    .layout-5 > .card-item:nth-child(n),
+    .layout-4 > .card-item:nth-child(n) {
+        grid-column: auto !important;
+    }
+}

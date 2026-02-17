@@ -11,11 +11,6 @@ from enum import Enum, auto
 from typing import Optional
 
 from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS, SWIPE_STEPS_SCROLL
-from ptcgp_auto_v2.config.rarity_icons import (
-    RARITY_CODE_REVERSE,
-    RARITY_GROUP_DEFAULTS,
-    RARITY_ICON_TEMPLATES,
-)
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -23,14 +18,15 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
 )
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
-from ptcgp_auto_v2.infra.icon_group_detector import (
-    IconGroupDetector,
-    find_group_by_rarity,
-)
+from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
+from ptcgp_auto_v2.tasks.utils.rarity_filter import (
+    FilterPanelState,
+    handle_filter_panel,
+)
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     pinch_in,
@@ -38,10 +34,8 @@ from ptcgp_auto_v2.utils.gesture import (
     swipe,
     tap,
     tap_box,
-    tap_ok,
     tap_template,
     tap_text,
-    tap_text_exact,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,13 +45,7 @@ logger = logging.getLogger(__name__)
 # 常量定义（基于 1080x1920 基准分辨率）
 # ============================================================
 
-BASE_FILTER_ROI_X1 = 80
-BASE_FILTER_ROI_X2 = 1000
-BASE_FILTER_ROI_HEIGHT = 520
-BASE_FILTER_SCROLL_DISTANCE_Y = 192  # 1920 * 0.10
-BASE_FILTER_OK_SCROLL_DISTANCE_Y = 154  # 1920 * 0.08
 BASE_SCAN_SCROLL_DISTANCE_Y = 500  # 1920 * 0.26
-FILTER_SCROLL_WAIT = 1.2
 BASE_SORT_ROW_TOL = 30
 BASE_SORT_BTN_X = 965
 BASE_SORT_BTN_Y = 1672
@@ -130,6 +118,7 @@ class CollectAccountCardsTask(Task):
         )
 
         self._action_cache: dict[str, bool] = {}
+        self._filter_state = FilterPanelState()
         self._completed = False
         self._skipped = False
         self._skip_reason: Optional[str] = None
@@ -159,6 +148,7 @@ class CollectAccountCardsTask(Task):
         self._card_repo = CardRepository()
 
         self._action_cache.clear()
+        self._filter_state = FilterPanelState()
         self._completed = False
         self._skipped = False
         self._skip_reason = None
@@ -227,72 +217,31 @@ class CollectAccountCardsTask(Task):
         return self._scan_and_scroll(page_info)
 
     def _handle_filter_panel(self, page_info: dict) -> ActionResult:
-        ocr_results = page_info.get("ocr_results", [])
-
-        no_target_box = self._find_text_box(
-            ocr_results, get_text_patterns("card_filter_no_target"), exact=False
+        result = handle_filter_panel(
+            adb=self.adb,
+            page_detector=self.page_detector,
+            icon_detector=self.icon_detector,
+            page_info=page_info,
+            rarity_codes=HIGH_RARITY_TARGETS,
+            state=self._filter_state,
+            action_cache=self._action_cache,
         )
-        if no_target_box:
-            logger.info("筛选界面提示无对象卡牌，任务直接结束")
-            self._completed = True
-            return ActionResult.ok(wait=0.5)
 
-        if not self._is_action_done("filter_cleared"):
-            result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("card_filter_clear"),
-                wait=0.5,
+        if self._is_action_done("filter_selected") and self._is_action_done(
+            "filter_ok_scrolled"
+        ):
+            no_target_box = self._find_text_box(
+                page_info.get("ocr_results", []),
+                get_text_patterns("card_filter_no_target"),
+                exact=False,
             )
-            if result:
-                self._mark_action_done("filter_cleared")
-                return result
-            return ActionResult.ok(wait=0.5)
-
-        if not self._is_action_done("filter_scrolled"):
-            start, end = scroll_points(
-                self.adb, base_distance_y=BASE_FILTER_SCROLL_DISTANCE_Y, direction="up"
-            )
-            swipe(
-                self.adb,
-                start,
-                end,
-                steps=SWIPE_STEPS_SCROLL,
-                wait=FILTER_SCROLL_WAIT,
-            )
-            self._mark_action_done("filter_scrolled")
-            return ActionResult.ok(wait=FILTER_SCROLL_WAIT)
-
-        if not self._is_action_done("filter_selected"):
-            result = self._select_high_rarities(page_info)
-            if result:
-                self._mark_action_done("filter_selected")
-                ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
-                if ok_result:
-                    return self._mark_filter_applied(ok_result)
-                if not self._is_action_done("filter_ok_scrolled"):
-                    start, end = scroll_points(
-                        self.adb,
-                        base_distance_y=BASE_FILTER_OK_SCROLL_DISTANCE_Y,
-                        direction="down",
-                    )
-                    swipe(
-                        self.adb,
-                        start,
-                        end,
-                        steps=SWIPE_STEPS_SCROLL,
-                        wait=0.8,
-                    )
-                    self._mark_action_done("filter_ok_scrolled")
-                    return ActionResult.ok(wait=0.8)
-                return result
-            return ActionResult.ok(wait=0.5)
-
-        result = tap_ok(self.adb, ocr_results, wait=1.0)
-        if result:
+            if no_target_box:
+                logger.info("筛选界面提示无对象卡牌，任务直接结束")
+                self._completed = True
+                return ActionResult.ok(wait=0.5)
             return self._mark_filter_applied(result)
 
-        return ActionResult.ok(wait=0.5)
+        return result
 
     def _handle_sort_panel(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])
@@ -342,62 +291,6 @@ class CollectAccountCardsTask(Task):
         tap_x = self.adb.scaled_x(BASE_SORT_BTN_X)
         tap_y = self.adb.scaled_y(BASE_SORT_BTN_Y)
         return tap(self.adb, tap_x, tap_y, wait=1.0)
-
-    def _select_high_rarities(self, page_info: dict) -> Optional[ActionResult]:
-        screenshot, ocr_results = self.page_detector.get_last_page_context()
-        if screenshot is None:
-            screenshot, ocr_results = self.page_detector.capture()
-            if screenshot is None:
-                return None
-
-        title_box = self._find_text_box(
-            ocr_results, get_text_patterns("card_filter_title"), exact=True
-        )
-        if not title_box:
-            return None
-
-        roi_x1 = self.adb.scaled_x(BASE_FILTER_ROI_X1)
-        roi_x2 = self.adb.scaled_x(BASE_FILTER_ROI_X2)
-        roi_y1 = title_box[1]
-        roi_y2 = title_box[3] + self.adb.scaled_y(BASE_FILTER_ROI_HEIGHT)
-        roi = (roi_x1, roi_y1, roi_x2, min(roi_y2, self.adb.screen_height))
-
-        hits = self.icon_detector.detect_icons(
-            screenshot=screenshot,
-            template_paths=RARITY_ICON_TEMPLATES,
-            roi=roi,
-            threshold=RARITY_GROUP_DEFAULTS["threshold"],
-            nms_iou=RARITY_GROUP_DEFAULTS["nms_iou"],
-            screen_width=self.adb.screen_width,
-        )
-
-        row_tol = self.adb.scaled_y(RARITY_GROUP_DEFAULTS["row_tol_px"])
-        gap = self.adb.scaled_x(RARITY_GROUP_DEFAULTS["gap_px"])
-        groups = self.icon_detector.group_hits(
-            hits,
-            row_tol=row_tol,
-            gap=gap,
-            min_count=RARITY_GROUP_DEFAULTS["min_count"],
-        )
-
-        clicked = False
-        visited = set()
-        for rarity_code in HIGH_RARITY_TARGETS:
-            pattern = RARITY_CODE_REVERSE.get(rarity_code)
-            if not pattern:
-                continue
-            if pattern in visited:
-                continue
-            visited.add(pattern)
-            group = find_group_by_rarity(rarity_code, groups, RARITY_CODE_REVERSE)
-            if not group:
-                logger.debug("未找到稀有度分组: %s", rarity_code)
-                continue
-            tap(self.adb, int(group.center[0]), int(group.center[1]), wait=0.0)
-            logger.info("已选择稀有度: %s", rarity_code)
-            clicked = True
-
-        return ActionResult.ok(wait=0.5) if clicked else None
 
     def _scan_and_scroll(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])

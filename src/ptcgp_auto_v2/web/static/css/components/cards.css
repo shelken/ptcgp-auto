@@ -1,0 +1,44 @@
+/* Card Styles */
+
+.brutal-card {
+  background-color: var(--card-bg);
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--shadow-color);
+  border-radius: var(--radius);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.brutal-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: calc(var(--shadow-offset) + 2px) calc(var(--shadow-offset) + 2px) 0px var(--shadow-color);
+}
+
+[data-theme="retro"] .brutal-card {
+  background-color: var(--card-bg);
+}
+
+[data-theme="luxury"] .brutal-card {
+  background-color: var(--card-bg);
+  box-shadow: 0 4px 20px var(--shadow-color);
+}
+
+[data-theme="luxury"] .brutal-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px var(--shadow-color);
+}
+
+[data-theme="organic"] .brutal-card {
+  background-color: var(--card-bg);
+  border-style: solid;
+}
+
+[data-theme="art_deco"] .brutal-card {
+  background-color: var(--card-bg);
+  border-style: double;
+  border-width: 4px;
+}
+
+.brutal-border {
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius);
+}

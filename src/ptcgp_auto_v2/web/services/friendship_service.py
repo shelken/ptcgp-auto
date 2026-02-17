@@ -21,6 +21,11 @@ def build_friendship_context(
     lang: str,
     account_id: int | None = None,
     from_account_id: int | None = None,
+    q: str = "",
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    page: int = 0,
+    page_size: int = 10,
 ) -> dict:
     """构建好友管理页面所需上下文数据。"""
     current_lang = normalize_lang(lang)
@@ -36,17 +41,54 @@ def build_friendship_context(
         account_name_map[account.id] = account.display_name
         account_friend_id_map[account.id] = account.friend_id or "-"
 
-    requests = list_friend_requests(session=session, account_id=account_id)
-    friendships = list_friendships(session=session, account_id=account_id)
+    request_result = list_friend_requests(
+        session=session,
+        account_id=account_id,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
+    friendship_result = list_friendships(
+        session=session,
+        account_id=account_id,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
+
+    if isinstance(request_result, tuple):
+        requests, request_total = request_result
+    else:
+        requests = request_result
+        request_total = len(requests)
+
+    if isinstance(friendship_result, tuple):
+        friendships, friendship_total = friendship_result
+    else:
+        friendships = friendship_result
+        friendship_total = len(friendships)
 
     return {
         "accounts": accounts,
         "requests": requests,
+        "request_total": request_total,
         "friendships": friendships,
+        "friendship_total": friendship_total,
         "account_name_map": account_name_map,
         "account_friend_id_map": account_friend_id_map,
         "selected_account_id": account_id,
         "selected_from_account_id": from_account_id,
+        "q": q,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
+        "page": page,
+        "page_size": page_size,
+        "has_prev": page > 0,
+        "has_next": (page + 1) * page_size < max(request_total, friendship_total),
         "t": t,
         "current_lang": current_lang,
     }

@@ -37,5 +37,11 @@ class AccountFriendship(SQLModel, table=True):
         description="好友的账号ID（系统内账号有值）",
     )
 
+    # 好友昵称（系统外账号从游戏获取）
+    friend_nickname: Optional[str] = Field(
+        default=None,
+        description="好友昵称（系统外账号从游戏获取）",
+    )
+
     # 时间戳（本地时间）
     created_at: datetime = Field(default_factory=datetime.now)

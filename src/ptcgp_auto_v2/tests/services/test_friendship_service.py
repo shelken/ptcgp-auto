@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -27,6 +28,48 @@ class TestFriendshipService(unittest.TestCase):
             task_type="manage_friendship",
             reset_type="once",
         )
+
+    @patch("ptcgp_auto_v2.services.friendship_service.FriendRequestRepository")
+    def test_expire_add_request_if_needed_should_mark_external_as_failed(
+        self, repo_cls
+    ):
+        """外部 add 请求超过 10 分钟应标记失败。"""
+        repo = repo_cls.return_value
+        request = SimpleNamespace(
+            request_type="add",
+            status="sended",
+            to_account_id=None,
+            created_at=datetime.now() - timedelta(minutes=11),
+            failed_reason=None,
+            updated_at=None,
+        )
+
+        changed = FriendshipService.expire_add_request_if_needed(request)
+
+        self.assertTrue(changed)
+        self.assertEqual("failed", request.status)
+        repo.update.assert_called_once_with(request)
+
+    @patch("ptcgp_auto_v2.services.friendship_service.FriendRequestRepository")
+    def test_expire_add_request_if_needed_should_mark_internal_as_failed(
+        self, repo_cls
+    ):
+        """系统内 add 请求超过 30 分钟应标记失败。"""
+        repo = repo_cls.return_value
+        request = SimpleNamespace(
+            request_type="add",
+            status="sending",
+            to_account_id=2,
+            created_at=datetime.now() - timedelta(minutes=31),
+            failed_reason=None,
+            updated_at=None,
+        )
+
+        changed = FriendshipService.expire_add_request_if_needed(request)
+
+        self.assertTrue(changed)
+        self.assertEqual("failed", request.status)
+        repo.update.assert_called_once_with(request)
 
 
 if __name__ == "__main__":

@@ -61,7 +61,7 @@ class TestSendCardDailyTask(unittest.TestCase):
 
         task.on_start()
 
-        self.assertFalse(task.is_completed())
+        self.assertTrue(task.is_completed())
         self.assertTrue(task.was_skipped())
         self.assertEqual("账号未过14天冷冻期（同日待到期）", task._skip_reason)
         pairing_service_mock.ensure_pairs_for_account.assert_not_called()
@@ -77,10 +77,32 @@ class TestSendCardDailyTask(unittest.TestCase):
 
         task.on_start()
 
-        self.assertFalse(task.is_completed())
+        self.assertTrue(task.is_completed())
         self.assertTrue(task.was_skipped())
         self.assertEqual("无可用送卡目标", task._skip_reason)
         record_service_mock.ensure_daily_record.assert_not_called()
+
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.tap_ok")
+    @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftRecordService.update_status")
+    def test_locked_popup_should_skip_and_mark_completed(
+        self, update_status_mock, tap_ok_mock
+    ):
+        task = cast(Any, self.task)
+        task._record = SimpleNamespace()
+        tap_ok_mock.return_value = ActionResult.ok(wait=0.1)
+
+        result = task._handle_exchange_locked_popup({"ocr_results": [{"text": "OK"}]})
+
+        self.assertTrue(result.success)
+        self.assertTrue(task.is_completed())
+        self.assertTrue(task.was_skipped())
+        self.assertEqual("分送功能未解锁（14天冷冻期未到）", task._skip_reason)
+        update_status_mock.assert_called_once_with(
+            task._record,
+            status="completed_no_target",
+            error_code="FEATURE_LOCKED",
+            error_message="分送功能未解锁（14天冷冻期未到）",
+        )
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftRecordService")
     @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftPairingService")
