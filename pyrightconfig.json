@@ -1,0 +1,12 @@
+{
+  "typeCheckingMode": "basic",
+  "reportAssignmentType": "warning",
+  "reportArgumentType": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportUnknownArgumentType": "warning",
+  "exclude": [
+    "**/tests/**",
+    "**/yolo-card-training/**"
+  ]
+}
