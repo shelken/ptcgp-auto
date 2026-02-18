@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from .account_pack_point import AccountPackPoint
     from .account_stat import AccountStat
     from .pack_record import PackRecord
     from .task_instance import TaskInstance
@@ -35,7 +36,7 @@ class Account(SQLModel, table=True):
     - 资源统计（exchange_points、pack_hourglass_count）迁移到 account_stats 表
     """
 
-    __tablename__ = "accounts"
+    __tablename__ = "accounts"  # type: ignore[assignment]
 
     id: Optional[int] = Field(default=None, primary_key=True)
     game_id: str = Field(unique=True, description="deviceAccount 字段，唯一标识")
@@ -80,6 +81,12 @@ class Account(SQLModel, table=True):
             "primaryjoin": "Account.id==AccountStat.account_id",
             "foreign_keys": "[AccountStat.account_id]",
             "uselist": False,
+        }
+    )
+    pack_points: List["AccountPackPoint"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "Account.id==AccountPackPoint.account_id",
+            "foreign_keys": "[AccountPackPoint.account_id]",
         }
     )
 
