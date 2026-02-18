@@ -48,8 +48,14 @@ def build_pack_config_context(account_id: int, lang: str) -> dict:
 def save_account_pack_config(
     account_id: int, pack_code: str, booster_name: str
 ) -> None:
-    """保存账号补充包配置。"""
+    """保存账号补充包配置。
+
+    当 pack_code 为空时，删除该账号的配置（清空设置）。
+    """
     repo = AccountPackConfigRepository()
+    if not pack_code:
+        repo.delete_by_account_and_type(account_id, "daily")
+        return
     config = AccountPackConfig(
         account_id=account_id,
         type="daily",
