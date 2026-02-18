@@ -27,7 +27,7 @@
 ### 变更与维护规范
 
 - 在变更代码逻辑时，同时检查 方法/类/文件开头 的注释，避免逻辑与注释不完全一致
-- **当代码结构变更时，对应更新 README 和 CLAUDE.md（本文件）**
+- **当代码结构变更时，对应更新 README 和 AGENTS.md（本文件）**
 - 重构时，如果被修改的文件有未提交的代码，务必先提问是否先提交代码才往下进行（防止被改变功能逻辑）
 - 如果 plan 文档与实际代码不一样，则有可能 plan 文档相比代码是过时的，如果要变更一定要先询问开发者
 - 每次定位并修复新问题后，必须把问题与正确做法回填到对应模块的 `AGENTS.md`（如 `web/AGENTS.md`、`tasks/AGENTS.md`）的常见问题/注意点中，保持规则持续更新
@@ -75,48 +75,107 @@
 ## 项目概述
 
 这是一个用于 PTCGP（Pokemon TCG Pocket）的 Python 自动化框架。
-**v2 版本 (当前主版本)** 采用任务队列 + 调度器架构，支持多账号、多设备、原子任务（开包、领奖等）。
+**v2 版本 (当前主版本)** 采用任务队列 + 调度器架构，支持多账号、多设备、原子任务。
 **v1 版本 (Legacy)** 仅用于单人对战刷经验，保留在 `src/ptcgp_auto` 中。
 
 ## 核心架构 (v2)
 
 源代码位于 `src/ptcgp_auto_v2/` 目录下：
 
-- `main_v2.py` - v2 入口文件
-  - `src/ptcgp_auto_v2/`
-    - `core/` - 核心调度模块
-      - `scheduler.py` - 任务调度器 (Scheduler)
-      - `executor.py` - 任务执行器 (Executor)
-      - `task_base.py` - 任务基类 (Task) 和注册表
-      - `task_status.py` - 任务状态定义
-      - `hooks.py` - Hook 机制基础定义
-      - `device_pool.py` - 设备池管理
-    - `tasks/` - 具体任务实现
-      - `open_pack.py` - 开包任务
-      - `claim_rewards.py` - 领取奖励任务
-      - `fetch_account_info.py` - 账号信息同步任务
-      - `collect_account_cards.py` - 账号高稀有度卡牌采集任务
-      - `wonder_pick.py` - 得卡挑战任务
-      - `send_card_daily.py` - 每日送卡任务
-    - `infra/` - 基础设施层
-      - `adb.py` - ADB 控制封装
-      - `ocr.py` - OCR 引擎封装
-      - `model_manager.py` - [新增] YOLO模型管理（全局单例，异步加载）
-      - `card_hash_manager.py` - [新增] 卡牌Hash索引管理（内存缓存）
-      - `yolo_card_recognizer.py` - [新增] YOLO+Hash卡牌识别器
-      - `icon_group_detector.py` - 稀有度图标分组检测
-      - `page_detector.py` - 页面检测器
-      - `account_switcher.py` - 账号切换逻辑
-    - `db/` - 数据库层
-      - `models/` - 数据模型 (Account, TaskInstance)
-        - `account_card.py` - 账号卡牌关联表
-        - `account_gift_pair.py` - 账号送卡稳定配对表
-        - `account_gift_record.py` - 账号送卡执行记录表
-      - `repositories/` - 数据访问对象 (DAO)
-    - `config/` - 配置管理
-    - `locales/` - 多语言配置
-    - `hooks/` - Hook 实现
-    - `services/` - 业务服务层
+```
+src/ptcgp_auto_v2/
+├── main_v2.py              # v2 入口文件（项目根目录）
+├── core/                   # 核心调度模块
+│   ├── scheduler.py        # 任务调度器
+│   ├── executor.py         # 任务执行器
+│   ├── task_base.py        # 任务基类与注册表
+│   ├── task_status.py      # 任务状态定义
+│   ├── hooks.py            # Hook 机制基础定义
+│   └── device_pool.py      # 设备池管理
+├── tasks/                  # 任务实现（10 个任务）
+│   ├── open_pack.py        # 每日开包
+│   ├── claim_rewards.py    # 领取任务奖励
+│   ├── claim_gifts.py      # 领取礼物盒
+│   ├── wonder_pick.py      # 得卡挑战
+│   ├── collect_account_cards.py  # 卡牌采集
+│   ├── send_card_daily.py  # 每日送卡
+│   ├── exchange_cards.py   # 交换卡牌
+│   ├── fetch_account_info.py    # 账号信息同步
+│   ├── init_account.py     # 新账号初始化入库
+│   ├── manage_friendship.py     # 好友管理（添加/删除）
+│   └── utils/              # 任务级共用逻辑
+│       ├── card_pick.py    # 卡牌选择逻辑
+│       ├── rarity_filter.py     # 稀有度筛选面板
+│       ├── friend_selection_flow.py  # 好友选择流程
+│       ├── friend_card_flow.py  # 好友卡牌检测
+│       ├── pack_opening_flow.py # 开包流程共用
+│       ├── high_rarity_saver.py # 高稀有度卡牌保存
+│       └── constants.py    # 常量定义
+├── hooks/                  # Hook 实现
+│   ├── exchange_hooks.py   # 交换卡牌 Hook
+│   ├── friend_hooks.py     # 好友关系 Hook
+│   └── gift_hooks.py       # 送卡 Hook
+├── services/               # 业务服务层
+│   ├── exchange_card_service.py  # 交换卡牌服务
+│   ├── friendship_service.py     # 好友关系服务
+│   ├── gift_pairing_service.py   # 送卡配对服务
+│   └── gift_record_service.py    # 送卡记录服务
+├── infra/                  # 基础设施层
+│   ├── adb.py              # ADB 控制封装
+│   ├── ocr.py              # OCR 引擎封装
+│   ├── model_manager.py    # YOLO 模型管理
+│   ├── card_hash_manager.py     # 卡牌 Hash 索引管理
+│   ├── yolo_card_recognizer.py  # YOLO + Hash 卡牌识别器
+│   ├── icon_group_detector.py   # 稀有度图标分组检测
+│   ├── page_detector.py    # 页面检测器
+│   └── account_switcher.py # 账号切换逻辑
+├── db/                     # 数据库层
+│   ├── models/             # 数据模型（17 个）
+│   │   ├── account.py      # 账号模型
+│   │   ├── account_stat.py # 账号资源统计
+│   │   ├── account_card.py # 账号卡牌关联
+│   │   ├── account_friendship.py  # 好友关系
+│   │   ├── account_friend_request.py  # 好友请求
+│   │   ├── account_gift_pair.py   # 送卡配对
+│   │   ├── account_gift_record.py # 送卡记录
+│   │   ├── account_pack_config.py # 开包配置
+│   │   ├── account_pack_point.py  # 系列点数
+│   │   ├── account_task_plan.py   # 账号任务计划关联
+│   │   ├── exchange_card_request.py  # 交换请求
+│   │   ├── task_instance.py   # 任务实例
+│   │   ├── task_plan.py       # 任务计划
+│   │   ├── card.py            # 卡牌/系列/子包模型
+│   │   ├── pack_card.py       # 开包记录卡牌
+│   │   ├── pack_record.py     # 开包记录
+│   │   └── base.py            # 基础模型
+│   └── repositories/       # 数据访问对象 (DAO)
+├── web/                    # Web UI (FastAPI + HTMX)
+│   ├── app.py              # Web 入口
+│   ├── routers/            # 路由层（13 个路由）
+│   │   ├── index.py        # 首页
+│   │   ├── records.py      # 开包记录
+│   │   ├── owned_cards.py  # 拥有卡牌
+│   │   ├── tasks.py        # 任务状态
+│   │   ├── management.py   # 管理中心
+│   │   ├── plans.py        # 计划配置
+│   │   ├── metadata.py     # 元数据管理
+│   │   ├── pack_config.py  # 开包配置
+│   │   ├── friendship.py   # 好友关系
+│   │   ├── daily_gift.py   # 每日送卡
+│   │   └── exchange_card.py  # 交换记录
+│   ├── services/           # 业务层
+│   ├── queries/            # 查询层
+│   ├── utils/              # 工具层
+│   ├── templates/          # Jinja2 模板
+│   ├── static/             # 静态资源 (CSS/JS)
+│   ├── locales/            # 多语言配置
+│   └── tests/              # Web 测试
+├── config/                 # 配置管理
+├── locales/                # 任务用多语言配置
+└── utils/                  # 工具函数
+    ├── action_result.py    # 动作结果数据结构
+    └── perceptual_hash.py  # 感知哈希计算
+```
 
 ### 调度流程
 
@@ -124,48 +183,14 @@
 Main (Daemon)
   ↓
 Scheduler (Loop)
-  ├── 1. Generate Tasks (检查 AccountPlan 生成 TaskInstance)
-  ├── 2. Check Devices (获取空闲 Device)
-  └── 3. Dispatch (将 Task 分配给 Executor)
+  ├── 1. Generate Tasks (检查任务计划生成任务实例)
+  ├── 2. Check Devices (获取空闲设备)
+  └── 3. Dispatch (将任务分配给执行器)
          ↓
       Executor (Thread)
          ├── Bind Device & Task
          ├── Switch Account (if needed)
          └── Run Task Logic (OCR -> Action -> Loop)
-```
-
-## 文件结构概览
-
-```
-ptcgp-auto/
-├── main_v2.py                  # [v2] 主入口
-├── main.py                     # [v1] 旧版入口 (Legacy)
-├── debug_tool.py               # 调试工具
-├── src/
-│   ├── ptcgp_auto_v2/          # [v2] 核心代码
-│   │   ├── core/               # 核心框架
-│   │   ├── tasks/              # 任务实现
-│   │   │   └── utils/           # 任务级共用逻辑
-│   │   ├── db/                 # 数据库
-│   │   │   └── models/
-│   │   │       └── card.py     # 新增 perceptual_hash 字段
-│   │   ├── infra/              # 基础设施
-│   │   │   ├── model_manager.py       # [新增] 模型管理
-│   │   │   ├── card_hash_manager.py   # [新增] Hash管理
-│   │   │   └── yolo_card_recognizer.py # [新增] YOLO识别
-│   │   ├── config/             # 配置
-│   │   ├── web/                # Web UI (FastAPI/HTMX)
-│   │   │   ├── app.py           # Web 入口（初始化与路由挂载）
-│   │   │   ├── routers/         # 路由层
-│   │   │   ├── services/        # 业务层
-│   │   │   ├── queries/         # 查询层
-│   │   │   ├── utils/           # i18n/模板/视图辅助
-│   │   │   └── static/js/       # 前端模块化入口
-│   │   └── utils/              # 工具
-│   │       ├── action_result.py    # 动作结果数据结构
-│   │       └── perceptual_hash.py    # [新增] 哈希计算
-│   └── ptcgp_auto/             # [v1] 旧版代码
-└── docs/                       # 文档
 ```
 
 ## 常用命令
@@ -176,20 +201,23 @@ python main_v2.py --daemon
 
 # 调试工具
 python debug_tool.py
+
+# 手动执行单次任务
+python main_v2.py --task open_pack --account 1 --debug
 ```
 
 ## 调试与开发
 
 1. **新增任务**: 在 `src/ptcgp_auto_v2/tasks/` 创建新文件，继承 `Task` 类并使用 `@TaskRegistry.register` 装饰器。
-2. **页面定义**: 在 `各自task中` 中定义页面识别规则。
+2. **页面定义**: 在各自 task 中定义页面识别规则。
 3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id> --debug` 单独测试任务。
-4. **卡牌识别配置**: 在 `src/ptcgp_auto_v2/config/constants.py` 中调整 YOLO 和 Hash 阈值
+4. **卡牌识别配置**: 在 `src/ptcgp_auto_v2/config/constants.py` 中调整 YOLO 和 Hash 阈值。
 
 ## 注意事项
 
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
-- **模型来源**: YOLO模型从 `shelken/ptcgp-assets` 自动下载
-- **Hash计算**: 使用 scipy DCT 实现，比纯Python快 100-1000 倍
+- **模型来源**: YOLO 模型从 `shelken/ptcgp-assets` 自动下载
+- **Hash 计算**: 使用 scipy DCT 实现，比纯 Python 快 100-1000 倍
 - **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)
   - **重要**: 为保持灵活性，**所有物理外键 (Foreign Key) 约束已被移除**。表之间的关系由 SQLAlchemy/SQLModel 的逻辑外键 (`Relationship` with `primaryjoin`) 维护。
   - 修改模型后无需迁移（目前自动初始化，复杂变更需手动处理）
