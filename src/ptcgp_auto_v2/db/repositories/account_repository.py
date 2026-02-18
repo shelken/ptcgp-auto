@@ -6,7 +6,13 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import Account, AccountStat, AccountTaskPlan, TaskPlan
+from ptcgp_auto_v2.db.models import (
+    Account,
+    AccountPackPoint,
+    AccountStat,
+    AccountTaskPlan,
+    TaskPlan,
+)
 
 
 class AccountRepository:
@@ -23,6 +29,7 @@ class AccountRepository:
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                     selectinload(cast(Any, Account.account_stat)),
+                    selectinload(cast(Any, Account.pack_points)),
                 )
             )
             return session.exec(statement).first()
@@ -49,6 +56,7 @@ class AccountRepository:
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                     selectinload(cast(Any, Account.account_stat)),
+                    selectinload(cast(Any, Account.pack_points)),
                 )
                 .order_by(col(Account.id))
             )
@@ -74,10 +82,6 @@ class AccountRepository:
     def get_accounts_with_plans(self) -> List[Account]:
         """获取所有有任务计划的账号（包括新旧关联）"""
         with Session(get_engine()) as session:
-            # 查询有旧关联 OR 有新关联的账号
-            # 这里简化处理：获取所有账号，然后由应用层判断（因为 eager load 了，性能损耗主要在 DB IO）
-            # 或者使用 join 过滤。为保持代码简单且健壮，复用 get_all 的 eager load 逻辑
-            # 但为了性能，还是加上 where
             statement = (
                 select(Account)
                 .options(
@@ -85,6 +89,7 @@ class AccountRepository:
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                     selectinload(cast(Any, Account.account_stat)),
+                    selectinload(cast(Any, Account.pack_points)),
                 )
                 .order_by(col(Account.id))
             )
@@ -98,7 +103,7 @@ class AccountRepository:
                 select(Account)
                 .join(
                     AccountTaskPlan,
-                    AccountTaskPlan.account_id == Account.id,
+                    col(AccountTaskPlan.account_id) == col(Account.id),
                 )
                 .where(AccountTaskPlan.task_plan_id == plan_id)
                 .options(
@@ -106,6 +111,7 @@ class AccountRepository:
                         cast(Any, Account.task_plan_associations)
                     ).selectinload(cast(Any, AccountTaskPlan.task_plan)),
                     selectinload(cast(Any, Account.account_stat)),
+                    selectinload(cast(Any, Account.pack_points)),
                 )
                 .order_by(col(Account.id))
             )
