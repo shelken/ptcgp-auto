@@ -72,3 +72,17 @@ class AccountPackConfigRepository:
                 session.commit()
                 return True
             return False
+
+    def delete_by_account_and_type(self, account_id: int, config_type: str) -> bool:
+        """根据账号和类型删除开包配置"""
+        with Session(get_engine()) as session:
+            statement = select(AccountPackConfig).where(
+                AccountPackConfig.account_id == account_id,
+                AccountPackConfig.type == config_type,
+            )
+            config = session.exec(statement).first()
+            if config:
+                session.delete(config)
+                session.commit()
+                return True
+            return False

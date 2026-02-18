@@ -7,7 +7,7 @@ import logging
 import random
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import SWIPE_STEPS_SCROLL
+
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 # 常量定义（基于 1080x1920 基准分辨率）
 # ============================================================
 
-BASE_SCAN_SCROLL_DISTANCE_Y = 500  # 1920 * 0.26
+BASE_SCAN_SCROLL_DISTANCE_Y = 400  # 得卡挑战列表滚动距离（基准像素）
+WONDER_PICK_SWIPE_STEPS = 8  # 得卡挑战滑动步数
 
 WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"
 
@@ -379,7 +380,7 @@ class WonderPickTask(Task):
                     base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
                     direction="up",
                 )
-            swipe(self.adb, start, end, steps=SWIPE_STEPS_SCROLL, wait=0.8)
+            swipe(self.adb, start, end, steps=WONDER_PICK_SWIPE_STEPS, wait=0.8)
             return ActionResult.ok(wait=0.5)
 
         if self.has_end_marker(ocr_results):
@@ -390,7 +391,7 @@ class WonderPickTask(Task):
         start, end = scroll_points(
             self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
         )
-        swipe(self.adb, start, end, steps=SWIPE_STEPS_SCROLL, wait=0.8)
+        swipe(self.adb, start, end, steps=WONDER_PICK_SWIPE_STEPS, wait=0.8)
         return ActionResult.ok(wait=0.5)
 
     def _handle_popup(self, page_info: dict) -> ActionResult:
