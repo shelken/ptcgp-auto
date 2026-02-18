@@ -85,6 +85,25 @@
                         <span class="text-muted account-resource-value">-</span>
                         {% endif %}
                     </div>
+                    {% if account.pack_points %}
+                    <div class="pack-points-section text-xs text-muted mt-2 pt-2 border-t border-subtle">
+                        {% set sorted_points = account.pack_points | sort(attribute='series') %}
+                        {% for i in range(0, sorted_points | length, 2) %}
+                        <div class="flex justify-between">
+                            {% for j in range(2) %}
+                                {% set idx = i + j %}
+                                {% if idx < sorted_points | length %}
+                                    {% set pp = sorted_points[idx] %}
+                                    <span>{{ pp.series }}: {{ "{:,}".format(pp.points) }}</span>
+                                    {% if j == 0 and idx + 1 < sorted_points | length %}
+                                    <span class="text-subtle mx-1">|</span>
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
             {% endset %}
             {% set plans_cell %}
