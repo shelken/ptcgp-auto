@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from sqlmodel import Field, SQLModel
+from typing import TYPE_CHECKING, Optional
+
+from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from .account import Account
 
 
 class AccountPackPoint(SQLModel, table=True):
@@ -17,3 +22,11 @@ class AccountPackPoint(SQLModel, table=True):
 
     points: int = Field(description="当前点数")
     updated_at: datetime = Field(default_factory=datetime.now)
+
+    account: Optional["Account"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "AccountPackPoint.account_id==Account.id",
+            "foreign_keys": "[AccountPackPoint.account_id]",
+            "overlaps": "pack_points",
+        }
+    )
