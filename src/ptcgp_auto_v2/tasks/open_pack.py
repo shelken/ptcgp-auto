@@ -25,11 +25,15 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
+from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
+    map_detected_cards,
+)
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
     long_press_opening_card,
     swipe_card_register,
@@ -54,6 +58,7 @@ from ptcgp_auto_v2.utils.gesture import (
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 
 if TYPE_CHECKING:
+    from ptcgp_auto_v2.db.models import Card
     from ptcgp_auto_v2.db.repositories import (
         AccountCardRepository,
         AccountPackConfigRepository,
@@ -693,109 +698,109 @@ class OpenPackTask(Task):
         )
 
     def _recognize_cards(self):
-        """识别卡牌并保存记录（YOLO+Hash 版本）"""
-        max_retries = 3
-
+        """识别卡牌并保存记录（YOLO+Hash 版本）。"""
         set_code = (
             self.target_pack.get("pack_code", "Unknown")
             if self.target_pack
             else "Unknown"
         )
+        cards = self._scan_cards_with_retry(set_code, max_retries=3)
 
+        if not cards:
+            self._result_recognized = True
+            return
+
+        if self._packs_opened_count == 0:
+            self._packs_opened_count = 1
+
+        rows = map_detected_cards(
+            cards=cards,
+            card_repo=self._card_repo,
+            fixed_set_code=set_code,
+        )
+        current_batch_cards = [
+            {
+                "card_name": row.get("card_name"),
+                "rarity": row.get("rarity"),
+                "card_id": row.get("card_id"),
+                "is_new": bool(row.get("is_new", False)),
+                "position": row.get("position"),
+                "confidence": float(row.get("confidence") or 0.0),
+                "hash_similarity": float(row.get("hash_similarity") or 0.0),
+            }
+            for row in rows
+        ]
+
+        self._save_pack_record(current_batch_cards)
+
+        if self._account_card_repo and self.account.id:
+            self._save_high_rarity_cards(rows)
+        logger.debug("==================================")
+        self._result_recognized = True
+
+    def _scan_cards_with_retry(
+        self, set_code: str, max_retries: int
+    ) -> list[DetectedCard]:
+        """识别开包结果，失败时按固定次数重试。"""
         for attempt in range(max_retries):
             try:
                 cards = self.card_recognizer.scan_pack_result(
                     set_code, similarity_threshold=0.68, debug=True
                 )
-                if cards:
-                    if self._packs_opened_count == 0:
-                        self._packs_opened_count = 1
-
-                    card_names = [
-                        f"{c.card_number}(Conf:{c.confidence:.2f},Sim:{c.similarity:.2f})"
-                        for c in cards
-                    ]
-                    current_batch_cards = []
-
-                    for i, c in enumerate(cards):
-                        # 使用 card_number 查询卡牌详情
-                        card_obj = (
-                            self._card_repo.get_card_by_set_and_number(
-                                set_code, c.card_number
-                            )
-                            if self._card_repo
-                            else None
-                        )
-
-                        card_data = {
-                            "card_name": card_obj.name
-                            if card_obj
-                            else f"Card #{c.card_number}",
-                            "rarity": card_obj.rarity if card_obj else "Unknown",
-                            "card_id": card_obj.id if card_obj else None,
-                            "is_new": False,
-                            "position": i + 1,
-                            "confidence": float(c.confidence),
-                            "hash_similarity": float(c.similarity),
-                        }
-                        current_batch_cards.append(card_data)
-
-                    # 即时保存数据库
-                    if self._pack_record_repo and self.account.id:
-                        try:
-                            pack_type = "daily_free"
-                            pack_code = (
-                                self.target_pack.get("pack_code")
-                                if self.target_pack
-                                else None
-                            )
-                            pack_name = (
-                                self.target_pack.get("booster_name")
-                                if self.target_pack
-                                else None
-                            )
-
-                            self._pack_record_repo.create_for_account(
-                                self.account.id,
-                                pack_type=pack_type,
-                                pack_code=pack_code,
-                                pack_name=pack_name,
-                                cards=current_batch_cards,
-                            )
-                            card_names = [
-                                f"{c['card_name']}({c['rarity']})"
-                                for c in current_batch_cards
-                            ]
-                            logger.info(
-                                f"已保存开包记录: {pack_code}/{pack_name} ({len(current_batch_cards)} 张): {', '.join(card_names)}"
-                            )
-                        except Exception as e:
-                            logger.error(f"保存开包记录失败: {e}")
-
-                    if self._account_card_repo and self.account.id:
-                        self._save_high_rarity_cards(current_batch_cards)
-
-                    logger.debug("==================================")
-                    self._result_recognized = True
-                    break
-                else:
-                    if attempt < max_retries - 1:
-                        logger.debug(
-                            f"未识别到卡牌，等待重试 ({attempt + 1}/{max_retries})"
-                        )
-                        time.sleep(2.0)
-                    else:
-                        logger.warning(f"卡牌识别连续失败 {max_retries} 次，跳过识别")
-                        self._result_recognized = True
-
             except RuntimeError as e:
                 logger.error(f"识别卡牌失败: {e}")
-                if attempt >= max_retries - 1:
-                    self._result_recognized = True
+                cards = []
 
-    def _save_high_rarity_cards(self, cards: list[dict]) -> None:
-        """记录高稀有度卡牌到账号卡牌表"""
-        save_high_rarity_cards(self._account_card_repo, self.account.id, cards)
+            if cards:
+                return cards
+
+            if attempt < max_retries - 1:
+                logger.debug(f"未识别到卡牌，等待重试 ({attempt + 1}/{max_retries})")
+                time.sleep(2.0)
+
+        logger.warning(f"卡牌识别连续失败 {max_retries} 次，跳过识别")
+        return []
+
+    def _save_pack_record(self, current_batch_cards: list[dict]) -> None:
+        """保存本次开包记录到数据库。"""
+        if not (self._pack_record_repo and self.account.id):
+            return
+
+        try:
+            pack_code = self.target_pack.get("pack_code") if self.target_pack else None
+            pack_name = (
+                self.target_pack.get("booster_name") if self.target_pack else None
+            )
+
+            self._pack_record_repo.create_for_account(
+                self.account.id,
+                pack_type="daily_free",
+                pack_code=pack_code,
+                pack_name=pack_name,
+                cards=current_batch_cards,
+            )
+            card_names = [
+                f"{card['card_name']}({card['rarity']})" for card in current_batch_cards
+            ]
+            logger.info(
+                f"已保存开包记录: {pack_code}/{pack_name} ({len(current_batch_cards)} 张): {', '.join(card_names)}"
+            )
+        except Exception as e:
+            logger.error(f"保存开包记录失败: {e}")
+
+    def _save_high_rarity_cards(self, rows: list[dict]) -> None:
+        """记录高稀有度卡牌并在保存路径内通知。"""
+        try:
+            save_high_rarity_cards(
+                account_card_repo=self._account_card_repo,
+                account_id=self.account.id,
+                rows=rows,
+                account=self.account,
+                notifier=get_notifier(),
+                notify_message="开包获得稀有卡牌",
+            )
+        except Exception as e:
+            logger.warning(f"保存高稀有度卡牌并通知失败: {e}")
 
     def _get_target_series(self) -> Optional[str]:
         """根据 pack_code 获取目标系列（A/B）"""
