@@ -6,7 +6,8 @@ export const MANAGEMENT_HASH_WHITELIST = [
     'metadata',
     'friendships',
     'daily-gift',
-    'exchange-cards'
+    'exchange-cards',
+    'notifications'
 ];
 
 // --- 判断是否为管理页 hash ---

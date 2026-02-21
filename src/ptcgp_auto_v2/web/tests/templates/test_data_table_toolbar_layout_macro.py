@@ -9,6 +9,8 @@ def _render_template(source: str) -> str:
     """渲染临时模板内容并返回 HTML。"""
     templates_dir = Path(__file__).resolve().parents[2] / "templates"
     env = Environment(loader=FileSystemLoader(str(templates_dir)))
+    env.filters["datetime"] = lambda value: str(value)
+    env.filters["rarity_display"] = lambda value, _lang=None: value
     template = env.from_string(source)
     return template.render()
 
@@ -46,3 +48,39 @@ def test_toolbar_layout_supports_left_right_order_and_wrap_tokens():
     assert search_index != -1
     assert refresh_index != -1
     assert status_index < search_index
+
+
+def test_notification_task_status_notify_on_empty_should_not_fallback_defaults():
+    """task_status 的 notify_on 为空数组时，回显不应退回默认勾选。"""
+    html = _render_template(
+        """
+        {% set extra = {'notify_on': []} %}
+        {% set task_status_options = ['failed', 'blocked', 'timeout', 'success'] %}
+        {% set notify_on_values = extra.notify_on if extra.notify_on is defined else ['failed', 'blocked', 'timeout'] %}
+        {% for status in task_status_options %}
+        <input type="checkbox" name="notify_on" value="{{ status }}" {% if status in notify_on_values %}checked{% endif %}>
+        {% endfor %}
+        """
+    )
+
+    assert 'name="notify_on" value="failed" checked' not in html
+    assert 'name="notify_on" value="blocked" checked' not in html
+    assert 'name="notify_on" value="timeout" checked' not in html
+
+
+def test_notification_task_status_notify_on_undefined_should_use_defaults():
+    """task_status 的 notify_on 未配置时，回显应使用默认失败/阻塞/超时。"""
+    html = _render_template(
+        """
+        {% set extra = {} %}
+        {% set task_status_options = ['failed', 'blocked', 'timeout', 'success'] %}
+        {% set notify_on_values = extra.notify_on if extra.notify_on is defined else ['failed', 'blocked', 'timeout'] %}
+        {% for status in task_status_options %}
+        <input type="checkbox" name="notify_on" value="{{ status }}" {% if status in notify_on_values %}checked{% endif %}>
+        {% endfor %}
+        """
+    )
+
+    assert 'name="notify_on" value="failed" checked' in html
+    assert 'name="notify_on" value="blocked" checked' in html
+    assert 'name="notify_on" value="timeout" checked' in html

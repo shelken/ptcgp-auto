@@ -82,6 +82,30 @@ direnv allow
 pip install -r requirements.txt
 ```
 
+### 1.1 使用 `.env` 配置（v2）
+
+v2 现已支持读取项目根目录 `.env`（与 v1 一致，且不覆盖已存在的环境变量）。
+
+示例：
+
+```bash
+PTCGP_WEB_PORT=8000
+PTCGP_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
+PTCGP_DEBUG=true
+```
+
+Webhook 也支持仅配置 key（兼容 v1）：
+
+```bash
+NOTIFY_KEY=xxxx
+# 或
+PTCGP_NOTIFY_KEY=xxxx
+```
+
+配置优先级：**CLI 参数 > 环境变量 > `.env` > 代码默认值**。
+
+Webhook 解析优先级：**显式 URL 参数 > `PTCGP_WEBHOOK_URL` > `PTCGP_NOTIFY_KEY`/`NOTIFY_KEY` > 不发送**。
+
 ### 2. 启动守护进程
 
 ```bash
@@ -109,6 +133,10 @@ python main_v2.py --task open_pack --account 1
 
 # 同步当前设备登录的账号到数据库
 python main_v2.py --sync-account
+
+# CLI 直接覆盖企微配置（优先级最高）
+python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
+python main_v2.py --web --notify-key "xxxx"
 ```
 
 ## 📦 模型自动下载

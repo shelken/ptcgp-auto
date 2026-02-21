@@ -294,6 +294,25 @@ class BaseExecutor(ABC):
         # 保存到数据库
         task_instance.save()
 
+        # 发送任务状态通知
+        if status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
+            self._notify_task_status(task_instance, status.value, error_message or "")
+
+    def _notify_task_status(
+        self,
+        task_instance: "TaskInstance",
+        status: str,
+        message: str,
+    ):
+        """发送任务状态通知"""
+        try:
+            from ptcgp_auto_v2.infra.notifier import get_notifier
+
+            notifier = get_notifier()
+            notifier.notify_task_status(task_instance, status, message)
+        except Exception as e:
+            logger.warning(f"发送任务状态通知失败: {e}")
+
     def _execute_task_with_prerequisites(
         self,
         task_instance: "TaskInstance",

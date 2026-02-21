@@ -8,7 +8,7 @@ import math
 import time
 from typing import Callable, Optional, Tuple
 
-from src.ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.infra.adb import AdbController
 
 Box = tuple[int, int, int, int]
 

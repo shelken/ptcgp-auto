@@ -6,6 +6,7 @@
 """
 
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -40,6 +41,56 @@ logger = logging.getLogger(__name__)
 
 # 全局配置实例
 _settings: Optional["Settings"] = None
+_dotenv_loaded = False
+
+
+def build_wecom_webhook_url_from_key(key: str) -> str:
+    """将企微 webhook key 转换为完整 webhook URL。"""
+    return f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key={key}"
+
+
+def apply_webhook_cli_overrides(
+    webhook_url: Optional[str] = None,
+    notify_key: Optional[str] = None,
+) -> None:
+    """应用 webhook CLI 参数覆盖（优先级最高）。"""
+    if webhook_url:
+        os.environ["PTCGP_WEBHOOK_URL"] = webhook_url.strip()
+        return
+
+    if notify_key:
+        key = notify_key.strip()
+        if not key:
+            return
+        os.environ["PTCGP_WEBHOOK_URL"] = build_wecom_webhook_url_from_key(key)
+        os.environ["PTCGP_NOTIFY_KEY"] = key
+        os.environ["NOTIFY_KEY"] = key
+
+
+def load_dotenv() -> None:
+    """加载项目根目录 .env 到环境变量（不覆盖已有环境变量）。"""
+    global _dotenv_loaded
+    if _dotenv_loaded:
+        return
+
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        _dotenv_loaded = True
+        return
+
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+
+        key, _, value = raw.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if not key:
+            continue
+        os.environ.setdefault(key, value)
+
+    _dotenv_loaded = True
 
 
 def get_project_root() -> Path:
@@ -175,7 +226,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         """从环境变量加载配置"""
-        import os
+        load_dotenv()
 
         settings = cls()
 
@@ -223,6 +274,7 @@ def get_settings() -> Settings:
         Settings 实例
     """
     global _settings
+    load_dotenv()
 
     if _settings is None:
         _settings = Settings.from_env()
@@ -238,4 +290,5 @@ def set_settings(settings: Settings):
         settings: Settings 实例
     """
     global _settings
+    load_dotenv()
     _settings = settings
