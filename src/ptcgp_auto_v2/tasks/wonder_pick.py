@@ -19,10 +19,14 @@ from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegi
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector, count_icons
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
+from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
+from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
+    map_detected_cards,
+)
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
@@ -439,13 +443,9 @@ class WonderPickTask(Task):
         return swipe_card_register(self.adb)
 
     def _handle_get_card(self, page_info: dict) -> ActionResult:
+        ocr_results = page_info.get("ocr_results", [])
         if self._is_action_done("get_card_saved"):
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                page_info.get("ocr_results", []),
-                get_text_patterns("back_button"),
-            )
+            return self._navigate_back_from_get_card(ocr_results)
 
         if not self._card_repo or not self._account_card_repo or not self.account.id:
             return ActionResult.ok(wait=0.5)
@@ -459,30 +459,30 @@ class WonderPickTask(Task):
         if not detected:
             return ActionResult.ok(wait=0.5)
 
-        cards = []
-        for item in detected:
-            if not item.set_code:
-                continue
-            card_obj = self._card_repo.get_card_by_set_and_number(
-                item.set_code, item.card_number
-            )
-            if not card_obj:
-                continue
-            cards.append(
-                {
-                    "card_id": card_obj.id,
-                    "rarity": card_obj.rarity,
-                    "confidence": float(item.confidence),
-                    "hash_similarity": float(item.similarity),
-                }
-            )
+        rows = map_detected_cards(
+            cards=detected,
+            card_repo=self._card_repo,
+        )
+        if not any(row.get("card_id") for row in rows):
+            return ActionResult.ok(wait=0.5)
 
-        save_high_rarity_cards(self._account_card_repo, self.account.id, cards)
+        save_high_rarity_cards(
+            account_card_repo=self._account_card_repo,
+            account_id=self.account.id,
+            rows=rows,
+            account=self.account,
+            notifier=get_notifier(),
+            notify_message="得卡挑战获得稀有卡牌",
+        )
         self._mark_action_done("get_card_saved")
+        return self._navigate_back_from_get_card(ocr_results)
+
+    def _navigate_back_from_get_card(self, ocr_results: list[dict]) -> ActionResult:
+        """从 GET 页返回列表页。"""
         return navigate_back(
             self.adb,
             self.page_detector,
-            page_info.get("ocr_results", []),
+            ocr_results,
             get_text_patterns("back_button"),
         )
 

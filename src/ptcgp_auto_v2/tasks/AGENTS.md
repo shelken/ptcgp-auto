@@ -14,6 +14,12 @@
 - 目前要寻找不同语言的某个值统一使用get_text_patterns("key")来获取不同语言的文本
 - pages 规则数字越小越优先匹配
 - 每次遇到新问题并解决了，必须把正确方式写回下面的常见问题与注意点，简洁点，直接告诉问题和正确做法。
+- **开包识别编排原则**：`open_pack` 里的 `_recognize_cards` 只做流程编排；`DetectedCard -> Card/批次dict` 映射统一放 `tasks/utils`，避免任务类继续膨胀。
+- **识别查询去重原则**：同一批识别结果的卡牌详情只查一次并复用（入库与通知共用），禁止在一个流程里重复查库。
+- **高稀有度保存与通知同入口原则**：`open_pack` / `wonder_pick` 的稀有度通知必须绑定在 `tasks/utils/high_rarity_saver.py` 保存流程内触发，禁止“保存一处、通知一处”的分离实现；仅高稀有度且满足任务条件（如 wonder_pick 命中目标稀有度）才通知。
+- **识别映射统一结构原则**：`DetectedCard` 映射统一走 `tasks/utils/pack_result_mapper.py::map_detected_cards`，返回单一 rows 结构（含 card_obj + 各类字段），任务内禁止再拆两份结构或重复写循环映射。
+- **通知配置归 Notifier 原则**：task 层（含 wonder_pick）不做通知过滤判断，是否发送通知由 `Notifier.notify_rare_card` 内部配置决定。
+- **稀有卡事件来源标记原则**：task 调用 `save_high_rarity_cards` 时必须传入来源消息（如“开包获得稀有卡牌”/“得卡挑战获得稀有卡牌”），由 notifier 正文统一展示事件来源。
 
 ## 【2026-02-15 新增】任务编写核心原则
 

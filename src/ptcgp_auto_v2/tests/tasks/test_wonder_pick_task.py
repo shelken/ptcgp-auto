@@ -5,7 +5,7 @@
 
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -379,6 +379,43 @@ class TestWonderPickTargetPickIndexTiming(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(task._target_pick_index, 2)
+
+
+class TestWonderPickGetCardNotify(unittest.TestCase):
+    def test_handle_get_card_uses_high_rarity_saver_notify_filter(self):
+        task = FakeTask()
+        task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+        task._card_repo = Mock()
+        task._account_card_repo = Mock()
+        task._target_rarities = ["SAR", "SR", "AR"]
+        task._selected_rarity = "SR"
+
+        card = SimpleNamespace(id=101, rarity="SR")
+        task._card_repo.get_card_by_set_and_number.return_value = card
+        task.card_recognizer = Mock()
+        task.card_recognizer.scan.return_value = [
+            DetectedCard(
+                set_code="A1",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.88,
+                bbox=(0, 0, 1, 1),
+                center=(10.0, 10.0),
+            )
+        ]
+
+        with patch("ptcgp_auto_v2.tasks.wonder_pick.get_notifier") as mock_get_notifier:
+            with patch(
+                "ptcgp_auto_v2.tasks.wonder_pick.save_high_rarity_cards"
+            ) as mock_save:
+                mock_get_notifier.return_value = Mock()
+                task._handle_get_card({"ocr_results": []})
+
+        self.assertTrue(mock_save.called)
+        kwargs = mock_save.call_args.kwargs
+        self.assertIn("notifier", kwargs)
+        self.assertIn("rows", kwargs)
+        self.assertEqual("得卡挑战获得稀有卡牌", kwargs.get("notify_message"))
 
 
 if __name__ == "__main__":
