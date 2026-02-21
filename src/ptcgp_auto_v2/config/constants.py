@@ -116,3 +116,12 @@ DETECT_HASH_VARIANT_TOP_TRIMS = [0.0, 0.04, 0.08, 0.12]
 
 # 高稀有度卡牌范围（用于记录账号卡牌）
 HIGH_RARITY_TARGETS = ["RR", "AR", "SR", "SAR", "IM", "UR", "S", "SSR"]
+
+# 通知状态配置
+NOTIFICATION_TASK_STATUS_DEFAULTS = ["failed", "blocked", "timeout"]
+NOTIFICATION_TASK_STATUS_OPTIONS = [
+    "failed",
+    "blocked",
+    "timeout",
+    "success",
+]

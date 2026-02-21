@@ -18,7 +18,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=5.1">
+    <link rel="stylesheet" href="/static/css/main.css?v=6.6">
 </head>
 <body class="min-h-screen p-4 md:p-8">
 
@@ -551,6 +551,18 @@
                                     data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_exchange_cards or 'EXCHANGE RECORDS' }}">
                                     {{ t.menu_exchange_cards or 'EXCHANGE RECORDS' }}
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
+                                    hx-get="/management/notifications?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    data-hash="notifications"
+                                    data-action="update-sidebar-state"
+                                    aria-label="{{ t.menu_notifications or 'NOTIFICATIONS' }}">
+                                    {{ t.menu_notifications or 'NOTIFICATIONS' }}
                                 </button>
                             </li>
                         </ul>

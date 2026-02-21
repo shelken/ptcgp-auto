@@ -2,14 +2,13 @@
 
 ## 进行中
 
-
+- [ ] 通知系统（企业微信 Webhook/站内通知）
 
 ## 高优先级
 
 
 ## 中优先级
 
-- [ ] 任务失败通知（Webhook）
 - [ ] `battle` - 自动对战任务（可复用 v1 逻辑）
 - [ ] 自动更新来自github的他人维护的基础数据(metadata)
 
@@ -83,3 +82,4 @@
 - [x] `manage_friendship` - 管理好友关系任务
 - [x] `give_cards` - 每日送卡任务
 - [x] `exchange_card` - 发起交换卡牌
+- [x] 交换完成之后对应减少卡牌

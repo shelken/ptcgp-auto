@@ -9,6 +9,7 @@ sys.path.append(src_dir)
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
 from ptcgp_auto_v2.web.utils.i18n import init_i18n
 from ptcgp_auto_v2.web.utils.template_env import init_templates
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime
@@ -25,6 +26,7 @@ from ptcgp_auto_v2.web.routers import (
     friendship,
     daily_gift,
     exchange_card,
+    notifications,
 )
 
 # 导入任务模块以触发注册
@@ -42,6 +44,7 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 templates_path = os.path.join(current_dir, "templates")
 templates = init_templates(templates_path)
 templates.env.filters["datetime"] = format_datetime
+templates.env.filters["rarity_display"] = get_rarity_display
 
 # 多语言初始化
 locales_dir = os.path.join(current_dir, "locales")
@@ -59,6 +62,7 @@ app.include_router(pack_config.router)
 app.include_router(friendship.router)
 app.include_router(daily_gift.router)
 app.include_router(exchange_card.router)
+app.include_router(notifications.router)
 
 
 if __name__ == "__main__":

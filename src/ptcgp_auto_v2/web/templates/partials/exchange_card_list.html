@@ -74,7 +74,7 @@
                     <div class="text-xs text-muted">{{ account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown') }} · #{{ row.to_account_id }}</div>
                 {% endif %}
             </td>
-            <td class="p-3">#{{ row.target_card_id }} · {{ row.target_card_rarity }}</td>
+            <td class="p-3">#{{ row.target_card_id }} · {{ row.target_card_rarity|rarity_display(current_lang) }}</td>
             <td class="p-3">
                 {{ status_chip(row.status, t, key_prefix='exchange_request_status_', reason=row.failed_reason or '') }}
             </td>

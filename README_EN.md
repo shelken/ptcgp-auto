@@ -48,6 +48,30 @@ Manual dependencies:
 pip install -r requirements.txt
 ```
 
+### 1.1 Use `.env` for v2
+
+v2 now supports loading `.env` from project root (same behavior as v1, and existing environment variables are not overridden).
+
+Example:
+
+```bash
+PTCGP_WEB_PORT=8000
+PTCGP_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
+PTCGP_DEBUG=true
+```
+
+Webhook also supports key-only mode (v1 compatible):
+
+```bash
+NOTIFY_KEY=xxxx
+# or
+PTCGP_NOTIFY_KEY=xxxx
+```
+
+Priority: **CLI Args > Environment Variables > `.env` > Default Values**.
+
+Webhook resolution priority: **Explicit URL arg > `PTCGP_WEBHOOK_URL` > `PTCGP_NOTIFY_KEY`/`NOTIFY_KEY` > disabled**.
+
 ### 2. Start v2 daemon
 
 ```bash
@@ -83,6 +107,10 @@ python main_v2.py --task open_pack --account 1
 
 # Sync currently logged-in account into DB
 python main_v2.py --sync-account
+
+# Override WeCom config by CLI (highest priority)
+python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
+python main_v2.py --web --notify-key "xxxx"
 ```
 
 ## 🏗️ Architecture

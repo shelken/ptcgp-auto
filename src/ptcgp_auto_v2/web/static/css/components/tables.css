@@ -103,6 +103,49 @@
     line-height: 1.2;
 }
 
+/* Notification toolbar: keep 4 filters in first row */
+.notification-toolbar.table-toolbar-layout {
+    align-items: flex-start;
+}
+
+.notification-toolbar .table-toolbar-zone--left {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+    gap: var(--table-toolbar-gap);
+    align-items: end;
+}
+
+.notification-toolbar .table-toolbar-zone--left .table-filter-item {
+    min-width: 0;
+}
+
+.notification-toolbar .notification-filter-item--search {
+    grid-column: span 1;
+}
+
+.notification-toolbar .table-control,
+.notification-toolbar .table-control.custom-select-initialized + .custom-select-container {
+    min-width: 0;
+    width: 100%;
+}
+
+.notification-toolbar .table-toolbar-zone--right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+    .notification-toolbar .table-toolbar-zone--left {
+        grid-template-columns: 1fr;
+    }
+
+    .notification-toolbar .table-toolbar-zone--right {
+        justify-content: flex-start;
+    }
+}
+
 /* Operation panel controls (non-table sections) */
 .panel-controls-row {
     display: flex;

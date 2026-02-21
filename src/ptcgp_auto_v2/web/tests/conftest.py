@@ -14,8 +14,16 @@ def _create_in_memory_engine():
 
 
 @pytest.fixture(name="session")
-def session_fixture():
+def session_fixture(monkeypatch):
     """提供测试会话。"""
     engine = _create_in_memory_engine()
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.db.repositories.notification_config_repository.get_engine",
+        lambda: engine,
+    )
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.db.repositories.notification_repository.get_engine",
+        lambda: engine,
+    )
     with Session(engine) as session:
         yield session

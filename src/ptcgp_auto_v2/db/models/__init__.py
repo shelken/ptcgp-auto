@@ -17,6 +17,8 @@ from .account_gift_pair import AccountGiftPair
 from .account_gift_record import AccountGiftRecord
 from .exchange_card_request import ExchangeCardRequest
 from .base import TimestampMixin
+from .notification import Notification
+from .notification_config import NotificationConfig
 from .pack_record import PackRecord
 from .pack_card import PackCard
 from .task_instance import TaskInstance
@@ -40,6 +42,8 @@ __all__ = [
     "AccountPackConfig",
     "AccountPackPoint",
     "AccountCard",
+    "Notification",
+    "NotificationConfig",
     "Card",
     "CardSet",
     "CardPack",

@@ -1,0 +1,135 @@
+{% from "partials/macros/modal.html" import modal_header %}
+{% set image_locale = 'zh-TW' if current_lang.startswith('zh') else 'en-US' %}
+{% set image_cdn_url = 'https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/' ~ image_locale ~ '/cards-by-set' %}
+{% set page_card_ids = cards | map(attribute='id') | list %}
+
+<div class="notification-card-picker-modal">
+    {{ modal_header(t.btn_select_cards or '选择卡牌', t) }}
+
+    <form
+        id="notification-card-picker-form"
+        class="space-y-3"
+        hx-get="/management/notifications/card-picker-modal?lang={{ current_lang }}&scene={{ scene }}"
+        hx-trigger="change delay:120ms from:select, input changed delay:300ms from:input[name='card_selector_q']"
+        hx-target="#modal-content"
+        hx-include="#notification-card-picker-form"
+        hx-swap="innerHTML">
+        <input type="hidden" name="scene" value="{{ scene }}">
+        <input type="hidden" name="card_selector_page_size" value="{{ card_selector_page_size }}">
+        <input type="hidden" name="card_selector_sort_by" value="{{ card_selector_sort_by }}">
+        <input type="hidden" name="card_selector_sort_order" value="{{ card_selector_sort_order }}">
+
+        {% for selected_id in selected_card_ids %}
+        {% if selected_id not in page_card_ids %}
+        <input type="hidden" name="notify_card_ids" value="{{ selected_id }}">
+        {% endif %}
+        {% endfor %}
+
+        <div class="notification-picker-filters">
+            <input
+                type="text"
+                name="card_selector_q"
+                value="{{ card_selector_q }}"
+                class="brutal-input"
+                placeholder="{{ t.notification_card_search_placeholder or '搜索卡牌名/编号/系列' }}">
+            <select name="card_selector_rarity" class="brutal-input js-custom-select">
+                <option value="">{{ t.label_all_rarities or '全部稀有度' }}</option>
+                {% for code in rarity_codes %}
+                <option value="{{ code }}" {% if card_selector_rarity == code %}selected{% endif %}>{{ code|rarity_display(current_lang) }}</option>
+                {% endfor %}
+            </select>
+            <select
+                name="card_selector_set_code"
+                class="brutal-input js-custom-select"
+                data-searchable="true"
+                data-search-placeholder="{{ t.notification_set_search_placeholder or '搜索系列' }}">
+                <option value="">{{ t.label_all_sets or '全部系列' }}</option>
+                {% for code in set_codes %}
+                <option value="{{ code }}" {% if card_selector_set_code == code %}selected{% endif %}>{{ code }}</option>
+                {% endfor %}
+            </select>
+            <select
+                name="card_selector_pack_name"
+                class="brutal-input js-custom-select"
+                data-searchable="true"
+                data-search-placeholder="{{ t.notification_pack_search_placeholder or '搜索子包' }}">
+                <option value="">{{ t.label_all_packs or '全部子包' }}</option>
+                {% for name in pack_names %}
+                <option value="{{ name }}" {% if card_selector_pack_name == name %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="text-xs text-muted">
+            {{ t.total_items_label or '总数' }}: {{ card_selector_total }}
+            · {{ t.selected_cards_count or '已选' }}: {{ selected_card_ids|length }}
+        </div>
+
+        <div class="owned-grid notification-picker-owned-grid" style="--owned-grid-cols: 6;">
+            {% for card in cards %}
+            {% set checked = card.id in selected_card_ids %}
+            <label class="owned-card notification-picker-owned-card brutal-card">
+                <input class="notification-picker-checkbox" type="checkbox" name="notify_card_ids" value="{{ card.id }}" {% if checked %}checked{% endif %}>
+                <div class="owned-card-media">
+                    <img
+                        src="{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.png"
+                        alt="{{ card.name }}"
+                        class="owned-card-image"
+                        loading="lazy"
+                        decoding="async"
+                        onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.webp';}else{this.style.visibility='hidden';}">
+                    <div class="notification-picker-owned-overlay" aria-hidden="true">
+                        <span class="notification-picker-check">✓</span>
+                    </div>
+                    <div class="notification-picker-owned-meta">
+                        <div>#{{ card.id }}</div>
+                        <div>{{ card.set_code }}-{{ card.number }}</div>
+                    </div>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+
+        {% if not cards %}
+        <div class="text-xs text-muted">{{ t.notification_empty or '暂无通知' }}</div>
+        {% endif %}
+
+        <div class="flex justify-end gap-2">
+            {% if card_selector_has_prev %}
+            <button
+                type="button"
+                class="brutal-btn text-xs"
+                hx-get="/management/notifications/card-picker-modal?lang={{ current_lang }}&scene={{ scene }}&card_selector_page={{ card_selector_page - 1 }}"
+                hx-target="#modal-content"
+                hx-include="#notification-card-picker-form"
+                hx-swap="innerHTML">
+                {{ t.btn_prev_page or 'Previous' }}
+            </button>
+            {% endif %}
+            {% if card_selector_has_next %}
+            <button
+                type="button"
+                class="brutal-btn text-xs"
+                hx-get="/management/notifications/card-picker-modal?lang={{ current_lang }}&scene={{ scene }}&card_selector_page={{ card_selector_page + 1 }}"
+                hx-target="#modal-content"
+                hx-include="#notification-card-picker-form"
+                hx-swap="innerHTML">
+                {{ t.btn_next_page or 'Next' }}
+            </button>
+            {% endif %}
+        </div>
+    </form>
+
+    <div class="flex justify-end gap-2 pt-4 border-t border-subtle mt-4">
+        <button type="button" class="brutal-btn" data-action="close-modal">{{ t.label_cancel or 'Cancel' }}</button>
+        <button
+            type="button"
+            class="brutal-btn"
+            hx-post="/management/notifications/card-picker/apply?lang={{ current_lang }}&scene={{ scene }}"
+            hx-include="#notification-card-picker-form"
+            hx-target="#notification-selected-cards-{{ scene }}"
+            hx-swap="innerHTML">
+            {{ t.btn_apply_selection or '应用选择' }}
+        </button>
+    </div>
+</div>

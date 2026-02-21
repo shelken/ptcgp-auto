@@ -20,7 +20,7 @@
             </div>
             <div class="flex flex-wrap gap-1 mb-3">
                 <span class="brutal-tag text-xs">{{ t.label_card_number }} #{{ card.number }}</span>
-                <span class="brutal-tag text-xs">{{ t.label_rarity }} {{ card.rarity }}</span>
+                <span class="brutal-tag text-xs">{{ t.label_rarity }} {{ card.rarity|rarity_display(current_lang) }}</span>
                 {% if card.type %}
                 <span class="brutal-tag text-xs">{{ t['type_' + card.type] or card.type }}</span>
                 {% endif %}

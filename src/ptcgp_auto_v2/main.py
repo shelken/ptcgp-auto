@@ -16,7 +16,12 @@ import uvicorn
 # 导入任务模块以触发注册
 import ptcgp_auto_v2.tasks
 from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
-from ptcgp_auto_v2.config.settings import Settings, get_settings, set_settings
+from ptcgp_auto_v2.config.settings import (
+    Settings,
+    apply_webhook_cli_overrides,
+    get_settings,
+    set_settings,
+)
 from ptcgp_auto_v2.core.executor import ExecutorConfig
 from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
 from ptcgp_auto_v2.core.task_base import TaskRegistry
@@ -142,6 +147,18 @@ def parse_args(argv: list[str] | None = None):
         "--debug",
         action="store_true",
         help="启用调试模式",
+    )
+
+    parser.add_argument(
+        "--webhook-url",
+        type=str,
+        help="企业微信完整 Webhook URL（优先级最高）",
+    )
+
+    parser.add_argument(
+        "--notify-key",
+        type=str,
+        help="企业微信 Webhook Key（等价于 v1 的 NOTIFY_KEY）",
     )
 
     parser.add_argument(
@@ -562,6 +579,7 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
 def main():
     """主入口函数"""
     args = parse_args()
+    apply_webhook_cli_overrides(args.webhook_url, args.notify_key)
 
     device_addresses: list[str] | None = args.devices
     discovered_devices = False
