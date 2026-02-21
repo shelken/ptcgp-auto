@@ -67,7 +67,7 @@
             <div class="card-item relative group aspect-[2/3] overflow-hidden transition-all duration-200 brutal-card cursor-pointer"
                      data-action="open-card-preview"
                      data-card-name="{{ card.card_name }}"
-                     data-card-rarity="{{ card.rarity }}"
+                     data-card-rarity="{{ card.rarity|rarity_display(current_lang) }}"
                      data-card-set="{{ card.card.set_code if card.card else '' }}"
                      data-card-number="{{ card.card.number if card.card else '' }}"
                        data-card-image="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&output=png{% else %}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=={% endif %}"
@@ -93,7 +93,7 @@
                 <!-- Rarity Badge -->
                 <div class="absolute top-0 right-0 text-[10px] px-2 py-1 font-bold z-10"
                      style="background-color: var(--border-color); color: var(--bg-color); border-left: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
-                    {{ card.rarity }}
+                    {{ card.rarity|rarity_display(current_lang) }}
                 </div>
 
                 <!-- New Badge -->

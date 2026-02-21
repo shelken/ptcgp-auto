@@ -109,6 +109,18 @@
   animation: btn-spinner-rotate 0.7s linear infinite;
 }
 
+/* Notification webhook test button highlight */
+.notification-test-btn {
+  background-color: var(--btn-active-bg) !important;
+  border-color: var(--btn-active-border) !important;
+  color: var(--btn-active-text) !important;
+  box-shadow: none !important;
+}
+
+.notification-test-btn:hover {
+  filter: brightness(1.05);
+}
+
 @keyframes btn-spinner-rotate {
   to {
     transform: rotate(360deg);
