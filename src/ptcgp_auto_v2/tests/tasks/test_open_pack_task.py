@@ -1,6 +1,6 @@
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -200,6 +200,45 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
             yolo_conf=0.9,
             hash_similarity=0.85,
         )
+
+    def test_recognize_cards_uses_high_rarity_saver_for_notification(self):
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+
+        task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+        task.target_pack = {"pack_code": "A1", "booster_name": "Test"}
+
+        high_card = SimpleNamespace(id=101, name="High", rarity="SR")
+        task._card_repo = Mock()
+        task._card_repo.get_card_by_set_and_number.return_value = high_card
+        task._pack_record_repo = Mock()
+        task._account_card_repo = Mock()
+
+        task.card_recognizer = Mock()
+        task.card_recognizer.scan_pack_result.return_value = [
+            DetectedCard(
+                set_code="A1",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.85,
+                bbox=(0, 0, 1, 1),
+                center=(0.0, 0.0),
+            )
+        ]
+
+        with patch("ptcgp_auto_v2.tasks.open_pack.get_notifier") as mock_get_notifier:
+            with patch(
+                "ptcgp_auto_v2.tasks.open_pack.save_high_rarity_cards"
+            ) as mock_save:
+                mock_get_notifier.return_value = Mock()
+                task._recognize_cards()
+
+        self.assertTrue(mock_save.called)
+        kwargs = mock_save.call_args.kwargs
+        self.assertIn("notifier", kwargs)
+        self.assertIn("rows", kwargs)
+        self.assertEqual("开包获得稀有卡牌", kwargs.get("notify_message"))
 
 
 if __name__ == "__main__":
