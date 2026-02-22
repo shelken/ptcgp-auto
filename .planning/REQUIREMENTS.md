@@ -22,11 +22,11 @@
 
 ### 通知列表
 
-- [ ] **LIST-01**: 列表显示全部通知（未读优先排序）
-- [ ] **LIST-02**: 未读通知与已读通知有视觉区分（粗细/颜色）
-- [ ] **LIST-03**: 每条通知显示标题、时间（相对时间格式）
-- [ ] **LIST-04**: 滚动到底部自动加载更多（HTMX revealed trigger）
-- [ ] **LIST-05**: 加载更多时显示 loading 状态
+- [x] **LIST-01**: 列表显示全部通知（未读优先排序）
+- [x] **LIST-02**: 未读通知与已读通知有视觉区分（粗细/颜色）
+- [x] **LIST-03**: 每条通知显示标题、时间（相对时间格式）
+- [x] **LIST-04**: 滚动到底部自动加载更多（HTMX revealed trigger）
+- [x] **LIST-05**: 加载更多时显示 loading 状态
 
 ### 通知交互
 
@@ -88,11 +88,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PANEL-06 | Phase 1 | Complete |
 | A11Y-01 | Phase 1 | Pending |
 | A11Y-02 | Phase 1 | Pending |
-| LIST-01 | Phase 1 | Pending |
-| LIST-02 | Phase 1 | Pending |
-| LIST-03 | Phase 1 | Pending |
-| LIST-04 | Phase 1 | Pending |
-| LIST-05 | Phase 1 | Pending |
+| LIST-01 | Phase 1 | Complete |
+| LIST-02 | Phase 1 | Complete |
+| LIST-03 | Phase 1 | Complete |
+| LIST-04 | Phase 1 | Complete |
+| LIST-05 | Phase 1 | Complete |
 | INTR-04 | Phase 1 | Pending |
 | INTR-05 | Phase 1 | Pending |
 | INTR-01 | Phase 2 | Pending |

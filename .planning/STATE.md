@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 1 of 2 (基础面板与核心交互)
-Plan: 2 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-23 — Completed plan 01-02
+Last activity: 2026-02-23 — Completed plan 01-03
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 5.5 min
-- Total execution time: 0.2 hours
+- Total plans completed: 3
+- Average duration: 8.7 min
+- Total execution time: 0.4 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. 基础面板与核心交互 | 2 | 5 | 5.5 min |
+| 1. 基础面板与核心交互 | 3 | 5 | 8.7 min |
 | 2. 详情展示与 Markdown 渲染 | 0 | 2 | - |
 
 **Recent Trend:**
-- Last 5 plans: 6 min, 5 min
+- Last 5 plans: 6 min, 5 min, 15 min
 - Trend: Steady progress on notification panel
 
 *Updated after each plan completion*
@@ -50,6 +50,10 @@ Recent decisions affecting current work:
 - [01-01]: 滑出动画 250ms ease-out，响应式宽度 320-400px
 - [01-02]: 铃铛放置在主题选择器左侧（与用户设置功能归组）
 - [01-02]: Badge 颜色复用 .status-tone-failed 红色系语义
+- [01-03]: 两阶段查询实现未读优先排序，避免复杂 SQL
+- [01-03]: 后端预计算相对时间，前端仅负责 HTMX swap 后更新
+- [01-03]: 两阶段查询实现未读优先排序（先未读后已读）
+- [01-03]: 后端预计算相对时间文本
 
 ### Pending Todos
 
@@ -62,5 +66,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 01-02-PLAN.md
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
