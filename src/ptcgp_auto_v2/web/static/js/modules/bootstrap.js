@@ -11,6 +11,10 @@ import {
 import { initCustomSelects } from './custom_select.js';
 import { initDailyGiftDatePickers } from './features/daily_gift.js';
 import { bindAppEventHandlers } from './event_bindings.js';
+import { getNotificationDrawer } from './features/notification_panel.js';
+
+// 导出通知面板管理器供其他模块使用
+export { getNotificationDrawer };
 
 function restoreInitialTabData() {
     if (currentTabName === 'records') {
