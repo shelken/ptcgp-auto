@@ -10,9 +10,14 @@
     <div class="notification-drawer__actions">
         <button
             type="button"
+            id="mark-all-read-btn"
             class="brutal-btn brutal-btn--sm notification-drawer__mark-all"
             data-action="mark-all-notifications-read"
             {% if unread_count is not defined or unread_count == 0 %}disabled{% endif %}
+            hx-post="/notifications/panel/mark-all-read?lang={{ current_lang }}"
+            hx-trigger="click"
+            hx-target="#notification-list-content"
+            hx-swap="innerHTML"
             aria-label="{{ t.btn_mark_all_read or '全部已读' }}">
             {{ t.btn_mark_all_read or '全部已读' }}
         </button>
