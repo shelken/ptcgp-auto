@@ -15,8 +15,8 @@
 
 - [x] **PANEL-01**: 面板从右侧滑出，宽度 320-400px
 - [x] **PANEL-02**: 面板包含标题栏（"通知"）+ "全部已读" 按钮 + 关闭按钮
-- [ ] **PANEL-03**: 点击面板外部区域关闭面板
-- [ ] **PANEL-04**: 按 ESC 键关闭面板
+- [x] **PANEL-03**: 点击面板外部区域关闭面板
+- [x] **PANEL-04**: 按 ESC 键关闭面板
 - [x] **PANEL-05**: 面板打开时锁定 body 滚动（防止滚动穿透）
 - [x] **PANEL-06**: 面板关闭后恢复 body 滚动
 
@@ -43,8 +43,8 @@
 
 ### 无障碍
 
-- [ ] **A11Y-01**: 面板支持键盘导航（Tab 键循环）
-- [ ] **A11Y-02**: 焦点在面板打开时被捕获，关闭时恢复到触发元素
+- [x] **A11Y-01**: 面板支持键盘导航（Tab 键循环）
+- [x] **A11Y-02**: 焦点在面板打开时被捕获，关闭时恢复到触发元素
 
 ## v2 Requirements
 
@@ -82,12 +82,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENTR-03 | Phase 1 | Complete |
 | PANEL-01 | Phase 1 | Complete |
 | PANEL-02 | Phase 1 | Complete |
-| PANEL-03 | Phase 1 | Pending |
-| PANEL-04 | Phase 1 | Pending |
+| PANEL-03 | Phase 1 | Complete |
+| PANEL-04 | Phase 1 | Complete |
 | PANEL-05 | Phase 1 | Complete |
 | PANEL-06 | Phase 1 | Complete |
-| A11Y-01 | Phase 1 | Pending |
-| A11Y-02 | Phase 1 | Pending |
+| A11Y-01 | Phase 1 | Complete |
+| A11Y-02 | Phase 1 | Complete |
 | LIST-01 | Phase 1 | Complete |
 | LIST-02 | Phase 1 | Complete |
 | LIST-03 | Phase 1 | Complete |
