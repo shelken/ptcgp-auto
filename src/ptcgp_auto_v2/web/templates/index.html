@@ -34,6 +34,24 @@
             </div>
 
             <div class="flex items-center gap-3 relative">
+                <!-- 通知铃铛 -->
+                <button
+                    id="notification-trigger"
+                    type="button"
+                    class="notification-bell-btn"
+                    data-action="toggle-notification-panel"
+                    aria-label="{{ t.notification_center or '通知中心' }}">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span id="notification-badge"
+                          hx-get="/notifications/count"
+                          hx-trigger="load, notificationsUpdated from:body"
+                          hx-swap="innerHTML">
+                    </span>
+                </button>
+
                 <!-- 模式切换按钮 -->
                 <button
                     id="theme-mode-btn"
