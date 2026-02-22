@@ -7,9 +7,9 @@
 
 ### 入口与触发
 
-- [ ] **ENTR-01**: 首页右上角显示铃铛图标
-- [ ] **ENTR-02**: 铃铛图标旁显示未读数量 badge（无未读时隐藏）
-- [ ] **ENTR-03**: 点击铃铛图标从右侧滑出通知面板
+- [x] **ENTR-01**: 首页右上角显示铃铛图标
+- [x] **ENTR-02**: 铃铛图标旁显示未读数量 badge（无未读时隐藏）
+- [x] **ENTR-03**: 点击铃铛图标从右侧滑出通知面板
 
 ### 面板基础
 
@@ -77,9 +77,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENTR-01 | Phase 1 | Pending |
-| ENTR-02 | Phase 1 | Pending |
-| ENTR-03 | Phase 1 | Pending |
+| ENTR-01 | Phase 1 | Complete |
+| ENTR-02 | Phase 1 | Complete |
+| ENTR-03 | Phase 1 | Complete |
 | PANEL-01 | Phase 1 | Complete |
 | PANEL-02 | Phase 1 | Complete |
 | PANEL-03 | Phase 1 | Pending |
