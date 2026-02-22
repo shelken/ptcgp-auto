@@ -33,7 +33,7 @@
 {# 加载更多触发器 #}
 {% if has_more %}
 <div class="load-more-trigger"
-     hx-get="/notifications/load-more?page={{ next_page }}"
+     hx-get="/notifications/load-more?page={{ next_page }}&lang={{ current_lang }}"
      hx-trigger="revealed once"
      hx-target="#notification-list-content"
      hx-swap="beforeend">
