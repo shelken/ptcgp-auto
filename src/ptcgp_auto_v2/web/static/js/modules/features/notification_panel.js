@@ -459,7 +459,7 @@ function markAsReadOptimistically(element) {
  */
 async function markAsReadAsync(id) {
     try {
-        const response = await fetch(`/notifications/${id}/read`, {
+        const response = await fetch(`/management/notifications/mark-read?notification_id=${id}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
