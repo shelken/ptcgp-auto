@@ -2,32 +2,44 @@
   通知列表项片段模板
   Notification List Items Partial Template
   用于 HTMX 动态加载更多通知项
+
+  Design decisions:
+  - 使用 details/summary 实现原生手风琴互斥（name="notification-accordion"）
+  - 点击展开显示完整内容，再次点击收起
+  - 展开时自动滚动到可见位置
 #}
 
 {% for notification in notifications %}
-<div class="notification-item {% if not notification.is_read %}notification-item--unread{% endif %}"
-     data-notification-id="{{ notification.id }}"
-     tabindex="0"
-     role="button"
-     aria-label="{{ notification.title }}">
-    {# 左侧竖线（仅未读） #}
-    {% if not notification.is_read %}
-    <div class="notification-item__indicator"></div>
-    {% endif %}
+<details name="notification-accordion"
+         class="notification-item {% if not notification.is_read %}notification-item--unread{% endif %}"
+         data-notification-id="{{ notification.id }}"
+         aria-label="{{ notification.title }}">
+    {# 标题区（可点击展开/收起） #}
+    <summary class="notification-item__summary">
+        {# 左侧竖线（仅未读） #}
+        {% if not notification.is_read %}
+        <div class="notification-item__indicator"></div>
+        {% endif %}
 
-    {# 内容区 #}
-    <div class="notification-item__content">
-        <div class="notification-item__header">
-            <span class="notification-item__title">{{ notification.title }}</span>
-            <span class="notification-item__time relative-time"
-                  data-iso="{{ notification.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}"
-                  data-tooltip="{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}">
-                {{ notification.relative_time }}
-            </span>
+        {# 内容区 #}
+        <div class="notification-item__content">
+            <div class="notification-item__header">
+                <span class="notification-item__title">{{ notification.title }}</span>
+                <span class="notification-item__time relative-time"
+                      data-iso="{{ notification.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}"
+                      data-tooltip="{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}">
+                    {{ notification.relative_time }}
+                </span>
+            </div>
+            <p class="notification-item__preview">{{ notification.content[:80] }}{% if notification.content|length > 80 %}...{% endif %}</p>
         </div>
-        <p class="notification-item__summary">{{ notification.content[:80] }}{% if notification.content|length > 80 %}...{% endif %}</p>
+    </summary>
+
+    {# 详情区（展开后显示） #}
+    <div class="notification-item__detail" data-notification-content>
+        {{ notification.content }}
     </div>
-</div>
+</details>
 {% endfor %}
 
 {# 加载更多触发器 #}
