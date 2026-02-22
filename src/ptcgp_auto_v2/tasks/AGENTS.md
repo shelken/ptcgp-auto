@@ -20,6 +20,7 @@
 - **识别映射统一结构原则**：`DetectedCard` 映射统一走 `tasks/utils/pack_result_mapper.py::map_detected_cards`，返回单一 rows 结构（含 card_obj + 各类字段），任务内禁止再拆两份结构或重复写循环映射。
 - **通知配置归 Notifier 原则**：task 层（含 wonder_pick）不做通知过滤判断，是否发送通知由 `Notifier.notify_rare_card` 内部配置决定。
 - **稀有卡事件来源标记原则**：task 调用 `save_high_rarity_cards` 时必须传入来源消息（如“开包获得稀有卡牌”/“得卡挑战获得稀有卡牌”），由 notifier 正文统一展示事件来源。
+- **任务测试优先级原则**：新增/重构 task 时，优先补“核心分支 + 去重/幂等 + 边界输入”三类测试；纯工具函数（如 friend_id/nickname 提取）必须补独立单测，避免仅靠任务集成间接覆盖。
 
 ## 【2026-02-15 新增】任务编写核心原则
 

@@ -294,8 +294,8 @@ class TestHandleSelectCountry(unittest.TestCase):
         self.assertTrue(task._is_action_done("select_country_country_clicked"))
 
     @patch("ptcgp_auto_v2.tasks.init_account.tap_ok")
-    def test_resets_country_selection_flags_after_ok(self, tap_ok_mock):
-        """测试点击 OK 后会重置国家选择标记，便于下轮重试"""
+    def test_keeps_country_selection_flags_after_ok(self, tap_ok_mock):
+        """测试点击 OK 后保留国家选择标记，避免重复打开国家列表。"""
         adb = FakeAdb()
         page_detector = FakePageDetector(ocr_results=[])
         task = InitAccountTask(adb, recognizer=None, page_detector=page_detector)
@@ -311,8 +311,8 @@ class TestHandleSelectCountry(unittest.TestCase):
         result = task._handle_select_country({"ocr_results": []})
 
         self.assertTrue(result.success)
-        self.assertFalse(task._is_action_done("select_country_list_opened"))
-        self.assertFalse(task._is_action_done("select_country_country_clicked"))
+        self.assertTrue(task._is_action_done("select_country_list_opened"))
+        self.assertTrue(task._is_action_done("select_country_country_clicked"))
 
     @patch("ptcgp_auto_v2.tasks.init_account.tap_ok")
     def test_keeps_country_selection_flags_on_country_form(self, tap_ok_mock):
