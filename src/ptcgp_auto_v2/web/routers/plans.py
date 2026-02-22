@@ -22,17 +22,16 @@ from ptcgp_auto_v2.web.utils.template_env import get_templates
 router = APIRouter()
 
 
-@router.get("/management/plans", response_class=HTMLResponse)
-async def get_management_plans(
+async def _render_management_plans(
     request: Request,
-    lang: str | None = Query(default=None),
-    q: str = Query(default=""),
-    sort_by: str = Query(default="id"),
-    sort_order: str = Query(default="asc"),
-    page: int = Query(default=0),
-    page_size: int = Query(default=10),
+    lang: str | None,
+    q: str = "",
+    sort_by: str = "id",
+    sort_order: str = "asc",
+    page: int = 0,
+    page_size: int = 10,
 ):
-    """渲染计划管理列表。"""
+    """渲染计划管理列表（内部复用，避免 Query 默认对象泄漏）。"""
     current_lang = detect_lang(request, lang)
     context = get_plans_context(
         lang=current_lang,
@@ -45,6 +44,28 @@ async def get_management_plans(
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/plan_list.html", context)
+
+
+@router.get("/management/plans", response_class=HTMLResponse)
+async def get_management_plans(
+    request: Request,
+    lang: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="id"),
+    sort_order: str = Query(default="asc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
+):
+    """渲染计划管理列表。"""
+    return await _render_management_plans(
+        request=request,
+        lang=lang,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/management/plans/edit", response_class=HTMLResponse)
@@ -83,7 +104,15 @@ async def save_plan(
         )
         return response
 
-    response = await get_management_plans(request, lang=lang)
+    response = await _render_management_plans(
+        request=request,
+        lang=lang,
+        q="",
+        sort_by="id",
+        sort_order="asc",
+        page=0,
+        page_size=10,
+    )
     response.headers["HX-Trigger"] = "closeModal"
     return response
 
@@ -96,7 +125,15 @@ async def delete_plan(
 ):
     """删除计划。"""
     delete_plan_by_id(plan_id)
-    return await get_management_plans(request, lang=lang)
+    return await _render_management_plans(
+        request=request,
+        lang=lang,
+        q="",
+        sort_by="id",
+        sort_order="asc",
+        page=0,
+        page_size=10,
+    )
 
 
 @router.get("/management/accounts/{account_id}/plans", response_class=HTMLResponse)
