@@ -593,6 +593,13 @@
         <div id="modal-content" class="bg-surface p-6 brutal-border w-full max-w-4xl max-h-[90vh] overflow-y-auto relative"></div>
     </div>
 
+    <!-- Notification Panel Container -->
+    <div id="notification-panel-container" class="notification-drawer-overlay hidden" aria-hidden="true">
+        <div id="notification-panel" class="notification-drawer" role="dialog" aria-label="{{ t.notification_center or '通知中心' }}">
+            {% include 'partials/notification_panel.html' %}
+        </div>
+    </div>
+
     <footer class="max-w-7xl mx-auto mt-12 py-8 brutal-separator text-center text-sm text-muted font-mono">
         <p>{{ t.generated_by }}</p>
     </footer>
