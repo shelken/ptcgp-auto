@@ -138,41 +138,158 @@
 }
 
 /* ========================================
-   Notification Item (预留样式)
-   通知项样式 - 后续计划使用
+   Notification Item
+   通知项样式
 ======================================== */
 .notification-item {
-    padding: 1rem 1.25rem;
+    display: flex;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-subtle-light);
-    transition: background-color 0.2s;
+    cursor: pointer;
+    transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .notification-item:hover {
     background-color: var(--bg-subtle);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+/* 未读状态 */
 .notification-item--unread {
     background-color: var(--bg-subtle);
-    border-left: 3px solid var(--active-color);
+}
+
+.notification-item--unread .notification-item__title {
+    font-weight: 600;
+}
+
+/* 左侧竖线指示器 */
+.notification-item__indicator {
+    width: 3px;
+    background-color: var(--active-color);
+    border-radius: 2px;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+/* 内容区 */
+.notification-item__content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* 头部行：标题 + 时间 */
+.notification-item__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
 }
 
 .notification-item__title {
-    font-weight: 600;
-    margin-bottom: 0.25rem;
+    flex: 1;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--text-color);
 }
 
 .notification-item__time {
-    font-size: 0.75rem;
+    font-size: 12px;
     color: var(--text-muted);
+    flex-shrink: 0;
 }
 
+/* 摘要文本 */
 .notification-item__summary {
-    font-size: 0.875rem;
-    color: var(--text-color);
+    font-size: 13px;
+    color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    margin-top: 4px;
+}
+
+/* ========================================
+   Empty State
+   空状态
+======================================== */
+.notification-empty-state {
+    padding: 2rem;
+    text-align: center;
+}
+
+.notification-empty-icon {
+    opacity: 0.5;
+    margin: 0 auto;
+}
+
+/* ========================================
+   Load More Trigger
+   加载更多触发器
+======================================== */
+.load-more-trigger {
+    padding: 8px 16px;
+}
+
+/* ========================================
+   Skeleton Loading
+   骨架屏
+======================================== */
+.notification-skeleton {
+    padding: 12px 16px;
+}
+
+.skeleton-line {
+    height: 14px;
+    background: linear-gradient(
+        90deg,
+        var(--bg-subtle) 25%,
+        var(--card-bg) 50%,
+        var(--bg-subtle) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.skeleton-line:last-child {
+    margin-bottom: 0;
+}
+
+.skeleton-line--w75 {
+    width: 75%;
+}
+
+.skeleton-line--w50 {
+    width: 50%;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-line {
+        animation: none;
+        background: var(--bg-subtle);
+    }
+}
+
+/* ========================================
+   End of List
+   列表底部提示
+======================================== */
+.notification-end {
+    border-top: 1px solid var(--border-subtle-light);
 }
 
 /* ========================================

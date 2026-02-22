@@ -1,7 +1,7 @@
 {#
   通知面板内容模板
   Notification Panel Content Template
-  Provides: 标题栏 + 内容区（空容器，后续填充）
+  Provides: 标题栏 + 内容区（通知列表）
 #}
 
 <!-- 通知面板标题栏 -->
@@ -12,7 +12,7 @@
             type="button"
             class="brutal-btn brutal-btn--sm notification-drawer__mark-all"
             data-action="mark-all-notifications-read"
-            disabled
+            {% if unread_count is not defined or unread_count == 0 %}disabled{% endif %}
             aria-label="{{ t.btn_mark_all_read or '全部已读' }}">
             {{ t.btn_mark_all_read or '全部已读' }}
         </button>
@@ -30,9 +30,29 @@
 </div>
 
 <!-- 通知列表内容区 -->
-<div id="notification-list-content" class="notification-drawer__content">
-    <!-- 动态内容将通过 HTMX 加载到这里 -->
-    <div class="notification-drawer__empty">
-        <p class="text-muted text-center py-8">{{ t.notification_empty or '暂无通知' }}</p>
-    </div>
+<div id="notification-list-content"
+     class="notification-drawer__content"
+     data-relative-locale="{{ current_lang }}"
+     data-relative-just-now="{{ t.relative_just_now or '刚刚' }}"
+     data-relative-soon="{{ t.relative_soon or '马上' }}"
+     data-relative-minutes="{{ t.relative_minutes or '分钟' }}"
+     data-relative-hours="{{ t.relative_hours or '小时' }}"
+     data-relative-days="{{ t.relative_days or '天' }}"
+     data-relative-ago="{{ t.relative_ago or '前' }}"
+     data-relative-in="{{ t.relative_in or '后' }}">
+
+    {% if notifications %}
+        {% include "partials/notification_list_items.html" %}
+    {% else %}
+        <!-- 空状态 -->
+        <div class="notification-empty-state">
+            <div class="text-muted text-center py-8">
+                <svg class="notification-empty-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <p class="mt-4">{{ t.notification_empty or '暂无通知' }}</p>
+            </div>
+        </div>
+    {% endif %}
 </div>
