@@ -33,8 +33,8 @@
 - [ ] **INTR-01**: 点击通知项展开详情（显示 markdown 内容）
 - [ ] **INTR-02**: 点击通知项自动标记为已读
 - [ ] **INTR-03**: 展开详情后可收起
-- [ ] **INTR-04**: 点击 "全部已读" 按钮批量标记所有未读通知
-- [ ] **INTR-05**: 标记已读后实时更新 badge 数量（HTMX OOB swap）
+- [x] **INTR-04**: 点击 "全部已读" 按钮批量标记所有未读通知
+- [x] **INTR-05**: 标记已读后实时更新 badge 数量（HTMX OOB swap）
 
 ### Markdown 渲染
 
@@ -93,8 +93,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIST-03 | Phase 1 | Complete |
 | LIST-04 | Phase 1 | Complete |
 | LIST-05 | Phase 1 | Complete |
-| INTR-04 | Phase 1 | Pending |
-| INTR-05 | Phase 1 | Pending |
+| INTR-04 | Phase 1 | Complete |
+| INTR-05 | Phase 1 | Complete |
 | INTR-01 | Phase 2 | Pending |
 | INTR-02 | Phase 2 | Pending |
 | INTR-03 | Phase 2 | Pending |
