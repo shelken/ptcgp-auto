@@ -603,7 +603,9 @@ async def get_notification_panel(
     )
     context["request"] = request
     templates = get_templates()
-    return templates.TemplateResponse("partials/notification_panel.html", context)
+    return templates.TemplateResponse(
+        "partials/notification_panel_content.html", context
+    )
 
 
 @router.get("/notifications/load-more", response_class=HTMLResponse)
