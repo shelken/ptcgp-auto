@@ -613,7 +613,16 @@
 
     <!-- Notification Panel Container -->
     <div id="notification-panel-container" class="notification-drawer-overlay hidden" aria-hidden="true">
-        <div id="notification-panel" class="notification-drawer" role="dialog" aria-label="{{ t.notification_center or '通知中心' }}">
+        <div id="notification-panel"
+             class="notification-drawer"
+             role="dialog"
+             aria-modal="true"
+             aria-label="{{ t.notification_center or '通知中心' }}"
+             aria-describedby="notification-panel-description">
+            <!-- 屏幕阅读器描述 -->
+            <span id="notification-panel-description" class="sr-only">
+                {{ t.notification_panel_description or '通知列表，按 Escape 关闭' }}
+            </span>
             {% include 'partials/notification_panel.html' %}
         </div>
     </div>

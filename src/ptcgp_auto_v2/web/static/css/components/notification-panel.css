@@ -334,6 +334,20 @@
    Accessibility
    无障碍支持
 ======================================== */
+
+/* 屏幕阅读器专用 - 视觉隐藏但可被屏幕阅读器读取 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .notification-drawer-overlay[aria-hidden="true"] {
     visibility: hidden;
 }
@@ -349,14 +363,38 @@
     }
 }
 
+/* 焦点样式 - 使用 :focus-visible 仅在键盘导航时显示 */
+.notification-drawer :focus-visible {
+    outline: 2px solid var(--btn-focus-ring, var(--active-color));
+    outline-offset: 2px;
+}
+
+.notification-item:focus-visible {
+    outline: 2px solid var(--btn-focus-ring, var(--active-color));
+    outline-offset: -2px;
+    background-color: var(--bg-subtle);
+}
+
+.notification-drawer__close:focus-visible,
+.notification-drawer__mark-all:focus-visible {
+    outline: 2px solid var(--btn-focus-ring, var(--active-color));
+    outline-offset: 2px;
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+    .notification-drawer :focus-visible {
+        outline-width: 3px;
+    }
+
+    .notification-item:focus-visible {
+        outline-width: 3px;
+    }
+}
+
 /* Focus trap indicator for screen readers */
 .notification-drawer:focus {
     outline: none;
-}
-
-.notification-drawer:focus-visible {
-    outline: 2px solid var(--btn-focus-ring);
-    outline-offset: -2px;
 }
 
 /* ========================================
@@ -418,4 +456,84 @@
 .notification-badge.updating {
     transform: scale(0.8);
     opacity: 0.5;
+}
+
+/* ========================================
+   Unread → Read Transition Animation
+   未读→已读状态过渡动画
+   ======================================== */
+.notification-item {
+    transition: background-color 300ms ease, opacity 300ms ease;
+}
+
+.notification-item.marking-read {
+    animation: mark-read-flash 500ms ease;
+}
+
+@keyframes mark-read-flash {
+    0% {
+        background-color: var(--bg-subtle);
+    }
+    50% {
+        background-color: var(--bg-subtle);
+    }
+    100% {
+        background-color: transparent;
+    }
+}
+
+/* 未读→已读过渡 */
+.notification-item--unread.to-read {
+    animation: unread-to-read 300ms ease forwards;
+}
+
+@keyframes unread-to-read {
+    from {
+        background-color: var(--bg-subtle);
+    }
+    to {
+        background-color: transparent;
+    }
+}
+
+/* 竖线指示器淡出 */
+.notification-item--unread.to-read .notification-item__indicator {
+    animation: indicator-fade 300ms ease forwards;
+}
+
+@keyframes indicator-fade {
+    from {
+        width: 3px;
+        opacity: 1;
+    }
+    to {
+        width: 0;
+        opacity: 0;
+    }
+}
+
+/* 标题字重变化 */
+.notification-item--unread.to-read .notification-item__title {
+    animation: title-unbold 300ms ease forwards;
+}
+
+@keyframes title-unbold {
+    from {
+        font-weight: 600;
+    }
+    to {
+        font-weight: 500;
+    }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+    .notification-item,
+    .notification-item.marking-read,
+    .notification-item--unread.to-read,
+    .notification-item--unread.to-read .notification-item__indicator,
+    .notification-item--unread.to-read .notification-item__title {
+        animation: none;
+        transition: none;
+    }
 }
