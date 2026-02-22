@@ -1,0 +1,48 @@
+{#
+  通知列表项片段模板
+  Notification List Items Partial Template
+  用于 HTMX 动态加载更多通知项
+#}
+
+{% for notification in notifications %}
+<div class="notification-item {% if not notification.is_read %}notification-item--unread{% endif %}"
+     data-notification-id="{{ notification.id }}">
+    {# 左侧竖线（仅未读） #}
+    {% if not notification.is_read %}
+    <div class="notification-item__indicator"></div>
+    {% endif %}
+
+    {# 内容区 #}
+    <div class="notification-item__content">
+        <div class="notification-item__header">
+            <span class="notification-item__title">{{ notification.title }}</span>
+            <span class="notification-item__time relative-time"
+                  data-iso="{{ notification.created_at.isoformat() }}"
+                  data-tooltip="{{ notification.created_at | datetime('%Y-%m-%d %H:%M') }}">
+                {{ notification.relative_time }}
+            </span>
+        </div>
+        <p class="notification-item__summary">{{ notification.content[:80] }}{% if notification.content|length > 80 %}...{% endif %}</p>
+    </div>
+</div>
+{% endfor %}
+
+{# 加载更多触发器 #}
+{% if has_more %}
+<div class="load-more-trigger"
+     hx-get="/notifications/load-more?page={{ next_page }}"
+     hx-trigger="revealed once"
+     hx-target="#notification-list-content"
+     hx-swap="beforeend">
+    {# 骨架屏 #}
+    <div class="notification-skeleton">
+        <div class="skeleton-line skeleton-line--w75"></div>
+        <div class="skeleton-line skeleton-line--w50"></div>
+    </div>
+</div>
+{% elif notifications %}
+{# 无更多数据提示 #}
+<div class="notification-end text-muted text-center py-4 text-sm">
+    {{ t.notification_all_loaded or '已显示全部通知' }}
+</div>
+{% endif %}
