@@ -394,5 +394,7 @@
     "btn_test_send": "Send Test",
     "webhook_test_success": "Test message sent",
     "webhook_test_failed": "Test send failed, please check Webhook URL",
-    "webhook_test_empty": "No notification available for webhook test"
+    "webhook_test_empty": "No notification available for webhook test",
+    "notification_center": "Notifications",
+    "notification_close": "Close"
 }

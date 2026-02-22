@@ -397,5 +397,7 @@
   "btn_test_send": "测试发送",
   "webhook_test_success": "测试消息已发送",
   "webhook_test_failed": "测试发送失败，请检查 Webhook URL",
-  "webhook_test_empty": "当前筛选下没有可测试通知"
+  "webhook_test_empty": "当前筛选下没有可测试通知",
+  "notification_center": "通知中心",
+  "notification_close": "关闭"
 }
