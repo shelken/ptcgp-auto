@@ -16,6 +16,7 @@ import { cycleThemeMode, setManualTheme } from './theme.js';
 import { showToast } from './utils.js';
 import { cancelExchangeForm, searchExchangeAccounts, showExchangeForm } from './features/exchange_cards.js';
 import { setLang, setViewMode, toggleRecordFilterPanel } from './ui_preferences.js';
+import { getNotificationDrawer } from './features/notification_panel.js';
 
 function toggleSection(sectionId, iconId = null) {
     if (!sectionId) return;
@@ -106,6 +107,11 @@ export function handleActionClick(event) {
         setManualTheme(actionButton.dataset.themeValue);
         const popover = document.getElementById('theme-popover');
         if (popover) popover.classList.add('hidden');
+        return;
+    }
+
+    if (action === 'toggle-notification-panel') {
+        getNotificationDrawer().toggle();
         return;
     }
 
