@@ -502,10 +502,8 @@ function renderNotificationDetail(details) {
     detailContainer.dataset.rendered = 'true';
 }
 
-// 导出供外部访问
+// 导出供外部访问（renderMarkdownSafely 和 renderNotificationDetail 不是 export function 声明）
 export { 
-    getNotificationDrawer, 
-    animateBadgeUpdate, 
     renderMarkdownSafely,
     renderNotificationDetail
 };
