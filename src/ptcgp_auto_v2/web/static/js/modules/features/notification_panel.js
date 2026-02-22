@@ -8,9 +8,99 @@
  * - ESC 键关闭
  * - 焦点陷阱（Tab 键循环导航）
  * - 焦点恢复
+ * - 安全 Markdown 渲染（XSS 防护）
  * 
  * 参考模态框管理模块 (modal.js) 的实现模式
  */
+
+// ============================================================================
+// DOMPurify Hook 初始化
+// ============================================================================
+
+/**
+ * 初始化 DOMPurify hook
+ * 为所有链接添加 target="_blank" 和 rel="noopener noreferrer"
+ */
+function initDOMPurifyHooks() {
+    if (typeof DOMPurify === 'undefined') {
+        console.warn('DOMPurify not loaded');
+        return;
+    }
+    
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+        // 为所有链接添加安全属性
+        if (node.tagName === 'A' && node.hasAttribute('href')) {
+            node.setAttribute('target', '_blank');
+            node.setAttribute('rel', 'noopener noreferrer');
+        }
+    });
+}
+
+// 初始化 hooks（模块加载时立即执行）
+initDOMPurifyHooks();
+
+// ============================================================================
+// Markdown 渲染配置
+// ============================================================================
+
+/**
+ * Markdown 渲染配置
+ * 最小语法集：粗体、斜体、链接、自动链接
+ */
+const MARKED_OPTIONS = {
+    gfm: true,           // 启用 GFM（包含 autolink）
+    breaks: true,        // 换行转 <br>
+    pedantic: false,
+};
+
+/**
+ * DOMPurify 白名单配置
+ * 仅允许：粗体、斜体、链接、段落、换行
+ */
+const PURIFY_CONFIG = {
+    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'a', 'p', 'br'],
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+    ALLOW_DATA_ATTR: false,
+};
+
+/**
+ * 安全渲染 Markdown 内容
+ * @param {string} markdown - 原始 Markdown 文本
+ * @returns {string} - 清理后的安全 HTML
+ */
+function renderMarkdownSafely(markdown) {
+    if (!markdown) return '';
+    
+    // 检查依赖是否加载
+    if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+        console.warn('marked or DOMPurify not loaded, returning plain text');
+        return escapeHtml(markdown);
+    }
+    
+    try {
+        // 1. Markdown 解析
+        const rawHtml = marked.parse(markdown, MARKED_OPTIONS);
+        
+        // 2. XSS 过滤
+        const cleanHtml = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
+        
+        return cleanHtml;
+    } catch (error) {
+        console.error('Markdown rendering error:', error);
+        return escapeHtml(markdown);
+    }
+}
+
+/**
+ * HTML 转义（fallback 用）
+ * @param {string} text - 原始文本
+ * @returns {string} - 转义后的文本
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 export class NotificationDrawerManager {
     constructor() {
@@ -386,4 +476,9 @@ async function markAsReadAsync(id) {
 }
 
 // 导出供外部访问
-export { markAsReadOptimistically, markAsReadAsync };
+export { 
+    getNotificationDrawer, 
+    animateBadgeUpdate, 
+    triggerUnreadToReadAnimation,
+    renderMarkdownSafely 
+};
