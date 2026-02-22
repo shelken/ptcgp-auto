@@ -12,7 +12,7 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: 基础面板与核心交互** - 铃铛入口、滑出面板、通知列表、滚动加载、标记已读、无障碍支持
+- [x] **Phase 1: 基础面板与核心交互** - 铃铛入口、滑出面板、通知列表、滚动加载、标记已读、无障碍支持 (completed 2026-02-23)
 - [ ] **Phase 2: 详情展示与 Markdown 渲染** - 点击展开详情、Markdown 渲染、XSS 防护
 
 ## Phase Details
@@ -31,11 +31,11 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 5 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — 面板基础设施（HTML 结构、CSS 样式、滑出动画、滚动锁定）
-- [ ] 01-02-PLAN.md — 铃铛入口与 Badge（图标、未读数量、点击触发）
-- [ ] 01-03-PLAN.md — 通知列表（列表渲染、未读/已读样式、滚动加载）
-- [ ] 01-04-PLAN.md — 标记已读交互（全部已读按钮、badge OOB 更新）
-- [ ] 01-05-PLAN.md — 关闭机制与无障碍（外部点击、ESC 关闭、焦点陷阱）
+- [x] 01-01-PLAN.md — 面板基础设施（HTML 结构、CSS 样式、滑出动画、滚动锁定）
+- [x] 01-02-PLAN.md — 铃铛入口与 Badge（图标、未读数量、点击触发）
+- [x] 01-03-PLAN.md — 通知列表（列表渲染、未读/已读样式、滚动加载）
+- [x] 01-04-PLAN.md — 标记已读交互（全部已读按钮、badge OOB 更新）
+- [x] 01-05-PLAN.md — 关闭机制与无障碍（外部点击、ESC 关闭、焦点陷阱）
 
 ### Phase 2: 详情展示与 Markdown 渲染
 **Goal**: 用户可以点击通知展开详情，查看 Markdown 渲染后的完整内容
@@ -59,7 +59,7 @@ Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 基础面板与核心交互 | 0/5 | Not started | - |
+| 1. 基础面板与核心交互 | 5/5 | Complete | 2026-02-23 |
 | 2. 详情展示与 Markdown 渲染 | 0/2 | Not started | - |
 
 ---
