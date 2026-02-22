@@ -597,6 +597,14 @@
     word-break: break-word; /* 长单词换行 */
 }
 
+/* 详情区域内的图片样式 */
+.notification-item__detail img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
 /* ========================================
    Smooth Height Animation
    平滑高度动画（Chrome 129+）

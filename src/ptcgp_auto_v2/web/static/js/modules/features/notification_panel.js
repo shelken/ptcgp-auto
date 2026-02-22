@@ -55,11 +55,11 @@ const MARKED_OPTIONS = {
 
 /**
  * DOMPurify 白名单配置
- * 仅允许：粗体、斜体、链接、段落、换行
+ * 仅允许：粗体、斜体、链接、段落、换行、图片
  */
 const PURIFY_CONFIG = {
-    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'a', 'p', 'br'],
-    ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+    ALLOWED_TAGS: ['b', 'strong', 'i', 'em', 'a', 'p', 'br', 'img'],
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt'],
     ALLOW_DATA_ATTR: false,
 };
 
