@@ -115,6 +115,11 @@ export function handleActionClick(event) {
         return;
     }
 
+    if (action === 'close-notification-panel') {
+        getNotificationDrawer().close();
+        return;
+    }
+
     if (action === 'toggle-owned-filter-group') {
         toggleOwnedFilterGroup(actionButton);
         return;
