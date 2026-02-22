@@ -32,6 +32,7 @@
 @import url('components/record-grid.css');
 @import url('components/modal.css');
 @import url('components/card-preview.css');
+@import url('components/notification-panel.css');
 
 /* Utilities */
 @import url('utilities/colors.css');

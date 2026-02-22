@@ -1,0 +1,38 @@
+{#
+  通知面板内容模板
+  Notification Panel Content Template
+  Provides: 标题栏 + 内容区（空容器，后续填充）
+#}
+
+<!-- 通知面板标题栏 -->
+<div class="notification-drawer__header">
+    <h2 class="notification-drawer__title">{{ t.notification_center or '通知中心' }}</h2>
+    <div class="notification-drawer__actions">
+        <button
+            type="button"
+            class="brutal-btn brutal-btn--sm notification-drawer__mark-all"
+            data-action="mark-all-notifications-read"
+            disabled
+            aria-label="{{ t.btn_mark_all_read or '全部已读' }}">
+            {{ t.btn_mark_all_read or '全部已读' }}
+        </button>
+        <button
+            type="button"
+            class="notification-drawer__close"
+            data-action="close-notification-panel"
+            aria-label="{{ t.label_close or '关闭' }}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<!-- 通知列表内容区 -->
+<div id="notification-list-content" class="notification-drawer__content">
+    <!-- 动态内容将通过 HTMX 加载到这里 -->
+    <div class="notification-drawer__empty">
+        <p class="text-muted text-center py-8">{{ t.notification_empty or '暂无通知' }}</p>
+    </div>
+</div>
