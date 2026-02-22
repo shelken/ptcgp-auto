@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 1 of 2 (基础面板与核心交互)
-Plan: 4 of 5 in current phase
+Plan: 5 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-23 — Completed plan 01-05
+Last activity: 2026-02-23 — Completed plan 01-04
 
 Progress: [████████░░] 80%
 
@@ -31,7 +31,7 @@ Progress: [████████░░] 80%
 | 2. 详情展示与 Markdown 渲染 | 0 | 2 | - |
 
 **Recent Trend:**
-- Last 5 plans: 6 min, 5 min, 15 min, 4 min
+- Last 5 plans: 6 min, 5 min, 15 min, 4 min, 7 min
 - Trend: Steady progress on notification panel
 
 *Updated after each plan completion*
@@ -54,6 +54,9 @@ Recent decisions affecting current work:
 - [01-03]: 后端预计算相对时间，前端仅负责 HTMX swap 后更新
 - [01-03]: 两阶段查询实现未读优先排序（先未读后已读）
 - [01-03]: 后端预计算相对时间文本
+- [01-04]: 使用 HX-Trigger 头触发 Badge 刷新，而非 OOB swap（更简洁）
+- [01-04]: 批量动画错开 50ms 执行，产生波浪效果
+- [01-04]: 动画时长 300ms，与设计决策一致
 - [01-05]: 使用 :focus-visible 而非 :focus，仅在键盘导航时显示焦点环
 - [01-05]: 事件监听器在 open/close 时动态绑定/解绑，避免内存泄漏
 
@@ -68,5 +71,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 01-05-PLAN.md
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
