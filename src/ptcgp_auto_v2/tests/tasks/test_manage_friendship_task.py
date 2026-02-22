@@ -265,7 +265,10 @@ class TestManageFriendshipTask(unittest.TestCase):
         )
 
         request_repo.get_by_from_account_and_status.return_value = [sending_new]
-        request_repo.get_by_to_account_and_status.return_value = [sended_old]
+        request_repo.get_add_requests_by_to_account_and_status.return_value = [
+            sended_old
+        ]
+        request_repo.get_external_sended_requests.return_value = []
         request_repo.get_by_from_account_and_type.side_effect = [[], [deleting_mid]]
 
         requests = self.task._get_pending_requests()
