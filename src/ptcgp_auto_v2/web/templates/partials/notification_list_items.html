@@ -6,7 +6,10 @@
 
 {% for notification in notifications %}
 <div class="notification-item {% if not notification.is_read %}notification-item--unread{% endif %}"
-     data-notification-id="{{ notification.id }}">
+     data-notification-id="{{ notification.id }}"
+     tabindex="0"
+     role="button"
+     aria-label="{{ notification.title }}">
     {# 左侧竖线（仅未读） #}
     {% if not notification.is_read %}
     <div class="notification-item__indicator"></div>

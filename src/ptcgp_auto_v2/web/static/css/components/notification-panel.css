@@ -154,6 +154,11 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+/* Enter 键激活时的视觉反馈 */
+.notification-item:active {
+    transform: scale(0.99);
+}
+
 /* 未读状态 */
 .notification-item--unread {
     background-color: var(--bg-subtle);
