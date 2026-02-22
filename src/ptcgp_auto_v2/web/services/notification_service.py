@@ -4,7 +4,7 @@
 import json
 from typing import Any, Optional
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.config.constants import (
     HIGH_RARITY_TARGETS,
@@ -14,7 +14,13 @@ from ptcgp_auto_v2.config.notification import (
     NOTIFICATION_SCENE_OPTIONS,
     NOTIFICATION_TASK_STATUS_OPTIONS,
 )
-from ptcgp_auto_v2.db.models import Account, Card, NotificationConfig, Pack
+from ptcgp_auto_v2.db.models import (
+    Account,
+    Card,
+    Notification,
+    NotificationConfig,
+    Pack,
+)
 from ptcgp_auto_v2.db.repositories import (
     NotificationConfigRepository,
     NotificationRepository,
@@ -259,3 +265,154 @@ def build_recent_notifications_context(
         "current_lang": current_lang,
         "notifications": rows,
     }
+
+
+def build_notification_panel_context(
+    session: Session,
+    lang: str,
+    page: int = 0,
+    page_size: int = 10,
+) -> dict[str, Any]:
+    """
+    构建通知面板内容上下文。
+
+    排序规则：
+    - 未读通知优先显示
+    - 同状态内按创建时间倒序
+
+    Returns:
+        dict: 包含 notifications, has_more, next_page, unread_count 等字段
+    """
+    current_lang = normalize_lang(lang)
+    t = get_translations(current_lang)
+    notification_repo = NotificationRepository()
+
+    normalized_page = max(page, 0)
+    normalized_page_size = min(max(page_size, 1), 50)
+
+    # 查询未读优先的通知列表
+    # 使用两阶段查询：先获取未读，再获取已读
+    unread_stmt = (
+        select(Notification)
+        .where(Notification.is_read == False)  # noqa: E712
+        .order_by(col(Notification.created_at).desc())
+    )
+
+    read_stmt = (
+        select(Notification)
+        .where(Notification.is_read == True)  # noqa: E712
+        .order_by(col(Notification.created_at).desc())
+    )
+
+    # 计算分页偏移
+    offset = normalized_page * normalized_page_size
+
+    # 获取未读数量，用于判断分页边界
+    unread_count_stmt = select(func.count()).select_from(unread_stmt.subquery())
+    unread_count = int(session.exec(unread_count_stmt).one())
+
+    # 根据分页位置，从两个查询中组合数据
+    notifications = []
+
+    if offset < unread_count:
+        # 当前页起始位置在未读区域内
+        unread_offset = offset
+        unread_limit = min(normalized_page_size, unread_count - unread_offset)
+        unread_rows = list(
+            session.exec(unread_stmt.offset(unread_offset).limit(unread_limit)).all()
+        )
+        notifications.extend(unread_rows)
+
+        # 如果未读数据不够，从已读数据补充
+        remaining = normalized_page_size - len(notifications)
+        if remaining > 0:
+            read_rows = list(session.exec(read_stmt.limit(remaining)).all())
+            notifications.extend(read_rows)
+    else:
+        # 当前页起始位置在已读区域内
+        read_offset = offset - unread_count
+        read_rows = list(
+            session.exec(
+                read_stmt.offset(read_offset).limit(normalized_page_size)
+            ).all()
+        )
+        notifications.extend(read_rows)
+
+    # 计算总数和是否还有更多
+    total_count_stmt = select(func.count()).select_from(Notification)
+    total_count = int(session.exec(total_count_stmt).one())
+    has_more = (normalized_page + 1) * normalized_page_size < total_count
+    next_page = normalized_page + 1 if has_more else normalized_page
+
+    # 为每个通知添加相对时间文本
+    for notification in notifications:
+        notification.relative_time = _format_relative_time(
+            notification.created_at, current_lang, t
+        )
+
+    return {
+        "t": t,
+        "current_lang": current_lang,
+        "notifications": notifications,
+        "has_more": has_more,
+        "next_page": next_page,
+        "unread_count": unread_count,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }
+
+
+def _format_relative_time(
+    created_at: Any,
+    lang: str,
+    t: dict[str, Any],
+) -> str:
+    """格式化相对时间文本。"""
+    from datetime import datetime
+
+    if created_at is None:
+        return ""
+
+    # 确保使用本地时间
+    now = datetime.now()
+    diff_ms = (now - created_at).total_seconds() * 1000
+
+    if diff_ms < 0:
+        # 未来时间
+        abs_sec = abs(diff_ms) / 1000
+        if abs_sec < 60:
+            return t.get("relative_soon") or "soon"
+        return _format_time_value(abs_sec, lang, t, future=True)
+
+    abs_sec = diff_ms / 1000
+
+    if abs_sec < 60:
+        return t.get("relative_just_now") or "just now"
+
+    return _format_time_value(abs_sec, lang, t, future=False)
+
+
+def _format_time_value(
+    abs_sec: float,
+    lang: str,
+    t: dict[str, Any],
+    future: bool,
+) -> str:
+    """格式化时间值。"""
+    if abs_sec < 3600:
+        value = round(abs_sec / 60)
+        unit = t.get("relative_minutes") or "min"
+    elif abs_sec < 86400:
+        value = round(abs_sec / 3600)
+        unit = t.get("relative_hours") or "hr"
+    else:
+        value = round(abs_sec / 86400)
+        unit = t.get("relative_days") or "day"
+
+    ago_text = t.get("relative_ago") or "ago"
+    in_text = t.get("relative_in") or "in"
+
+    if lang.startswith("en"):
+        return f"{in_text} {value} {unit}" if future else f"{value} {unit} {ago_text}"
+
+    return f"{value}{unit}{in_text}" if future else f"{value}{unit}{ago_text}"
