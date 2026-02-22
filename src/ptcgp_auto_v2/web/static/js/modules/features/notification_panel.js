@@ -506,7 +506,6 @@ function renderNotificationDetail(details) {
 export { 
     getNotificationDrawer, 
     animateBadgeUpdate, 
-    triggerUnreadToReadAnimation,
     renderMarkdownSafely,
     renderNotificationDetail
 };
