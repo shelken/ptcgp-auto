@@ -19,6 +19,13 @@ from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_ac
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
 
 
+def _normalize_query_text(q: str | object | None) -> str:
+    """归一化搜索词，兜底非字符串输入。"""
+    if isinstance(q, str):
+        return q.strip().lower()
+    return ""
+
+
 def get_accounts_context(
     session: Session,
     lang: str,
@@ -34,7 +41,7 @@ def get_accounts_context(
     repo = AccountRepository()
     accounts = repo.get_all()
 
-    normalized_q = (q or "").strip().lower()
+    normalized_q = _normalize_query_text(q)
     allowed_sort_fields = {"id", "nickname", "friend_id"}
     normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
     normalized_sort_order = "desc" if str(sort_order).lower() == "desc" else "asc"

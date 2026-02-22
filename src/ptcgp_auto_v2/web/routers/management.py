@@ -16,18 +16,17 @@ from ptcgp_auto_v2.web.utils.template_env import get_templates
 router = APIRouter()
 
 
-@router.get("/management/accounts", response_class=HTMLResponse)
-async def get_management_accounts(
+async def _render_management_accounts(
     request: Request,
-    lang: str | None = Query(default=None),
-    q: str = Query(default=""),
-    sort_by: str = Query(default="id"),
-    sort_order: str = Query(default="asc"),
-    page: int = Query(default=0),
-    page_size: int = Query(default=10),
-    session: Session = Depends(get_fastapi_session),
+    lang: str | None,
+    session: Session,
+    q: str = "",
+    sort_by: str = "id",
+    sort_order: str = "asc",
+    page: int = 0,
+    page_size: int = 10,
 ):
-    """渲染账号管理列表。"""
+    """渲染账号管理列表（内部复用，避免 Query 默认对象泄漏）。"""
     current_lang = detect_lang(request, lang)
     context = get_accounts_context(
         session=session,
@@ -41,6 +40,30 @@ async def get_management_accounts(
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/account_list.html", context)
+
+
+@router.get("/management/accounts", response_class=HTMLResponse)
+async def get_management_accounts(
+    request: Request,
+    lang: str | None = Query(default=None),
+    q: str = Query(default=""),
+    sort_by: str = Query(default="id"),
+    sort_order: str = Query(default="asc"),
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
+    session: Session = Depends(get_fastapi_session),
+):
+    """渲染账号管理列表。"""
+    return await _render_management_accounts(
+        request=request,
+        lang=lang,
+        session=session,
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/management/accounts/{account_id}/edit", response_class=HTMLResponse)
@@ -72,6 +95,15 @@ async def update_account_details_api(
     remark = safe_get_string(form, "remark") or ""
     update_account_details(account_id, nickname, remark)
 
-    response = await get_management_accounts(request, lang=lang, session=session)
+    response = await _render_management_accounts(
+        request=request,
+        lang=lang,
+        session=session,
+        q="",
+        sort_by="id",
+        sort_order="asc",
+        page=0,
+        page_size=10,
+    )
     response.headers["HX-Trigger"] = "closeModal"
     return response
