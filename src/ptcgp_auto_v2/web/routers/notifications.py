@@ -23,6 +23,7 @@ from ptcgp_auto_v2.db.repositories import (
 from ptcgp_auto_v2.web.services.notification_service import (
     TASK_STATUS_OPTIONS,
     build_notification_card_selector_context,
+    build_notification_panel_context,
     build_config_view,
     build_notifications_context,
     build_recent_notifications_context,
@@ -575,3 +576,55 @@ async def send_test_webhook(
         {"showToast": {"message": message}}, ensure_ascii=True
     )
     return response
+
+
+# ============================================================
+# 通知面板 API（右侧滑出面板专用）
+# ============================================================
+
+
+@router.get("/notifications/panel", response_class=HTMLResponse)
+async def get_notification_panel(
+    request: Request,
+    lang: str | None = Query(default=None),
+    session: Session = Depends(get_fastapi_session),
+):
+    """
+    渲染通知面板内容（首次加载）。
+
+    排序规则：未读优先，同状态内按创建时间倒序。
+    """
+    current_lang = detect_lang(request, lang)
+    context = build_notification_panel_context(
+        session=session,
+        lang=current_lang,
+        page=0,
+        page_size=10,
+    )
+    context["request"] = request
+    templates = get_templates()
+    return templates.TemplateResponse("partials/notification_panel.html", context)
+
+
+@router.get("/notifications/load-more", response_class=HTMLResponse)
+async def get_notification_load_more(
+    request: Request,
+    lang: str | None = Query(default=None),
+    page: int = Query(default=0),
+    session: Session = Depends(get_fastapi_session),
+):
+    """
+    渲染更多通知项（滚动加载）。
+
+    用于 HTMX revealed trigger 无限滚动加载。
+    """
+    current_lang = detect_lang(request, lang)
+    context = build_notification_panel_context(
+        session=session,
+        lang=current_lang,
+        page=page,
+        page_size=10,
+    )
+    context["request"] = request
+    templates = get_templates()
+    return templates.TemplateResponse("partials/notification_list_items.html", context)
