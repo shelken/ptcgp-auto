@@ -21,7 +21,7 @@ export class NotificationDrawerManager {
         this.isOpen = false;
         this.previousActiveElement = null;
 
-        // 预绑定事件处理程序（确保可以正确移除）
+        // 预绑定事件处理程序���确保可以正确移除）
         this._boundHandleKeydown = this._handleKeydown.bind(this);
         this._boundHandleOutsideClick = this._handleOutsideClick.bind(this);
     }
@@ -145,7 +145,7 @@ export class NotificationDrawerManager {
     }
 
     /**
-     * ���复 body 和 html 滚动
+     * 恢复 body 和 html 滚动
      */
     unlockBodyScroll() {
         // 恢复 body overflow
@@ -248,148 +248,6 @@ export class NotificationDrawerManager {
         }
     }
 }
-    }
-
-    /**
-     * 打开通知面板
-     * - 显示面板，锁定滚动
-     * - 分发 opened 自定义事件
-     */
-    open() {
-        if (this.isOpen || !this.container) return;
-
-        // 移除 hidden 类，添加 open 类
-        this.container.classList.remove('hidden');
-        this.container.classList.add('open');
-        this.container.setAttribute('aria-hidden', 'false');
-        
-        // 锁定滚动
-        this.lockBodyScroll();
-        
-        // 加载通知列表
-        this.loadPanelContent();
-        
-        this.isOpen = true;
-
-        // 分发自定义事件
-        document.dispatchEvent(new CustomEvent('notification-drawer:opened', {
-            detail: { drawer: this }
-        }));
-    }
-
-    /**
-     * 加载面板内容
-     * 通过 HTMX 从后端加载
-     */
-    loadPanelContent() {
-        const content = document.getElementById('notification-list-content');
-        if (!content) return;
-
-        // 使用 HTMX 加载内容
-        if (typeof htmx !== 'undefined') {
-            htmx.trigger(content, 'loadPanel');
-        }
-    }
-}
-
-    /**
-     * 关闭通知面板
-     * - 隐藏面板，恢复滚动
-     * - 分发 closed 自定义事件
-     */
-    close() {
-        if (!this.isOpen || !this.container) return;
-
-        // 移除 open 类，添加 hidden 类
-        this.container.classList.remove('open');
-        this.container.classList.add('hidden');
-        this.container.setAttribute('aria-hidden', 'true');
-        
-        // 恢复滚动
-        this.unlockBodyScroll();
-        
-        this.isOpen = false;
-
-        // 分发自定义事件
-        document.dispatchEvent(new CustomEvent('notification-drawer:closed'));
-    }
-
-    /**
-     * 切换面板状态
-     */
-    toggle() {
-        if (this.isOpen) {
-            this.close();
-        } else {
-            this.open();
-        }
-    }
-
-    /**
-     * 锁定 body 和 html 滚动
-     * 防止面板打开时背景页面滚动
-     */
-    lockBodyScroll() {
-        // 保存当前 overflow 值
-        if (this.previousBodyOverflow === null) {
-            this.previousBodyOverflow = document.body.style.overflow;
-        }
-        if (this.previousHtmlOverflow === null) {
-            this.previousHtmlOverflow = document.documentElement.style.overflow;
-        }
-        
-        // 同时锁定 body 和 html
-        document.body.style.overflow = 'hidden';
-        document.documentElement.style.overflow = 'hidden';
-    }
-
-    /**
-     * 恢复 body 和 html 滚动
-     */
-    unlockBodyScroll() {
-        // 恢复 body overflow
-        if (this.previousBodyOverflow !== null) {
-            document.body.style.overflow = this.previousBodyOverflow;
-            this.previousBodyOverflow = null;
-        } else {
-            document.body.style.overflow = '';
-        }
-        
-        // 恢复 html overflow
-        if (this.previousHtmlOverflow !== null) {
-            document.documentElement.style.overflow = this.previousHtmlOverflow;
-            this.previousHtmlOverflow = null;
-        } else {
-            document.documentElement.style.overflow = '';
-        }
-    }
-
-    /**
-     * 绑定外部点击关闭
-     * 点击面板外部区域时关闭面板
-     * @private
-     */
-    _bindOutsideClick() {
-        this.container.addEventListener('click', (event) => {
-            // 仅当点击的是容器本身（不是面板）时关闭
-            if (event.target === this.container) {
-                this.close();
-            }
-        });
-    }
-
-    /**
-     * 绑定 ESC 键关闭
-     * @private
-     */
-    _bindEscapeKey() {
-        document.addEventListener('keydown', (event) => {
-            if (this.isOpen && event.key === 'Escape') {
-                this.close();
-            }
-        });
-    }
-}
 
 // 单例实例
 let drawerInstance = null;
@@ -422,3 +280,34 @@ export function animateBadgeUpdate(newCount) {
         badge.classList.remove('updating');
     });
 }
+
+/**
+ * 触发未读→已读状态过渡动画
+ * 批量标记已读后，为每个通知项添加动画
+ */
+export function triggerUnreadToReadAnimation() {
+    const content = document.getElementById('notification-list-content');
+    if (!content) return;
+
+    // 获取所有未读通知项
+    const items = content.querySelectorAll('.notification-item--unread');
+    items.forEach((item, index) => {
+        // 错开动画，产生波浪效果
+        setTimeout(() => {
+            item.classList.add('to-read');
+            // 动画结束后移除未读状态类
+            setTimeout(() => {
+                item.classList.remove('notification-item--unread', 'to-read');
+            }, 300);
+        }, index * 50);
+    });
+}
+
+// 监听 HTMX 内容替换后的事件，触发未读→已读动画
+document.addEventListener('htmx:afterSettle', (event) => {
+    // 检查是否是通知列表内容的替换
+    if (event.target.id === 'notification-list-content') {
+        // 触发未读→已读动画
+        triggerUnreadToReadAnimation();
+    }
+});
