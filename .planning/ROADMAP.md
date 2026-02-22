@@ -28,14 +28,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. 用户点击"全部已读"按钮后，所有未读通知被标记，badge 数量实时更新为 0
   5. 滚动到列表底部时自动加载更多通知，显示 loading 状态
   6. 面板支持键盘 Tab 导航，焦点被正确捕获和恢复
-**Plans**: TBD
+**Plans:** 5 plans
 
 Plans:
-- [ ] 01-01: 面板基础设施（HTML 结构、CSS 样式、滑出动画、滚动锁定）
-- [ ] 01-02: 铃铛入口与 Badge（图标、未读数量、点击触发）
-- [ ] 01-03: 通知列表（列表渲染、未读/已读样式、滚动加载）
-- [ ] 01-04: 标记已读交互（全部已读按钮、badge OOB 更新）
-- [ ] 01-05: 关闭机制与无障碍（外部点击、ESC 关闭、焦点陷阱）
+- [ ] 01-01-PLAN.md — 面板基础设施（HTML 结构、CSS 样式、滑出动画、滚动锁定）
+- [ ] 01-02-PLAN.md — 铃铛入口与 Badge（图标、未读数量、点击触发）
+- [ ] 01-03-PLAN.md — 通知列表（列表渲染、未读/已读样式、滚动加载）
+- [ ] 01-04-PLAN.md — 标记已读交互（全部已读按钮、badge OOB 更新）
+- [ ] 01-05-PLAN.md — 关闭机制与无障碍（外部点击、ESC 关闭、焦点陷阱）
 
 ### Phase 2: 详情展示与 Markdown 渲染
 **Goal**: 用户可以点击通知展开详情，查看 Markdown 渲染后的完整内容
