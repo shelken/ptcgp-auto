@@ -157,3 +157,21 @@ export function getNotificationDrawer() {
     }
     return drawerInstance;
 }
+
+/**
+ * Badge 更新动画辅助方法
+ * 用于在 badge 内容更新时添加视觉反馈
+ * @param {number} newCount - 新的未读数量（可选，仅用于记录）
+ */
+export function animateBadgeUpdate(newCount) {
+    const badge = document.getElementById('notification-badge');
+    if (!badge) return;
+
+    // 添加更新中状态
+    badge.classList.add('updating');
+
+    // 下一帧移除状态，触发过渡动画
+    requestAnimationFrame(() => {
+        badge.classList.remove('updating');
+    });
+}
