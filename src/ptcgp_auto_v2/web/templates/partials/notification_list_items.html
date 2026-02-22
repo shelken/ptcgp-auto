@@ -20,8 +20,8 @@
         <div class="notification-item__header">
             <span class="notification-item__title">{{ notification.title }}</span>
             <span class="notification-item__time relative-time"
-                  data-iso="{{ notification.created_at.isoformat() }}"
-                  data-tooltip="{{ notification.created_at | datetime('%Y-%m-%d %H:%M') }}">
+                  data-iso="{{ notification.created_at.strftime('%Y-%m-%dT%H:%M:%S') }}"
+                  data-tooltip="{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}">
                 {{ notification.relative_time }}
             </span>
         </div>
