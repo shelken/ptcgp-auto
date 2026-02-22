@@ -542,3 +542,92 @@
         transition: none;
     }
 }
+
+/* ========================================
+   Details/Summary Accordion Styles
+   手风琴展开/收起样式
+   ======================================== */
+
+/* 移除 summary 默认三角标记 */
+.notification-item > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+}
+
+.notification-item > summary::-webkit-details-marker {
+    display: none;
+}
+
+.notification-item > summary::marker {
+    display: none;
+}
+
+/* 移除 summary 默认焦点样式（使用全局 :focus-visible） */
+.notification-item > summary:focus {
+    outline: none;
+}
+
+.notification-item > summary:focus-visible {
+    outline: 2px solid var(--btn-focus-ring, var(--active-color));
+    outline-offset: -2px;
+}
+
+/* summary 内的预览文本（替代原 notification-item__summary） */
+.notification-item__preview {
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 4px;
+}
+
+/* ========================================
+   Detail Content Area
+   详情区域样式
+   ======================================== */
+.notification-item__detail {
+    padding: 12px 16px 12px 28px; /* 左侧留出 indicator 空间 */
+    line-height: 1.6;
+    color: var(--text-color);
+    scroll-margin-top: 60px; /* 避免被面板标题遮挡 */
+    white-space: pre-wrap; /* 保留换行 */
+    word-break: break-word; /* 长单词换行 */
+}
+
+/* ========================================
+   Smooth Height Animation
+   平滑高度动画（Chrome 129+）
+   使用 calc-size() + ::details-content
+   ======================================== */
+@supports (block-size: calc-size(auto, size)) {
+    .notification-item::details-content {
+        block-size: 0;
+        transition: block-size 250ms ease-out;
+        overflow: hidden;
+    }
+
+    .notification-item[open]::details-content {
+        block-size: calc-size(auto, size);
+    }
+}
+
+/* 降级方案：旧浏览器无动画但功能正常 */
+@supports not (block-size: calc-size(auto, size)) {
+    .notification-item__detail {
+        display: none;
+    }
+
+    .notification-item[open] .notification-item__detail {
+        display: block;
+    }
+}
+
+/* 减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+    .notification-item::details-content {
+        transition: none;
+    }
+}
