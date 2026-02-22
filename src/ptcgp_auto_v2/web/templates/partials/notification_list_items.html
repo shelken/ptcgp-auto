@@ -33,6 +33,15 @@
             </div>
             <p class="notification-item__preview">{{ notification.content[:80] }}{% if notification.content|length > 80 %}...{% endif %}</p>
         </div>
+
+        {# 卡牌预览图 #}
+        {% if notification.image_url %}
+        <img class="notification-item__thumbnail" 
+             src="{{ notification.image_url }}" 
+             alt="card preview"
+             loading="lazy"
+             onerror="this.style.display='none'">
+        {% endif %}
     </summary>
 
     {# 详情区（展开后显示，Markdown 渲染目标） #}

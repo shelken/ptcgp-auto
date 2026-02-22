@@ -344,7 +344,7 @@ def build_notification_panel_context(
     has_more = (normalized_page + 1) * normalized_page_size < total_count
     next_page = normalized_page + 1 if has_more else normalized_page
 
-    # 转换为字典并添加相对时间文本
+    # 转换为字典并添加相对时间文本和图片URL
     notification_dicts = []
     for n in notifications:
         notification_dicts.append(
@@ -353,6 +353,7 @@ def build_notification_panel_context(
                 "scene": n.scene,
                 "title": n.title,
                 "content": n.content,
+                "image_url": _extract_image_url(n.content),
                 "related_account_id": n.related_account_id,
                 "related_task_instance_id": n.related_task_instance_id,
                 "is_read": n.is_read,
@@ -371,6 +372,19 @@ def build_notification_panel_context(
         "page": normalized_page,
         "page_size": normalized_page_size,
     }
+
+
+def _extract_image_url(content: str) -> str | None:
+    """从 Markdown 内容中提取第一个图片 URL。"""
+    import re
+
+    if not content:
+        return None
+    # 匹配 ![alt](url) 格式
+    match = re.search(r"!\[.*?\]\((https?://[^\)]+)\)", content)
+    if match:
+        return match.group(1)
+    return None
 
 
 def _format_relative_time(
