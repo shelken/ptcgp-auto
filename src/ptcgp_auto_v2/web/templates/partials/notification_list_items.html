@@ -35,8 +35,8 @@
 <div class="load-more-trigger"
      hx-get="/notifications/load-more?page={{ next_page }}&lang={{ current_lang }}"
      hx-trigger="revealed once"
-     hx-target="#notification-list-content"
-     hx-swap="beforeend">
+     hx-target="this"
+     hx-swap="outerHTML">
     {# 骨架屏 #}
     <div class="notification-skeleton">
         <div class="skeleton-line skeleton-line--w75"></div>
