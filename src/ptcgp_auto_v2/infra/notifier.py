@@ -174,14 +174,18 @@ class Notifier:
         card_name: str,
         rarity_display: str,
         event_message: str,
+        image_url: Optional[str] = None,
     ) -> str:
         """构建稀有卡牌通知正文。"""
-        return (
+        content = (
             f"账号: {account_name}\n"
             f"事件: {event_message}\n"
             f"卡牌: {card_name}\n"
             f"稀有度: {rarity_display}"
         )
+        if image_url:
+            content += f"\n\n![{card_name}]({image_url})"
+        return content
 
     @staticmethod
     def _build_task_status_content(
@@ -268,6 +272,7 @@ class Notifier:
             card_name=card.name,
             rarity_display=rarity_display,
             event_message=message or "开出稀有卡牌",
+            image_url=resolved_image_url,
         )
 
         return self.notify(
