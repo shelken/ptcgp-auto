@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** 用户能快速查看未读通知，了解系统运行状态（稀有卡牌、任务状态、系统警告），无需跳转到管理页面
-**Current focus:** Phase 2 - 详情展示与 Markdown 渲染
+**Current focus:** 规划下一里程碑（v2.x）
 
 ## Current Position
 
-Phase: 2 of 2 (详情展示与 Markdown 渲染)
-Plan: 3 of 3 in current phase
-Status: Complete
-Last activity: 2026-02-22 — Plan 03 completed (Gap Closure)
+Phase: Milestone v2.0.0 completed
+Plan: Milestone archived
+Status: Shipped
+Last activity: 2026-02-23 — v2.0.0 milestone archived
 
-Progress: [███████████████████] 100% (Phase 2: 3/3 plans)
+Progress: [███████████████████] 100% (v2.0.0: 8/8 plans)
 
 ## Performance Metrics
 
@@ -34,7 +34,7 @@ Progress: [███████████████████] 100% (Phas
 - Last 5 plans: 7 min, 4 min, 4 min, 4 min, 2 min
 - Trend: Phase 2 complete (including gap closure)
 
-*Updated after each plan completion*
+*Updated after milestone operations*
 
 ## Accumulated Context
 
@@ -67,6 +67,7 @@ Recent decisions affecting current work:
 - [02-02]: 链接自动添加 target="_blank" 和 rel="noopener noreferrer"
 - [02-02]: 首次展开渲染 Markdown，dataset.rendered 防止重复
 - [02-03]: 使用现有端点而非新增端点（保持代码简洁）
+- [Milestone]: v2.0.0 已归档，ROADMAP/REQUIREMENTS 已拆分到 milestones 目录
 
 ### Pending Todos
 
@@ -78,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-22
-Stopped at: Completed 02-03-PLAN.md (Gap Closure)
-Resume file: None
+Last session: 2026-02-23
+Stopped at: Completed milestone v2.0.0 archive
+Resume file: `/gsd-new-milestone`
