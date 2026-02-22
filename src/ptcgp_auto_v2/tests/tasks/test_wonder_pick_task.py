@@ -27,7 +27,7 @@ class TestChallengeRarityConfig(unittest.TestCase):
 
     def test_default_targets_contains_supported_rarities(self):
         """测试默认目标稀有度配置"""
-        self.assertEqual(set(WONDER_PICK_DEFAULT_TARGETS), {"SAR", "SR", "AR"})
+        self.assertEqual(set(WONDER_PICK_DEFAULT_TARGETS), {"SAR", "SR"})
 
     def test_challenge_costs(self):
         """测试稀有度挑战力消耗配置"""
@@ -156,12 +156,10 @@ class TestWonderPickScanLogic(unittest.TestCase):
                 center=(300.0, 400.0),
             ),
         ]
-        task.card_recognizer = SimpleNamespace(scan=lambda **kwargs: detected)
-
-        count = task._update_scan_signature([{"text": "甲"}])
+        count = task._update_scan_signature(detected)
         self.assertEqual(count, 1)
 
-        count = task._update_scan_signature([{"text": "乙"}])
+        count = task._update_scan_signature(detected)
         self.assertEqual(count, 2)
 
         new_detected = [
@@ -174,9 +172,7 @@ class TestWonderPickScanLogic(unittest.TestCase):
                 center=(500.0, 600.0),
             )
         ]
-        task.card_recognizer = SimpleNamespace(scan=lambda **kwargs: new_detected)
-
-        count = task._update_scan_signature([{"text": "丙"}])
+        count = task._update_scan_signature(new_detected)
         self.assertEqual(count, 1)
 
 
@@ -217,27 +213,26 @@ class TestWonderPickHomeFallback(unittest.TestCase):
     def test_list_page_stamina_not_enough_does_not_skip(self):
         task = FakeTask()
         task._current_stamina = 0
-        task._target_rarities = ["SR"]
+        task._active_targets = ["SR"]
 
         with patch.object(task, "_scan_targets", return_value=None):
             result = task._handle_list({"ocr_results": []})
 
         self.assertIsInstance(result, ActionResult)
-        self.assertEqual(task.adb.back_count, 0)
+        self.assertEqual(task.adb.back_count, 1)
         self.assertFalse(task._skipped)
+        self.assertTrue(task._completed)
 
 
 class TestWonderPickEndMarkerBack(unittest.TestCase):
     def test_end_marker_with_pending_triggers_back(self):
         task = FakeTask()
-        task._pending_target = "SR"
 
         result = task._handle_end_of_list("已出现结束标志")
 
         self.assertIsInstance(result, ActionResult)
-        self.assertEqual(task.adb.back_count, 1)
-        self.assertEqual(task._prefer_target, "SR")
-        self.assertTrue(task._force_reenter)
+        self.assertEqual(task.adb.back_count, 0)
+        self.assertTrue(task._completed)
 
 
 class TestWonderPickForceReenter(unittest.TestCase):
@@ -245,6 +240,7 @@ class TestWonderPickForceReenter(unittest.TestCase):
         task = FakeTask()
         task._force_reenter = True
         task._get_wonder_stamina = lambda: 1
+        task._active_targets = []
 
         with patch(
             "ptcgp_auto_v2.tasks.wonder_pick.tap_text_exact",
@@ -261,7 +257,8 @@ class TestWonderPickHomeStaminaCache(unittest.TestCase):
     def test_home_uses_cached_stamina_and_enters(self):
         task = FakeTask()
         task._current_stamina = 0
-        task._target_rarities = ["SR"]
+        task._active_targets = ["SR"]
+        task._get_wonder_stamina = lambda: 0
 
         with patch(
             "ptcgp_auto_v2.tasks.wonder_pick.tap_text_exact",
@@ -271,24 +268,23 @@ class TestWonderPickHomeStaminaCache(unittest.TestCase):
 
         self.assertIsInstance(result, ActionResult)
         self.assertFalse(task._skipped)
-        self.assertTrue(mock_tap.called)
+        self.assertFalse(mock_tap.called)
+        self.assertFalse(task._completed)
 
 
 class TestWonderPickAfterSelect(unittest.TestCase):
-    def test_after_select_ends_when_stamina_insufficient(self):
+    def test_popup_recover_text_should_skip(self):
         task = FakeTask()
-        task._current_stamina = 0
-        task._target_rarities = ["SR"]
-        task._mark_action_done("select_card_tapped")
-
         with patch(
-            "ptcgp_auto_v2.tasks.wonder_pick.tap_text_exact",
-            return_value=ActionResult.ok(wait=0.5),
+            "ptcgp_auto_v2.tasks.wonder_pick.is_text_visible", return_value=True
         ):
-            result = task._handle_select_card({"ocr_results": [{"text": "謝謝"}]})
+            result = task._handle_popup(
+                {"ocr_results": [{"text": "恢復挑戰力", "box": (0, 0, 10, 10)}]}
+            )
 
         self.assertIsInstance(result, ActionResult)
         self.assertTrue(task._completed)
+        self.assertTrue(task._skipped)
 
 
 class TestWonderPickCardRegister(unittest.TestCase):

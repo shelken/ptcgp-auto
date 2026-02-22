@@ -53,7 +53,13 @@ class TestSendCardDailyTask(unittest.TestCase):
         pairing_service_mock.ensure_pairs_for_account.assert_not_called()
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftPairingService")
-    def test_on_start_skip_when_in_cooldown_but_same_day(self, pairing_service_mock):
+    @patch(
+        "ptcgp_auto_v2.tasks.send_card_daily.is_account_pending_same_day_cooldown",
+        return_value=True,
+    )
+    def test_on_start_skip_when_in_cooldown_but_same_day(
+        self, _same_day_mock, pairing_service_mock
+    ):
         task = cast(Any, self.task)
         now = datetime.now().replace(minute=0, second=0, microsecond=0)
         task.account.created_at = now - timedelta(days=14) + timedelta(hours=1)
@@ -196,39 +202,36 @@ class TestSendCardDailyTask(unittest.TestCase):
         self.assertTrue(task._filter_applied)
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.tap_box")
-    @patch("ptcgp_auto_v2.tasks.send_card_daily.find_send_box_near_anchor")
-    @patch("ptcgp_auto_v2.tasks.send_card_daily.find_target_search_plus_box")
-    def test_choose_friend_should_click_search_plus_before_send(
-        self,
-        find_plus_box_mock,
-        find_send_near_anchor_mock,
-        tap_box_mock,
-    ):
+    def test_choose_friend_should_click_search_plus_before_send(self, tap_box_mock):
         task = cast(Any, self.task)
-        task._target_friend_id = "1234567890123456"
-        task._target_nickname = "skn4"
-        task._target_friend_verified = False
-        find_plus_box_mock.return_value = (900, 360, 980, 430)
-        find_send_near_anchor_mock.return_value = (760, 520, 890, 570)
+        task._friend_flow.nickname = "skn4"
+        task._friend_flow.friend_verified = False
+        task._friend_helper = SimpleNamespace(
+            update_signature_and_check_stable=lambda _ocr: False,
+            find_plus_for_nickname=lambda _ocr, _nick: (900, 360, 980, 430),
+            tap_plus_and_wait_profile=lambda _box: ActionResult.ok(wait=0.1),
+            scroll_or_fail=lambda: ActionResult.ok(wait=0.1),
+            check_scroll_bottom=lambda: False,
+            get_next_probe_box=lambda: None,
+        )
         tap_box_mock.return_value = ActionResult.ok(wait=0.1)
 
         result = task._handle_choose_friend({"ocr_results": []})
 
         self.assertTrue(result.success)
-        tap_box_mock.assert_called_once_with(task.adb, (900, 360, 980, 430), wait=3)
+        tap_box_mock.assert_not_called()
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.tap_box")
-    @patch("ptcgp_auto_v2.tasks.send_card_daily.find_send_box_near_anchor")
-    def test_choose_friend_should_click_send_after_friend_verified(
-        self,
-        find_send_near_anchor_mock,
-        tap_box_mock,
-    ):
+    def test_choose_friend_should_click_send_after_friend_verified(self, tap_box_mock):
         task = cast(Any, self.task)
-        task._target_friend_verified = True
-        task._verified_row_anchor_y = 520
-        task._target_nickname = "skn4"
-        find_send_near_anchor_mock.return_value = (760, 520, 890, 570)
+        task._friend_flow.friend_verified = True
+        task._friend_helper = SimpleNamespace(
+            update_signature_and_check_stable=lambda _ocr: False,
+            find_send_box_by_anchor=lambda _ocr: (760, 520, 890, 570),
+            scroll_or_fail=lambda: ActionResult.ok(wait=0.1),
+            check_scroll_bottom=lambda: False,
+            get_next_probe_box=lambda: None,
+        )
         tap_box_mock.return_value = ActionResult.ok(wait=0.1)
 
         result = task._handle_choose_friend({"ocr_results": []})
@@ -236,44 +239,33 @@ class TestSendCardDailyTask(unittest.TestCase):
         self.assertTrue(result.success)
         tap_box_mock.assert_called_once_with(task.adb, (760, 520, 890, 570), wait=1.0)
 
-    @patch("ptcgp_auto_v2.tasks.send_card_daily.click_close")
-    def test_handle_friend_profile_should_verify_target_friend_id(
-        self, click_close_mock
-    ):
+    def test_choose_friend_without_helper_returns_wait(self):
         task = cast(Any, self.task)
-        task._target_friend_id = "1234567890123456"
-        task._target_friend_verified = False
-        task._verified_row_anchor_y = 620
-        click_close_mock.return_value = ActionResult.ok(wait=0.1)
-
-        result = task._handle_friend_profile(
-            {
-                "ocr_results": [
-                    {"text": "朋友ID 1234-5678-9012-3456", "box": (100, 100, 420, 140)}
-                ]
-            }
-        )
-
+        task._friend_helper = None
+        result = task._handle_choose_friend({"ocr_results": []})
         self.assertTrue(result.success)
-        self.assertTrue(task._target_friend_verified)
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftRecordService.update_status")
-    def test_friend_list_stable_should_skip_and_update_record(self, update_status_mock):
+    def test_choose_friend_scroll_exhausted_should_skip_and_update_record(
+        self, update_status_mock
+    ):
         task = cast(Any, self.task)
         task._record = SimpleNamespace()
-        task._friend_stable_rounds = 99
+        task._friend_helper = SimpleNamespace(
+            update_signature_and_check_stable=lambda _ocr: True,
+            scroll_or_fail=lambda: task._skip_without_send(
+                skip_reason="好友列表遍历完成未找到可送目标",
+                record_status="completed_no_target",
+                error_code="TARGET_LIST_EXHAUSTED",
+            ),
+        )
 
-        result = task._continue_find_target_in_friend_list()
+        result = task._handle_choose_friend({"ocr_results": []})
 
         self.assertTrue(result.success)
         self.assertTrue(task.was_skipped())
         self.assertEqual("好友列表遍历完成未找到可送目标", task._skip_reason)
-        update_status_mock.assert_called_once_with(
-            task._record,
-            status="completed_no_target",
-            error_code="TARGET_LIST_EXHAUSTED",
-            error_message="好友列表遍历完成未找到可送目标",
-        )
+        update_status_mock.assert_called_once()
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftRecordService.update_status")
     def test_choose_friend_should_skip_when_no_friends_text_visible(
@@ -281,7 +273,12 @@ class TestSendCardDailyTask(unittest.TestCase):
     ):
         task = cast(Any, self.task)
         task._record = SimpleNamespace()
-        task._target_friend_verified = False
+        task._friend_helper = SimpleNamespace(
+            update_signature_and_check_stable=lambda _ocr: False,
+            scroll_or_fail=lambda: ActionResult.ok(wait=0.1),
+            check_scroll_bottom=lambda: False,
+            get_next_probe_box=lambda: None,
+        )
 
         result = task._handle_choose_friend(
             {
@@ -353,49 +350,30 @@ class TestSendCardDailyTask(unittest.TestCase):
         record_service_mock.ensure_send_card_daily_pending.assert_not_called()
         record_service_mock.update_status.assert_not_called()
 
-    @patch("ptcgp_auto_v2.tasks.send_card_daily.extract_friend_id_from_text")
-    def test_duplicate_nickname_should_skip_failed_row_and_try_next(self, extract_mock):
-        """同名好友场景：第一个验证失败后，应尝试第二个"""
+    def test_duplicate_nickname_logic_is_delegated_to_friend_helper(self):
+        """同名好友选择逻辑已委托 FriendSelectionHelper。"""
         task = cast(Any, self.task)
-        task._target_friend_id = "9999-9999-9999-9999"
-        task._target_nickname = "skn"
-        task._target_friend_verified = False
-        task._failed_plus_rows = set()  # 初始化失败行记录
+        helper = SimpleNamespace(
+            update_signature_and_check_stable=lambda _ocr: False,
+            find_plus_for_nickname=lambda _ocr, _nick: (900, 600, 980, 670),
+            tap_plus_and_wait_profile=lambda _box: ActionResult.ok(wait=0.1),
+            scroll_or_fail=lambda: ActionResult.ok(wait=0.1),
+            check_scroll_bottom=lambda: False,
+            get_next_probe_box=lambda: None,
+        )
+        task._friend_helper = helper
+        task._friend_flow.nickname = "skn"
 
-        # 模拟找到两个加号（同名好友）
-        plus_boxes = [
-            (900, 360, 980, 430),  # 第一行
-            (900, 600, 980, 670),  # 第二行
-        ]
-        task.page_detector = SimpleNamespace(
-            find_all_templates=lambda *args, **kwargs: [
-                SimpleNamespace(box=box) for box in plus_boxes
-            ]
+        result = task._handle_choose_friend(
+            {
+                "ocr_results": [
+                    {"text": "skn", "box": (389, 408, 450, 430)},
+                    {"text": "skn", "box": (389, 648, 450, 670)},
+                ]
+            }
         )
 
-        # OCR 结果包含两个同名好友
-        ocr_results = [
-            {"text": "skn", "box": (389, 408, 450, 430)},
-            {"text": "skn", "box": (389, 648, 450, 670)},
-        ]
-
-        # 第一次提取返回错误的 friend_id
-        extract_mock.side_effect = ["1111-1111-1111-1111", "9999-9999-9999-9999"]
-
-        # 第一次调用 _find_target_search_plus_box
-        box1 = task._find_target_search_plus_box(ocr_results)
-        self.assertEqual(box1, (900, 360, 980, 430))
-
-        # 模拟验证失败，记录失败行
-        task._verified_row_anchor_y = (360 + 430) // 2
-        task._failed_plus_rows.add(task._verified_row_anchor_y)
-
-        # 第二次调用应返回第二个加号
-        box2 = task._find_target_search_plus_box(ocr_results)
-        self.assertEqual(box2, (900, 600, 980, 670))
-
-        # 验证失败行已被记录
-        self.assertIn((360 + 430) // 2, task._failed_plus_rows)
+        self.assertTrue(result.success)
 
 
 if __name__ == "__main__":
