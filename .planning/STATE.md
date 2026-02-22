@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 2 of 2 (详情展示与 Markdown 渲染)
-Plan: 1 of 2 in current phase
-Status: In Progress
-Last activity: 2026-02-22 — Plan 01 completed
+Plan: 2 of 2 in current phase
+Status: Complete
+Last activity: 2026-02-22 — Plan 02 completed
 
-Progress: [██████████░░░░░░░░] 50% (Phase 2: 1/2 plans)
+Progress: [███████████████████] 100% (Phase 2: 2/2 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 6.5 min
-- Total execution time: 0.7 hours
+- Total plans completed: 7
+- Average duration: 6.3 min
+- Total execution time: 0.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. 基础面板与核心交互 | 5 | 5 | 6.8 min |
-| 2. 详情展示与 Markdown 渲染 | 1 | 2 | 4 min |
+| 2. 详情展示与 Markdown 渲染 | 2 | 2 | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 15 min, 4 min, 7 min, 4 min, 4 min
-- Trend: Phase 2 in progress
+- Last 5 plans: 4 min, 7 min, 4 min, 4 min, 4 min
+- Trend: Phase 2 complete
 
 *Updated after each plan completion*
 
@@ -62,6 +62,10 @@ Recent decisions affecting current work:
 - [02-01]: 使用 details/summary 原生元素实现手风琴，name 属性实现互斥
 - [02-01]: toggle 事件使用 capture 阶段监听（因为不冒泡）
 - [02-01]: 乐观 UI 更新 + 异步后端调用模式
+- [02-02]: 使用 marked.js 解析 Markdown（GFM 模式支持自动链接）
+- [02-02]: DOMPurify 白名单仅允许 b/strong/i/em/a/p/br 标签
+- [02-02]: 链接自动添加 target="_blank" 和 rel="noopener noreferrer"
+- [02-02]: 首次展开渲染 Markdown，dataset.rendered 防止重复
 
 ### Pending Todos
 
@@ -74,5 +78,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

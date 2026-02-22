@@ -38,8 +38,8 @@
 
 ### Markdown 渲染
 
-- [ ] **MD-01**: 通知详情支持 markdown 渲染
-- [ ] **MD-02**: markdown 渲染前进行 XSS 过滤（DOMPurify）
+- [x] **MD-01**: 通知详情支持 markdown 渲染
+- [x] **MD-02**: markdown 渲染前进行 XSS 过滤（DOMPurify）
 
 ### 无障碍
 
@@ -98,8 +98,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INTR-01 | Phase 2 | Complete |
 | INTR-02 | Phase 2 | Complete |
 | INTR-03 | Phase 2 | Complete |
-| MD-01 | Phase 2 | Pending |
-| MD-02 | Phase 2 | Pending |
+| MD-01 | Phase 2 | Complete |
+| MD-02 | Phase 2 | Complete |
 
 **Coverage:**
 - v1 requirements: 22 total
