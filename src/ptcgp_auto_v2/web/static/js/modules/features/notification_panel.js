@@ -37,6 +37,9 @@ export class NotificationDrawerManager {
         // 锁定滚动
         this.lockBodyScroll();
         
+        // 加载通知列表
+        this.loadPanelContent();
+        
         this.isOpen = true;
 
         // 分发自定义事件
@@ -44,6 +47,21 @@ export class NotificationDrawerManager {
             detail: { drawer: this }
         }));
     }
+
+    /**
+     * 加载面板内容
+     * 通过 HTMX 从后端加载
+     */
+    loadPanelContent() {
+        const content = document.getElementById('notification-list-content');
+        if (!content) return;
+
+        // 使用 HTMX 加载内容
+        if (typeof htmx !== 'undefined') {
+            htmx.trigger(content, 'loadPanel');
+        }
+    }
+}
 
     /**
      * 关闭通知面板
