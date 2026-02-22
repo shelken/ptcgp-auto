@@ -35,9 +35,8 @@
         </div>
     </summary>
 
-    {# 详情区（展开后显示） #}
-    <div class="notification-item__detail" data-notification-content>
-        {{ notification.content }}
+    {# 详情区（展开后显示，Markdown 渲染目标） #}
+    <div class="notification-item__detail" data-notification-content="{{ notification.content | e }}">
     </div>
 </details>
 {% endfor %}
