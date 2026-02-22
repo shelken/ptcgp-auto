@@ -43,14 +43,14 @@ Plans:
 **Requirements**: INTR-01, INTR-02, INTR-03, MD-01, MD-02
 **Success Criteria** (what must be TRUE):
   1. 用户点击通知项可展开查看完整详情内容
-  2. 通知详情支持 Markdown 渲染（链接、格式化、代码块等）
+  2. 通知详情支持 Markdown 渲染（链接、格式化）
   3. 点击通知项后该通知自动标记为已读
   4. 展开的详情区域可以收起折叠
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: 详情展开/收起交互（点击展开、再次点击收起）
-- [ ] 02-02: Markdown 渲染与 XSS 防护（marked.js + DOMPurify 集成）
+- [ ] 02-01-PLAN.md — 详情展开/收起交互（HTML details 手风琴、CSS 动画、toggle 事件、已读标记）
+- [ ] 02-02-PLAN.md — Markdown 渲染与 XSS 防护（CDN 引入、安全渲染逻辑、集成到 toggle）
 
 ## Progress
 
