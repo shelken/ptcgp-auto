@@ -628,3 +628,51 @@ async def get_notification_load_more(
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/notification_list_items.html", context)
+
+
+@router.post("/notifications/panel/mark-all-read", response_class=HTMLResponse)
+async def mark_all_panel_notifications_read(
+    request: Request,
+    lang: str | None = Query(default=None),
+    session: Session = Depends(get_fastapi_session),
+):
+    """
+    标记所有未读通知为已读，返回更新后的面板内容。
+
+    通过 HX-Trigger 通知前端刷新 Badge 并显示 toast 提示。
+    """
+    current_lang = detect_lang(request, lang)
+    t = get_translations(current_lang)
+
+    repo = NotificationRepository()
+    count = repo.mark_all_as_read()
+
+    # 构建更新后的面板内容上下文
+    context = build_notification_panel_context(
+        session=session,
+        lang=current_lang,
+        page=0,
+        page_size=10,
+    )
+    context["request"] = request
+    context["unread_count"] = 0  # 全部已读
+
+    templates = get_templates()
+    response = templates.TemplateResponse(
+        "partials/notification_list_items.html", context
+    )
+
+    # 通过 HX-Trigger 通知前端更新 badge 和显示 toast
+    message_template = (
+        t.get("notification_marked_read") or "已标记 {count} 条通知为已读"
+    )
+    message = message_template.format(count=count)
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "notificationsUpdated": True,
+            "showToast": {"message": message},
+        },
+        ensure_ascii=True,
+    )
+
+    return response
