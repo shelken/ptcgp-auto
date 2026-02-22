@@ -206,14 +206,10 @@
     flex-shrink: 0;
 }
 
-/* 摘要文本 */
+/* summary 容器（避免继承导致正文被强制单行） */
 .notification-item__summary {
-    font-size: 13px;
-    color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-top: 4px;
+    color: var(--text-color);
+    white-space: normal;
 }
 
 /* ========================================
@@ -591,6 +587,7 @@
     font-size: 13px;
     color: var(--text-muted);
     margin-top: 4px;
+    white-space: normal;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
