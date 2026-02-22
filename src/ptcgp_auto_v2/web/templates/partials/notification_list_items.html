@@ -54,7 +54,7 @@
 {% if has_more %}
 <div class="load-more-trigger"
      hx-get="/notifications/load-more?page={{ next_page }}&lang={{ current_lang }}"
-     hx-trigger="revealed once"
+     hx-trigger="intersect once root:#notification-list-content threshold:0.1"
      hx-target="this"
      hx-swap="outerHTML">
     {# 骨架屏 #}
