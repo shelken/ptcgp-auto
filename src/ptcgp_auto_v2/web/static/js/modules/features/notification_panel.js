@@ -404,7 +404,7 @@ document.addEventListener('htmx:afterSettle', (event) => {
 
 /**
  * 处理 details toggle 事件
- * 展开时：滚动到可见位置 + 乐观 UI 已读标记 + 异步后端调用
+ * 展开时：滚动到可见位置 + 乐观 UI 已读标记 + 异步后端调用 + Markdown 渲染
  */
 document.addEventListener('toggle', (event) => {
     const details = event.target;
@@ -424,6 +424,9 @@ document.addEventListener('toggle', (event) => {
         if (id) {
             markAsReadAsync(id);
         }
+        
+        // 4. 渲染 Markdown 内容
+        renderNotificationDetail(details);
     }
 }, true); // capture 阶段监听，因为 toggle 事件不冒泡
 
@@ -475,10 +478,35 @@ async function markAsReadAsync(id) {
     }
 }
 
+/**
+ * 渲染通知详情内容
+ * 仅在首次展开时渲染（检查是否已渲染）
+ * @param {HTMLElement} details - details 元素
+ */
+function renderNotificationDetail(details) {
+    const detailContainer = details.querySelector('.notification-item__detail');
+    if (!detailContainer) return;
+    
+    // 检查是否已渲染（避免重复渲染）
+    if (detailContainer.dataset.rendered === 'true') return;
+    
+    // 获取原始 Markdown 内容
+    const markdown = detailContainer.dataset.notificationContent;
+    if (!markdown) return;
+    
+    // 渲染 Markdown
+    const renderedHtml = renderMarkdownSafely(markdown);
+    detailContainer.innerHTML = renderedHtml;
+    
+    // 标记已渲染
+    detailContainer.dataset.rendered = 'true';
+}
+
 // 导出供外部访问
 export { 
     getNotificationDrawer, 
     animateBadgeUpdate, 
     triggerUnreadToReadAnimation,
-    renderMarkdownSafely 
+    renderMarkdownSafely,
+    renderNotificationDetail
 };
