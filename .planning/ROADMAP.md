@@ -46,11 +46,12 @@ Plans:
   2. 通知详情支持 Markdown 渲染（链接、格式化）
   3. 点击通知项后该通知自动标记为已读
   4. 展开的详情区域可以收起折叠
-**Plans:** 2 plans
+**Plans:** 3 plans (2 initial + 1 gap closure)
 
 Plans:
-- [ ] 02-01-PLAN.md — 详情展开/收起交互（HTML details 手风琴、CSS 动画、toggle 事件、已读标记）
-- [ ] 02-02-PLAN.md — Markdown 渲染与 XSS 防护（CDN 引入、安全渲染逻辑、集成到 toggle）
+- [x] 02-01-PLAN.md — 详情展开/收起交互（HTML details 手风琴、CSS 动画、toggle 事件、已读标记）
+- [x] 02-02-PLAN.md — Markdown 渲染与 XSS 防护（CDN 引入、安全渲染逻辑、集成到 toggle）
+- [ ] 02-03-PLAN.md — [GAP CLOSURE] 修复 data-notification-content 属性绑定和 API 端点路径错误
 
 ## Progress
 
@@ -60,7 +61,7 @@ Phases execute in numeric order: 1 → 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 基础面板与核心交互 | 5/5 | Complete | 2026-02-23 |
-| 2. 详情展示与 Markdown 渲染 | 0/2 | Not started | - |
+| 2. 详情展示与 Markdown 渲染 | 2/3 | Gap closure needed | - |
 
 ---
 *Roadmap created: 2026-02-23*
