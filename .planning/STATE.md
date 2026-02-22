@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 2 of 2 (详情展示与 Markdown 渲染)
-Plan: 0 of 2 in current phase
-Status: Ready to start
-Last activity: 2026-02-23 — Phase 1 completed (5/5 plans)
+Plan: 1 of 2 in current phase
+Status: In Progress
+Last activity: 2026-02-22 — Plan 01 completed
 
-Progress: [██████████] 100% (Phase 1)
+Progress: [██████████░░░░░░░░] 50% (Phase 2: 1/2 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 6.8 min
-- Total execution time: 0.6 hours
+- Total plans completed: 6
+- Average duration: 6.5 min
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. 基础面板与核心交互 | 5 | 5 | 6.8 min |
-| 2. 详情展示与 Markdown 渲染 | 0 | 2 | - |
+| 2. 详情展示与 Markdown 渲染 | 1 | 2 | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 15 min, 4 min, 7 min, 4 min
-- Trend: Phase 1 completed successfully
+- Last 5 plans: 15 min, 4 min, 7 min, 4 min, 4 min
+- Trend: Phase 2 in progress
 
 *Updated after each plan completion*
 
@@ -59,6 +59,9 @@ Recent decisions affecting current work:
 - [01-04]: 动画时长 300ms，与设计决策一致
 - [01-05]: 使用 :focus-visible 而非 :focus，仅在键盘导航时显示焦点环
 - [01-05]: 事件监听器在 open/close 时动态绑定/解绑，避免内存泄漏
+- [02-01]: 使用 details/summary 原生元素实现手风琴，name 属性实现互斥
+- [02-01]: toggle 事件使用 capture 阶段监听（因为不冒泡）
+- [02-01]: 乐观 UI 更新 + 异步后端调用模式
 
 ### Pending Todos
 
@@ -70,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-23
-Stopped at: Phase 1 completed
+Last session: 2026-02-22
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None

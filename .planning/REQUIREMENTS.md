@@ -30,9 +30,9 @@
 
 ### 通知交互
 
-- [ ] **INTR-01**: 点击通知项展开详情（显示 markdown 内容）
-- [ ] **INTR-02**: 点击通知项自动标记为已读
-- [ ] **INTR-03**: 展开详情后可收起
+- [x] **INTR-01**: 点击通知项展开详情（显示 markdown 内容）
+- [x] **INTR-02**: 点击通知项自动标记为已读
+- [x] **INTR-03**: 展开详情后可收起
 - [x] **INTR-04**: 点击 "全部已读" 按钮批量标记所有未读通知
 - [x] **INTR-05**: 标记已读后实时更新 badge 数量（HTMX OOB swap）
 
@@ -95,9 +95,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIST-05 | Phase 1 | Complete |
 | INTR-04 | Phase 1 | Complete |
 | INTR-05 | Phase 1 | Complete |
-| INTR-01 | Phase 2 | Pending |
-| INTR-02 | Phase 2 | Pending |
-| INTR-03 | Phase 2 | Pending |
+| INTR-01 | Phase 2 | Complete |
+| INTR-02 | Phase 2 | Complete |
+| INTR-03 | Phase 2 | Complete |
 | MD-01 | Phase 2 | Pending |
 | MD-02 | Phase 2 | Pending |
 
