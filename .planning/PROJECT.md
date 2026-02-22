@@ -18,23 +18,43 @@
 - ✓ 通知管理页面 (`/management/notifications`) — existing
 - ✓ 未读数量接口 (`/notifications/count`) — existing
 - ✓ 标记已读接口 (`mark-read`, `mark-all-read`) — existing
+- ✓ 首页右上角铃铛图标 + 未读 badge — v2.0.0
+- ✓ 点击铃铛从右侧滑出通知中心面板 — v2.0.0
+- ✓ 通知中心显示全部通知（未读优先）— v2.0.0
+- ✓ 滚动到底部自动加载更多 — v2.0.0
+- ✓ 点击通知项展开详情 + 标记已读 — v2.0.0
+- ✓ 提供「全部已读」按钮 — v2.0.0
+- ✓ 支持 markdown 渲染并进行 XSS 过滤 — v2.0.0
+- ✓ 面板可通过 ESC / 外部点击 / 关闭按钮关闭 — v2.0.0
+- ✓ 焦点陷阱与焦点恢复无障碍能力 — v2.0.0
 
 ### Active
 
-- [ ] 首页右上角铃铛图标 + 未读 badge
-- [ ] 点击铃铛从右侧滑出通知中心面板
-- [ ] 通知中心显示全部通知（未读优先）
-- [ ] 滚动到底部自动加载更多
-- [ ] 点击通知项展开详情 + 标记已读
-- [ ] 提供「全部已读」按钮
-- [ ] 支持 markdown 渲染
+- [ ] 通知中心筛选能力（按类型/来源）
+- [ ] 通知中心搜索能力（标题/内容关键字）
+- [ ] 通知优先级与分组展示
+- [ ] 通知详情中的卡片/任务深链接跳转
 
 ### Out of Scope
 
-- 通知筛选功能 — 用户可直接跳转到管理页面筛选
-- 通知分类标签 — 简化首次实现
+- 全量实时推送更新 — 当前以打开面板刷新为主，避免阅读打断
+- 声音提醒 — 避免通知疲劳
 
 ## Context
+
+### Current State
+
+已完成并发布里程碑 **v2.0.0 Notification Center**：
+
+- 交付范围：2 个阶段，8 个计划项
+- 核心能力：铃铛入口、滑出面板、未读优先列表、无限滚动、批量已读、详情展开、Markdown 安全渲染、键盘无障碍
+- 归档文档：`.planning/milestones/v2.0.0-ROADMAP.md`、`.planning/milestones/v2.0.0-REQUIREMENTS.md`
+
+### Next Milestone Goals
+
+1. 增强通知检索效率（筛选 + 搜索）
+2. 增强通知语义表达（优先级、分组、状态）
+3. 打通通知到业务页面的深链接跳转
 
 ### 现有系统
 
@@ -62,9 +82,10 @@
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| 右侧滑出面板 | 类似 macOS 通知中心，用户熟悉 | — Pending |
-| 滚动加载而非分页 | 更好的连续体验 | — Pending |
-| 点击展开详情 | 一站式查看 markdown 内容 | — Pending |
+| 右侧滑出面板 | 类似 macOS 通知中心，用户熟悉 | ✓ Good（v2.0.0） |
+| 滚动加载而非分页 | 更好的连续体验 | ✓ Good（v2.0.0） |
+| 点击展开详情 | 一站式查看 markdown 内容 | ✓ Good（v2.0.0） |
+| Markdown 客户端渲染 + DOMPurify 白名单 | 平衡可读性与安全性 | ✓ Good（v2.0.0） |
 
 ---
-*Last updated: 2026-02-23 after initialization*
+*Last updated: 2026-02-23 after v2.0.0 milestone*
