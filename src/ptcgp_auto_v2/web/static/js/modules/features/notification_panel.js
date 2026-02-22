@@ -311,3 +311,79 @@ document.addEventListener('htmx:afterSettle', (event) => {
         triggerUnreadToReadAnimation();
     }
 });
+
+/**
+ * 处理 details toggle 事件
+ * 展开时：滚动到可见位置 + 乐观 UI 已读标记 + 异步后端调用
+ */
+document.addEventListener('toggle', (event) => {
+    const details = event.target;
+
+    // 仅处理通知项的 details 元素
+    if (!details.classList.contains('notification-item')) return;
+
+    if (details.open) {
+        // 1. 滚动到可见位置
+        details.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // 2. 乐观 UI 已读标记（立即视觉反馈）
+        markAsReadOptimistically(details);
+
+        // 3. 异步后端调用（静默忽略失败）
+        const id = details.dataset.notificationId;
+        if (id) {
+            markAsReadAsync(id);
+        }
+    }
+}, true); // capture 阶段监听，因为 toggle 事件不冒泡
+
+/**
+ * 乐观 UI 已读标记
+ * 立即更新视觉效果，不等待后端响应
+ * @param {HTMLElement} element - details 元素
+ */
+function markAsReadOptimistically(element) {
+    // 移除未读状态类
+    element.classList.remove('notification-item--unread');
+
+    // 移除竖线指示器
+    const indicator = element.querySelector('.notification-item__indicator');
+    if (indicator) {
+        indicator.remove();
+    }
+
+    // 更新标题字重（通过动画类）
+    const title = element.querySelector('.notification-item__title');
+    if (title) {
+        title.style.fontWeight = '500';
+    }
+}
+
+/**
+ * 异步后端已读标记
+ * 静默忽略失败，保持 UI 变化
+ * @param {string|number} id - 通知 ID
+ */
+async function markAsReadAsync(id) {
+    try {
+        const response = await fetch(`/notifications/${id}/read`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            console.warn(`Failed to mark notification ${id} as read`);
+        }
+
+        // 触发 badge 更新
+        document.dispatchEvent(new CustomEvent('notificationRead'));
+    } catch (error) {
+        // 静默忽略失败
+        console.warn('markAsReadAsync error:', error);
+    }
+}
+
+// 导出供外部访问
+export { markAsReadOptimistically, markAsReadAsync };
