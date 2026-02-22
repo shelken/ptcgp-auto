@@ -344,16 +344,27 @@ def build_notification_panel_context(
     has_more = (normalized_page + 1) * normalized_page_size < total_count
     next_page = normalized_page + 1 if has_more else normalized_page
 
-    # 为每个通知添加相对时间文本
-    for notification in notifications:
-        notification.relative_time = _format_relative_time(
-            notification.created_at, current_lang, t
+    # 转换为字典并添加相对时间文本
+    notification_dicts = []
+    for n in notifications:
+        notification_dicts.append(
+            {
+                "id": n.id,
+                "scene": n.scene,
+                "title": n.title,
+                "content": n.content,
+                "related_account_id": n.related_account_id,
+                "related_task_instance_id": n.related_task_instance_id,
+                "is_read": n.is_read,
+                "created_at": n.created_at,
+                "relative_time": _format_relative_time(n.created_at, current_lang, t),
+            }
         )
 
     return {
         "t": t,
         "current_lang": current_lang,
-        "notifications": notifications,
+        "notifications": notification_dicts,
         "has_more": has_more,
         "next_page": next_page,
         "unread_count": unread_count,
