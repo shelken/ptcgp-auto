@@ -22,11 +22,11 @@ from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
-from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.tasks.utils.rarity_filter import (
     FilterPanelState,
     handle_filter_panel,
 )
+from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
     pinch_in,
@@ -469,4 +469,4 @@ class CollectAccountCardsTask(Task):
         row_tol = self.adb.scaled_y(BASE_SORT_ROW_TOL)
         if abs(target_cy - arrow_cy) > row_tol:
             return False
-        return arrow_box[0] >= target_box[2]
+        return arrow_box[0] >= target_box[0]
