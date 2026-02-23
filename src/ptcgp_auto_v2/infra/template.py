@@ -336,6 +336,12 @@ class TemplateMatcher:
             )
 
         result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        # 添加统计信息
+        max_conf = result.max()
+        mean_conf = result.mean()
+        logger.debug(
+            f"[模板统计] {template_name}: max={max_conf:.3f}, mean={mean_conf:.3f}"
+        )
         locations = np.where(result >= threshold)
 
         h, w = template.shape[:2]
