@@ -7,17 +7,20 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
+from ptcgp_auto_v2.utils import pack_auto_selector
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 
 
 class FakeCardRepo:
-    def __init__(self, packs, card_sets):
+    def __init__(self, packs, card_sets, progress_map=None):
         self._packs = packs
         self._card_sets = card_sets
+        self._progress_map = progress_map or {}
 
     def get_packs_by_set_prefixes(self, prefixes, exclude_set_codes):
         exclude = {code.upper() for code in exclude_set_codes}
@@ -33,6 +36,15 @@ class FakeCardRepo:
 
     def get_all_sets(self):
         return self._card_sets
+
+    def get_pack_target_rarity_progress(self, pack_names, target_rarities):
+        return {
+            pack_name: self._progress_map.get(
+                pack_name,
+                {"owned_target": 0, "total_target": 0},
+            )
+            for pack_name in pack_names
+        }
 
 
 class FakeRecordRepo:
@@ -52,6 +64,9 @@ class FakeAccount:
 
 
 class TestPackAutoSelector(unittest.TestCase):
+    def setUp(self):
+        pack_auto_selector._HRW_WEEKLY_CACHE.clear()
+
     def test_latest_strategy_picks_newest_set(self):
         packs = [
             SimpleNamespace(set_code="A1", name="Pikachu"),
@@ -77,7 +92,7 @@ class TestPackAutoSelector(unittest.TestCase):
         self.assertEqual(result["pack_code"], "A2")
         self.assertEqual(result["booster_name"], "Charizard")
 
-    def test_hash_balance_is_stable(self):
+    def test_hrw_progress_balance_is_stable(self):
         packs = [
             SimpleNamespace(set_code="A1", name="Pikachu"),
             SimpleNamespace(set_code="A2", name="Charizard"),
@@ -88,20 +103,95 @@ class TestPackAutoSelector(unittest.TestCase):
 
         first = select_pack_for_account(
             account=account,
-            strategy="hash_balance",
+            strategy="hrw_progress_balance",
             card_repo=repo,
             record_repo=record_repo,
             exclude_set_codes=[],
         )
         second = select_pack_for_account(
             account=account,
-            strategy="hash_balance",
+            strategy="hrw_progress_balance",
             card_repo=repo,
             record_repo=record_repo,
             exclude_set_codes=[],
         )
 
         self.assertEqual(first, second)
+
+    def test_hrw_progress_balance_prefers_low_progress_pack(self):
+        packs = [
+            SimpleNamespace(set_code="A1", name="Pikachu"),
+            SimpleNamespace(set_code="A2", name="Charizard"),
+        ]
+        progress_map = {
+            "Pikachu": {"owned_target": 10, "total_target": 10},
+            "Charizard": {"owned_target": 0, "total_target": 10},
+        }
+        repo = FakeCardRepo(packs, [], progress_map=progress_map)
+        record_repo = FakeRecordRepo()
+        account = FakeAccount(account_id=42)
+
+        with (
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector._load_all_account_keys",
+                return_value=["id:42"],
+            ),
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector._build_seed_candidates",
+                return_value=["seed-test"],
+            ),
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector._hash_to_unit",
+                return_value=0.5,
+            ),
+        ):
+            result = select_pack_for_account(
+                account=account,
+                strategy="hrw_progress_balance",
+                card_repo=repo,
+                record_repo=record_repo,
+                exclude_set_codes=[],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["pack_code"], "A2")
+        self.assertEqual(result["booster_name"], "Charizard")
+
+    def test_hrw_progress_balance_seed_uses_game_biz_date(self):
+        packs = [SimpleNamespace(set_code="A1", name="Pikachu")]
+        progress_map = {"Pikachu": {"owned_target": 0, "total_target": 10}}
+        repo = FakeCardRepo(packs, [], progress_map=progress_map)
+        record_repo = FakeRecordRepo()
+        account = FakeAccount(account_id=1)
+
+        with (
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector.get_game_biz_date_str",
+                return_value="2026-02-24",
+            ),
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector._load_all_account_keys",
+                return_value=["id:1"],
+            ),
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector._build_seed_candidates",
+                return_value=["rarity-gap-auto-39|2026-W09"],
+            ),
+            patch(
+                "ptcgp_auto_v2.utils.pack_auto_selector._hash_to_unit",
+                return_value=0.5,
+            ) as hash_mock,
+        ):
+            result = select_pack_for_account(
+                account=account,
+                strategy="hrw_progress_balance",
+                card_repo=repo,
+                record_repo=record_repo,
+                exclude_set_codes=[],
+            )
+
+        self.assertIsNotNone(result)
+        hash_mock.assert_called_with("id:1|A1/Pikachu|rarity-gap-auto-39|2026-W09")
 
     def test_least_used_prefers_lowest_count(self):
         packs = [
