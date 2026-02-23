@@ -229,7 +229,8 @@ export function initCustomSelects(context = document) {
                         searchInput.select();
                     }
                 } else {
-                    updateFocusedOption(0);
+                    const selectedIndex = Array.from(optionsList.querySelectorAll('.custom-select-option')).findIndex(el => el.classList.contains('selected'));
+                    updateFocusedOption(selectedIndex >= 0 ? selectedIndex : 0);
                 }
             }
         });
