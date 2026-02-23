@@ -25,20 +25,20 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
+from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
-from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
-    map_detected_cards,
-)
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
     long_press_opening_card,
     swipe_card_register,
     swipe_open_pack,
     tap_opening_continue,
+)
+from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
+    map_detected_cards,
 )
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
@@ -430,7 +430,7 @@ class OpenPackTask(Task):
 
         # 检查是否有免费包图标
         free_pack_box = self.page_detector.find_template_with_scale(
-            "icon_free_pack_available", screenshot=screenshot, threshold=0.68
+            "icon_free_pack_available", screenshot=screenshot, threshold=0.8
         )
 
         if free_pack_box:
