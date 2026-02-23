@@ -21,6 +21,7 @@
   "owned_sort_label": "排序",
   "owned_sort_rarity": "稀有度(高→低)",
   "owned_sort_acquired": "拥有时间(新→旧)",
+  "owned_sort_count": "拥有数量(多→少)",
   "end_of_records": "没有更多记录了",
   "generated_by": "由 PTCGP Auto V2 生成",
   "account_id": "账号 ID",
