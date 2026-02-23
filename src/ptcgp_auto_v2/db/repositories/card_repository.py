@@ -3,12 +3,12 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
-from sqlalchemy import or_
+from sqlalchemy import and_, distinct, func, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import Card, CardPack, CardSet, Pack
+from ptcgp_auto_v2.db.models import AccountCard, Card, CardPack, CardSet, Pack
 from ptcgp_auto_v2.utils.card_naming import parse_card_number_from_filename
 
 logger = logging.getLogger(__name__)
@@ -102,6 +102,48 @@ class CardRepository:
                 statement = statement.where(col(Pack.set_code).not_in(exclude_set))
             statement = statement.order_by(Pack.set_code, Pack.name)
             return list(session.exec(statement).all())
+
+    def get_pack_target_rarity_progress(
+        self,
+        pack_names: list[str],
+        target_rarities: list[str],
+    ) -> dict[str, dict[str, int]]:
+        """按子包统计目标稀有度全账号并集进度。"""
+        if not pack_names or not target_rarities:
+            return {}
+
+        with Session(get_engine()) as session:
+            statement = (
+                select(
+                    CardPack.pack_name,
+                    func.count(distinct(col(Card.id))).label("total_target"),
+                    func.count(distinct(col(AccountCard.card_id))).label(
+                        "owned_target"
+                    ),
+                )
+                .select_from(CardPack)
+                .join(Card, col(Card.id) == col(CardPack.card_id))
+                .outerjoin(
+                    AccountCard,
+                    and_(
+                        col(AccountCard.card_id) == col(Card.id),
+                        col(AccountCard.count) > 0,
+                    ),
+                )
+                .where(
+                    col(CardPack.pack_name).in_(pack_names),
+                    col(Card.rarity).in_(target_rarities),
+                )
+                .group_by(col(CardPack.pack_name))
+            )
+            rows = session.exec(statement).all()
+            return {
+                pack_name: {
+                    "total_target": int(total_target or 0),
+                    "owned_target": int(owned_target or 0),
+                }
+                for pack_name, total_target, owned_target in rows
+            }
 
     def get_pack_by_name(self, name: str) -> Optional[Pack]:
         """获取卡包详情"""
