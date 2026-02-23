@@ -255,10 +255,12 @@ def show_preview(preview: SyncPreview) -> None:
 
 def confirm_sync(input_fn: Callable[[str], str] = input) -> bool:
     """确认是否执行写入，只有输入 y 才继续。"""
-    answer = input_fn("确认写入数据库吗？输入 y 继续，其他任意输入取消: ")
+    print("确认写入数据库吗？输入 y 继续，其他任意输入取消:", flush=True)
+    answer = input_fn("> ")
     if answer.strip().lower() != "y":
         logger.info("已取消，未写入数据库")
         return False
+    logger.info("确认通过，开始写入数据库")
     return True
 
 
