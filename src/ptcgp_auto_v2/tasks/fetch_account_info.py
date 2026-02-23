@@ -18,8 +18,8 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
+from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
@@ -302,7 +302,7 @@ class FetchAccountInfoTask(Task):
             ocr,
             get_text_patterns("more_menu_holdings"),
             wait=1.5,
-            exact=True,
+            exact=False,
         )
         if result:
             self._mark_action_done("holdings_entered")
