@@ -8,19 +8,33 @@
 from __future__ import annotations
 
 import hashlib
+import math
+import threading
 from bisect import bisect_left
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, cast
 
 from ptcgp_auto_v2.config.constants import (
+    PACK_AUTO_HRW_PROGRESS_BETA,
+    PACK_AUTO_HRW_SEED,
+    PACK_AUTO_HRW_SEED_SCAN_COUNT,
+    PACK_AUTO_HRW_TARGET_RARITIES,
+    PACK_AUTO_HRW_LOAD_EPSILON,
+    PACK_AUTO_HRW_WEIGHT_MAX,
+    PACK_AUTO_HRW_WEIGHT_MIN,
     PACK_AUTO_HASH_VIRTUAL_NODES,
     PACK_AUTO_STRATEGIES,
     PACK_SERIES_CODES,
 )
+from ptcgp_auto_v2.utils.game_time import get_game_biz_date_str
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account, Pack, CardSet
     from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
+
+
+_HRW_WEEKLY_CACHE: dict[str, dict] = {}
+_HRW_WEEKLY_CACHE_LOCK = threading.RLock()
 
 
 def select_pack_for_account(
@@ -31,20 +45,26 @@ def select_pack_for_account(
     exclude_set_codes: list[str],
 ) -> Optional[dict]:
     """根据策略返回选中的卡包信息。"""
-    candidates = _build_candidates(card_repo, exclude_set_codes)
-    if not candidates:
-        return None
-
     if strategy not in PACK_AUTO_STRATEGIES:
         strategy = "latest"
 
     account_key = _build_account_key(account)
-    if strategy == "least_used":
-        pack = _select_least_used(account_key, candidates, record_repo)
-    elif strategy == "hash_balance":
-        pack = _select_by_consistent_hash(account_key, candidates)
+    candidate_count = 0
+    if strategy in ("hrw_progress_balance", "hash_balance"):
+        pack, candidate_count = _select_by_weighted_hrw(
+            account_key,
+            card_repo,
+            exclude_set_codes,
+        )
     else:
-        pack = _select_latest_pack(candidates, card_repo)
+        candidates = _build_candidates(card_repo, exclude_set_codes)
+        if not candidates:
+            return None
+        candidate_count = len(candidates)
+        if strategy == "least_used":
+            pack = _select_least_used(account_key, candidates, record_repo)
+        else:
+            pack = _select_latest_pack(candidates, card_repo)
 
     if not pack:
         return None
@@ -53,7 +73,7 @@ def select_pack_for_account(
         "pack_code": pack.set_code,
         "booster_name": pack.name,
         "strategy": strategy,
-        "candidate_count": len(candidates),
+        "candidate_count": candidate_count,
     }
 
 
@@ -149,6 +169,333 @@ def _select_by_consistent_hash(
     return ring[pos][1]
 
 
+def _select_by_weighted_hrw(
+    account_key: str,
+    card_repo: "CardRepository",
+    exclude_set_codes: list[str],
+) -> tuple[Optional["Pack"], int]:
+    """按全局进度权重使用 HRW 选择卡包。"""
+    cache_key = _build_weekly_cache_key(exclude_set_codes)
+    snapshot = _get_or_build_weekly_snapshot(
+        cache_key=cache_key,
+        card_repo=card_repo,
+        exclude_set_codes=exclude_set_codes,
+        current_account_key=account_key,
+    )
+    if not snapshot:
+        return None, 0
+
+    selected_pack_key = snapshot["assignment_map"].get(account_key)
+    if not selected_pack_key:
+        snapshot = _get_or_build_weekly_snapshot(
+            cache_key=cache_key,
+            card_repo=card_repo,
+            exclude_set_codes=exclude_set_codes,
+            current_account_key=account_key,
+            force_rebuild=True,
+        )
+        if not snapshot:
+            return None, 0
+        selected_pack_key = snapshot["assignment_map"].get(account_key)
+
+    if not selected_pack_key:
+        return None, int(snapshot["candidate_count"])
+    return snapshot["pack_map"].get(selected_pack_key), int(snapshot["candidate_count"])
+
+
+def get_hrw_distribution_snapshot(
+    card_repo: "CardRepository",
+    exclude_set_codes: list[str],
+    force_rebuild: bool = False,
+) -> Optional[dict]:
+    """获取 HRW 分配快照（供调试脚本复用正式逻辑）。"""
+    cache_key = _build_weekly_cache_key(exclude_set_codes)
+    return _get_or_build_weekly_snapshot(
+        cache_key=cache_key,
+        card_repo=card_repo,
+        exclude_set_codes=exclude_set_codes,
+        current_account_key="",
+        force_rebuild=force_rebuild,
+    )
+
+
+def _build_weekly_cache_key(exclude_set_codes: list[str]) -> str:
+    """构建日级快照缓存键（seed 仍按周）。"""
+    biz_date = get_game_biz_date_str()
+    week_key = _build_week_seed_suffix(biz_date)
+    excludes = ",".join(sorted(code for code in exclude_set_codes if code))
+    return (
+        f"{biz_date}|{week_key}|{excludes}|{PACK_AUTO_HRW_PROGRESS_BETA}|"
+        f"{PACK_AUTO_HRW_WEIGHT_MIN}|{PACK_AUTO_HRW_WEIGHT_MAX}|"
+        f"{PACK_AUTO_HRW_LOAD_EPSILON}|{PACK_AUTO_HRW_SEED_SCAN_COUNT}|{PACK_AUTO_HRW_SEED}"
+    )
+
+
+def _get_or_build_weekly_snapshot(
+    cache_key: str,
+    card_repo: "CardRepository",
+    exclude_set_codes: list[str],
+    current_account_key: str,
+    force_rebuild: bool = False,
+) -> Optional[dict]:
+    """获取或构建周级分配快照。"""
+    with _HRW_WEEKLY_CACHE_LOCK:
+        _prune_old_weekly_cache(cache_key)
+        if not force_rebuild and cache_key in _HRW_WEEKLY_CACHE:
+            return _HRW_WEEKLY_CACHE[cache_key]
+
+    snapshot = _build_weekly_snapshot(
+        card_repo=card_repo,
+        exclude_set_codes=exclude_set_codes,
+        current_account_key=current_account_key,
+    )
+    if not snapshot:
+        return None
+
+    with _HRW_WEEKLY_CACHE_LOCK:
+        _HRW_WEEKLY_CACHE[cache_key] = snapshot
+    return snapshot
+
+
+def _prune_old_weekly_cache(cache_key: str) -> None:
+    """清理非当日缓存，避免无限增长。"""
+    day_prefix = cache_key.split("|", 1)[0]
+    stale_keys = [item for item in _HRW_WEEKLY_CACHE if not item.startswith(day_prefix)]
+    for item in stale_keys:
+        _HRW_WEEKLY_CACHE.pop(item, None)
+
+
+def _build_weekly_snapshot(
+    card_repo: "CardRepository",
+    exclude_set_codes: list[str],
+    current_account_key: str,
+) -> Optional[dict]:
+    """构建周级分配快照。"""
+    candidates = _build_candidates(card_repo, exclude_set_codes)
+    if not candidates:
+        return None
+
+    pack_weights, progress_stats, progress_map = _build_pack_weights(
+        candidates, card_repo
+    )
+    if not pack_weights:
+        return None
+
+    pack_map = {f"{pack.set_code}/{pack.name}": pack for pack in candidates}
+    pack_keys = list(pack_map.keys())
+    account_keys = _load_all_account_keys(current_account_key)
+    if not account_keys:
+        account_keys = [current_account_key]
+
+    selected_seed, assignment_map, best_metrics = _select_best_seed_distribution(
+        account_keys=account_keys,
+        pack_keys=pack_keys,
+        pack_weights=pack_weights,
+        epsilon=PACK_AUTO_HRW_LOAD_EPSILON,
+        seed_candidates=_build_seed_candidates(),
+    )
+    return {
+        "selected_seed": selected_seed,
+        "best_metrics": best_metrics,
+        "pack_map": pack_map,
+        "assignment_map": assignment_map,
+        "pack_weights": pack_weights,
+        "progress_stats": progress_stats,
+        "progress_ratio_map": progress_map,
+        "account_count": len(account_keys),
+        "candidate_count": len(candidates),
+    }
+
+
+def _build_pack_weights(
+    candidates: list["Pack"],
+    card_repo: "CardRepository",
+) -> tuple[dict[str, float], dict[str, dict[str, int]], dict[str, float]]:
+    """构建候选子包权重映射。"""
+    pack_names = [pack.name for pack in candidates]
+    progress_stats = card_repo.get_pack_target_rarity_progress(
+        pack_names=pack_names,
+        target_rarities=PACK_AUTO_HRW_TARGET_RARITIES,
+    )
+
+    pack_weights: dict[str, float] = {}
+    progress_map: dict[str, float] = {}
+    for pack in candidates:
+        pack_key = f"{pack.set_code}/{pack.name}"
+        stat = progress_stats.get(pack.name, {"total_target": 0, "owned_target": 0})
+        total_target = int(stat.get("total_target", 0) or 0)
+        owned_target = int(stat.get("owned_target", 0) or 0)
+        progress_ratio = 1.0 if total_target <= 0 else owned_target / total_target
+        gap = 1.0 - progress_ratio
+        raw_weight = 1.0 + PACK_AUTO_HRW_PROGRESS_BETA * gap
+        pack_weights[pack_key] = max(
+            PACK_AUTO_HRW_WEIGHT_MIN,
+            min(PACK_AUTO_HRW_WEIGHT_MAX, raw_weight),
+        )
+        progress_map[pack_key] = progress_ratio
+    return pack_weights, progress_stats, progress_map
+
+
+def _build_hrw_seed() -> str:
+    """构建按游戏业务周滚动的 HRW seed。"""
+    biz_date = get_game_biz_date_str()
+    return f"{PACK_AUTO_HRW_SEED}|{_build_week_seed_suffix(biz_date)}"
+
+
+def _build_week_seed_suffix(biz_date: str) -> str:
+    """根据业务日生成 ISO 周标识。"""
+    parsed = datetime.strptime(biz_date, "%Y-%m-%d")
+    iso = parsed.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
+def _build_seed_candidates() -> list[str]:
+    """构建候选 seed 列表。"""
+    base_seed = _build_hrw_seed()
+    seeds = [base_seed]
+    seeds.extend(
+        [
+            f"rarity-gap-auto-{index}|{base_seed.split('|', 1)[1]}"
+            for index in range(1, PACK_AUTO_HRW_SEED_SCAN_COUNT + 1)
+        ]
+    )
+    return list(dict.fromkeys(seeds))
+
+
+def _load_all_account_keys(current_account_key: str) -> list[str]:
+    """加载用于全局分配的账号 key 列表。"""
+    try:
+        from ptcgp_auto_v2.db.repositories import AccountRepository
+
+        accounts = AccountRepository().get_all()
+        keys = [_build_account_key(item) for item in accounts]
+    except Exception:
+        keys = []
+
+    if current_account_key and current_account_key not in keys:
+        keys.append(current_account_key)
+    return list(dict.fromkeys(keys))
+
+
+def _assign_accounts_by_hrw(
+    account_keys: list[str],
+    pack_keys: list[str],
+    pack_weights: dict[str, float],
+    epsilon: float,
+    seed: str,
+) -> tuple[dict[str, int], dict[str, str]]:
+    """按 HRW + cap 批量分配账号到子包。"""
+    counts = {pack_key: 0 for pack_key in pack_keys}
+    assignment: dict[str, str] = {}
+    if not account_keys or not pack_keys:
+        return counts, assignment
+
+    cap = math.ceil((1.0 + epsilon) * len(account_keys) / len(pack_keys))
+    for account_key in account_keys:
+        scored: list[tuple[float, str]] = []
+        for pack_key in pack_keys:
+            weight = pack_weights.get(pack_key, 1.0)
+            unit = _hash_to_unit(f"{account_key}|{pack_key}|{seed}")
+            score = -math.log(unit) / weight
+            scored.append((score, pack_key))
+        scored.sort(key=lambda item: (item[0], item[1]))
+
+        selected_pack_key = None
+        for _, pack_key in scored:
+            if counts[pack_key] < cap:
+                selected_pack_key = pack_key
+                break
+        if not selected_pack_key:
+            selected_pack_key = min(
+                counts.items(), key=lambda item: (item[1], item[0])
+            )[0]
+
+        counts[selected_pack_key] += 1
+        assignment[account_key] = selected_pack_key
+    return counts, assignment
+
+
+def _compute_distribution_metrics(
+    counts: dict[str, int],
+    expected: float,
+) -> tuple[float, int]:
+    """计算标准差与极差。"""
+    values = list(counts.values())
+    if not values:
+        return 0.0, 0
+    diffs = [value - expected for value in values]
+    std = (sum(item * item for item in diffs) / len(diffs)) ** 0.5
+    spread = max(values) - min(values)
+    return std, spread
+
+
+def _compute_weighted_rmse(
+    counts: dict[str, int],
+    pack_weights: dict[str, float],
+    total_accounts: int,
+) -> float:
+    """计算按权重目标的 RMSE。"""
+    if not counts:
+        return 0.0
+    weight_sum = sum(pack_weights.get(pack_key, 0.0) for pack_key in counts)
+    if weight_sum <= 0:
+        return 0.0
+
+    errors = []
+    for pack_key, assigned in counts.items():
+        target = total_accounts * pack_weights.get(pack_key, 0.0) / weight_sum
+        errors.append((assigned - target) ** 2)
+    return (sum(errors) / len(errors)) ** 0.5
+
+
+def _select_best_seed_distribution(
+    account_keys: list[str],
+    pack_keys: list[str],
+    pack_weights: dict[str, float],
+    epsilon: float,
+    seed_candidates: list[str],
+) -> tuple[str, dict[str, str], dict[str, float | int]]:
+    """评估候选 seed 并返回最佳分配。"""
+    if not seed_candidates:
+        raise ValueError("seed_candidates 不能为空")
+
+    expected = len(account_keys) / len(pack_keys) if pack_keys else 0.0
+    best_seed = ""
+    best_assignment: dict[str, str] = {}
+    best_metrics: dict[str, float | int] = {
+        "weighted_rmse": 0.0,
+        "std": 0.0,
+        "spread": 0,
+    }
+    best_tuple: tuple[float, float, int, str] | None = None
+    for seed in seed_candidates:
+        counts, assignment = _assign_accounts_by_hrw(
+            account_keys=account_keys,
+            pack_keys=pack_keys,
+            pack_weights=pack_weights,
+            epsilon=epsilon,
+            seed=seed,
+        )
+        weighted_rmse = _compute_weighted_rmse(
+            counts=counts,
+            pack_weights=pack_weights,
+            total_accounts=len(account_keys),
+        )
+        std, spread = _compute_distribution_metrics(counts=counts, expected=expected)
+        current_tuple = (weighted_rmse, std, spread, seed)
+        if best_tuple is None or current_tuple < best_tuple:
+            best_tuple = current_tuple
+            best_seed = seed
+            best_assignment = assignment
+            best_metrics = {
+                "weighted_rmse": weighted_rmse,
+                "std": std,
+                "spread": spread,
+            }
+
+    return best_seed, cast(dict[str, str], best_assignment), best_metrics
+
+
 def _select_least_used(
     account_key: str,
     candidates: list["Pack"],
@@ -179,3 +526,9 @@ def _hash_to_int(value: str) -> int:
     """稳定哈希到整数。"""
     digest = hashlib.md5(value.encode("utf-8")).hexdigest()
     return int(digest, 16)
+
+
+def _hash_to_unit(value: str) -> float:
+    """稳定哈希到 (0, 1] 浮点数。"""
+    hashed = _hash_to_int(value)
+    return (hashed + 1) / ((1 << 128) + 1)

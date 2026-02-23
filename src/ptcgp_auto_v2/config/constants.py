@@ -6,9 +6,23 @@
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
 PACK_TEMPLATE_THRESHOLD = 0.75  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
 PACK_SERIES_CODES = ["A", "B"]  # 扩充包系列代号（仅用于切换次数控制）
-PACK_AUTO_STRATEGIES = ["latest", "hash_balance", "least_used"]  # 自动选包策略
+PACK_AUTO_STRATEGIES = [
+    "latest",
+    "hrw_progress_balance",
+    "hash_balance",  # 兼容旧配置
+    "least_used",
+]  # 自动选包策略
 PACK_AUTO_EXCLUDE_SET_CODES = ["A4b"]  # 排除的限时系列
 PACK_AUTO_HASH_VIRTUAL_NODES = 32  # 一致性哈希虚拟节点数
+
+# 自动选包（hrw_progress_balance）权重参数
+PACK_AUTO_HRW_TARGET_RARITIES = ["SR", "SAR"]  # 进度统计使用的目标稀有度
+PACK_AUTO_HRW_PROGRESS_BETA = 4.0  # 进度缺口权重强度
+PACK_AUTO_HRW_WEIGHT_MIN = 0.5  # 权重下限
+PACK_AUTO_HRW_WEIGHT_MAX = 3.0  # 权重上限
+PACK_AUTO_HRW_SEED = "rarity-gap-auto-39"  # HRW 稳定种子
+PACK_AUTO_HRW_LOAD_EPSILON = 0.45  # 分配模拟容量松弛系数
+PACK_AUTO_HRW_SEED_SCAN_COUNT = 300  # 分配模拟 seed 扫描次数
 
 # ADB 配置
 DEFAULT_ADB_PORT = 5555  # 默认 ADB 端口

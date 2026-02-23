@@ -161,10 +161,10 @@ class Settings:
     locale: str = DEFAULT_LOCALE  # 默认界面语言 (对应 locales/ 下的文件名)
 
     # 未配置开包目标时的自动选包策略
-    # 可选值: latest / hash_balance / least_used
+    # 可选值: latest / hrw_progress_balance / hash_balance(兼容旧值) / least_used
     # latest 自动选最新包
-    # hash_balance 一致性hash均衡所有包的选择
-    pack_auto_strategy: str = "hash_balance"
+    # hrw_progress_balance 基于全局进度权重的 HRW 选择
+    pack_auto_strategy: str = "hrw_progress_balance"
 
     # 调度配置
     poll_interval: float = DEFAULT_POLL_INTERVAL
