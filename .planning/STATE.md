@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 Phase: Milestone v2.0.0 completed
 Plan: Milestone archived
 Status: Shipped
-Last activity: 2026-02-23 — v2.0.0 milestone archived
+Last activity: 2026-02-23 — quick-1 metadata sync confirmation gate completed
 
 Progress: [███████████████████] 100% (v2.0.0: 8/8 plans)
 
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - [02-02]: 首次展开渲染 Markdown，dataset.rendered 防止重复
 - [02-03]: 使用现有端点而非新增端点（保持代码简洁）
 - [Milestone]: v2.0.0 已归档，ROADMAP/REQUIREMENTS 已拆分到 milestones 目录
+- [Quick-1]: metadata 同步脚本改为“预览新增 -> 人工确认 -> 执行写入”两阶段
+- [Quick-1]: 仅输入 y 才写库，其它输入统一取消并保持退出码 0
 
 ### Pending Todos
 
@@ -80,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed milestone v2.0.0 archive
-Resume file: `/gsd-new-milestone`
+Stopped at: Completed quick-1-src-ptcgp-auto-v2-scripts-sync-metadata- / 1-PLAN.md
+Resume file: `.planning/quick/1-src-ptcgp-auto-v2-scripts-sync-metadata-/1-SUMMARY.md`
