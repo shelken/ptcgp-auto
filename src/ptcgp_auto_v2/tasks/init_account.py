@@ -605,7 +605,7 @@ class InitAccountTask(Task):
         """处理数据使用页面"""
         logger.debug(f"matched_text: {page_info.get('matched_text')}")
         matches = self.page_detector.find_all_templates(
-            "icon_gray_yes", threshold=0.95, scale=0.72
+            "icon_gray_yes", threshold=0.90, scale=0.72
         )
         if matches:
             for match in matches:
@@ -665,7 +665,7 @@ class InitAccountTask(Task):
                 return result
 
         # 步骤 3: 点击所有灰色勾选图标直到消失
-        match = self.page_detector.find_template("icon_gray_yes", threshold=0.95)
+        match = self.page_detector.find_template("icon_gray_yes", threshold=0.89)
         if match:
             logger.info("  -> 点击灰色勾选图标")
             return tap_box(self.adb, match, wait=0.1)
@@ -754,7 +754,9 @@ class InitAccountTask(Task):
             return tap_box(self.adb, match.box, wait=1.0)
 
         # 步骤 4: 点击输入框并输入昵称（首次输入）
-        result = tap(self.adb, self.adb.center_x(), INPUT_BOX_Y, wait=1.0)
+        result = tap(
+            self.adb, self.adb.center_x(), self.adb.scaled_y(INPUT_BOX_Y), wait=1.0
+        )
         if result:
             logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
             # 等待键盘弹出
