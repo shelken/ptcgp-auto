@@ -40,11 +40,41 @@ CARDS_EXTRA_URL = f"{BASE_URL}/cards.extra.json"
 
 @dataclass
 class SyncPreview:
-    """预览阶段统计出的新增数据清单。"""
+    """预览阶段统计出的增删改清单。"""
 
-    new_set_codes: list[str]
-    new_cards: list[tuple[str, int]]
-    new_pack_names: list[str]
+    new_set_count: int
+    new_card_count: int
+    new_pack_count: int
+    new_card_pack_link_count: int
+    update_rows: list["UpdateRow"]
+    delete_rows: list["DeleteRow"]
+
+
+@dataclass
+class FieldChange:
+    """字段变更项。"""
+
+    field: str
+    old_value: Any
+    new_value: Any
+
+
+@dataclass
+class UpdateRow:
+    """更新明细行。"""
+
+    table: str
+    key: str
+    changes: list[FieldChange]
+
+
+@dataclass
+class DeleteRow:
+    """删除明细行。"""
+
+    table: str
+    key: str
+    reason: str
 
 
 @dataclass
@@ -52,10 +82,20 @@ class SyncPayload:
     """写入阶段所需的完整数据载荷。"""
 
     sets_to_upsert: list[CardSet]
-    cards_to_upsert: list[Card]
-    card_packs_map: dict[tuple[str, int], list[str]]
+    card_sync_items: list["CardSyncItem"]
     packs_to_upsert: list[Pack]
     preview: SyncPreview
+
+
+@dataclass
+class CardSyncItem:
+    """单张卡牌的精确同步计划。"""
+
+    card: Card
+    existing_card_id: int | None
+    added_pack_names: list[str]
+    removed_pack_names: list[str]
+    needs_card_upsert: bool
 
 
 def _normalize_number(value: Any) -> int | None:
@@ -77,6 +117,138 @@ def _build_extra_map(
         if set_code and number is not None:
             extra_map[(str(set_code), number)] = item
     return extra_map
+
+
+def _merge_set_label_data(existing_label_data: str | None, name_val: Any) -> str:
+    """合并系列多语言标签，保留本地已有语言并用远端值更新同名语言。"""
+    existing_labels: dict[str, Any] = {}
+    if existing_label_data:
+        try:
+            parsed_existing = json.loads(existing_label_data)
+            if isinstance(parsed_existing, dict):
+                existing_labels = parsed_existing
+        except (TypeError, ValueError):
+            existing_labels = {}
+
+    incoming_labels: dict[str, Any] = {}
+    if isinstance(name_val, dict):
+        incoming_labels = name_val
+    elif isinstance(name_val, str):
+        incoming_labels = {"en": name_val}
+
+    merged_labels = dict(existing_labels)
+    merged_labels.update(incoming_labels)
+    return json.dumps(merged_labels, ensure_ascii=False)
+
+
+def _normalize_json_text(raw_text: str | None) -> str:
+    """规范化 JSON 文本，用于字段值比较。"""
+    if not raw_text:
+        return ""
+    try:
+        return json.dumps(json.loads(raw_text), ensure_ascii=False, sort_keys=True)
+    except (TypeError, ValueError):
+        return raw_text
+
+
+def _is_set_changed(existing_set: Any, incoming_set: CardSet) -> bool:
+    """判断系列字段是否发生变化。"""
+    if existing_set is None:
+        return True
+    return any(
+        [
+            existing_set.name != incoming_set.name,
+            existing_set.release_date != incoming_set.release_date,
+            int(existing_set.total_cards or 0) != int(incoming_set.total_cards or 0),
+            _normalize_json_text(existing_set.label_data)
+            != _normalize_json_text(incoming_set.label_data),
+        ]
+    )
+
+
+def _is_card_changed(existing_card: Any, incoming_card: Card) -> bool:
+    """判断卡牌字段是否发生变化。"""
+    if existing_card is None:
+        return True
+
+    fields = [
+        "name",
+        "rarity",
+        "image_url",
+        "element",
+        "type",
+        "stage",
+        "health",
+        "weakness",
+        "retreat_cost",
+    ]
+    for field_name in fields:
+        if getattr(existing_card, field_name) != getattr(incoming_card, field_name):
+            return True
+
+    return _normalize_json_text(existing_card.data) != _normalize_json_text(
+        incoming_card.data
+    )
+
+
+def _collect_set_changes(existing_set: Any, incoming_set: CardSet) -> list[FieldChange]:
+    """收集系列字段变更明细。"""
+    if existing_set is None:
+        return []
+
+    changes: list[FieldChange] = []
+    if existing_set.name != incoming_set.name:
+        changes.append(FieldChange("name", existing_set.name, incoming_set.name))
+    if existing_set.release_date != incoming_set.release_date:
+        changes.append(
+            FieldChange(
+                "release_date", existing_set.release_date, incoming_set.release_date
+            )
+        )
+    if int(existing_set.total_cards or 0) != int(incoming_set.total_cards or 0):
+        changes.append(
+            FieldChange(
+                "total_cards",
+                int(existing_set.total_cards or 0),
+                int(incoming_set.total_cards or 0),
+            )
+        )
+    existing_label = _normalize_json_text(existing_set.label_data)
+    incoming_label = _normalize_json_text(incoming_set.label_data)
+    if existing_label != incoming_label:
+        changes.append(FieldChange("label_data", existing_label, incoming_label))
+    return changes
+
+
+def _collect_card_changes(existing_card: Any, incoming_card: Card) -> list[FieldChange]:
+    """收集卡牌字段变更明细。"""
+    if existing_card is None:
+        return []
+
+    changes: list[FieldChange] = []
+    fields = [
+        "name",
+        "rarity",
+        "image_url",
+        "element",
+        "type",
+        "stage",
+        "health",
+        "weakness",
+        "retreat_cost",
+    ]
+    for field_name in fields:
+        old_value = getattr(existing_card, field_name)
+        new_value = getattr(incoming_card, field_name)
+        if old_value != new_value:
+            changes.append(FieldChange(field_name, old_value, new_value))
+
+    old_data = _normalize_json_text(existing_card.data)
+    new_data = _normalize_json_text(incoming_card.data)
+    if old_data != new_data:
+        changes.append(FieldChange("data", old_data, new_data))
+
+    return changes
 
 
 def fetch_remote_metadata() -> tuple[
@@ -121,19 +293,23 @@ def build_sync_payload(
 ) -> SyncPayload:
     """仅构建预览与写入载荷，不触发任何数据库写入。"""
     sets_to_upsert: list[CardSet] = []
-    cards_to_upsert: list[Card] = []
-    card_packs_map: dict[tuple[str, int], list[str]] = {}
+    card_sync_items: list[CardSyncItem] = []
     detected_packs: dict[str, str] = {}
 
     new_set_codes: list[str] = []
     new_cards: list[tuple[str, int]] = []
     new_pack_names: list[str] = []
+    new_card_pack_link_count = 0
+    update_rows: list[UpdateRow] = []
+    delete_rows: list[DeleteRow] = []
 
     for sets in sets_data.values():
         for set_item in sets:
             code = set_item.get("code")
             if not code:
                 continue
+
+            code_str = str(code)
 
             name_val = set_item.get("name", {})
             name = (
@@ -142,24 +318,33 @@ def build_sync_payload(
                 else str(name_val)
             )
 
-            label_data = "{}"
-            if isinstance(name_val, dict):
-                label_data = json.dumps(name_val, ensure_ascii=False)
-            elif isinstance(name_val, str):
-                label_data = json.dumps({"en": name_val}, ensure_ascii=False)
+            existing_set = repo.get_set_by_code(code_str)
+            if existing_set is None:
+                new_set_codes.append(code_str)
 
-            if repo.get_set_by_code(str(code)) is None:
-                new_set_codes.append(str(code))
-
-            sets_to_upsert.append(
-                CardSet(
-                    code=str(code),
-                    name=name,
-                    release_date=set_item.get("releaseDate"),
-                    total_cards=set_item.get("count", 0),
-                    label_data=label_data,
-                )
+            label_data = _merge_set_label_data(
+                existing_set.label_data if existing_set else None,
+                name_val,
             )
+
+            incoming_set = CardSet(
+                code=code_str,
+                name=name,
+                release_date=set_item.get("releaseDate"),
+                total_cards=set_item.get("count", 0),
+                label_data=label_data,
+            )
+            if _is_set_changed(existing_set, incoming_set):
+                sets_to_upsert.append(incoming_set)
+                set_changes = _collect_set_changes(existing_set, incoming_set)
+                if set_changes:
+                    update_rows.append(
+                        UpdateRow(
+                            table="card_sets",
+                            key=code_str,
+                            changes=set_changes,
+                        )
+                    )
 
     for card_item in cards_data:
         set_code = card_item.get("set")
@@ -173,7 +358,8 @@ def build_sync_payload(
         health = _normalize_number(extra.get("health"))
         retreat_cost = _normalize_number(extra.get("retreatCost"))
 
-        if repo.get_card_by_set_and_number(set_code_str, number) is None:
+        existing_card = repo.get_card_by_set_and_number(set_code_str, number)
+        if existing_card is None:
             new_cards.append((set_code_str, number))
 
         card = Card(
@@ -190,10 +376,48 @@ def build_sync_payload(
             retreat_cost=retreat_cost,
             data=json.dumps(card_item, ensure_ascii=False),
         )
-        cards_to_upsert.append(card)
-
         packs = [str(pack_name) for pack_name in card_item.get("packs", [])]
-        card_packs_map[(set_code_str, number)] = packs
+        existing_pack_names: list[str] = []
+        if existing_card and existing_card.id is not None:
+            existing_pack_names = repo.get_card_pack_names(existing_card.id)
+
+        needs_card_upsert = _is_card_changed(existing_card, card)
+        card_changes = _collect_card_changes(existing_card, card)
+        if card_changes:
+            update_rows.append(
+                UpdateRow(
+                    table="cards",
+                    key=f"{set_code_str}-{number:03d}",
+                    changes=card_changes,
+                )
+            )
+
+        existing_pack_set = set(existing_pack_names)
+        incoming_pack_set = set(packs)
+        added_pack_names = sorted(incoming_pack_set - existing_pack_set)
+        removed_pack_names = sorted(existing_pack_set - incoming_pack_set)
+        if added_pack_names:
+            new_card_pack_link_count += len(added_pack_names)
+        for pack_name in removed_pack_names:
+            delete_rows.append(
+                DeleteRow(
+                    table="card_packs",
+                    key=f"{set_code_str}-{number:03d}",
+                    reason=f"删除关联 pack_name={pack_name}",
+                )
+            )
+        needs_pack_sync = bool(added_pack_names or removed_pack_names)
+
+        if needs_card_upsert or needs_pack_sync:
+            card_sync_items.append(
+                CardSyncItem(
+                    card=card,
+                    existing_card_id=existing_card.id if existing_card else None,
+                    added_pack_names=added_pack_names,
+                    removed_pack_names=removed_pack_names,
+                    needs_card_upsert=needs_card_upsert,
+                )
+            )
 
         for pack_name in packs:
             if pack_name not in detected_packs:
@@ -201,55 +425,95 @@ def build_sync_payload(
 
     packs_to_upsert: list[Pack] = []
     for pack_name, set_code in detected_packs.items():
-        if repo.get_pack_by_name(pack_name) is None:
+        existing_pack = repo.get_pack_by_name(pack_name)
+        if existing_pack is None:
             new_pack_names.append(pack_name)
-
-        packs_to_upsert.append(
-            Pack(
-                name=pack_name,
-                set_code=set_code,
-                label_data=json.dumps({"en": pack_name}, ensure_ascii=False),
-            )
+            new_card_pack_link_count += 0
+        incoming_pack = Pack(
+            name=pack_name,
+            set_code=set_code,
+            label_data=json.dumps({"en": pack_name}, ensure_ascii=False),
         )
+        if existing_pack is None or existing_pack.set_code != incoming_pack.set_code:
+            if (
+                existing_pack is not None
+                and existing_pack.set_code != incoming_pack.set_code
+            ):
+                update_rows.append(
+                    UpdateRow(
+                        table="packs",
+                        key=pack_name,
+                        changes=[
+                            FieldChange(
+                                "set_code",
+                                existing_pack.set_code,
+                                incoming_pack.set_code,
+                            )
+                        ],
+                    )
+                )
+            packs_to_upsert.append(
+                Pack(
+                    name=pack_name,
+                    set_code=set_code,
+                    label_data=json.dumps({"en": pack_name}, ensure_ascii=False),
+                )
+            )
 
     return SyncPayload(
         sets_to_upsert=sets_to_upsert,
-        cards_to_upsert=cards_to_upsert,
-        card_packs_map=card_packs_map,
+        card_sync_items=card_sync_items,
         packs_to_upsert=packs_to_upsert,
         preview=SyncPreview(
-            new_set_codes=sorted(new_set_codes),
-            new_cards=sorted(new_cards),
-            new_pack_names=sorted(new_pack_names),
+            new_set_count=len(new_set_codes),
+            new_card_count=len(new_cards),
+            new_pack_count=len(new_pack_names),
+            new_card_pack_link_count=new_card_pack_link_count,
+            update_rows=update_rows,
+            delete_rows=delete_rows,
         ),
     )
 
 
-def _log_preview_items(title: str, items: list[str], max_preview: int = 8) -> None:
-    """打印新增清单，避免输出过长。"""
-    logger.info(f"{title}: {len(items)}")
-    if not items:
-        logger.info("  - 无")
-        return
-
-    preview_items = items[:max_preview]
-    for item in preview_items:
-        logger.info(f"  - {item}")
-    remain = len(items) - len(preview_items)
-    if remain > 0:
-        logger.info(f"  ... 另有 {remain} 条")
+def _format_value(value: Any) -> str:
+    """将字段值格式化为日志可读文本。"""
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return "null"
+    return json.dumps(value, ensure_ascii=False)
 
 
 def show_preview(preview: SyncPreview) -> None:
-    """输出本次将新增写入数据库的数据清单。"""
+    """输出本次将写入数据库的增删改清单。"""
     logger.info("=" * 50)
-    logger.info("本次同步新增预览（仅展示将新增写入的记录）")
-    _log_preview_items("新增系列", preview.new_set_codes)
-    _log_preview_items(
-        "新增卡牌",
-        [f"{set_code}-{number:03d}" for set_code, number in preview.new_cards],
-    )
-    _log_preview_items("新增卡包", preview.new_pack_names)
+    logger.info("本次同步变更预览")
+    logger.info("新增系列: %s", preview.new_set_count)
+    logger.info("新增卡牌: %s", preview.new_card_count)
+    logger.info("新增卡包: %s", preview.new_pack_count)
+    logger.info("新增卡包关联: %s", preview.new_card_pack_link_count)
+
+    logger.info("更新明细: %s", len(preview.update_rows))
+    if not preview.update_rows:
+        logger.info("  - 无")
+    else:
+        for row in preview.update_rows:
+            for change in row.changes:
+                logger.info(
+                    "  - [%s] %s 字段 %s: %s -> %s",
+                    row.table,
+                    row.key,
+                    change.field,
+                    _format_value(change.old_value),
+                    _format_value(change.new_value),
+                )
+
+    logger.info("删除明细: %s", len(preview.delete_rows))
+    if not preview.delete_rows:
+        logger.info("  - 无")
+    else:
+        for row in preview.delete_rows:
+            logger.info("  - [%s] %s (%s)", row.table, row.key, row.reason)
     logger.info("=" * 50)
 
 
@@ -269,11 +533,17 @@ def execute_sync(repo: CardRepository, payload: SyncPayload) -> None:
     for card_set in payload.sets_to_upsert:
         repo.upsert_set(card_set)
 
-    for index, card in enumerate(payload.cards_to_upsert, start=1):
-        saved_card = repo.upsert_card(card)
-        repo.clear_card_packs(saved_card.id)  # type: ignore[arg-type]
-        for pack_name in payload.card_packs_map.get((card.set_code, card.number), []):
-            repo.add_card_pack(saved_card.id, pack_name)  # type: ignore[arg-type]
+    for index, item in enumerate(payload.card_sync_items, start=1):
+        card_id: int | None = item.existing_card_id
+        if item.needs_card_upsert:
+            saved_card = repo.upsert_card(item.card)
+            card_id = saved_card.id  # type: ignore[assignment]
+
+        if card_id is not None:
+            for pack_name in item.removed_pack_names:
+                repo.remove_card_pack(card_id, pack_name)
+            for pack_name in item.added_pack_names:
+                repo.add_card_pack(card_id, pack_name)
 
         if index % 100 == 0:
             print(f"Processed {index} cards...", end="\r")
@@ -284,7 +554,7 @@ def execute_sync(repo: CardRepository, payload: SyncPayload) -> None:
     logger.info(
         "写入完成：sets=%s cards=%s packs=%s",
         len(payload.sets_to_upsert),
-        len(payload.cards_to_upsert),
+        len(payload.card_sync_items),
         len(payload.packs_to_upsert),
     )
 
