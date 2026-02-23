@@ -140,6 +140,13 @@ class AccountCardRepository:
                     col(Card.set_code),
                     col(Card.number),
                 )
+            elif sort_by == "count":
+                statement = statement.order_by(
+                    total_count.desc(),
+                    rarity_case.desc(),
+                    col(Card.set_code),
+                    col(Card.number),
+                )
             else:
                 statement = statement.order_by(
                     rarity_case.desc(),
