@@ -218,6 +218,29 @@ class CardRepository:
             session.add(pack)
             session.commit()
 
+    def remove_card_pack(self, card_id: int, pack_name: str):
+        """移除卡牌与指定卡包的关联。"""
+        with Session(get_engine()) as session:
+            statement = select(CardPack).where(
+                CardPack.card_id == card_id,
+                CardPack.pack_name == pack_name,
+            )
+            row = session.exec(statement).first()
+            if not row:
+                return
+            session.delete(row)
+            session.commit()
+
+    def get_card_pack_names(self, card_id: int) -> list[str]:
+        """获取指定卡牌当前关联的卡包名称列表。"""
+        with Session(get_engine()) as session:
+            statement = (
+                select(CardPack.pack_name)
+                .where(CardPack.card_id == card_id)
+                .order_by(CardPack.pack_name)
+            )
+            return list(session.exec(statement).all())
+
     def get_packs_by_set(self, set_code: str) -> dict:
         """
         获取指定系列的子包结构（用于生成兼容的 packs.json）
