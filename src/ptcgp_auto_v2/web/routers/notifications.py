@@ -5,7 +5,7 @@ import json
 import re
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session, select
 
@@ -14,17 +14,17 @@ from ptcgp_auto_v2.config.notification import (
     SCENE_RARE_CARD,
 )
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import (
     NotificationConfigRepository,
     NotificationRepository,
 )
+from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.web.services.notification_service import (
     TASK_STATUS_OPTIONS,
+    build_config_view,
     build_notification_card_selector_context,
     build_notification_panel_context,
-    build_config_view,
     build_notifications_context,
     build_recent_notifications_context,
     get_task_type_options,
@@ -564,7 +564,6 @@ async def send_test_webhook(
     sent = notifier.send_webhook_notification(
         title=notification.title,
         content=notification.content,
-        image_url=image_url,
     )
 
     message = (
