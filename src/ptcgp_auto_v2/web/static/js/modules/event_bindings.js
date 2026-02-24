@@ -57,6 +57,7 @@ function resolveRequestButton(detail) {
 function autoRefreshList(container) {
     if (!container) return;
     if (!isElementInActiveTab(container)) return;
+    if (!document.hasFocus()) return;
     if (container.dataset.loaded && container.dataset.loaded !== 'true') return;
     if (
         container.id === 'owned-cards-container'

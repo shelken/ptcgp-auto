@@ -2,8 +2,7 @@ import {
     restoreFilters,
     restoreOwnedFilters,
     updateOwnedFilterGroupsState,
-    getStoredTasksFilters,
-    buildQueryParts,
+    applyTasksSidebarRequestParams,
 } from './features/filters/index.js';
 import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { isManagementHash } from './constants.js';
@@ -96,6 +95,7 @@ export function switchTab(tabName, options = {}) {
     localStorage.setItem(STORAGE_KEY_TAB, tabName);
 
     if (tabName === 'management' && !skipAutoSelect) {
+        syncTaskSidebarRequestUrl();
         const content = document.getElementById('management-content');
         const hasContent = content.querySelector('table') || content.querySelector('form');
 
@@ -132,7 +132,7 @@ export function updateSidebarState(btn) {
     btn.classList.add('active');
     const hash = btn.getAttribute('data-hash');
     if (hash === 'tasks') {
-        applyTaskFiltersToSidebar(btn);
+        applyTasksSidebarRequestParams(btn);
     }
     if (hash) {
         if (isManagementHash(hash)) {
@@ -142,29 +142,16 @@ export function updateSidebarState(btn) {
     }
 }
 
-function applyTaskFiltersToSidebar(btn) {
-    const filters = getStoredTasksFilters();
-    const baseUrl = btn.dataset.baseUrl || btn.getAttribute('hx-get') || '';
-    if (!btn.dataset.baseUrl) {
-        btn.dataset.baseUrl = baseUrl;
-    }
-    if (!filters) {
-        btn.setAttribute('hx-get', btn.dataset.baseUrl || baseUrl);
-        return;
-    }
-    const base = btn.dataset.baseUrl || baseUrl;
-    if (!base) return;
-    const url = new URL(base, window.location.origin);
-    ['status', 'task_type', 'account_id'].forEach((key) => {
-        url.searchParams.delete(key);
-    });
-    const queryParts = buildQueryParts(filters);
-    queryParts.forEach((part) => {
-        const [key, value] = part.split('=');
-        if (!key) return;
-        url.searchParams.append(decodeURIComponent(key), decodeURIComponent(value || ''));
-    });
-    btn.setAttribute('hx-get', url.pathname + url.search);
+/**
+ * 同步任务侧栏按钮请求 URL。
+ *
+ * 注意：必须在点击前预先写入，不能在 click 事件内临时改写，
+ * 否则 HTMX 可能已读取旧 hx-get，导致首个请求丢失筛选参数。
+ */
+export function syncTaskSidebarRequestUrl() {
+    const btn = document.querySelector('#tab-content-management .sidebar-btn[data-hash="tasks"]');
+    if (!btn) return;
+    applyTasksSidebarRequestParams(btn);
 }
 
 // --- 恢复 Tab ---

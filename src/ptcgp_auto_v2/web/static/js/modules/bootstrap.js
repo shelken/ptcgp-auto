@@ -1,8 +1,7 @@
 import { restoreFilters, restoreOwnedFilters, updateOwnedFilterGroupsState } from './features/filters/index.js';
 import { restoreOwnedGridCols } from './features/owned_cards.js';
-import { restoreTab, currentTabName } from './tabs.js';
+import { restoreTab, currentTabName, syncTaskSidebarRequestUrl } from './tabs.js';
 import { initTheme } from './theme.js';
-import { isManagementHash } from './constants.js';
 import {
     initLang,
     restoreViewMode,
@@ -25,21 +24,6 @@ function restoreInitialTabData() {
     }
 }
 
-function ensureManagementHashLoaded() {
-    const hash = window.location.hash.replace('#', '');
-    if (!hash || !isManagementHash(hash)) return;
-
-    const activeBtn = document.querySelector(`.sidebar-btn.active[data-hash="${hash}"]`);
-    if (activeBtn) return;
-
-    setTimeout(() => {
-        const targetBtn = document.querySelector(`.sidebar-btn[data-hash="${hash}"]`);
-        if (targetBtn) {
-            targetBtn.click();
-        }
-    }, 0);
-}
-
 // --- 初始化入口 ---
 export function initApp() {
     document.addEventListener('DOMContentLoaded', () => {
@@ -48,6 +32,7 @@ export function initApp() {
 
         bindAppEventHandlers(restoreRecordFilterPanelState);
 
+        syncTaskSidebarRequestUrl();
         restoreTab();
         restoreInitialTabData();
         updateOwnedFilterGroupsState();
@@ -58,7 +43,5 @@ export function initApp() {
 
         initCustomSelects(document);
         initDailyGiftDatePickers(document);
-
-        ensureManagementHashLoaded();
     });
 }

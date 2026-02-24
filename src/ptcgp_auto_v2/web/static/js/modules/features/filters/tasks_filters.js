@@ -22,6 +22,58 @@ export function getStoredTasksFilters() {
     }
 }
 
+/**
+ * 将缓存的任务筛选参数应用到侧栏 tasks 按钮请求中。
+ * 仅负责任务页业务参数，不影响全局事件层。
+ */
+export function applyTasksSidebarRequestParams(button) {
+    if (!(button instanceof Element)) return;
+
+    const baseUrl = button.dataset.baseUrl || button.getAttribute('hx-get') || '';
+    if (!button.dataset.baseUrl && baseUrl) {
+        button.dataset.baseUrl = baseUrl;
+    }
+
+    const base = button.dataset.baseUrl || baseUrl;
+    if (!base) return;
+
+    const filters = getStoredTasksFilters();
+    const url = new URL(base, window.location.origin);
+
+    ['status', 'task_type', 'account_id', 'sort_by', 'sort_order', 'page', 'page_size'].forEach((key) => {
+        url.searchParams.delete(key);
+    });
+
+    const appendParam = (key, value) => {
+        if (value === '' || value === null || value === undefined) return;
+        if (Array.isArray(value)) {
+            value
+                .map((item) => (item == null ? '' : String(item).trim()))
+                .filter(Boolean)
+                .forEach((item) => url.searchParams.append(key, item));
+            return;
+        }
+        const text = String(value).trim();
+        if (!text) return;
+        url.searchParams.set(key, text);
+    };
+
+    if (filters) {
+        appendParam('status', filters.status);
+        appendParam('task_type', filters.task_type);
+        appendParam('account_id', filters.account_id);
+        appendParam('sort_by', filters.sort_by);
+        appendParam('sort_order', filters.sort_order);
+        appendParam('page', filters.page);
+        appendParam('page_size', filters.page_size);
+    }
+
+    button.setAttribute('hx-get', url.pathname + url.search);
+    if (window.htmx && typeof window.htmx.process === 'function') {
+        window.htmx.process(button);
+    }
+}
+
 // --- 恢复任务筛选 ---
 export function restoreTasksFilters(context = document) {
     const form = context.querySelector('#task-filter-form');
@@ -33,10 +85,9 @@ export function restoreTasksFilters(context = document) {
     applyFormFilters(form, filters);
     updateTaskResetButtonState(form);
 
-    if (form.dataset.restoreTrigger === 'true' && form.dataset.restoreApplied !== 'true') {
-        form.dataset.restoreApplied = 'true';
-        form.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    // 只做 UI 回填，不在恢复阶段主动触发请求。
+    // 任务列表首次数据应由入口请求一次性返回，避免出现双请求。
+    form.dataset.restoreApplied = 'true';
 }
 
 // --- 更新重置按钮状态 ---
