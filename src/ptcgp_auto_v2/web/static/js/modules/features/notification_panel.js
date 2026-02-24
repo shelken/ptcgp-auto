@@ -470,8 +470,8 @@ async function markAsReadAsync(id) {
             console.warn(`Failed to mark notification ${id} as read`);
         }
 
-        // 触发 badge 更新
-        document.dispatchEvent(new CustomEvent('notificationRead'));
+        // 触发 badge 更新（在 body 上触发，与 HTMX from:body 一致）
+        document.body.dispatchEvent(new CustomEvent('notificationsUpdated'));
     } catch (error) {
         // 静默忽略失败
         console.warn('markAsReadAsync error:', error);
