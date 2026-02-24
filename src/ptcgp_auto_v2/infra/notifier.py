@@ -19,11 +19,11 @@ from ptcgp_auto_v2.config.notification import (
     SCENE_SYSTEM_WARNING,
     SCENE_TASK_STATUS,
 )
+from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
 from ptcgp_auto_v2.config.settings import (
     build_wecom_webhook_url_from_key,
     load_dotenv,
 )
-from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
 from ptcgp_auto_v2.db.repositories import (
     NotificationConfigRepository,
     NotificationRepository,
@@ -213,17 +213,13 @@ class Notifier:
     def _build_webhook_payload(
         title: str,
         content: str,
-        image_url: Optional[str] = None,
     ) -> dict:
         """构建企业微信 webhook payload。"""
         markdown_content = f"## {title}\n\n{content}"
-        if image_url:
-            markdown_content += f"\n\n![card]({image_url})"
-            return {
-                "msgtype": "markdown_v2",
-                "markdown_v2": {"content": markdown_content},
-            }
-        return {"msgtype": "markdown", "markdown": {"content": markdown_content}}
+        return {
+            "msgtype": "markdown_v2",
+            "markdown_v2": {"content": markdown_content},
+        }
 
     def notify_rare_card(
         self,
@@ -389,16 +385,14 @@ class Notifier:
         self,
         title: str,
         content: str,
-        image_url: Optional[str] = None,
     ) -> bool:
         """直接发送指定通知内容到企业微信（不落库）。"""
-        return self._send_webhook(title=title, content=content, image_url=image_url)
+        return self._send_webhook(title=title, content=content)
 
     def _send_webhook(
         self,
         title: str,
         content: str,
-        image_url: Optional[str] = None,
     ) -> bool:
         """
         发送企微 Webhook
@@ -415,7 +409,7 @@ class Notifier:
             logger.warning("Webhook URL 未配置，跳过推送")
             return False
 
-        payload = self._build_webhook_payload(title, content, image_url)
+        payload = self._build_webhook_payload(title, content)
 
         try:
             response = requests.post(
