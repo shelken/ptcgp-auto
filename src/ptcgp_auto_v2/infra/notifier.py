@@ -3,6 +3,7 @@
 通知器模块
 
 提供统一的通知入口，支持站内通知和企业微信 Webhook 推送。
+重构简化版：内联单行/单次使用的静态方法，保持公共接口不变。
 """
 
 import logging
@@ -51,24 +52,17 @@ class Notifier:
         self._config_repo = NotificationConfigRepository()
         self._notification_repo = NotificationRepository()
 
-    @staticmethod
-    def _resolve_webhook_url(
-        explicit_webhook_url: Optional[str] = None,
-    ) -> Optional[str]:
+    def _resolve_webhook_url(self, explicit_url: Optional[str] = None) -> Optional[str]:
         """解析企业微信 Webhook URL（优先级：显式参数 > 环境变量 > .env > 默认空）。"""
         load_dotenv()
-
-        if explicit_webhook_url:
-            return explicit_webhook_url
-
+        if explicit_url:
+            return explicit_url
         webhook_url = os.environ.get("PTCGP_WEBHOOK_URL")
         if webhook_url:
             return webhook_url
-
         webhook_key = os.environ.get("PTCGP_NOTIFY_KEY") or os.environ.get("NOTIFY_KEY")
         if webhook_key:
             return build_wecom_webhook_url_from_key(webhook_key)
-
         return None
 
     def notify(
@@ -95,7 +89,6 @@ class Notifier:
             是否成功发送站内通知
         """
         config = self._config_repo.get_or_create(scene)
-
         if not config.enabled:
             logger.debug(f"通知场景 {scene} 未启用，跳过")
             return False
@@ -110,21 +103,15 @@ class Notifier:
         logger.info(f"站内通知已创建: [{scene}] {title}")
 
         if config.enabled_webhook and self.webhook_url:
-            self._send_webhook(title, content, image_url)
+            self._send_webhook(title, content)
 
         return True
-
-    @staticmethod
-    def _format_now() -> str:
-        """返回统一格式的本地时间字符串。"""
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod
     def _resolve_account_name(account: Optional["Account"]) -> str:
         """解析账号显示名称，兼容空账号场景。"""
         if account is None:
             return "未知账号"
-
         primary_name = account.nickname or account.display_name or str(account.id)
         account_id = getattr(account, "id", None)
         account_id_text = str(account_id) if account_id is not None else ""
@@ -132,36 +119,7 @@ class Notifier:
             return f"{primary_name} ({account_id_text})"
         return primary_name
 
-    @staticmethod
-    def _is_rare_card_notifiable(
-        rarity: str,
-        card_id: Optional[int],
-        notify_by_rarity: list[str],
-        notify_card_ids: list[int],
-    ) -> bool:
-        """判断稀有卡牌是否满足通知条件。"""
-        return card_id in notify_card_ids or rarity in notify_by_rarity
-
-    @staticmethod
-    def _is_task_status_notifiable(
-        task_type: str,
-        status: str,
-        notify_task_types: list[str],
-        notify_on: list[str],
-    ) -> bool:
-        """判断任务状态是否满足通知条件。"""
-        if notify_task_types and task_type not in notify_task_types:
-            logger.debug(f"任务类型 {task_type} 不在通知列表中")
-            return False
-        if status not in notify_on:
-            logger.debug(f"状态 {status} 不在通知条件中")
-            return False
-        return True
-
-    def _load_scene_extra_config(
-        self,
-        scene: str,
-    ) -> tuple[bool, dict]:
+    def _load_scene_extra_config(self, scene: str) -> tuple[bool, dict]:
         """加载场景配置，返回 (是否启用, 扩展配置)。"""
         config = self._config_repo.get_or_create(scene)
         if not config.enabled:
@@ -204,23 +162,6 @@ class Notifier:
             f"时间: {time_text}"
         )
 
-    @staticmethod
-    def _build_system_warning_content(message: str, time_text: str) -> str:
-        """构建系统警告通知正文。"""
-        return f"{message}\n时间: {time_text}"
-
-    @staticmethod
-    def _build_webhook_payload(
-        title: str,
-        content: str,
-    ) -> dict:
-        """构建企业微信 webhook payload。"""
-        markdown_content = f"## {title}\n\n{content}"
-        return {
-            "msgtype": "markdown_v2",
-            "markdown_v2": {"content": markdown_content},
-        }
-
     def notify_rare_card(
         self,
         account: "Account",
@@ -248,13 +189,8 @@ class Notifier:
         notify_card_ids = extra_config.get("notify_card_ids", [])
 
         card_id = card.id
-
-        if not self._is_rare_card_notifiable(
-            rarity=rarity,
-            card_id=card_id,
-            notify_by_rarity=notify_by_rarity,
-            notify_card_ids=notify_card_ids,
-        ):
+        # 内联 _is_rare_card_notifiable 判断
+        if not (card_id in notify_card_ids or rarity in notify_by_rarity):
             logger.debug(f"卡牌 {card.name} ({rarity}) 不符合通知条件")
             return False
 
@@ -286,12 +222,10 @@ class Notifier:
         """解析卡牌图片 URL：优先绝对 URL，否则按 set_code/number 生成。"""
         if image_url and image_url.startswith(("http://", "https://")):
             return image_url
-
         set_code = getattr(card, "set_code", None)
         card_number = getattr(card, "number", None)
         if set_code and card_number is not None:
             return f"{CARD_IMAGE_CDN_BASE_URL}/{set_code}/{card_number}.png"
-
         return None
 
     def notify_task_status(
@@ -321,19 +255,19 @@ class Notifier:
 
         task_type = task_instance.task_type
 
-        if not self._is_task_status_notifiable(
-            task_type=task_type,
-            status=status,
-            notify_task_types=notify_task_types,
-            notify_on=notify_on,
-        ):
+        # 内联 _is_task_status_notifiable 判断
+        if notify_task_types and task_type not in notify_task_types:
+            logger.debug(f"任务类型 {task_type} 不在通知列表中")
+            return False
+        if status not in notify_on:
+            logger.debug(f"状态 {status} 不在通知条件中")
             return False
 
         account = task_instance.account
         account_name = self._resolve_account_name(account)
 
         status_text = TASK_STATUS_TEXT_MAP.get(status, status)
-        now_text = self._format_now()
+        now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 内联 _format_now
 
         title = "任务状态通知"
         content = self._build_task_status_content(
@@ -352,11 +286,7 @@ class Notifier:
             task_instance_id=task_instance.id,
         )
 
-    def notify_system_warning(
-        self,
-        title: str,
-        message: str,
-    ) -> bool:
+    def notify_system_warning(self, title: str, message: str) -> bool:
         """
         系统警告通知
 
@@ -367,7 +297,8 @@ class Notifier:
         Returns:
             是否发送通知
         """
-        content = self._build_system_warning_content(message, self._format_now())
+        now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 内联 _format_now
+        content = f"{message}\n时间: {now_text}"  # 内联 _build_system_warning_content
 
         return self.notify(
             scene=SCENE_SYSTEM_WARNING,
@@ -378,29 +309,21 @@ class Notifier:
     def send_webhook_test(self) -> bool:
         """发送企业微信测试消息（仅 Webhook，不落库）。"""
         title = "企业微信通知测试"
-        content = f"这是一条来自 PTCGP Auto Web 的测试消息\n时间: {self._format_now()}"
+        now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 内联 _format_now
+        content = f"这是一条来自 PTCGP Auto Web 的测试消息\n时间: {now_text}"
         return self.send_webhook_notification(title=title, content=content)
 
-    def send_webhook_notification(
-        self,
-        title: str,
-        content: str,
-    ) -> bool:
+    def send_webhook_notification(self, title: str, content: str) -> bool:
         """直接发送指定通知内容到企业微信（不落库）。"""
         return self._send_webhook(title=title, content=content)
 
-    def _send_webhook(
-        self,
-        title: str,
-        content: str,
-    ) -> bool:
+    def _send_webhook(self, title: str, content: str) -> bool:
         """
         发送企微 Webhook
 
         Args:
             title: 标题
             content: Markdown 内容
-            image_url: 图片 URL
 
         Returns:
             是否发送成功
@@ -409,7 +332,12 @@ class Notifier:
             logger.warning("Webhook URL 未配置，跳过推送")
             return False
 
-        payload = self._build_webhook_payload(title, content)
+        # 内联 _build_webhook_payload
+        markdown_content = f"## {title}\n\n{content}"
+        payload = {
+            "msgtype": "markdown_v2",
+            "markdown_v2": {"content": markdown_content},
+        }
 
         try:
             response = requests.post(
