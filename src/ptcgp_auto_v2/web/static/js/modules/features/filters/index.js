@@ -26,6 +26,7 @@ export {
 export {
     saveTasksFilters,
     getStoredTasksFilters,
+    applyTasksSidebarRequestParams,
     restoreTasksFilters,
     updateTaskResetButtonState,
     initTaskSortControls,
