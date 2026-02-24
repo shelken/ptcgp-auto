@@ -559,8 +559,8 @@ class SendCardDailyTask(Task):
             self._last_card_signature = signature
 
         if self._card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
-            return self._complete_without_send(
-                complete_reason="扫描多次未找到目标卡 A1-153，结束本次送卡任务",
+            return self._skip_without_send(
+                skip_reason="扫描多次未找到目标卡 A1-153，结束本次送卡任务",
                 record_status="completed_no_card",
                 error_code="CARD_NOT_FOUND_BY_SCAN",
             )
