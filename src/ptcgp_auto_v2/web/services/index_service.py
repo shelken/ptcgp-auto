@@ -1,7 +1,7 @@
 from sqlmodel import Session, select, distinct
 
 from ptcgp_auto_v2.db.models.card import Card
-from ptcgp_auto_v2.db.repositories import CardRepository
+from ptcgp_auto_v2.db.repositories import CardRepository, NotificationRepository
 from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
 from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
@@ -39,6 +39,10 @@ def build_index_context(session: Session, lang: str) -> dict:
     card_sets = card_repo.get_all_sets()
     packs = card_repo.get_all_packs()
 
+    # 获取未读通知数量（用于通知面板按钮状态）
+    notification_repo = NotificationRepository()
+    unread_count = notification_repo.count_unread()
+
     lang_key = "zh" if current_lang.startswith("zh") else "en"
     sets_data = [
         {"code": item.code, "label": parse_json_label(item.label_data)}
@@ -62,4 +66,5 @@ def build_index_context(session: Session, lang: str) -> dict:
         "lang_key": lang_key,
         "t": t,
         "current_lang": current_lang,
+        "unread_count": unread_count,
     }
