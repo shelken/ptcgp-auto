@@ -236,6 +236,7 @@ src/ptcgp_auto_v2/web/
 - **元数据折叠规范**：分区折叠逻辑放在模块函数（如 `toggleSection`）中，通过 `data-target-id/data-icon-id` 驱动；禁止在 partial 内嵌 `<script>`。
 - **图片兜底规范**：禁止引用不存在的 `/static/*.png` 占位图；如果不需要占位背景，统一使用透明 data URI 作为最终兜底，避免额外静态资源依赖。
 - **onerror 防循环规范**：在图片 `onerror` 回退分支必须先 `this.onerror = null`，再改 `src`，避免 fallback 资源异常时产生无限 404 请求刷屏。
+- **hover 抖动误判排查原则**：出现“鼠标悬浮触发图片重复请求”时，优先检查图片 `onerror` 最终分支是否已解绑（`this.onerror=null`）；未解绑会在重绘/重排下重复触发错误回调，表现为 hover 期间持续请求同一资源。
 - **旧缓存兼容规范**：当静态资源路径发生变更时，优先通过版本号更新与前端统一回退策略清除旧引用，避免继续依赖临时兼容路由。
 - **任务2.2 DOM 安全规范**：在 `features/plans.js`、`features/filters/*.js` 这类用户可触发的动态区域，禁止再使用字符串 `innerHTML` 拼接按钮/卡片；统一使用 `createElement + textContent + replaceChildren`。
 - **筛选组清空规范**：拥有卡牌页若提供“分组清空”，必须在前端一次性批量取消选中并只触发一次列表刷新，避免逐个 checkbox 触发多次 HTMX 请求。
