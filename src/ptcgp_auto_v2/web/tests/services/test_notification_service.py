@@ -2,6 +2,7 @@
 
 from sqlmodel import Session
 
+from ptcgp_auto_v2.config.assets import build_card_image_urls
 from ptcgp_auto_v2.db.models import Account, Card, Notification
 from ptcgp_auto_v2.web.services.notification_service import (
     build_notification_panel_context,
@@ -190,3 +191,13 @@ def test_notification_panel_image_url_should_follow_owned_cards_wsrv_pattern(
     assert context["notifications"][0]["image_webp_url"].endswith(
         "/A1/260.webp&w=400&output=webp"
     )
+
+
+def test_build_card_image_urls_should_generate_png_and_webp_pair():
+    """图片 URL 构造应由统一函数生成，避免业务层硬编码地址。"""
+    png_url, webp_url = build_card_image_urls(
+        set_code="A1", card_number=260, lang="zh_CN", width=400
+    )
+
+    assert png_url.endswith("/A1/260.png&w=400&output=png")
+    assert webp_url.endswith("/A1/260.webp&w=400&output=webp")

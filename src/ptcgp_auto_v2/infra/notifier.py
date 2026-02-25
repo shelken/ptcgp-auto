@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Optional
 
 import requests
 
-from ptcgp_auto_v2.config.assets import CARD_IMAGE_CDN_BASE_URL
+from ptcgp_auto_v2.config.assets import build_card_cdn_image_url
 from ptcgp_auto_v2.config.constants import NOTIFICATION_TASK_STATUS_DEFAULTS
 from ptcgp_auto_v2.config.notification import (
     SCENE_RARE_CARD,
@@ -83,8 +83,7 @@ class Notifier:
             content: Markdown 内容
             account_id: 关联账号 ID
             task_instance_id: 关联任务实例 ID
-            image_url: 图片 URL（用于企微推送）
-
+            image_url: 图片 URL（用于构建通知正文）
         Returns:
             是否成功发送站内通知
         """
@@ -225,7 +224,12 @@ class Notifier:
         set_code = getattr(card, "set_code", None)
         card_number = getattr(card, "number", None)
         if set_code and card_number is not None:
-            return f"{CARD_IMAGE_CDN_BASE_URL}/{set_code}/{card_number}.png"
+            return build_card_cdn_image_url(
+                set_code=set_code,
+                card_number=card_number,
+                lang="zh_CN",
+                ext="png",
+            )
         return None
 
     def notify_task_status(
@@ -313,11 +317,19 @@ class Notifier:
         content = f"这是一条来自 PTCGP Auto Web 的测试消息\n时间: {now_text}"
         return self.send_webhook_notification(title=title, content=content)
 
-    def send_webhook_notification(self, title: str, content: str) -> bool:
+    def send_webhook_notification(
+        self,
+        title: str,
+        content: str,
+    ) -> bool:
         """直接发送指定通知内容到企业微信（不落库）。"""
         return self._send_webhook(title=title, content=content)
 
-    def _send_webhook(self, title: str, content: str) -> bool:
+    def _send_webhook(
+        self,
+        title: str,
+        content: str,
+    ) -> bool:
         """
         发送企微 Webhook
 
@@ -332,12 +344,10 @@ class Notifier:
             logger.warning("Webhook URL 未配置，跳过推送")
             return False
 
-        # 内联 _build_webhook_payload
-        markdown_content = f"## {title}\n\n{content}"
-        payload = {
-            "msgtype": "markdown_v2",
-            "markdown_v2": {"content": markdown_content},
-        }
+        payload = self._build_webhook_payload(
+            title=title,
+            content=content,
+        )
 
         try:
             response = requests.post(
@@ -356,6 +366,19 @@ class Notifier:
         except Exception as e:
             logger.warning(f"企微 Webhook 推送异常: {e}")
             return False
+
+    @staticmethod
+    def _build_webhook_payload(
+        title: str,
+        content: str,
+    ) -> dict:
+        """构造企业微信 Webhook 载荷。"""
+        markdown_content = f"## {title}\n\n{content}"
+
+        return {
+            "msgtype": "markdown_v2",
+            "markdown_v2": {"content": markdown_content},
+        }
 
 
 _notifier_instance: Optional[Notifier] = None

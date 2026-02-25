@@ -1,6 +1,6 @@
 {% from "partials/macros/modal.html" import modal_header %}
-{% set image_locale = 'zh-TW' if current_lang.startswith('zh') else 'en-US' %}
-{% set image_cdn_url = 'https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/' ~ image_locale ~ '/cards-by-set' %}
+{% set image_sources = build_card_image_bases(current_lang) %}
+{% set image_cdn_url = image_sources.cdn_base_url %}
 {% set page_card_ids = cards | map(attribute='id') | list %}
 
 <div class="notification-card-picker-modal">

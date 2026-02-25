@@ -16,7 +16,7 @@ import requests
 from PIL import Image
 from sqlmodel import Session
 
-from ptcgp_auto_v2.config.assets import CARD_IMAGE_CDN_BASE_URL
+from ptcgp_auto_v2.config.assets import build_card_image_bases
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.db.engine import get_engine
@@ -24,7 +24,7 @@ from ptcgp_auto_v2.db.engine import get_engine
 logger = logging.getLogger(__name__)
 
 # 使用 jsDelivr CDN 加速下载
-ASSETS_BASE_URL = CARD_IMAGE_CDN_BASE_URL
+ASSETS_BASE_URL = build_card_image_bases("zh_CN")["cdn_base_url"]
 
 
 class ImageResourceManager:
