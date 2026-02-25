@@ -25,26 +25,22 @@ class TestNotifierNotify:
     """基础通知测试"""
 
     def test_build_webhook_payload_without_image_uses_markdown(self):
-        """无图片时应使用 markdown 消息格式。"""
+        """无图片时应使用 markdown_v2 消息格式。"""
         from ptcgp_auto_v2.infra.notifier import Notifier
 
         payload = Notifier._build_webhook_payload(title="标题", content="内容")
 
-        assert payload["msgtype"] == "markdown"
-        assert payload["markdown"]["content"].startswith("## 标题")
+        assert payload["msgtype"] == "markdown_v2"
+        assert payload["markdown_v2"]["content"].startswith("## 标题")
 
     def test_build_webhook_payload_with_image_uses_markdown_v2(self):
-        """有图片时应使用 markdown_v2 消息格式并带图片语法。"""
+        """Webhook 载荷构造不处理图片注入，保持内容原样。"""
         from ptcgp_auto_v2.infra.notifier import Notifier
 
-        payload = Notifier._build_webhook_payload(
-            title="标题", content="内容", image_url="https://example.com/card.png"
-        )
+        payload = Notifier._build_webhook_payload(title="标题", content="内容")
 
         assert payload["msgtype"] == "markdown_v2"
-        assert (
-            "![card](https://example.com/card.png)" in payload["markdown_v2"]["content"]
-        )
+        assert payload["markdown_v2"]["content"] == "## 标题\n\n内容"
 
     def test_notify_creates_notification_when_enabled(self, engine):
         from ptcgp_auto_v2.infra.notifier import Notifier
@@ -131,10 +127,10 @@ class TestNotifierNotify:
             mock_post.assert_called_once()
             call_args = mock_post.call_args
             assert call_args[0][0] == "https://test.webhook.url"
-            assert call_args[1]["json"]["msgtype"] == "markdown"
+            assert call_args[1]["json"]["msgtype"] == "markdown_v2"
 
     def test_notify_uses_markdown_v2_when_image_url_provided(self, engine):
-        """传入图片 URL 时，应使用 markdown_v2 并包含图片语法。"""
+        """传入图片 URL 时仍走 markdown_v2，正文由调用方决定。"""
         from ptcgp_auto_v2.infra.notifier import Notifier
         from ptcgp_auto_v2.db.repositories.notification_config_repository import (
             NotificationConfigRepository,
@@ -168,10 +164,7 @@ class TestNotifierNotify:
             assert mock_post.call_count == 1
             payload = mock_post.call_args.kwargs["json"]
             assert payload["msgtype"] == "markdown_v2"
-            assert (
-                "![card](https://example.com/card.png)"
-                in payload["markdown_v2"]["content"]
-            )
+            assert payload["markdown_v2"]["content"] == "## 测试通知\n\n测试内容"
 
     def test_notifier_supports_notify_key_env(self, engine, monkeypatch):
         """仅提供 NOTIFY_KEY 时应自动拼接企微 webhook URL。"""
@@ -470,7 +463,7 @@ class TestNotifierRareCard:
             markdown_payload = mock_post.call_args.kwargs["json"]
             assert markdown_payload["msgtype"] == "markdown_v2"
             assert (
-                "![card](https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/zh-TW/cards-by-set/A1/260.png)"
+                "![Zapdos ex](https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/zh-TW/cards-by-set/A1/260.png)"
                 in markdown_payload["markdown_v2"]["content"]
             )
 

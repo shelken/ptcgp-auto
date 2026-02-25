@@ -322,8 +322,7 @@ def test_send_test_webhook_uses_notification_image_for_rare_card(
         ):
             assert title == "稀有卡牌通知"
             assert "Zapdos ex" in content
-            assert image_url is not None
-            assert image_url.endswith("/A1/260.png")
+            assert image_url is None
             return True
 
     monkeypatch.setattr(router, "get_notifier", lambda: _FakeNotifier())

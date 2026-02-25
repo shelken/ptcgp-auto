@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from sqlmodel import Session, col, func, select
 
+from ptcgp_auto_v2.config.assets import build_card_image_urls
 from ptcgp_auto_v2.config.constants import (
     HIGH_RARITY_TARGETS,
 )
@@ -348,16 +349,11 @@ def build_notification_panel_context(
     # 转换为字典并添加相对时间文本和图片URL
     notification_dicts = []
     for n in notifications:
-        image_url = _extract_image_url(n.content)
-        image_webp_url = _build_image_webp_fallback_url(image_url)
-        card_image_url, card_image_webp_url = _build_notification_card_asset_urls(
+        image_payload = build_notification_image_payload(
             notification=n,
             session=session,
             lang=current_lang,
         )
-        if card_image_url:
-            image_url = card_image_url
-            image_webp_url = card_image_webp_url
 
         notification_dicts.append(
             {
@@ -365,8 +361,8 @@ def build_notification_panel_context(
                 "scene": n.scene,
                 "title": n.title,
                 "content": n.content,
-                "image_url": image_url,
-                "image_webp_url": image_webp_url,
+                "image_url": image_payload["image_url"],
+                "image_webp_url": image_payload["image_webp_url"],
                 "related_account_id": n.related_account_id,
                 "related_task_instance_id": n.related_task_instance_id,
                 "is_read": n.is_read,
@@ -396,6 +392,30 @@ def _extract_image_url(content: str) -> str | None:
     if match:
         return match.group(1)
     return None
+
+
+def build_notification_image_payload(
+    notification: Notification,
+    session: Session,
+    lang: str,
+) -> dict[str, str | None]:
+    """统一构造通知图片 URL（普通 markdown / 稀有卡牌同源规则）。"""
+    image_url = _extract_image_url(notification.content)
+    image_webp_url = _build_image_webp_fallback_url(image_url)
+
+    card_image_url, card_image_webp_url = _build_notification_card_asset_urls(
+        notification=notification,
+        session=session,
+        lang=lang,
+    )
+    if card_image_url:
+        image_url = card_image_url
+        image_webp_url = card_image_webp_url
+
+    return {
+        "image_url": image_url,
+        "image_webp_url": image_webp_url,
+    }
 
 
 def _extract_card_name_and_rarity(content: str) -> tuple[str, str] | None:
@@ -444,15 +464,12 @@ def _build_notification_card_asset_urls(
     if card is None or not card.set_code or card.number is None:
         return None, None
 
-    image_locale = "zh-TW" if lang.startswith("zh") else "en-US"
-    image_base_url = (
-        "https://wsrv.nl/?url=raw.githubusercontent.com/shelken/ptcgp-assets/main/images/"
-        f"{image_locale}/cards-by-set"
+    return build_card_image_urls(
+        set_code=card.set_code,
+        card_number=card.number,
+        lang=lang,
+        width=400,
     )
-    card_path = f"/{card.set_code}/{card.number}"
-    png_url = f"{image_base_url}{card_path}.png&w=400&output=png"
-    webp_url = f"{image_base_url}{card_path}.webp&w=400&output=webp"
-    return png_url, webp_url
 
 
 def _build_image_webp_fallback_url(image_url: str | None) -> str | None:
