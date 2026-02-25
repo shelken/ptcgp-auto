@@ -2,19 +2,13 @@
 """通知管理路由。"""
 
 import json
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from ptcgp_auto_v2.config.assets import CARD_IMAGE_CDN_BASE_URL
-from ptcgp_auto_v2.config.notification import (
-    SCENE_RARE_CARD,
-)
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import (
     NotificationConfigRepository,
     NotificationRepository,
@@ -24,6 +18,7 @@ from ptcgp_auto_v2.web.services.notification_service import (
     TASK_STATUS_OPTIONS,
     build_config_view,
     build_notification_card_selector_context,
+    build_notification_image_payload,
     build_notification_panel_context,
     build_notifications_context,
     build_recent_notifications_context,
@@ -135,49 +130,6 @@ async def _render_notification_page(
 
     templates = get_templates()
     return templates.TemplateResponse("partials/notification_page.html", context)
-
-
-def _extract_card_name_and_rarity(content: str) -> tuple[str, str] | None:
-    """从通知内容中提取卡牌名与稀有度代码。"""
-    card_name = ""
-    rarity_code = ""
-    for line in content.splitlines():
-        text = line.strip()
-        if text.startswith("卡牌:"):
-            card_name = text.split(":", 1)[1].strip()
-        elif text.startswith("稀有度:"):
-            rarity_text = text.split(":", 1)[1].strip()
-            rarity_code = rarity_text.split(" ", 1)[0].strip()
-
-    if card_name and rarity_code:
-        return card_name, rarity_code
-
-    legacy_match = re.search(r"\*\*(?P<rarity>[A-Z]+)\s+(?P<name>[^*]+)\*\*", content)
-    if legacy_match:
-        return legacy_match.group("name").strip(), legacy_match.group("rarity").strip()
-
-    return None
-
-
-def _build_notification_image_url(notification, session: Session) -> str | None:
-    """根据通知内容解析卡牌并生成图片 URL。"""
-    if notification.scene != SCENE_RARE_CARD:
-        return None
-
-    parsed = _extract_card_name_and_rarity(notification.content or "")
-    if not parsed:
-        return None
-    card_name, rarity_code = parsed
-
-    card = session.exec(
-        select(Card).where(Card.name == card_name, Card.rarity == rarity_code)
-    ).first()
-    if card is None:
-        card = session.exec(select(Card).where(Card.name == card_name)).first()
-    if card is None or not card.set_code or card.number is None:
-        return None
-
-    return f"{CARD_IMAGE_CDN_BASE_URL}/{card.set_code}/{card.number}.png"
 
 
 @router.get("/management/notifications", response_class=HTMLResponse)
@@ -560,7 +512,6 @@ async def send_test_webhook(
         return response
 
     notifier = get_notifier()
-    image_url = _build_notification_image_url(notification, session)
     sent = notifier.send_webhook_notification(
         title=notification.title,
         content=notification.content,

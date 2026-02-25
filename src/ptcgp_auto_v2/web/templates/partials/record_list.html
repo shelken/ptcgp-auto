@@ -1,7 +1,7 @@
 {# 图片资源使用的 locale 映射 #}
-{% set image_locale = 'zh-TW' if current_lang.startswith('zh') else 'en-US' %}
-{% set image_base_url = 'https://wsrv.nl/?url=raw.githubusercontent.com/shelken/ptcgp-assets/main/images/' ~ image_locale ~ '/cards-by-set' %}
-{% set image_cdn_url = 'https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images/' ~ image_locale ~ '/cards-by-set' %}
+{% set image_sources = build_card_image_bases(current_lang) %}
+{% set image_base_url = image_sources.proxy_base_url %}
+{% set image_cdn_url = image_sources.cdn_base_url %}
 
 {% for item in records %}
 <div class="brutal-card p-8 flex flex-col md:flex-row gap-8">
