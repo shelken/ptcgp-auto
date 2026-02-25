@@ -4,6 +4,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.models import Account, Card, Notification
 from ptcgp_auto_v2.web.services.notification_service import (
+    build_notification_panel_context,
     build_notification_card_selector_context,
     build_notifications_context,
     get_task_type_options,
@@ -151,3 +152,41 @@ def test_get_task_type_options_reads_from_registry(monkeypatch):
     )
 
     assert get_task_type_options() == ["dynamic_task_a", "dynamic_task_b"]
+
+
+def test_notification_panel_image_url_should_follow_owned_cards_wsrv_pattern(
+    session: Session,
+):
+    """通知缩略图 URL 应与拥有卡一致使用 wsrv png 规则。"""
+    session.add(
+        Card(
+            id=900301,
+            number=260,
+            name="Zapdos ex",
+            rarity="SR",
+            type="Pokemon",
+            set_code="A1",
+            image_url="any.webp",
+        )
+    )
+    session.add(
+        Notification(
+            scene="rare_card_obtained",
+            title="稀有卡牌",
+            content="账号: skn159\n事件: 开出稀有卡牌\n卡牌: Zapdos ex\n稀有度: SR (2星)",
+            is_read=False,
+        )
+    )
+    session.commit()
+
+    context = build_notification_panel_context(
+        session=session, lang="zh_CN", page=0, page_size=10
+    )
+    image_url = context["notifications"][0]["image_url"]
+
+    assert image_url is not None
+    assert image_url.endswith("/A1/260.png&w=400&output=png")
+    assert "wsrv.nl" in image_url
+    assert context["notifications"][0]["image_webp_url"].endswith(
+        "/A1/260.webp&w=400&output=webp"
+    )
