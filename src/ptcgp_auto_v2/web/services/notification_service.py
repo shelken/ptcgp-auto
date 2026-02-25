@@ -2,6 +2,7 @@
 """通知管理页面服务。"""
 
 import json
+import re
 from typing import Any, Optional
 
 from sqlmodel import Session, col, func, select
@@ -347,13 +348,25 @@ def build_notification_panel_context(
     # 转换为字典并添加相对时间文本和图片URL
     notification_dicts = []
     for n in notifications:
+        image_url = _extract_image_url(n.content)
+        image_webp_url = _build_image_webp_fallback_url(image_url)
+        card_image_url, card_image_webp_url = _build_notification_card_asset_urls(
+            notification=n,
+            session=session,
+            lang=current_lang,
+        )
+        if card_image_url:
+            image_url = card_image_url
+            image_webp_url = card_image_webp_url
+
         notification_dicts.append(
             {
                 "id": n.id,
                 "scene": n.scene,
                 "title": n.title,
                 "content": n.content,
-                "image_url": _extract_image_url(n.content),
+                "image_url": image_url,
+                "image_webp_url": image_webp_url,
                 "related_account_id": n.related_account_id,
                 "related_task_instance_id": n.related_task_instance_id,
                 "is_read": n.is_read,
@@ -376,8 +389,6 @@ def build_notification_panel_context(
 
 def _extract_image_url(content: str) -> str | None:
     """从 Markdown 内容中提取第一个图片 URL。"""
-    import re
-
     if not content:
         return None
     # 匹配 ![alt](url) 格式
@@ -385,6 +396,79 @@ def _extract_image_url(content: str) -> str | None:
     if match:
         return match.group(1)
     return None
+
+
+def _extract_card_name_and_rarity(content: str) -> tuple[str, str] | None:
+    """从通知内容提取卡牌名与稀有度编码。"""
+    card_name = ""
+    rarity_code = ""
+    for line in (content or "").splitlines():
+        text = line.strip()
+        if text.startswith("卡牌:"):
+            card_name = text.split(":", 1)[1].strip()
+        elif text.startswith("稀有度:"):
+            rarity_text = text.split(":", 1)[1].strip()
+            rarity_code = rarity_text.split(" ", 1)[0].strip()
+
+    if card_name and rarity_code:
+        return card_name, rarity_code
+
+    legacy_match = re.search(
+        r"\*\*(?P<rarity>[A-Z]+)\s+(?P<name>[^*]+)\*\*", content or ""
+    )
+    if legacy_match:
+        return legacy_match.group("name").strip(), legacy_match.group("rarity").strip()
+
+    return None
+
+
+def _build_notification_card_asset_urls(
+    notification: Notification,
+    session: Session,
+    lang: str,
+) -> tuple[str | None, str | None]:
+    """按拥有卡同源规则生成通知缩略图 URL（png + webp）。"""
+    if notification.scene != "rare_card_obtained":
+        return None, None
+
+    parsed = _extract_card_name_and_rarity(notification.content or "")
+    if not parsed:
+        return None, None
+
+    card_name, rarity_code = parsed
+    card = session.exec(
+        select(Card).where(Card.name == card_name, Card.rarity == rarity_code)
+    ).first()
+    if card is None:
+        card = session.exec(select(Card).where(Card.name == card_name)).first()
+    if card is None or not card.set_code or card.number is None:
+        return None, None
+
+    image_locale = "zh-TW" if lang.startswith("zh") else "en-US"
+    image_base_url = (
+        "https://wsrv.nl/?url=raw.githubusercontent.com/shelken/ptcgp-assets/main/images/"
+        f"{image_locale}/cards-by-set"
+    )
+    card_path = f"/{card.set_code}/{card.number}"
+    png_url = f"{image_base_url}{card_path}.png&w=400&output=png"
+    webp_url = f"{image_base_url}{card_path}.webp&w=400&output=webp"
+    return png_url, webp_url
+
+
+def _build_image_webp_fallback_url(image_url: str | None) -> str | None:
+    """基于原图 URL 生成 webp 回退地址。"""
+    if not image_url:
+        return None
+
+    # 与 owned-card 保持一致：wsrv output 参数优先改为 webp
+    if "output=png" in image_url:
+        return image_url.replace("output=png", "output=webp")
+
+    # 兜底：常见 png 扩展名回退到 webp
+    if image_url.endswith(".png"):
+        return image_url[:-4] + ".webp"
+
+    return image_url
 
 
 def _format_relative_time(
