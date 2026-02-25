@@ -77,7 +77,7 @@
                         class="owned-card-image"
                         loading="lazy"
                         decoding="async"
-                        onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.webp';}else{this.style.visibility='hidden';}">
+                        onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.webp';}else{this.onerror=null;this.style.visibility='hidden';}">
                     <div class="notification-picker-owned-overlay" aria-hidden="true">
                         <span class="notification-picker-check">✓</span>
                     </div>

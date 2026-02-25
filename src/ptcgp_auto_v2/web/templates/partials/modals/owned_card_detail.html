@@ -40,7 +40,7 @@
                         loading="lazy"
                         decoding="async"
                         draggable="false"
-                        onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.webp';}else{this.style.display='none'; this.nextElementSibling.classList.remove('hidden');}">
+                        onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.webp';}else{this.onerror=null;this.style.display='none';this.nextElementSibling.classList.remove('hidden');}">
                     <div class="owned-card-placeholder hidden">
                         {{ t.no_image }}
                     </div>
