@@ -112,6 +112,7 @@ class FetchAccountInfoTask(Task):
 
     task_type = "fetch_account_info"
     reset_type = ResetType.DAILY
+    screenshot_lossless = True
     pages = _build_fetch_pages()
 
     def __init__(self, *args, **kwargs):
