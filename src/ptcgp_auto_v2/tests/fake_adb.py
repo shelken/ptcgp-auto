@@ -177,7 +177,7 @@ class FakeAdb:
         """记录双指放大参数。"""
         self.pinch_actions.append(("out", center, scale, steps))
 
-    def screenshot(self):
+    def screenshot(self, lossless: bool = False):
         """获取模拟截图。"""
         return self._device.screenshot()
 

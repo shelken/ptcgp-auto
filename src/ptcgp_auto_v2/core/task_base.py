@@ -95,6 +95,9 @@ class Task(ABC):
     # 连续未知页面上限
     max_unknown_pages: int = MAX_UNKNOWN_PAGES
 
+    # 页面检测默认截图模式：False=默认链路，True=无损截图
+    screenshot_lossless: bool = False
+
     def __init__(
         self,
         adb: AdbController,
@@ -338,7 +341,9 @@ class Task(ABC):
                 break
 
             # 识别当前页面
-            page_name, page_info = self.page_detector.detect()
+            page_name, page_info = self.page_detector.detect(
+                lossless=self.screenshot_lossless
+            )
 
             # 处理未知页面
             if page_name == "unknown":
