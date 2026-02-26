@@ -109,6 +109,7 @@ class PageDetector:
     def detect(
         self,
         screenshot: Optional[Image.Image] = None,
+        lossless: bool = False,
     ) -> Tuple[str, dict]:
         """
         检测当前界面
@@ -121,7 +122,7 @@ class PageDetector:
         """
         # 截图
         if screenshot is None:
-            screenshot = self.adb.screenshot()
+            screenshot = self.adb.screenshot(lossless=lossless)
             if screenshot is None:
                 logger.error("截图失败")
                 return "unknown", {}
@@ -315,11 +316,11 @@ class PageDetector:
         return self._last_screenshot, self._last_ocr_results
 
     def capture(
-        self, screenshot: Optional[Image.Image] = None
+        self, screenshot: Optional[Image.Image] = None, lossless: bool = False
     ) -> tuple[Optional[Image.Image], List[dict]]:
         """刷新截图与 OCR 结果，并写入缓存"""
         if screenshot is None:
-            screenshot = self.adb.screenshot()
+            screenshot = self.adb.screenshot(lossless=lossless)
             if screenshot is None:
                 return None, []
         self._last_screenshot = screenshot
@@ -333,10 +334,11 @@ class PageDetector:
         scale: float = 1.0,
         threshold: Optional[float] = None,
         screenshot: Optional[Image.Image] = None,
+        lossless: bool = False,
     ) -> Optional[TemplateMatch]:
         """按指定缩放比例匹配模板（缩放为相对系数）"""
         if screenshot is None:
-            screenshot = self._last_screenshot or self.adb.screenshot()
+            screenshot = self._last_screenshot or self.adb.screenshot(lossless=lossless)
             if screenshot is None:
                 return None
         self._last_screenshot = screenshot
@@ -350,6 +352,7 @@ class PageDetector:
         text: str,
         screenshot: Optional[Image.Image] = None,
         exact_match: bool = False,
+        lossless: bool = False,
     ) -> Optional[Tuple[int, int, int, int]]:
         """
         在屏幕上查找文字
@@ -363,7 +366,7 @@ class PageDetector:
             文字的边界框 (x1, y1, x2, y2) 或 None
         """
         if screenshot is None:
-            screenshot = self.adb.screenshot()
+            screenshot = self.adb.screenshot(lossless=lossless)
             if screenshot is None:
                 return None
 
@@ -375,6 +378,7 @@ class PageDetector:
         template_name: str,
         screenshot: Optional[Image.Image] = None,
         threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
+        lossless: bool = False,
     ) -> Optional[Tuple[int, int, int, int]]:
         """
         在屏幕上查找模板
@@ -388,7 +392,7 @@ class PageDetector:
             模板的边界框 (x1, y1, x2, y2) 或 None
         """
         if screenshot is None:
-            screenshot = self._last_screenshot or self.adb.screenshot()
+            screenshot = self._last_screenshot or self.adb.screenshot(lossless=lossless)
             if screenshot is None:
                 return None
         self._last_screenshot = screenshot
@@ -401,6 +405,7 @@ class PageDetector:
         screenshot: Optional[Image.Image] = None,
         threshold: float = DEFAULT_TEMPLATE_THRESHOLD,
         scale: float = 1.0,
+        lossless: bool = False,
     ) -> List[TemplateMatch]:
         f"""
         在屏幕上查找所有匹配的模板的位置
@@ -414,7 +419,7 @@ class PageDetector:
             返回置信度 和 位置
         """
         if screenshot is None:
-            screenshot = self._last_screenshot or self.adb.screenshot()
+            screenshot = self._last_screenshot or self.adb.screenshot(lossless=lossless)
             if screenshot is None:
                 return []
         self._last_screenshot = screenshot

@@ -242,9 +242,12 @@ class AdbController:
         except Exception:
             return False
 
-    def screenshot(self) -> Optional[Image.Image]:
+    def screenshot(self, lossless: bool = False) -> Optional[Image.Image]:
         """
         截取屏幕截图
+
+        Args:
+            lossless: 是否使用无损截图（display_id=0）
 
         Returns:
             PIL Image 对象，失败返回 None
@@ -254,7 +257,10 @@ class AdbController:
             return None
 
         try:
-            result = self.device.screenshot()
+            if lossless:
+                result = self.device.screenshot(display_id=0)
+            else:
+                result = self.device.screenshot()
             if isinstance(result, Image.Image):
                 return result
             logger.error("截图返回类型异常")
