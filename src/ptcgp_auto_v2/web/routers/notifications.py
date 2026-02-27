@@ -9,10 +9,6 @@ from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.db.repositories import (
-    NotificationConfigRepository,
-    NotificationRepository,
-)
 from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.web.services.notification_service import (
     TASK_STATUS_OPTIONS,
@@ -192,8 +188,8 @@ async def get_unread_count(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取未读通知数量（用于顶部图标徽标）。"""
-    repo = NotificationRepository()
-    count = repo.count_unread()
+    from ptcgp_auto_v2.web.services.notification_service import get_unread_notification_count
+    count = get_unread_notification_count()
     if count <= 0:
         return ""
     return f'<span class="notification-badge brutal-tag status-badge status-chip status-tone-failed">{count}</span>'
@@ -300,8 +296,8 @@ async def mark_as_read(
     session: Session = Depends(get_fastapi_session),
 ):
     """标记单条通知为已读并刷新列表。"""
-    repo = NotificationRepository()
-    repo.mark_as_read(notification_id)
+    from ptcgp_auto_v2.web.services.notification_service import mark_notification_as_read
+    mark_notification_as_read(notification_id)
     response = await get_notifications_list(
         request=request,
         scene=scene,
@@ -334,8 +330,11 @@ async def mark_all_as_read(
     session: Session = Depends(get_fastapi_session),
 ):
     """批量标记已读并刷新列表。"""
+    from ptcgp_auto_v2.web.services.notification_service import (
+        mark_all_notifications_as_read,
+    )
+
     current_lang, t = get_current_i18n()
-    repo = NotificationRepository()
     filters = _build_notification_list_filters(
         scene=scene,
         account_id=account_id,
@@ -346,7 +345,7 @@ async def mark_all_as_read(
         page=page,
         page_size=page_size,
     )
-    count = repo.mark_all_as_read(
+    count = mark_all_notifications_as_read(
         scene=filters["scene"],
         account_id=filters["account_id"],
     )
@@ -383,9 +382,12 @@ async def update_notification_config(
     session: Session = Depends(get_fastapi_session),
 ):
     """更新通知配置。"""
+    from ptcgp_auto_v2.web.services.notification_service import (
+        update_notification_config as update_config,
+    )
+
     current_lang, t = get_current_i18n()
     form = await request.form()
-    config_repo = NotificationConfigRepository()
 
     scene = normalize_scene(str(form.get("scene") or ""))
     if not scene:
@@ -409,7 +411,7 @@ async def update_notification_config(
             "notify_on": notify_on,
         }
 
-    config_repo.update(
+    updated_config = update_config(
         scene=scene,
         enabled=enabled,
         enabled_webhook=enabled_webhook,
@@ -417,7 +419,6 @@ async def update_notification_config(
     )
 
     message = t.get("notification_config_saved") or "配置已保存"
-    updated_config = config_repo.get_or_create(scene)
 
     templates = get_templates()
     response = templates.TemplateResponse(
@@ -456,12 +457,13 @@ async def send_test_webhook(
     session: Session = Depends(get_fastapi_session),
 ):
     """发送企业微信测试消息。"""
+    from ptcgp_auto_v2.web.services.notification_service import get_notification_by_id
+
     current_lang, t = get_current_i18n()
-    repo = NotificationRepository()
 
     notification = None
     if notification_id is not None:
-        notification = repo.get_by_id(notification_id)
+        notification = get_notification_by_id(notification_id)
     else:
         filters = _build_notification_list_filters(
             scene=scene,
@@ -560,10 +562,13 @@ async def mark_all_panel_notifications_read(
 
     通过 HX-Trigger 通知前端刷新 Badge 并显示 toast 提示。
     """
+    from ptcgp_auto_v2.web.services.notification_service import (
+        mark_all_notifications_as_read,
+    )
+
     current_lang, t = get_current_i18n()
 
-    repo = NotificationRepository()
-    count = repo.mark_all_as_read()
+    count = mark_all_notifications_as_read()
 
     # 构建更新后的面板内容上下文
     context = build_notification_panel_context(
