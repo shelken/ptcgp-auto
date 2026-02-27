@@ -35,16 +35,17 @@ from ptcgp_auto_v2.web.queries.notification_queries import (
     normalize_card_picker_sort,
     normalize_notification_sort,
 )
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
-
 
 SCENE_OPTIONS = list(NOTIFICATION_SCENE_OPTIONS)
 TASK_STATUS_OPTIONS = list(NOTIFICATION_TASK_STATUS_OPTIONS)
 RARITY_ORDER = {code: index for index, code in enumerate(HIGH_RARITY_TARGETS, start=1)}
 
 
-def _build_scene_options(t: dict[str, Any]) -> list[dict[str, str]]:
+def _build_scene_options() -> list[dict[str, str]]:
     """构建场景下拉选项。"""
+    from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
+
+    _, t = get_current_i18n()
     fallback_labels = {
         "rare_card_obtained": "稀有卡牌",
         "task_status": "任务状态",
@@ -129,7 +130,6 @@ def build_notification_card_selector_context(
     page_size: int = 24,
 ) -> dict[str, Any]:
     """构建通知配置卡牌选择器上下文。"""
-    current_lang, t = get_current_i18n()
     normalized_page = max(page, 0)
     normalized_page_size = min(max(page_size, 1), 60)
     normalized_sort_by, normalized_sort_order = normalize_card_picker_sort(
@@ -154,8 +154,6 @@ def build_notification_card_selector_context(
     selected_card_rows = list_cards_by_ids(session, selected_card_ids)
 
     return {
-        "t": t,
-        "current_lang": current_lang,
         "scene": scene,
         "cards": cards,
         "selected_card_ids": selected_card_ids,
@@ -189,7 +187,6 @@ def build_notifications_context(
     page_size: int = 10,
 ) -> dict[str, Any]:
     """构建通知页面上下文。"""
-    current_lang, t = get_current_i18n()
     config_repo = NotificationConfigRepository()
     notification_repo = NotificationRepository()
 
@@ -224,12 +221,10 @@ def build_notifications_context(
     config_views = [build_config_view(config) for config in config_repo.get_all()]
 
     return {
-        "t": t,
-        "current_lang": current_lang,
         "notifications": notifications,
         "total": total,
         "unread_count": notification_repo.count_unread(),
-        "scene_options": _build_scene_options(t),
+        "scene_options": _build_scene_options(),
         "selected_scene": normalized_scene,
         "selected_account_id": account_id,
         "selected_is_read": is_read,
@@ -254,11 +249,8 @@ def build_recent_notifications_context(
     limit: int = 5,
 ) -> dict[str, Any]:
     """构建最近通知下拉内容上下文。"""
-    current_lang, t = get_current_i18n()
     rows = list_recent_notifications(session, limit=limit)
     return {
-        "t": t,
-        "current_lang": current_lang,
         "notifications": rows,
     }
 
@@ -278,7 +270,8 @@ def build_notification_panel_context(
     Returns:
         dict: 包含 notifications, has_more, next_page, unread_count 等字段
     """
-    current_lang, t = get_current_i18n()
+    from ptcgp_auto_v2.web.utils.i18n import get_current_lang
+
     notification_repo = NotificationRepository()
 
     normalized_page = max(page, 0)
@@ -339,6 +332,7 @@ def build_notification_panel_context(
     next_page = normalized_page + 1 if has_more else normalized_page
 
     # 转换为字典并添加相对时间文本和图片URL
+    current_lang = get_current_lang()
     notification_dicts = []
     for n in notifications:
         image_payload = build_notification_image_payload(
@@ -359,13 +353,11 @@ def build_notification_panel_context(
                 "related_task_instance_id": n.related_task_instance_id,
                 "is_read": n.is_read,
                 "created_at": n.created_at,
-                "relative_time": _format_relative_time(n.created_at, current_lang, t),
+                "relative_time": _format_relative_time(n.created_at),
             }
         )
 
     return {
-        "t": t,
-        "current_lang": current_lang,
         "notifications": notification_dicts,
         "has_more": has_more,
         "next_page": next_page,
@@ -480,16 +472,15 @@ def _build_image_webp_fallback_url(image_url: str | None) -> str | None:
     return image_url
 
 
-def _format_relative_time(
-    created_at: Any,
-    lang: str,
-    t: dict[str, Any],
-) -> str:
+def _format_relative_time(created_at: Any) -> str:
     """格式化相对时间文本。"""
     from datetime import datetime
+    from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
     if created_at is None:
         return ""
+
+    current_lang, t = get_current_i18n()
 
     # 确保使用本地时间
     now = datetime.now()
@@ -500,14 +491,14 @@ def _format_relative_time(
         abs_sec = abs(diff_ms) / 1000
         if abs_sec < 60:
             return t.get("relative_soon") or "soon"
-        return _format_time_value(abs_sec, lang, t, future=True)
+        return _format_time_value(abs_sec, current_lang, t, future=True)
 
     abs_sec = diff_ms / 1000
 
     if abs_sec < 60:
         return t.get("relative_just_now") or "just now"
 
-    return _format_time_value(abs_sec, lang, t, future=False)
+    return _format_time_value(abs_sec, current_lang, t, future=False)
 
 
 def _format_time_value(
