@@ -2,18 +2,14 @@ import { getModal } from './modal.js';
 import { isElementInActiveTab, setButtonLoading, showToast } from './utils.js';
 import { initCustomSelects } from './custom_select.js';
 import {
-    restoreFilterCachesInContext,
     saveFilterCache,
     saveFilterCachesInContext,
     saveFilterCacheByElement,
-    updateOwnedFilterGroupsState,
-    updateTaskResetButtonState,
     initTaskSortControls,
 } from './features/filters/index.js';
-import { updateIntervalSeconds, updateTaskItemState, initSortable } from './features/tasks.js';
+import { updateTaskItemState, initSortable } from './features/tasks.js';
 import { addPlan } from './features/plans.js';
 import { initInlineCardDrag, cardPreviewState, closeCardPreview } from './features/card_preview.js';
-import { currentTabName } from './tabs.js';
 import { initDailyGiftDatePickers } from './features/daily_gift.js';
 import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { updateRelativeTimes } from './relative_time.js';
@@ -60,11 +56,10 @@ function autoRefreshList(container) {
     if (!isElementInActiveTab(container)) return;
     if (!document.hasFocus()) return;
     if (container.dataset.loaded && container.dataset.loaded !== 'true') return;
-    if (
-        container.id === 'owned-cards-container'
-        && window.pauseOwnedCardsAutoRefreshUntil
-        && Date.now() < window.pauseOwnedCardsAutoRefreshUntil
-    ) {
+
+    // 检查是否有滚动暂停配置（data-pause-auto-refresh-until 属性）
+    const pauseUntil = container.dataset.pauseAutoRefreshUntil;
+    if (pauseUntil && Date.now() < parseInt(pauseUntil, 10)) {
         return;
     }
 
@@ -72,13 +67,10 @@ function autoRefreshList(container) {
     const swap = container.dataset.refreshSwap || 'innerHTML';
     const targetSelector = container.dataset.refreshTarget;
     const target = targetSelector ? document.querySelector(targetSelector) : container;
-    if (target && target.dataset && target.dataset.refreshing === '1') {
+    if (target?.dataset?.refreshing === '1') {
         return;
     }
-    if (target && target.dataset) {
-        if (target.dataset.refreshing === '1') {
-            return;
-        }
+    if (target?.dataset) {
         target.dataset.refreshing = '1';
     }
 
@@ -91,26 +83,46 @@ function autoRefreshList(container) {
     });
 }
 
-function bindOwnedFilterFormEvents() {
-    const ownedFilterForm = document.getElementById('owned-filter-form');
-    if (!ownedFilterForm) return;
+// --- 绑定筛选表单通用事件 ---
+function bindFilterFormEvents(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!form.dataset.filterCacheKey) return;
 
-    ownedFilterForm.addEventListener('click', (event) => {
+    // 处理筛选组摘要更新（data-update-filter-summary 属性）
+    form.addEventListener('click', (event) => {
         const target = event.target;
-        if (target && target.tagName === 'LABEL' && target.classList.contains('filter-label')) {
-            requestAnimationFrame(() => {
-                updateOwnedFilterGroupsState();
-            });
+        if (target?.tagName === 'LABEL' && target.classList.contains('filter-label')) {
+            const updateSummary = form.dataset.updateFilterSummary;
+            if (updateSummary) {
+                requestAnimationFrame(() => {
+                    // 触发筛选摘要更新事件
+                    document.dispatchEvent(new CustomEvent('filter:updateSummary', {
+                        detail: { formId: form.id }
+                    }));
+                });
+            }
         }
     });
 
-    ownedFilterForm.addEventListener('change', (event) => {
-        if (event.target && event.target.classList.contains('owned-filter-checkbox')) {
+    // 处理筛选变更（data-track-filters 属性）
+    form.addEventListener('change', (event) => {
+        const trackSelector = form.dataset.trackFilters;
+        if (trackSelector && event.target?.matches(trackSelector)) {
             requestAnimationFrame(() => {
-                saveFilterCache(ownedFilterForm);
-                updateOwnedFilterGroupsState();
+                saveFilterCache(form);
+                // 触发筛选变更事件供特定模块处理
+                document.dispatchEvent(new CustomEvent('filter:changed', {
+                    detail: { formId: form.id, input: event.target }
+                }));
             });
         }
+    });
+}
+
+// --- 初始化所有带缓存 key 的表单事件 ---
+function bindAllFilterFormEvents() {
+    document.querySelectorAll('form[data-filter-cache-key]').forEach((form) => {
+        bindFilterFormEvents(form);
     });
 }
 
@@ -119,12 +131,12 @@ function handleFilterCacheOnForm(form) {
     if (!form.dataset.filterCacheKey) return;
 
     saveFilterCache(form);
-    if (form.id === 'owned-filter-form') {
-        updateOwnedFilterGroupsState();
-    }
-    if (form.id === 'task-filter-form') {
-        updateTaskResetButtonState(form);
-    }
+
+    // 触发表单缓存保存事件，供需要额外处理的模块监听
+    document.dispatchEvent(new CustomEvent('filter:saved', {
+        detail: { formId: form.id, form }
+    }));
+
     syncManagementSidebarRequestUrls();
 }
 
@@ -184,15 +196,19 @@ function bindHtmxRequestEvents() {
             target.dataset.refreshing = '1';
         }
 
-        const trigger = elt ? elt.getAttribute('hx-trigger') || '' : '';
-        const hxGet = elt ? elt.getAttribute('hx-get') || '' : '';
-        if (
-            trigger.includes('revealed')
-            && hxGet.includes('/api/owned-cards')
-            && !window.ownedCardsUserScrolled
-        ) {
-            event.preventDefault();
-            return;
+        // 处理懒加载触发器（data-lazy-load-scroll-aware 属性）
+        const trigger = elt?.getAttribute('hx-trigger') || '';
+        if (trigger.includes('revealed') && elt?.dataset.lazyLoadScrollAware === 'true') {
+            const scrollKey = elt?.dataset.scrollKey;
+            if (scrollKey && !window[scrollKey]) {
+                event.preventDefault();
+                return;
+            }
+        }
+
+        // 请求前保存表单缓存
+        if (requestForm?.dataset.filterCacheKey) {
+            saveFilterCache(requestForm);
         }
 
         const requestButton = resolveRequestButton(event.detail);
@@ -209,7 +225,8 @@ function bindHtmxRequestEvents() {
         const target = event.detail && event.detail.target;
         if (target && target.dataset) {
             target.dataset.refreshing = '0';
-            if (target.id === 'records-container' || target.id === 'owned-cards-container') {
+            // 更新加载状态（如果容器标记了 data-track-loading-state）
+            if (target.dataset.trackLoadingState === 'true') {
                 target.dataset.loaded = 'true';
                 target.dataset.loading = 'false';
             }
@@ -242,15 +259,8 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         initCustomSelects(evt.detail.elt);
         initDailyGiftDatePickers(evt.detail.elt);
         updateRelativeTimes(evt.detail.elt);
-        restoreFilterCachesInContext(evt.detail.elt);
         initTaskSortControls(evt.detail.elt);
         syncManagementSidebarRequestUrls();
-    });
-
-    document.body.addEventListener('change', (event) => {
-        if (event.target && event.target.classList.contains('owned-filter-checkbox')) {
-            updateOwnedFilterGroupsState();
-        }
     });
 
     document.body.addEventListener('change', (event) => {
@@ -357,34 +367,23 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         handleFilterCacheOnForm(form);
         if (!action) return;
 
-        if (action === 'sync-daily-gift-submit') {
-            const valueInput = form.querySelector('[data-role="value"]');
-            const stateInput = document.querySelector('#daily-gift-state-form input[name="biz_date_local"]');
-            if (valueInput && stateInput) {
-                stateInput.value = valueInput.value;
-            }
-            return;
-        }
-
-        if (action === 'sync-plan-intervals-submit') {
-            form.querySelectorAll('[data-interval-group] input[data-interval-unit]').forEach((input) => {
-                if (input instanceof HTMLInputElement) {
-                    updateIntervalSeconds(input);
-                }
-            });
-        }
+        // 触发表单提交事件，供特定模块监听处理
+        document.dispatchEvent(new CustomEvent('form:submitted', {
+            detail: { action, form }
+        }));
     });
 
-    bindOwnedFilterFormEvents();
+    bindAllFilterFormEvents();
 
     document.body.addEventListener('htmx:afterSwap', (evt) => {
         if (evt.detail && evt.detail.target && evt.detail.target.id === 'modal-content') {
             getModal().openFromSwap();
         }
-        if (evt.detail && evt.detail.target) {
-            updateRelativeTimes(evt.detail.target);
-            restoreFilterCachesInContext(evt.detail.target);
-            saveFilterCachesInContext(evt.detail.target);
+        // 使用 evt.detail.elt（新加载的元素）而不是 target（旧目标）
+        const newContent = evt.detail.elt || evt.detail.target;
+        if (newContent) {
+            updateRelativeTimes(newContent);
+            saveFilterCachesInContext(newContent);
             syncManagementSidebarRequestUrls();
         }
     });
@@ -435,8 +434,9 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     });
 
     window.addEventListener('scroll', () => {
-        if (currentTabName === 'owned-cards') {
-            window.ownedCardsUserScrolled = true;
+        // 标记当前激活的滚动感知标签为已滚动
+        if (window.activeScrollAwareTab) {
+            window[window.activeScrollAwareTab] = true;
         }
     }, { passive: true });
 

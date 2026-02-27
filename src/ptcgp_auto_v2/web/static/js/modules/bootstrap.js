@@ -1,4 +1,5 @@
-import { restoreAllFilterCaches, updateOwnedFilterGroupsState } from './features/filters/index.js';
+import { restoreAllFilterCaches, initCacheRestoreToUrl } from './features/filters/index.js';
+import { updateOwnedFilterGroupsState } from './features/filters/owned_filters.js';
 import { restoreOwnedGridCols } from './features/owned_cards.js';
 import { restoreTab, syncManagementSidebarRequestUrls } from './tabs.js';
 import { initTheme } from './theme.js';
@@ -26,6 +27,8 @@ export function initApp() {
 
         syncManagementSidebarRequestUrls();
         restoreTab();
+        // 恢复缓存到 URL（必须在 restoreTab 之后，因为此时动态内容已加载）
+        initCacheRestoreToUrl();
         updateOwnedFilterGroupsState();
 
         restoreViewMode();

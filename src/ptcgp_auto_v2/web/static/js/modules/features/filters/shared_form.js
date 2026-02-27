@@ -1,8 +1,26 @@
 import { reinitCustomSelect } from '../../custom_select.js';
 
+// 支持通过 id 隐式指定缓存 key（用于动态加载的表单）
 const FILTER_CACHE_KEY_FALLBACK = {
     'metadata-state-form': 'ptcgp_filter:metadata',
 };
+
+function collectCachedForms(root) {
+    const forms = new Set();
+    root.querySelectorAll('form[data-filter-cache-key]').forEach((form) => {
+        if (form instanceof HTMLFormElement) {
+            forms.add(form);
+        }
+    });
+    // 同时支持通过 id 隐式指定缓存 key
+    Object.keys(FILTER_CACHE_KEY_FALLBACK).forEach((formId) => {
+        const form = root.querySelector(`#${formId}`);
+        if (form instanceof HTMLFormElement) {
+            forms.add(form);
+        }
+    });
+    return Array.from(forms);
+}
 
 function getCacheKey(form) {
     if (!(form instanceof HTMLFormElement)) return '';
@@ -95,6 +113,12 @@ export function getStoredFiltersByKey(cacheKey) {
     return parseStored(localStorage.getItem(cacheKey));
 }
 
+export function saveFilterCacheByKey(cacheKey, filters) {
+    if (!cacheKey) return;
+    if (!filters || typeof filters !== 'object') return;
+    localStorage.setItem(cacheKey, JSON.stringify(filters));
+}
+
 export function getStoredFiltersByForm(form) {
     return getStoredFiltersByKey(getCacheKey(form));
 }
@@ -104,7 +128,7 @@ export function saveFilterCache(form, extraSelectors = []) {
     const cacheKey = getCacheKey(form);
     if (!cacheKey) return null;
     const filters = serializeFormFilters(form, extraSelectors);
-    localStorage.setItem(cacheKey, JSON.stringify(filters));
+    saveFilterCacheByKey(cacheKey, filters);
     return filters;
 }
 
@@ -123,10 +147,8 @@ export function saveFilterCachesInContext(context = document) {
     }
 
     const root = context === document ? document : context;
-    root.querySelectorAll('form[data-filter-cache-key]').forEach((form) => {
-        if (form instanceof HTMLFormElement) {
-            saveFilterCache(form);
-        }
+    collectCachedForms(root).forEach((form) => {
+        saveFilterCache(form);
     });
 }
 
@@ -146,15 +168,56 @@ export function restoreFilterCachesInContext(context = document) {
     }
 
     const root = context === document ? document : context;
-    root.querySelectorAll('form[data-filter-cache-key]').forEach((form) => {
-        if (form instanceof HTMLFormElement) {
-            restoreFilterCache(form);
-        }
+    collectCachedForms(root).forEach((form) => {
+        restoreFilterCache(form);
     });
 }
 
 export function restoreAllFilterCaches() {
     restoreFilterCachesInContext(document);
+}
+
+/**
+ * 页面初始化时恢复缓存到 URL
+ * 如果当前 URL 没有指定参数且缓存存在，用缓存值替换 URL（不刷新页面）
+ * 这样刷新后服务端能根据 URL 参数正确渲染
+ * @returns {boolean} 是否成功恢复缓存
+ */
+export function initCacheRestoreToUrl() {
+    // 查找是否有带缓存和 restore-url 的表单
+    const forms = collectCachedForms(document);
+    for (const form of forms) {
+        const baseUrl = form.dataset.restoreUrl;
+        if (!baseUrl) continue;
+
+        // 获取要检查的参数名（从 data-restore-check-params 或 data-restore-params）
+        const checkParamsAttr = form.dataset.restoreCheckParams || form.dataset.restoreParams;
+        if (!checkParamsAttr) continue;
+
+        const paramKeys = checkParamsAttr.split(',').map(k => k.trim()).filter(Boolean);
+        if (paramKeys.length === 0) continue;
+
+        // 检查 URL 是否已有任一参数
+        const currentParams = new URLSearchParams(window.location.search);
+        const hasAnyParam = paramKeys.some(key => currentParams.has(key));
+        if (hasAnyParam) return false;
+
+        // 检查缓存中是否有指定参数
+        const filters = getStoredFiltersByForm(form);
+        if (!filters) continue;
+
+        const hasCacheParam = paramKeys.some(key => filters[key]);
+        if (!hasCacheParam) continue;
+
+        // 构建新 URL 并替换当前历史记录
+        const keys = form.dataset.restoreParams?.split(',') || Object.keys(filters);
+        const newUrl = buildUrlWithFilters(baseUrl, filters, keys);
+
+        // 只替换 URL，不刷新页面
+        window.history.replaceState({}, '', newUrl);
+        return true;
+    }
+    return false;
 }
 
 export function clearFilterCache(form) {
