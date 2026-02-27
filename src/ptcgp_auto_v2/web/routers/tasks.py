@@ -13,13 +13,13 @@ from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.repositories import AccountRepository
 from ptcgp_auto_v2.web.services.task_service import (
-    list_task_status_view,
+    build_tasks_list_context,
     build_tasks_page_url,
     reset_completed_tasks_by_filters,
 )
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
-from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
 router = APIRouter()
@@ -56,7 +56,7 @@ async def get_management_tasks(
         if account_id_str.isdigit():
             parsed_account_id = int(account_id_str)
 
-    tasks, has_more = list_task_status_view(
+    context = build_tasks_list_context(
         session=session,
         page=page,
         page_size=page_size,
@@ -85,18 +85,17 @@ async def get_management_tasks(
         sort_order=sort_order,
     )
 
-    templates = get_templates()
-    return templates.TemplateResponse(
+    return render_template(
+        request,
         "partials/task_list.html",
         {
-            "request": request,
-            "tasks": tasks,
-            "has_more": has_more,
-            "has_prev": page > 0,
+            "tasks": context["items"],
+            "has_more": context["has_next"],
+            "has_prev": context["has_prev"],
             "next_page_url": next_page_url,
             "prev_page_url": prev_page_url,
-            "page": page,
-            "page_size": page_size,
+            "page": context["page"],
+            "page_size": context["page_size"],
             "status_options": status_options,
             "task_types": task_types,
             "accounts": accounts,
@@ -173,7 +172,7 @@ async def reset_completed_tasks(
     t = get_translations(current_lang)
     page = 0
     page_size = 10
-    tasks, has_more = list_task_status_view(
+    context = build_tasks_list_context(
         session=session,
         page=page,
         page_size=page_size,
@@ -202,18 +201,17 @@ async def reset_completed_tasks(
         sort_order=sort_order,
     )
 
-    templates = get_templates()
-    response = templates.TemplateResponse(
+    response = render_template(
+        request,
         "partials/task_list.html",
         {
-            "request": request,
-            "tasks": tasks,
-            "has_more": has_more,
-            "has_prev": page > 0,
+            "tasks": context["items"],
+            "has_more": context["has_next"],
+            "has_prev": context["has_prev"],
             "next_page_url": next_page_url,
             "prev_page_url": prev_page_url,
-            "page": page,
-            "page_size": page_size,
+            "page": context["page"],
+            "page_size": context["page_size"],
             "table_only": True,
             "t": t,
             "current_lang": current_lang,
@@ -261,7 +259,7 @@ async def get_tasks(
         if account_id_str.isdigit():
             parsed_account_id = int(account_id_str)
 
-    tasks, has_more = list_task_status_view(
+    context = build_tasks_list_context(
         session=session,
         page=page,
         page_size=page_size,
@@ -271,7 +269,7 @@ async def get_tasks(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    if not tasks and page > 0:
+    if not context["items"] and page > 0:
         return ""
 
     next_page_url = build_tasks_page_url(
@@ -293,18 +291,17 @@ async def get_tasks(
         sort_order=sort_order,
     )
 
-    templates = get_templates()
-    return templates.TemplateResponse(
+    return render_template(
+        request,
         "partials/task_list.html",
         {
-            "request": request,
-            "tasks": tasks,
-            "has_more": has_more,
-            "has_prev": page > 0,
+            "tasks": context["items"],
+            "has_more": context["has_next"],
+            "has_prev": context["has_prev"],
             "next_page_url": next_page_url,
             "prev_page_url": prev_page_url,
-            "page": page,
-            "page_size": page_size,
+            "page": context["page"],
+            "page_size": context["page_size"],
             "status_options": status_options,
             "task_types": task_types,
             "accounts": accounts,

@@ -8,13 +8,13 @@ from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.services.owned_card_service import (
-    build_owned_cards_context,
+    build_owned_cards_list_context,
     build_owned_card_modal_context,
     build_owned_card_exchange_accounts_context,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int, safe_get_string
 from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -35,7 +35,7 @@ async def get_owned_cards(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌列表。"""
-    result = build_owned_cards_context(
+    context = build_owned_cards_list_context(
         session=session,
         page=page,
         page_size=page_size,
@@ -47,11 +47,9 @@ async def get_owned_cards(
         element=element,
         sort_by=sort_by,
     )
-    if result.get("stop"):
+    if not context["items"] and page > 0:
         return ""
-    result["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/owned_card_list.html", result)
+    return render_template(request, "partials/owned_card_list.html", context)
 
 
 @router.get("/api/owned-cards/modal", response_class=HTMLResponse)
@@ -68,9 +66,7 @@ async def get_owned_card_modal(
         return HTMLResponse(
             t.get("owned_cards_not_found", "Card not found"), status_code=404
         )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/modals/owned_card_detail.html", context)
+    return render_template(request, "partials/modals/owned_card_detail.html", context)
 
 
 @router.get("/api/owned-cards/modal/exchange-accounts", response_class=HTMLResponse)
@@ -94,10 +90,10 @@ async def get_owned_card_modal_exchange_accounts(
         sort_by=sort_by,
         sort_order=sort_order,
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse(
-        "partials/modals/owned_card_exchange_accounts_table.html", context
+    return render_template(
+        request,
+        "partials/modals/owned_card_exchange_accounts_table.html",
+        context,
     )
 
 

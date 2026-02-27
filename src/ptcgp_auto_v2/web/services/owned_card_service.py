@@ -11,40 +11,64 @@ from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 
 
-def build_owned_cards_context(
+def build_owned_cards_list_context(
+    *,
     session: Session,
-    page: int,
-    page_size: int,
-    account_id: str | None,
-    rarity: list[str],
-    card_type: list[str],
-    set_code: list[str],
-    pack_name: list[str],
-    element: list[str],
-    sort_by: str,
+    page: int = 0,
+    page_size: int = 10,
+    account_id: str | None = None,
+    rarity: list[str] | None = None,
+    card_type: list[str] | None = None,
+    set_code: list[str] | None = None,
+    pack_name: list[str] | None = None,
+    element: list[str] | None = None,
+    sort_by: str = "acquired",
 ) -> dict[str, Any]:
-    """构建已拥有卡牌列表视图上下文。"""
+    """构建已拥有卡牌列表视图上下文（统一列表协议）。
+
+    返回字段:
+        - items: 卡牌列表
+        - page: 当前页码
+        - page_size: 每页大小
+        - has_prev: 是否有上一页
+        - has_next: 是否有下一页
+        - total: 总数量
+    """
+    from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
+
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
+
     repo = AccountCardRepository()
     account_id_value = parse_optional_int(account_id)
     items = repo.list_owned_cards(
-        page=page,
-        page_size=page_size,
+        page=normalized_page,
+        page_size=normalized_page_size,
         account_id=account_id_value,
-        rarities=rarity,
-        card_types=card_type,
-        set_codes=set_code,
-        pack_names=pack_name,
-        elements=element,
+        rarities=rarity or [],
+        card_types=card_type or [],
+        set_codes=set_code or [],
+        pack_names=pack_name or [],
+        elements=element or [],
         sort_by=sort_by,
     )
 
-    if not items and page > 0:
-        return {"stop": True}
+    # 判断是否还有更多数据（items 长度等于 page_size 时可能有更多）
+    has_next = len(items) >= normalized_page_size
+    has_prev = normalized_page > 0
+
+    # 估算总数
+    total = len(items) + (normalized_page * normalized_page_size)
+    if has_next:
+        total += normalized_page_size
 
     return {
-        "stop": False,
         "items": items,
-        "page": page,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": has_prev,
+        "has_next": has_next,
+        "total": total,
     }
 
 
