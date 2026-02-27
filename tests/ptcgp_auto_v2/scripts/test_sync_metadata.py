@@ -96,7 +96,7 @@ def _build_fake_remote_data():
 
 
 def test_show_preview_should_print_new_items(caplog):
-    """存在新增数据时，应输出新增数量与空的更新/删除明细。"""
+    """存在新增数据时，应输出新增系列/卡包明细，且不输出新增卡牌明细。"""
     module = _load_sync_module()
     caplog.set_level(logging.INFO, logger=module.logger.name)
     fake_repo = _FakeRepo()
@@ -106,8 +106,11 @@ def test_show_preview_should_print_new_items(caplog):
     module.show_preview(payload.preview)
 
     assert "新增系列: 1" in caplog.text
+    assert "  - [card_sets] A1" in caplog.text
     assert "新增卡牌: 1" in caplog.text
+    assert "新增卡牌明细" not in caplog.text
     assert "新增卡包: 1" in caplog.text
+    assert "  - [packs] Pack A (set_code=A1)" in caplog.text
     assert "更新明细: 0" in caplog.text
     assert "删除明细: 0" in caplog.text
 
