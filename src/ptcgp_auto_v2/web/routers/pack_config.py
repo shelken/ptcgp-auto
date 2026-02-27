@@ -11,7 +11,7 @@ from ptcgp_auto_v2.web.services.pack_config_service import (
 )
 from ptcgp_auto_v2.web.services.account_service import build_accounts_list_context
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -38,9 +38,7 @@ async def get_account_pack_config_modal(
 ):
     """渲染补充包配置弹窗。"""
     context = build_pack_config_context(account_id)
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/modals/edit_pack_config.html", context)
+    return render_template(request, "partials/modals/edit_pack_config.html", context)
 
 
 @router.get("/partials/boosters-options", response_class=HTMLResponse)
@@ -50,9 +48,8 @@ async def get_boosters_options(
 ):
     """获取补充包选项 HTML。"""
     boosters = list_set_boosters(pack_code)
-    templates = get_templates()
-    return templates.TemplateResponse(
-        "partials/options_boosters.html", {"request": request, "boosters": boosters}
+    return render_template(
+        request, "partials/options_boosters.html", {"boosters": boosters}
     )
 
 
@@ -70,7 +67,6 @@ async def save_account_pack_config_api(
     save_account_pack_config(account_id, pack_code, booster_name)
 
     context = build_accounts_list_context(session=session)
-    from ptcgp_auto_v2.web.utils.response_utils import render_template
     response = render_template(request, "partials/account_list.html", context)
     response.headers["HX-Trigger"] = "closeModal"
     return response

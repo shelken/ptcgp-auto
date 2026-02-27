@@ -16,6 +16,7 @@ from ptcgp_auto_v2.web.services.plan_service import (
     delete_plan_by_id,
 )
 from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -39,7 +40,6 @@ async def _render_management_plans(
         page=page,
         page_size=page_size,
     )
-    from ptcgp_auto_v2.web.utils.response_utils import render_template
     return render_template(request, "partials/plan_list.html", context)
 
 
@@ -72,14 +72,13 @@ async def get_plan_edit_modal(
 ):
     """渲染计划编辑弹窗。"""
     context = build_plan_edit_context(plan_id)
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/modals/edit_plan.html", context)
+    return render_template(request, "partials/modals/edit_plan.html", context)
 
 
 @router.post("/api/plans")
 async def save_plan(
     request: Request,
+    session: Session = Depends(get_fastapi_session),
 ):
     """保存计划数据。"""
     form = await request.form()
@@ -140,11 +139,7 @@ async def get_account_plans_modal(
     context = build_account_plans_context(session, account_id)
     if not context:
         return HTMLResponse("Account not found", status_code=404)
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse(
-        "partials/modals/edit_account_plans.html", context
-    )
+    return render_template(request, "partials/modals/edit_account_plans.html", context)
 
 
 @router.post("/api/accounts/{account_id}/plans")
