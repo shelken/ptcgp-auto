@@ -1,8 +1,5 @@
-from typing import Any
-
 from datetime import datetime
 from typing import Any
-
 from urllib.parse import urlencode
 
 from sqlmodel import Session, select
@@ -23,6 +20,10 @@ from ptcgp_auto_v2.web.queries.task_queries import (
     reset_completed_task_instances,
 )
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
+from ptcgp_auto_v2.web.utils.filter_utils import (
+    normalize_page,
+    normalize_page_size,
+)
 
 
 def build_tasks_page_url(
@@ -49,23 +50,36 @@ def build_tasks_page_url(
     return f"/api/tasks?{urlencode(params)}"
 
 
-def list_task_status_view(
+def build_tasks_list_context(
+    *,
     session: Session,
-    page: int,
-    page_size: int,
-    status: list[str],
-    task_type: list[str],
-    account_id: int | None,
-    sort_by: str,
-    sort_order: str,
-) -> tuple[list[dict[str, Any]], bool]:
-    """获取任务状态视图数据。"""
+    page: int = 0,
+    page_size: int = 10,
+    status: list[str] | None = None,
+    task_type: list[str] | None = None,
+    account_id: int | None = None,
+    sort_by: str = "",
+    sort_order: str = "asc",
+) -> dict[str, Any]:
+    """构建任务列表视图上下文（统一列表协议）。
+
+    返回字段:
+        - items: 任务列表
+        - page: 当前页码
+        - page_size: 每页大小
+        - has_prev: 是否有上一页
+        - has_next: 是否有下一页
+        - total: 总数量（估算值，基于当前页数据）
+    """
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
+
     instances, has_more = fetch_task_instances(
         session=session,
-        page=page,
-        page_size=page_size,
-        status=status,
-        task_type=task_type,
+        page=normalized_page,
+        page_size=normalized_page_size,
+        status=status or [],
+        task_type=task_type or [],
         account_id=account_id,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -126,32 +140,30 @@ def list_task_status_view(
 
         next_run_at_is_past = next_run_at is not None and next_run_at <= now
 
-        rows.append(
-            {
-                "id": instance.id,
-                "account_id": account.id,
-                "account_name": account.nickname
-                or account.display_name
-                or str(account.id),
-                "task_type": instance.task_type,
-                "status": instance.status,
-                "reset_type": effective_reset_type.value,
-                "last_completed_at": instance.last_completed_at,
-                "last_completed_at_iso": format_datetime_iso(
-                    instance.last_completed_at
-                ),
-                "updated_at": instance.updated_at,
-                "error_message": instance.error_message,
-                "next_run_at": next_run_at,
-                "next_run_at_iso": format_datetime_iso(next_run_at),
-                "next_run_at_is_past": next_run_at_is_past,
-                "interval_seconds": interval_seconds,
-                "plan_name": plan_source["name"] if plan_source else None,
-                "plan_priority": plan_source["priority"] if plan_source else None,
-                "target_pack_label": None,
-                "target_pack_auto": False,
-            }
-        )
+        row_data: dict[str, Any] = {
+            "id": instance.id,
+            "account_id": account.id,
+            "account_name": account.nickname
+            or account.display_name
+            or str(account.id),
+            "task_type": instance.task_type,
+            "status": instance.status,
+            "reset_type": effective_reset_type.value,
+            "last_completed_at": instance.last_completed_at,
+            "last_completed_at_iso": format_datetime_iso(
+                instance.last_completed_at
+            ),
+            "updated_at": instance.updated_at,
+            "error_message": instance.error_message,
+            "next_run_at": next_run_at,
+            "next_run_at_iso": format_datetime_iso(next_run_at),
+            "next_run_at_is_past": next_run_at_is_past,
+            "interval_seconds": interval_seconds,
+            "plan_name": plan_source["name"] if plan_source else None,
+            "plan_priority": plan_source["priority"] if plan_source else None,
+            "target_pack_label": None,
+            "target_pack_auto": False,
+        }
 
         if instance.task_type == "open_pack":
             target_pack_label = None
@@ -167,10 +179,25 @@ def list_task_status_view(
                     )
                     target_pack_auto = True
 
-            rows[-1]["target_pack_label"] = target_pack_label
-            rows[-1]["target_pack_auto"] = target_pack_auto
+            row_data["target_pack_label"] = target_pack_label
+            row_data["target_pack_auto"] = target_pack_auto
 
-    return rows, has_more
+        rows.append(row_data)
+
+    # 估算总数：当前页数量 + (是否有下一页 ? 估算更多)
+    # 由于 has_more 机制，我们知道是否有更多数据
+    estimated_total = len(rows) + (normalized_page * normalized_page_size)
+    if has_more:
+        estimated_total += normalized_page_size  # 至少还有一页
+
+    return {
+        "items": rows,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": normalized_page > 0,
+        "has_next": has_more,
+        "total": estimated_total,
+    }
 
 
 def recompute_next_run_at_for_account(
