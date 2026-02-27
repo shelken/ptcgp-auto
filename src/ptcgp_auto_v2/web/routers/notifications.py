@@ -28,7 +28,7 @@ from ptcgp_auto_v2.web.services.notification_service import (
     normalize_scene,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.i18n import detect_lang, get_translations
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 router = APIRouter()
@@ -80,13 +80,11 @@ def _build_notification_list_filters(
 
 def _build_notifications_page_context(
     session: Session,
-    current_lang: str,
     filters: dict[str, Any],
 ) -> dict[str, Any]:
     """根据归一化过滤参数构建通知列表上下文。"""
     return build_notifications_context(
         session=session,
-        lang=current_lang,
         scene=filters["scene"],
         account_id=filters["account_id"],
         is_read=filters["is_read"],
@@ -100,7 +98,6 @@ def _build_notifications_page_context(
 
 async def _render_notification_page(
     request: Request,
-    lang: str | None,
     scene: str | None,
     account_id: str | None,
     is_read: str | None,
@@ -113,7 +110,6 @@ async def _render_notification_page(
     notification_view: str,
 ) -> HTMLResponse:
     """构建通知页面上下文并渲染统一模板。"""
-    current_lang = detect_lang(request, lang)
     filters = _build_notification_list_filters(
         scene=scene,
         account_id=account_id,
@@ -124,7 +120,7 @@ async def _render_notification_page(
         page=page,
         page_size=page_size,
     )
-    context = _build_notifications_page_context(session, current_lang, filters)
+    context = _build_notifications_page_context(session, filters)
     context["request"] = request
     context["notification_view"] = notification_view
 
@@ -135,7 +131,6 @@ async def _render_notification_page(
 @router.get("/management/notifications", response_class=HTMLResponse)
 async def get_notifications_page(
     request: Request,
-    lang: str | None = Query(default=None),
     scene: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     is_read: str | None = Query(default=None),
@@ -149,7 +144,6 @@ async def get_notifications_page(
     """渲染通知管理页面（配置 + 列表）。"""
     return await _render_notification_page(
         request=request,
-        lang=lang,
         scene=scene,
         account_id=account_id,
         is_read=is_read,
@@ -166,7 +160,6 @@ async def get_notifications_page(
 @router.get("/management/notifications/list", response_class=HTMLResponse)
 async def get_notifications_list(
     request: Request,
-    lang: str | None = Query(default=None),
     scene: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     is_read: str | None = Query(default=None),
@@ -180,7 +173,6 @@ async def get_notifications_list(
     """渲染通知列表片段。"""
     return await _render_notification_page(
         request=request,
-        lang=lang,
         scene=scene,
         account_id=account_id,
         is_read=is_read,
@@ -210,15 +202,12 @@ async def get_unread_count(
 @router.get("/notifications/recent", response_class=HTMLResponse)
 async def get_recent_notifications(
     request: Request,
-    lang: str | None = Query(default=None),
     limit: int = Query(default=5),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染最近通知列表片段。"""
-    current_lang = detect_lang(request, lang)
     context = build_recent_notifications_context(
         session=session,
-        lang=current_lang,
         limit=min(max(limit, 1), 20),
     )
     context["request"] = request
@@ -239,17 +228,14 @@ async def get_notification_card_picker_modal(
     card_selector_sort_order: str = Query(default="asc"),
     card_selector_page: int = Query(default=0),
     card_selector_page_size: int = Query(default=24),
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染通知配置卡牌选择弹窗。"""
-    current_lang = detect_lang(request, lang)
     selected_ids = _parse_unique_int_ids(
         request.query_params.getlist("notify_card_ids")
     )
     context = build_notification_card_selector_context(
         session=session,
-        lang=current_lang,
         scene=normalize_scene(scene) or "rare_card_obtained",
         selected_card_ids=selected_ids,
         q=card_selector_q,
@@ -270,12 +256,10 @@ async def get_notification_card_picker_modal(
 async def apply_notification_card_picker(
     request: Request,
     scene: str = Query(default="rare_card_obtained"),
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """应用卡牌选择结果并回填到配置表单。"""
-    current_lang = detect_lang(request, lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     form = await request.form()
     selected_ids = _parse_unique_int_ids(form.getlist("notify_card_ids"))
 
@@ -305,7 +289,6 @@ async def apply_notification_card_picker(
 async def mark_as_read(
     request: Request,
     notification_id: int = Query(...),
-    lang: str | None = Query(default=None),
     scene: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     is_read: str | None = Query(default=None),
@@ -317,12 +300,10 @@ async def mark_as_read(
     session: Session = Depends(get_fastapi_session),
 ):
     """标记单条通知为已读并刷新列表。"""
-    current_lang = detect_lang(request, lang)
     repo = NotificationRepository()
     repo.mark_as_read(notification_id)
     response = await get_notifications_list(
         request=request,
-        lang=current_lang,
         scene=scene,
         account_id=account_id,
         is_read=is_read,
@@ -350,12 +331,10 @@ async def mark_all_as_read(
     sort_order: str = Query(default="desc"),
     page: int = Query(default=0),
     page_size: int = Query(default=10),
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """批量标记已读并刷新列表。"""
-    current_lang = detect_lang(request, lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = NotificationRepository()
     filters = _build_notification_list_filters(
         scene=scene,
@@ -378,7 +357,6 @@ async def mark_all_as_read(
     message = message_template.format(count=count)
     response = await get_notifications_list(
         request=request,
-        lang=current_lang,
         scene=scene,
         account_id=account_id,
         is_read=is_read,
@@ -402,12 +380,10 @@ async def mark_all_as_read(
 @router.post("/management/notifications/config", response_class=HTMLResponse)
 async def update_notification_config(
     request: Request,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """更新通知配置。"""
-    current_lang = detect_lang(request, lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     form = await request.form()
     config_repo = NotificationConfigRepository()
 
@@ -468,7 +444,6 @@ async def update_notification_config(
 @router.post("/management/notifications/test-webhook", response_class=HTMLResponse)
 async def send_test_webhook(
     request: Request,
-    lang: str | None = Query(default=None),
     notification_id: int | None = Query(default=None),
     scene: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
@@ -481,8 +456,7 @@ async def send_test_webhook(
     session: Session = Depends(get_fastapi_session),
 ):
     """发送企业微信测试消息。"""
-    current_lang = detect_lang(request, lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = NotificationRepository()
 
     notification = None
@@ -499,7 +473,7 @@ async def send_test_webhook(
             page=page,
             page_size=page_size,
         )
-        context = _build_notifications_page_context(session, current_lang, filters)
+        context = _build_notifications_page_context(session, filters)
         notifications = context.get("notifications") or []
         notification = notifications[0] if notifications else None
 
@@ -536,7 +510,6 @@ async def send_test_webhook(
 @router.get("/notifications/panel", response_class=HTMLResponse)
 async def get_notification_panel(
     request: Request,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """
@@ -544,10 +517,8 @@ async def get_notification_panel(
 
     排序规则：未读优先，同状态内按创建时间倒序。
     """
-    current_lang = detect_lang(request, lang)
     context = build_notification_panel_context(
         session=session,
-        lang=current_lang,
         page=0,
         page_size=10,
     )
@@ -561,7 +532,6 @@ async def get_notification_panel(
 @router.get("/notifications/load-more", response_class=HTMLResponse)
 async def get_notification_load_more(
     request: Request,
-    lang: str | None = Query(default=None),
     page: int = Query(default=0),
     session: Session = Depends(get_fastapi_session),
 ):
@@ -570,10 +540,8 @@ async def get_notification_load_more(
 
     用于 HTMX revealed trigger 无限滚动加载。
     """
-    current_lang = detect_lang(request, lang)
     context = build_notification_panel_context(
         session=session,
-        lang=current_lang,
         page=page,
         page_size=10,
     )
@@ -585,7 +553,6 @@ async def get_notification_load_more(
 @router.post("/notifications/panel/mark-all-read", response_class=HTMLResponse)
 async def mark_all_panel_notifications_read(
     request: Request,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """
@@ -593,8 +560,7 @@ async def mark_all_panel_notifications_read(
 
     通过 HX-Trigger 通知前端刷新 Badge 并显示 toast 提示。
     """
-    current_lang = detect_lang(request, lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
 
     repo = NotificationRepository()
     count = repo.mark_all_as_read()
@@ -602,7 +568,6 @@ async def mark_all_panel_notifications_read(
     # 构建更新后的面板内容上下文
     context = build_notification_panel_context(
         session=session,
-        lang=current_lang,
         page=0,
         page_size=10,
     )

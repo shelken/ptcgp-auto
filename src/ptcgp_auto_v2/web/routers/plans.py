@@ -15,7 +15,7 @@ from ptcgp_auto_v2.web.services.plan_service import (
     upsert_plan_from_form,
     delete_plan_by_id,
 )
-from ptcgp_auto_v2.web.utils.i18n import detect_lang, get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -24,7 +24,6 @@ router = APIRouter()
 
 async def _render_management_plans(
     request: Request,
-    lang: str | None,
     q: str = "",
     sort_by: str = "id",
     sort_order: str = "asc",
@@ -32,9 +31,7 @@ async def _render_management_plans(
     page_size: int = 10,
 ):
     """渲染计划管理列表（内部复用，避免 Query 默认对象泄漏）。"""
-    current_lang = detect_lang(request, lang)
     context = get_plans_context(
-        lang=current_lang,
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -49,7 +46,6 @@ async def _render_management_plans(
 @router.get("/management/plans", response_class=HTMLResponse)
 async def get_management_plans(
     request: Request,
-    lang: str | None = Query(default=None),
     q: str = Query(default=""),
     sort_by: str = Query(default="id"),
     sort_order: str = Query(default="asc"),
@@ -59,7 +55,6 @@ async def get_management_plans(
     """渲染计划管理列表。"""
     return await _render_management_plans(
         request=request,
-        lang=lang,
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -72,11 +67,9 @@ async def get_management_plans(
 async def get_plan_edit_modal(
     request: Request,
     plan_id: int | None = Query(None),
-    lang: str | None = Query(default=None),
 ):
     """渲染计划编辑弹窗。"""
-    current_lang = detect_lang(request, lang)
-    context = build_plan_edit_context(plan_id, current_lang)
+    context = build_plan_edit_context(plan_id)
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/modals/edit_plan.html", context)
@@ -85,7 +78,6 @@ async def get_plan_edit_modal(
 @router.post("/api/plans")
 async def save_plan(
     request: Request,
-    lang: str | None = Query(default=None),
 ):
     """保存计划数据。"""
     form = await request.form()
@@ -93,7 +85,7 @@ async def save_plan(
 
     if duplicate_name is not None:
         # 名称重复，返回 toast 提示但不关闭弹窗
-        current_lang = normalize_lang(detect_lang(request, lang))
+        current_lang = get_current_lang()
         t = get_translations(current_lang)
         msg_tpl = t.get("msg_plan_name_duplicate", "Plan name '{name}' already exists")
         message = msg_tpl.replace("{name}", duplicate_name)
@@ -106,7 +98,6 @@ async def save_plan(
 
     response = await _render_management_plans(
         request=request,
-        lang=lang,
         q="",
         sort_by="id",
         sort_order="asc",
@@ -121,13 +112,11 @@ async def save_plan(
 async def delete_plan(
     request: Request,
     plan_id: int,
-    lang: str | None = Query(default=None),
 ):
     """删除计划。"""
     delete_plan_by_id(plan_id)
     return await _render_management_plans(
         request=request,
-        lang=lang,
         q="",
         sort_by="id",
         sort_order="asc",
@@ -140,12 +129,10 @@ async def delete_plan(
 async def get_account_plans_modal(
     request: Request,
     account_id: int,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染账号计划编辑弹窗。"""
-    current_lang = detect_lang(request, lang)
-    context = build_account_plans_context(session, account_id, current_lang)
+    context = build_account_plans_context(session, account_id)
     if not context:
         return HTMLResponse("Account not found", status_code=404)
     context["request"] = request
@@ -159,7 +146,6 @@ async def get_account_plans_modal(
 async def update_account_plans_api(
     request: Request,
     account_id: int,
-    lang: str | None = Query(default=None),
 ):
     """更新账号计划关联。"""
     try:

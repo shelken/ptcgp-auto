@@ -4,13 +4,12 @@ from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.repositories import CardRepository, NotificationRepository
 from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
-def build_index_context(session: Session, lang: str) -> dict:
+def build_index_context(session: Session) -> dict:
     """构建首页渲染所需上下文。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
 
     rarities = session.exec(select(distinct(Card.rarity)).order_by(Card.rarity)).all()
     rarities = [item for item in rarities if item]

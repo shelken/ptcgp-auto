@@ -13,7 +13,7 @@ from ptcgp_auto_v2.web.services.owned_card_service import (
     build_owned_card_exchange_accounts_context,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int, safe_get_string
-from ptcgp_auto_v2.web.utils.i18n import detect_lang, get_translations
+from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -32,10 +32,8 @@ async def get_owned_cards(
     pack_name: list[str] = Query(default=[]),
     element: list[str] = Query(default=[]),
     sort_by: str = Query(default="acquired"),
-    lang: str | None = Query(default=None),
 ):
     """获取已拥有卡牌列表。"""
-    current_lang = detect_lang(request, lang)
     result = list_owned_cards(
         page,
         page_size,
@@ -46,7 +44,6 @@ async def get_owned_cards(
         pack_name,
         element,
         sort_by,
-        current_lang,
     )
     if result.get("stop"):
         return ""
@@ -59,12 +56,11 @@ async def get_owned_cards(
 async def get_owned_card_modal(
     request: Request,
     card_id: int,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌详情弹窗。"""
-    current_lang = detect_lang(request, lang)
-    context = build_owned_card_modal_context(session, card_id, current_lang)
+    current_lang = get_current_lang()
+    context = build_owned_card_modal_context(session, card_id)
     if not context:
         t = get_translations(current_lang)
         return HTMLResponse(
@@ -84,15 +80,12 @@ async def get_owned_card_modal_exchange_accounts(
     q: str = Query(default=""),
     sort_by: str = Query(default="account_id"),
     sort_order: str = Query(default="asc"),
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌弹窗中的交换账号分页表格。"""
-    current_lang = detect_lang(request, lang)
     context = build_owned_card_exchange_accounts_context(
         session=session,
         card_id=card_id,
-        lang=current_lang,
         page=page,
         page_size=page_size,
         q=q,
@@ -109,10 +102,9 @@ async def get_owned_card_modal_exchange_accounts(
 @router.post("/api/exchange-cards/requests", response_class=HTMLResponse)
 async def create_exchange_request(
     request: Request,
-    lang: str | None = Query(default=None),
 ):
     """从拥有卡牌弹窗创建交换请求。"""
-    current_lang = detect_lang(request, lang)
+    current_lang = get_current_lang()
     t = get_translations(current_lang)
     form = await request.form()
 

@@ -11,7 +11,6 @@ from ptcgp_auto_v2.web.services.pack_config_service import (
 )
 from ptcgp_auto_v2.web.services.account_service import get_accounts_context
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.i18n import detect_lang
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -36,11 +35,9 @@ async def get_set_boosters(set_code: str):
 async def get_account_pack_config_modal(
     request: Request,
     account_id: int,
-    lang: str | None = Query(default=None),
 ):
     """渲染补充包配置弹窗。"""
-    current_lang = detect_lang(request, lang)
-    context = build_pack_config_context(account_id, current_lang)
+    context = build_pack_config_context(account_id)
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse("partials/modals/edit_pack_config.html", context)
@@ -63,7 +60,6 @@ async def get_boosters_options(
 async def save_account_pack_config_api(
     request: Request,
     account_id: int,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """保存账号补充包配置。"""
@@ -73,8 +69,7 @@ async def save_account_pack_config_api(
 
     save_account_pack_config(account_id, pack_code, booster_name)
 
-    current_lang = detect_lang(request, lang)
-    context = get_accounts_context(session, current_lang)
+    context = get_accounts_context(session)
     context["request"] = request
     templates = get_templates()
     response = templates.TemplateResponse("partials/account_list.html", context)

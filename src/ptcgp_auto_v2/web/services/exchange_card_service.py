@@ -12,12 +12,11 @@ from ptcgp_auto_v2.db.repositories import (
     TaskInstanceRepository,
 )
 from ptcgp_auto_v2.web.queries.exchange_card_queries import list_exchange_requests
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def build_exchange_card_context(
     session: Session,
-    lang: str,
     account_id: Optional[int] = None,
     status: Optional[str] = None,
     q: str = "",
@@ -27,8 +26,7 @@ def build_exchange_card_context(
     page_size: int = 10,
 ) -> dict[str, Any]:
     """构建交换记录管理视图数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     result = list_exchange_requests(
         session=session,
         account_id=account_id,

@@ -1,8 +1,14 @@
 import json
 import os
-from typing import Dict, Any
+from contextvars import ContextVar
+from typing import Dict, Any, List, Optional
 
 from fastapi import Request
+
+from ptcgp_auto_v2.config.constants import WEB_LANG_TO_DB_LABEL_KEYS, DEFAULT_LANG_KEY
+
+# 全局请求上下文变量
+_current_lang_ctx: ContextVar[Optional["LangContext"]] = ContextVar("lang_ctx", default=None)
 
 
 _locales_dir: str | None = None
@@ -97,3 +103,51 @@ def _parse_accept_language(value: str) -> list[str]:
         items.append((lang, q))
     items.sort(key=lambda item: item[1], reverse=True)
     return [item[0] for item in items]
+
+
+class LangContext:
+    """语言上下文，在请求入口处统一构建，后续直接使用"""
+
+    def __init__(self, web_lang: str):
+        self.web_lang = web_lang
+        # 标签语言候选列表（按优先级）
+        self.label_candidates: List[str] = WEB_LANG_TO_DB_LABEL_KEYS.get(
+            web_lang, WEB_LANG_TO_DB_LABEL_KEYS[DEFAULT_LANG_KEY]
+        )
+
+    def resolve_label(self, label_dict: Dict[str, Any], fallback: str = "") -> str:
+        """从标签字典中按优先级解析展示名"""
+        if not isinstance(label_dict, dict):
+            return fallback
+        for key in self.label_candidates:
+            value = label_dict.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return fallback
+
+
+def set_lang_context(web_lang: str) -> None:
+    """在请求入口处设置全局语言上下文"""
+    _current_lang_ctx.set(LangContext(web_lang))
+
+
+def get_current_lang() -> str:
+    """获取当前请求的语言（最底层使用）"""
+    ctx = _current_lang_ctx.get()
+    if ctx is None:
+        return DEFAULT_LANG_KEY
+    return ctx.web_lang
+
+
+def get_current_i18n() -> tuple[str, Dict[str, Any]]:
+    """获取当前请求语言与翻译字典（服务层统一入口）。"""
+    current_lang = normalize_lang(get_current_lang())
+    return current_lang, get_translations(current_lang)
+
+
+def resolve_label(label_dict: Dict[str, Any], fallback: str = "") -> str:
+    """解析标签（最底层使用，自动获取当前语言上下文）"""
+    ctx = _current_lang_ctx.get()
+    if ctx is None:
+        ctx = LangContext(DEFAULT_LANG_KEY)
+    return ctx.resolve_label(label_dict, fallback)
