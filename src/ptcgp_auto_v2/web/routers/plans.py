@@ -10,7 +10,7 @@ from ptcgp_auto_v2.web.services.account_service import (
     update_account_plans,
 )
 from ptcgp_auto_v2.web.services.plan_service import (
-    get_plans_context,
+    build_plans_list_context,
     build_plan_edit_context,
     upsert_plan_from_form,
     delete_plan_by_id,
@@ -31,7 +31,7 @@ async def _render_management_plans(
     page_size: int = 10,
 ):
     """渲染计划管理列表（内部复用，避免 Query 默认对象泄漏）。"""
-    context = get_plans_context(
+    context = build_plans_list_context(
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,

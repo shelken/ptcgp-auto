@@ -2,7 +2,6 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import CardRepository, AccountPackConfigRepository
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def list_card_sets() -> list[dict]:
@@ -20,8 +19,6 @@ def list_set_boosters(set_code: str) -> list:
 
 def build_pack_config_context(account_id: int) -> dict:
     """构建补充包配置弹窗数据。"""
-    current_lang, t = get_current_i18n()
-
     config_repo = AccountPackConfigRepository()
     card_repo = CardRepository()
     config = config_repo.get_by_account_and_type(account_id, "daily")
@@ -39,8 +36,6 @@ def build_pack_config_context(account_id: int) -> dict:
         "config": config,
         "card_sets": card_sets,
         "current_boosters": current_boosters,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 

@@ -5,34 +5,31 @@ from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
 from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
+from ptcgp_auto_v2.web.utils.filter_utils import (
+    normalize_query_text,
+    normalize_page,
+    normalize_page_size,
+    normalize_sort_order,
+)
 
 
-def _normalize_query_text(q: str | object | None) -> str:
-    """归一化搜索词，兜底非字符串输入。"""
-    if isinstance(q, str):
-        return q.strip().lower()
-    return ""
-
-
-def get_plans_context(
+def build_plans_list_context(
     q: str = "",
     sort_by: str = "id",
     sort_order: str = "asc",
     page: int = 0,
     page_size: int = 10,
 ) -> dict:
-    """获取计划列表视图数据（统一列表协议：q/sort/page）。"""
-    current_lang, t = get_current_i18n()
+    """构建计划列表视图上下文（统一列表协议：q/sort/page）。"""
     repo = TaskPlanRepository()
     plans = repo.get_all()
 
-    normalized_q = _normalize_query_text(q)
+    normalized_q = normalize_query_text(q)
     allowed_sort_fields = {"id", "name"}
     normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
-    normalized_sort_order = "desc" if str(sort_order).lower() == "desc" else "asc"
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 100)
+    normalized_sort_order = normalize_sort_order(sort_order)
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
 
     if normalized_q:
         plans = [
@@ -69,14 +66,11 @@ def get_plans_context(
         "has_prev": normalized_page > 0,
         "has_next": end < total_items,
         "total_items": total_items,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 
 def build_plan_edit_context(plan_id: int | None) -> dict:
     """构建计划编辑弹窗数据。"""
-    current_lang, t = get_current_i18n()
     repo = TaskPlanRepository()
     plan = repo.get_by_id(plan_id) if plan_id else None
 
@@ -98,8 +92,6 @@ def build_plan_edit_context(plan_id: int | None) -> dict:
         "plan": plan,
         "available_tasks": ordered_tasks,
         "reset_types": reset_types,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 

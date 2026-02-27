@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.web.services.record_service import list_records
+from ptcgp_auto_v2.web.services.record_service import build_records_context
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -20,7 +20,7 @@ async def get_records(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取开包记录列表。"""
-    result = list_records(session, page, page_size, rarity, card_type)
+    result = build_records_context(session, page, page_size, rarity, card_type)
     if result.get("stop"):
         return ""
     result["request"] = request
