@@ -10,10 +10,6 @@ _templates: Jinja2Templates | None = None
 class _LazyI18nContext:
     """延迟加载的 i18n 上下文，每次访问时重新计算"""
 
-    def __init__(self):
-        self._t = None
-        self._current_lang = None
-
     def keys(self):
         return ["t", "current_lang"]
 
@@ -23,9 +19,6 @@ class _LazyI18nContext:
         if key == "current_lang":
             return get_current_i18n()[0]
         raise KeyError(key)
-
-    def __iter__(self):
-        return iter(self.keys())
 
 
 def init_templates(templates_path: str) -> Jinja2Templates:
