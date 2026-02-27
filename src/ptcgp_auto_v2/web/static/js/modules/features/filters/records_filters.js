@@ -1,7 +1,5 @@
-import { isElementInActiveTab, showToast, setButtonLoading } from '../../utils.js';
-import { buildQueryParts, initAndApplyFormFilters, saveFormFilters } from './shared_form.js';
-
-const STORAGE_KEY_FILTERS = 'ptcgp_filters';
+import { showToast, setButtonLoading } from '../../utils.js';
+import { clearFilterCacheByFormId } from './shared_form.js';
 
 function bindRequestLoading(button, targetId) {
     if (!button) return;
@@ -28,55 +26,12 @@ function bindRequestLoading(button, targetId) {
     }, 10000);
 }
 
-// --- 保存记录筛选 ---
-export function saveFilters() {
-    saveFormFilters('filter-form', STORAGE_KEY_FILTERS);
-}
-
-// --- 恢复记录筛选 ---
-export function restoreFilters() {
-    const stored = localStorage.getItem(STORAGE_KEY_FILTERS);
-    let queryParts = [];
-
-    if (stored) {
-        try {
-            const filters = JSON.parse(stored);
-            const form = document.getElementById('filter-form');
-            if (form) {
-                initAndApplyFormFilters(form, filters);
-            }
-            queryParts = buildQueryParts(filters);
-        } catch (e) {
-            console.error('Failed to restore filters', e);
-        }
-    }
-
-    const container = document.getElementById('records-container');
-    if (container) {
-        if (!isElementInActiveTab(container)) {
-            return;
-        }
-        if (container.dataset.loaded === 'true' || container.dataset.loading === 'true') {
-            return;
-        }
-        container.dataset.loading = 'true';
-        const baseAttr = container.getAttribute('data-base-url') || container.getAttribute('data-url');
-        let finalUrl = baseAttr;
-
-        if (queryParts.length > 0) {
-            finalUrl = `${baseAttr}&${queryParts.join('&')}`;
-        }
-
-        htmx.ajax('GET', finalUrl, { target: '#records-container', swap: 'innerHTML' });
-    }
-}
-
 // --- 清除记录筛选 ---
 export function clearFilters() {
     document.querySelectorAll('.filter-checkbox').forEach((el) => {
         el.checked = false;
     });
-    localStorage.removeItem(STORAGE_KEY_FILTERS);
+    clearFilterCacheByFormId('filter-form');
 
     const urlParams = new URLSearchParams(window.location.search);
     const lang = urlParams.get('lang') || 'en';

@@ -2,12 +2,12 @@ import { getModal } from './modal.js';
 import { isElementInActiveTab, setButtonLoading, showToast } from './utils.js';
 import { initCustomSelects } from './custom_select.js';
 import {
-    restoreTasksFilters,
+    restoreFilterCachesInContext,
+    saveFilterCache,
+    saveFilterCachesInContext,
+    saveFilterCacheByElement,
     updateOwnedFilterGroupsState,
-    saveTasksFilters,
     updateTaskResetButtonState,
-    saveOwnedFilters,
-    saveFilters,
     initTaskSortControls,
 } from './features/filters/index.js';
 import { updateIntervalSeconds, updateTaskItemState, initSortable } from './features/tasks.js';
@@ -19,6 +19,7 @@ import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { updateRelativeTimes } from './relative_time.js';
 import { searchExchangeAccounts } from './features/exchange_cards.js';
 import { handleActionClick } from './action_handlers.js';
+import { syncManagementSidebarRequestUrls } from './tabs.js';
 
 const htmxLoadingButtons = new WeakMap();
 
@@ -106,11 +107,31 @@ function bindOwnedFilterFormEvents() {
     ownedFilterForm.addEventListener('change', (event) => {
         if (event.target && event.target.classList.contains('owned-filter-checkbox')) {
             requestAnimationFrame(() => {
-                saveOwnedFilters();
+                saveFilterCache(ownedFilterForm);
                 updateOwnedFilterGroupsState();
             });
         }
     });
+}
+
+function handleFilterCacheOnForm(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!form.dataset.filterCacheKey) return;
+
+    saveFilterCache(form);
+    if (form.id === 'owned-filter-form') {
+        updateOwnedFilterGroupsState();
+    }
+    if (form.id === 'task-filter-form') {
+        updateTaskResetButtonState(form);
+    }
+    syncManagementSidebarRequestUrls();
+}
+
+function saveFilterCacheForElement(element) {
+    if (!(element instanceof Element)) return;
+    saveFilterCacheByElement(element);
+    syncManagementSidebarRequestUrls();
 }
 
 function bindMutationObserver() {
@@ -221,8 +242,9 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         initCustomSelects(evt.detail.elt);
         initDailyGiftDatePickers(evt.detail.elt);
         updateRelativeTimes(evt.detail.elt);
-        restoreTasksFilters(evt.detail.elt);
+        restoreFilterCachesInContext(evt.detail.elt);
         initTaskSortControls(evt.detail.elt);
+        syncManagementSidebarRequestUrls();
     });
 
     document.body.addEventListener('change', (event) => {
@@ -234,25 +256,22 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     document.body.addEventListener('change', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
+
+        const linkedForm = target instanceof HTMLElement ? target.form : null;
+        const cachedForm = target.closest('form[data-filter-cache-key]')
+            || (linkedForm instanceof HTMLFormElement ? linkedForm : null);
+        handleFilterCacheOnForm(cachedForm);
+
         const actionElement = target.closest('[data-action]');
         if (!actionElement) return;
         const action = actionElement.dataset.action;
-        if (action === 'save-record-filters') {
-            saveFilters();
-            return;
-        }
-        if (action === 'save-owned-filters') {
-            saveOwnedFilters();
-            return;
-        }
         if (action === 'save-tasks-filters') {
             if (!(actionElement instanceof HTMLFormElement)) return;
             const pageInput = actionElement.querySelector('#task-page');
             if (pageInput instanceof HTMLInputElement) {
                 pageInput.value = '0';
             }
-            saveTasksFilters();
-            updateTaskResetButtonState(actionElement);
+            handleFilterCacheOnForm(actionElement);
             return;
         }
         if (action === 'add-plan') {
@@ -280,19 +299,23 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
             if (!stateName) return;
             const stateInput = document.querySelector(`#friendship-state-form input[name="${stateName}"]`);
             if (stateInput) stateInput.value = actionElement.value;
+            const stateForm = document.getElementById('friendship-state-form');
+            if (stateForm instanceof HTMLFormElement && stateForm.dataset.filterCacheKey) {
+                handleFilterCacheOnForm(stateForm);
+            }
         }
+
     });
 
     document.body.addEventListener('input', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
+
+        saveFilterCacheForElement(target);
+
         const actionElement = target.closest('[data-action]');
         if (!actionElement) return;
         const action = actionElement.dataset.action;
-        if (action === 'save-owned-filters-input') {
-            saveOwnedFilters();
-            return;
-        }
         if (action === 'update-interval-seconds') {
             if (!(actionElement instanceof HTMLInputElement)) return;
             updateIntervalSeconds(actionElement);
@@ -331,6 +354,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         }
 
         const action = form.dataset.action;
+        handleFilterCacheOnForm(form);
         if (!action) return;
 
         if (action === 'sync-daily-gift-submit') {
@@ -359,6 +383,9 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         }
         if (evt.detail && evt.detail.target) {
             updateRelativeTimes(evt.detail.target);
+            restoreFilterCachesInContext(evt.detail.target);
+            saveFilterCachesInContext(evt.detail.target);
+            syncManagementSidebarRequestUrls();
         }
     });
 
