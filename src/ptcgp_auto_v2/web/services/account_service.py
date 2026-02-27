@@ -16,7 +16,7 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def _normalize_query_text(q: str | object | None) -> str:
@@ -28,7 +28,6 @@ def _normalize_query_text(q: str | object | None) -> str:
 
 def get_accounts_context(
     session: Session,
-    lang: str,
     q: str = "",
     sort_by: str = "id",
     sort_order: str = "asc",
@@ -36,8 +35,7 @@ def get_accounts_context(
     page_size: int = 10,
 ) -> dict:
     """获取账号管理列表视图数据（统一列表协议：q/sort/page）。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = AccountRepository()
     accounts = repo.get_all()
 
@@ -125,10 +123,9 @@ def get_accounts_context(
     }
 
 
-def build_account_edit_context(account_id: int, lang: str) -> dict | None:
+def build_account_edit_context(account_id: int) -> dict | None:
     """构建账号编辑弹窗数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = AccountRepository()
     account = repo.get_by_id(account_id)
     if not account:
@@ -148,11 +145,10 @@ def update_account_details(account_id: int, nickname: str, remark: str) -> None:
 
 
 def build_account_plans_context(
-    session: Session, account_id: int, lang: str
+    session: Session, account_id: int
 ) -> dict | None:
     """构建账号计划编辑弹窗数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     statement = (
         select(Account)
         .where(Account.id == account_id)

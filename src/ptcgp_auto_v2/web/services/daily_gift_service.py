@@ -17,7 +17,7 @@ from ptcgp_auto_v2.web.queries.daily_gift_queries import (
     list_active_gift_pairs,
     list_daily_gift_records,
 )
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def _today_local_date() -> str:
@@ -221,7 +221,6 @@ def _build_pair_send_status_rows(
 
 def build_daily_gift_context(
     session: Session,
-    lang: str,
     biz_date_local: str | None = None,
     q: str = "",
     sort_by: str = "updated_at",
@@ -230,8 +229,7 @@ def build_daily_gift_context(
     page_size: int = 10,
 ) -> dict[str, Any]:
     """构建每日送卡页面上下文。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     selected_date = _normalize_biz_date_local(biz_date_local)
     current_biz_date_local = _today_local_date()
 

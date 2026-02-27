@@ -13,7 +13,6 @@ from ptcgp_auto_v2.web.services.exchange_card_service import (
     cancel_exchange_request,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.i18n import detect_lang
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -23,7 +22,6 @@ router = APIRouter()
 @router.get("/management/exchange-cards", response_class=HTMLResponse)
 async def get_management_exchange_cards(
     request: Request,
-    lang: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     q: str = Query(default=""),
@@ -34,10 +32,8 @@ async def get_management_exchange_cards(
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染交换记录管理页面。"""
-    current_lang = detect_lang(request, lang)
     context = build_exchange_card_context(
         session=session,
-        lang=current_lang,
         account_id=parse_optional_int(account_id),
         status=status or None,
         q=q,
@@ -58,7 +54,6 @@ async def get_management_exchange_cards(
 async def post_cancel_exchange_request(
     request_id: int,
     request: Request,
-    lang: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     q: str = Query(default=""),
@@ -72,7 +67,6 @@ async def post_cancel_exchange_request(
     cancelled = cancel_exchange_request(request_id=request_id)
     response = await get_management_exchange_cards(
         request=request,
-        lang=lang,
         account_id=account_id,
         status=status,
         q=q,
@@ -82,9 +76,7 @@ async def post_cancel_exchange_request(
         page_size=page_size,
         session=session,
     )
-    context = build_exchange_card_context(
-        session=session, lang=detect_lang(request, lang)
-    )
+    context = build_exchange_card_context(session=session)
     t = context["t"]
     message = (
         t.get("msg_exchange_request_cancelled")
