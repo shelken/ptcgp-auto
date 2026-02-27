@@ -525,3 +525,62 @@ def _format_time_value(
         return f"{in_text} {value} {unit}" if future else f"{value} {unit} {ago_text}"
 
     return f"{value}{unit}{in_text}" if future else f"{value}{unit}{ago_text}"
+
+
+def mark_notification_as_read(notification_id: int) -> None:
+    """标记单条通知为已读。"""
+    repo = NotificationRepository()
+    repo.mark_as_read(notification_id)
+
+
+def mark_all_notifications_as_read(
+    scene: str | None = None,
+    account_id: int | None = None,
+) -> int:
+    """批量标记通知为已读。
+
+    Returns:
+        标记为已读的通知数量
+    """
+    repo = NotificationRepository()
+    return repo.mark_all_as_read(scene=scene, account_id=account_id)
+
+
+def get_unread_notification_count() -> int:
+    """获取未读通知数量。"""
+    repo = NotificationRepository()
+    return repo.count_unread()
+
+
+def update_notification_config(
+    scene: str,
+    enabled: bool,
+    enabled_webhook: bool,
+    extra_config: dict[str, object],
+) -> NotificationConfig:
+    """更新通知配置。
+
+    Returns:
+        更新后的配置对象
+    """
+    config_repo = NotificationConfigRepository()
+    config_repo.update(
+        scene=scene,
+        enabled=enabled,
+        enabled_webhook=enabled_webhook,
+        extra_config=extra_config,
+    )
+    return config_repo.get_or_create(scene)
+
+
+def get_notification_by_id(notification_id: int) -> Notification | None:
+    """根据 ID 获取单条通知。
+
+    Args:
+        notification_id: 通知 ID
+
+    Returns:
+        通知对象，不存在则返回 None
+    """
+    repo = NotificationRepository()
+    return repo.get_by_id(notification_id)
