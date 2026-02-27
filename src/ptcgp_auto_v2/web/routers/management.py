@@ -4,7 +4,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.account_service import (
-    build_accounts_context,
+    build_accounts_list_context,
     build_account_edit_context,
     update_account_details,
 )
@@ -25,7 +25,7 @@ async def _render_management_accounts(
     page_size: int = 10,
 ):
     """渲染账号管理列表（内部复用，避免 Query 默认对象泄漏）。"""
-    context = build_accounts_context(
+    context = build_accounts_list_context(
         session=session,
         q=q,
         sort_by=sort_by,
@@ -33,9 +33,8 @@ async def _render_management_accounts(
         page=page,
         page_size=page_size,
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/account_list.html", context)
+    from ptcgp_auto_v2.web.utils.response_utils import render_template
+    return render_template(request, "partials/account_list.html", context)
 
 
 @router.get("/management/accounts", response_class=HTMLResponse)
@@ -69,9 +68,8 @@ async def get_account_edit_modal(
     context = build_account_edit_context(account_id)
     if not context:
         return HTMLResponse("Account not found", status_code=404)
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/modals/edit_account.html", context)
+    from ptcgp_auto_v2.web.utils.response_utils import render_template
+    return render_template(request, "partials/modals/edit_account.html", context)
 
 
 @router.post("/api/accounts/{account_id}/details")

@@ -53,7 +53,7 @@
         {% endcall %}
     </form>
 
-    {% if plans %}
+    {% if items %}
     {% set next_order_id = 'desc' if (sort_by or 'id') == 'id' and (sort_order or 'asc') == 'asc' else 'asc' %}
     {% set next_order_name = 'desc' if sort_by == 'name' and (sort_order or 'asc') == 'asc' else 'asc' %}
     {% set sort_id_url = '/management/plans?lang=' ~ current_lang ~ '&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=id&sort_order=' ~ next_order_id %}
@@ -65,7 +65,7 @@
         t.col_config or 'Config',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
     ], t) %}
-        {% for plan in plans %}
+        {% for plan in items %}
             {% set config_cell %}
                 <div class="space-y-1">
                     {% for task_type in plan.task_types_list %}
@@ -132,6 +132,6 @@
 
     {% set plan_prev_url = "/management/plans?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ "&q=" ~ ((q or '')|urlencode) ~ "&sort_by=" ~ (sort_by or 'id') ~ "&sort_order=" ~ (sort_order or 'asc') %}
     {% set plan_next_url = "/management/plans?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ "&q=" ~ ((q or '')|urlencode) ~ "&sort_by=" ~ (sort_by or 'id') ~ "&sort_order=" ~ (sort_order or 'asc') %}
-    {{ data_table_pager(page or 0, has_prev, has_next, plan_prev_url, plan_next_url, '#management-content', total_items or 0, t) }}
+    {{ data_table_pager(page or 0, has_prev, has_next, plan_prev_url, plan_next_url, '#management-content', total or 0, t) }}
 {% endcall %}
 {% endcall %}
