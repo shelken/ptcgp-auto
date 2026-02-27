@@ -11,7 +11,37 @@ from ptcgp_auto_v2.db.repositories import (
     ExchangeCardRequestRepository,
     TaskInstanceRepository,
 )
+from ptcgp_auto_v2.services import ExchangeCardService as CoreExchangeCardService
 from ptcgp_auto_v2.web.queries.exchange_card_queries import list_exchange_requests
+
+
+def create_exchange_request_with_task(
+    from_account_id: int,
+    to_account_id: int | None,
+    to_friend_id: str,
+    target_card_id: int,
+    target_card_rarity: str,
+) -> bool:
+    """创建交换请求并确保任务实例为待执行状态。
+
+    Returns:
+        是否成功创建请求
+    """
+    created = CoreExchangeCardService.create_request(
+        from_account_id=from_account_id,
+        to_account_id=to_account_id,
+        to_friend_id=to_friend_id,
+        target_card_id=target_card_id,
+        target_card_rarity=target_card_rarity,
+    )
+    if created is not None:
+        TaskInstanceRepository().ensure_pending(
+            account_id=from_account_id,
+            task_type="exchange_cards",
+            reset_type="once",
+        )
+        return True
+    return False
 
 
 def build_exchange_card_context(
