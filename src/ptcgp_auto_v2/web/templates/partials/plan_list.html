@@ -65,11 +65,11 @@
         t.col_config or 'Config',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
     ], t) %}
-        {% for plan in items %}
+        {% for item in items %}
             {% set config_cell %}
                 <div class="space-y-1">
-                    {% for task_type in plan.task_types_list %}
-                        {% set task_config = plan.config_dict.get(task_type, {}) %}
+                    {% for task_type in item.task_types_list %}
+                        {% set task_config = item.config_dict.get(task_type, {}) %}
                         {% set reset_type = task_config.get('reset_type', 'daily') %}
                         {% set interval_seconds = task_config.get('interval_seconds', 3600) %}
                         <div class="flex items-center gap-2 text-xs">
@@ -95,22 +95,22 @@
             {% set actions_cell %}
                 <div class="flex justify-end gap-2">
                     <button class="brutal-btn text-xs px-3 py-1"
-                            hx-get="/management/plans/edit?plan_id={{ plan.id }}&lang={{ current_lang }}"
+                            hx-get="/management/plans/edit?plan_id={{ item.id }}&lang={{ current_lang }}"
                             hx-target="#modal-content">
                         {{ t.btn_edit or 'Edit' }}
                     </button>
                     <button class="brutal-btn text-xs px-3 py-1"
-                            hx-delete="/api/plans/{{ plan.id }}?lang={{ current_lang }}"
-                            hx-confirm="{{ t.confirm_delete_plan.format(name=plan.name) if t.confirm_delete_plan else 'Are you sure you want to delete plan?' }}"
+                            hx-delete="/api/plans/{{ item.id }}?lang={{ current_lang }}"
+                            hx-confirm="{{ t.confirm_delete_plan.format(name=item.name) if t.confirm_delete_plan else 'Are you sure you want to delete plan?' }}"
                             hx-target="#management-content">
                         {{ t.btn_delete or 'Del' }}
                     </button>
                 </div>
             {% endset %}
             {{ table_row([
-                ('#' ~ plan.id),
-                plan.name,
-                (plan.description or '-'),
+                ('#' ~ item.id),
+                item.name,
+                (item.description or '-'),
                 config_cell,
                 actions_cell
             ], row_class='border-subtle hover-bg-subtle') }}

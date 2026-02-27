@@ -49,18 +49,18 @@
         t.col_target_pack or 'Target Pack',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
     ], t) %}
-        {% for account in items %}
+        {% for item in items %}
             {% set nickname_cell %}
                 <div class="space-y-2 account-identity-cell">
-                    <div class="font-bold text-base leading-tight">{{ account.nickname or (account.display_name or '-') }}</div>
-                    <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ account.id }}</div>
+                    <div class="font-bold text-base leading-tight">{{ item.nickname or (item.display_name or '-') }}</div>
+                    <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.id }}</div>
                 </div>
-                {% if account.friend_id %}
-                <div class="group relative text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ account.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
-                    <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ account.friend_id[:4] }}-{{ account.friend_id[4:8] }}-{{ account.friend_id[8:12] }}-{{ account.friend_id[12:] }}</span>
+                {% if item.friend_id %}
+                <div class="group relative text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ item.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
+                    <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ item.friend_id[:4] }}-{{ item.friend_id[4:8] }}-{{ item.friend_id[8:12] }}-{{ item.friend_id[12:] }}</span>
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
                         <div class="bg-card text-theme border-2 border-theme text-xs p-2 rounded shadow-lg">
-                            {{ t.col_game_id or 'Game ID' }}: {{ account.game_id }}
+                            {{ t.col_game_id or 'Game ID' }}: {{ item.game_id }}
                         </div>
                     </div>
                 </div>
@@ -72,23 +72,23 @@
                 <div class="space-y-2 text-xs account-resources-cell">
                     <div class="account-resource-item">
                         <span class="text-muted account-resource-label">{{ t.col_exchange_points or 'Exchange Points' }}</span>
-                        {% if account.exchange_points is not none %}
-                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(account.exchange_points) }}</span>
+                        {% if item.exchange_points is not none %}
+                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(item.exchange_points) }}</span>
                         {% else %}
                         <span class="text-muted account-resource-value">-</span>
                         {% endif %}
                     </div>
                     <div class="account-resource-item">
                         <span class="text-muted account-resource-label">{{ t.col_pack_hourglass or 'Pack Hourglass' }}</span>
-                        {% if account.pack_hourglass_count is not none %}
-                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(account.pack_hourglass_count) }}</span>
+                        {% if item.pack_hourglass_count is not none %}
+                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(item.pack_hourglass_count) }}</span>
                         {% else %}
                         <span class="text-muted account-resource-value">-</span>
                         {% endif %}
                     </div>
-                    {% if account.pack_points %}
+                    {% if item.pack_points %}
                     <div class="pack-points-section text-xs text-muted mt-2 pt-2 border-t border-subtle">
-                        {% set sorted_points = account.pack_points | sort(attribute='series') %}
+                        {% set sorted_points = item.pack_points | sort(attribute='series') %}
                         {% for i in range(0, sorted_points | length, 2) %}
                         <div class="flex justify-between">
                             {% for j in range(2) %}
@@ -110,7 +110,7 @@
             {% set plans_cell %}
                 <div class="flex flex-wrap gap-1">
                     {% set ns = namespace(found=false) %}
-                    {% for assoc in account.task_plan_associations|sort(attribute='priority', reverse=True) %}
+                    {% for assoc in item.task_plan_associations|sort(attribute='priority', reverse=True) %}
                         {% if assoc.is_active and assoc.task_plan %}
                             {% set ns.found = true %}
                             <span class="brutal-tag text-xs cursor-help" title="Priority: {{ assoc.priority }}">
@@ -124,8 +124,8 @@
                 </div>
             {% endset %}
             {% set target_pack_cell %}
-                {% set config = pack_configs.get(account.id) %}
-                {% set auto_pack = auto_pack_map.get(account.id) %}
+                {% set config = pack_configs.get(item.id) %}
+                {% set auto_pack = auto_pack_map.get(item.id) %}
                 {% if config %}
                 <div class="flex flex-col">
                     <span class="font-bold text-xs">{{ config.pack_code }}</span>
@@ -143,7 +143,7 @@
             {% set actions_cell %}
                 <div class="flex justify-end gap-2">
                     <button class="brutal-btn text-xs p-2"
-                            hx-get="/management/accounts/{{ account.id }}/edit?lang={{ current_lang }}"
+                            hx-get="/management/accounts/{{ item.id }}/edit?lang={{ current_lang }}"
                             hx-target="#modal-content"
                             title="{{ t.btn_edit_account_title or 'Edit Account' }}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -152,7 +152,7 @@
                         </svg>
                     </button>
                     <button class="brutal-btn text-xs p-2"
-                            hx-get="/management/accounts/{{ account.id }}/pack-config?lang={{ current_lang }}"
+                            hx-get="/management/accounts/{{ item.id }}/pack-config?lang={{ current_lang }}"
                             hx-target="#modal-content"
                             title="{{ t.btn_pack_config_title or 'Configure Target Pack' }}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -162,7 +162,7 @@
                         </svg>
                     </button>
                     <button class="brutal-btn text-xs px-3 py-1"
-                            hx-get="/management/accounts/{{ account.id }}/plans?lang={{ current_lang }}"
+                            hx-get="/management/accounts/{{ item.id }}/plans?lang={{ current_lang }}"
                             hx-target="#modal-content">
                         {{ t.btn_edit_plans or 'Edit Plans' }}
                     </button>
