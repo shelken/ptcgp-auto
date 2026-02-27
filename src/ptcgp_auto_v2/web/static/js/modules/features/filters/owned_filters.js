@@ -132,6 +132,21 @@ export function updateOwnedFilterGroupsState() {
     });
 }
 
+// --- 监听全局筛选事件 ---
+document.addEventListener('filter:saved', (event) => {
+    const { formId } = event.detail;
+    if (formId === 'owned-filter-form') {
+        updateOwnedFilterGroupsState();
+    }
+});
+
+document.addEventListener('filter:changed', (event) => {
+    const { formId } = event.detail;
+    if (formId === 'owned-filter-form') {
+        updateOwnedFilterGroupsState();
+    }
+});
+
 // --- 清除已拥有卡牌筛选 ---
 export function clearOwnedFilters() {
     window.pauseOwnedCardsAutoRefreshUntil = Date.now() + 1500;

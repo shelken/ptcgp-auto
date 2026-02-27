@@ -1,11 +1,13 @@
 export {
     saveFilterCache,
+    saveFilterCacheByKey,
     saveFilterCacheByElement,
     saveFilterCachesInContext,
     restoreFilterCachesInContext,
     restoreAllFilterCaches,
     clearFilterCacheByFormId,
     syncSidebarRequestParams,
+    initCacheRestoreToUrl,
 } from './shared_form.js';
 
 export {
@@ -17,12 +19,10 @@ export {
     clearOwnedFilterGroup,
     toggleOwnedFilterChip,
     toggleOwnedFilterGroup,
-    updateOwnedFilterGroupsState,
     clearOwnedFilters,
     refreshOwnedCards,
 } from './owned_filters.js';
 
 export {
-    updateTaskResetButtonState,
     initTaskSortControls,
 } from './tasks_filters.js';

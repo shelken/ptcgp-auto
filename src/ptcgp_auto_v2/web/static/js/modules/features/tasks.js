@@ -118,3 +118,16 @@ export function initSortable(context = document) {
         checkEmpty(plansList);
     }
 }
+
+// --- 监听表单提交事件 ---
+document.addEventListener('form:submitted', (event) => {
+    const { action, form } = event.detail;
+
+    if (action === 'sync-plan-intervals-submit') {
+        form.querySelectorAll('[data-interval-group] input[data-interval-unit]').forEach((input) => {
+            if (input instanceof HTMLInputElement) {
+                updateIntervalSeconds(input);
+            }
+        });
+    }
+});
