@@ -1,8 +1,6 @@
-import { isElementInActiveTab, showToast, setButtonLoading } from '../../utils.js';
+import { showToast, setButtonLoading } from '../../utils.js';
 import { reinitCustomSelect } from '../../custom_select.js';
-import { buildQueryParts, initAndApplyFormFilters, saveFormFilters } from './shared_form.js';
-
-const STORAGE_KEY_OWNED_FILTERS = 'ptcgp_owned_filters';
+import { clearFilterCacheByFormId } from './shared_form.js';
 
 function bindRequestLoading(button, targetId) {
     if (!button) return;
@@ -80,60 +78,6 @@ function updateOwnedFilterGroupSummary(group) {
     summary.replaceChildren(fragment);
 }
 
-// --- 保存已拥有卡牌筛选 ---
-export function saveOwnedFilters() {
-    if (window.suppressOwnedFilterSave) return;
-    saveFormFilters('owned-filter-form', STORAGE_KEY_OWNED_FILTERS, ['#owned-sort-select']);
-    updateOwnedFilterGroupsState();
-}
-
-// --- 恢复已拥有卡牌筛选 ---
-export function restoreOwnedFilters() {
-    const stored = localStorage.getItem(STORAGE_KEY_OWNED_FILTERS);
-    let queryParts = [];
-    const form = document.getElementById('owned-filter-form');
-    if (!form) return;
-    const sortSelect = document.getElementById('owned-sort-select');
-
-    if (sortSelect && !stored) {
-        sortSelect.value = 'acquired';
-        if (sortSelect.classList.contains('custom-select-initialized')) {
-            reinitCustomSelect(sortSelect);
-        }
-    }
-
-    if (stored) {
-        try {
-            const filters = JSON.parse(stored);
-            initAndApplyFormFilters(form, filters, ['#owned-sort-select']);
-            queryParts = buildQueryParts(filters);
-        } catch (e) {
-            console.error('Failed to restore owned filters', e);
-        }
-    }
-
-    updateOwnedFilterGroupsState();
-
-    const container = document.getElementById('owned-cards-container');
-    if (container) {
-        if (!isElementInActiveTab(container)) {
-            return;
-        }
-        if (container.dataset.loaded === 'true' || container.dataset.loading === 'true') {
-            return;
-        }
-        container.dataset.loading = 'true';
-        const baseAttr = container.getAttribute('data-base-url') || container.getAttribute('data-url');
-        let finalUrl = baseAttr;
-
-        if (queryParts.length > 0) {
-            finalUrl = `${baseAttr}&${queryParts.join('&')}`;
-        }
-
-        htmx.ajax('GET', finalUrl, { target: '#owned-cards-container', swap: 'innerHTML' });
-    }
-}
-
 // --- 清空单个筛选组 ---
 export function clearOwnedFilterGroup(button) {
     const group = button.closest('[data-filter-group]');
@@ -148,7 +92,7 @@ export function clearOwnedFilterGroup(button) {
     });
 
     updateOwnedFilterGroupsState();
-    saveOwnedFilters();
+    form.dispatchEvent(new Event('change', { bubbles: true }));
     refreshOwnedCardsByForm(form);
 }
 
@@ -191,7 +135,6 @@ export function updateOwnedFilterGroupsState() {
 // --- 清除已拥有卡牌筛选 ---
 export function clearOwnedFilters() {
     window.pauseOwnedCardsAutoRefreshUntil = Date.now() + 1500;
-    window.suppressOwnedFilterSave = true;
 
     const sortSelect = document.getElementById('owned-sort-select');
     const currentSortBy = (sortSelect && sortSelect.value) ? sortSelect.value : 'acquired';
@@ -207,21 +150,21 @@ export function clearOwnedFilters() {
             reinitCustomSelect(sortSelect);
         }
     }
-
-    localStorage.setItem(STORAGE_KEY_OWNED_FILTERS, JSON.stringify({ sort_by: currentSortBy }));
+    clearFilterCacheByFormId('owned-filter-form');
 
     document.querySelectorAll('[data-filter-group]').forEach((group) => {
         updateOwnedFilterGroupSummary(group);
         group.classList.remove('is-open');
     });
 
+    const form = document.getElementById('owned-filter-form');
+    if (form) {
+        form.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const lang = urlParams.get('lang') || 'en';
     htmx.ajax('GET', `/api/owned-cards?page=0&lang=${lang}&sort_by=${encodeURIComponent(currentSortBy)}`, { target: '#owned-cards-container', swap: 'innerHTML' });
-
-    setTimeout(() => {
-        window.suppressOwnedFilterSave = false;
-    }, 0);
 }
 
 // --- 刷新已拥有卡牌列表 ---

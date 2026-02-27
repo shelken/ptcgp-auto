@@ -6,7 +6,8 @@
     <form id="account-table-filter-form"
           hx-get="/management/accounts?lang={{ current_lang }}"
           hx-target="#management-content"
-          hx-swap="innerHTML">
+          hx-swap="innerHTML"
+          data-filter-cache-key="ptcgp_filter:accounts">
         <input type="hidden" name="page" value="0">
         <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
         <input type="hidden" name="sort_by" value="{{ sort_by or 'id' }}">

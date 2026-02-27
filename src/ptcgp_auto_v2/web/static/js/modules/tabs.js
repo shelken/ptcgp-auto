@@ -1,8 +1,6 @@
 import {
-    restoreFilters,
-    restoreOwnedFilters,
     updateOwnedFilterGroupsState,
-    applyTasksSidebarRequestParams,
+    syncSidebarRequestParams,
 } from './features/filters/index.js';
 import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { isManagementHash } from './constants.js';
@@ -75,27 +73,22 @@ export function switchTab(tabName, options = {}) {
 
     if (tabName === 'records') {
         const container = document.getElementById('records-container');
-        if (container && container.dataset.loaded !== 'true') {
-            // 避免首次进入 records 时触发双请求
-            restoreFilters();
-        } else if (container && container.dataset.autoRefresh) {
+        submitFilterFormIfNeeded('filter-form', 'records-container');
+        if (container && container.dataset.loaded === 'true' && container.dataset.autoRefresh) {
             triggerAutoRefresh(container);
         }
     }
 
     if (tabName === 'owned-cards') {
         window.ownedCardsUserScrolled = false;
-        const container = document.getElementById('owned-cards-container');
-        if (container && container.dataset.loaded !== 'true') {
-            restoreOwnedFilters();
-        }
+        submitFilterFormIfNeeded('owned-filter-form', 'owned-cards-container');
         updateOwnedFilterGroupsState();
     }
 
     localStorage.setItem(STORAGE_KEY_TAB, tabName);
 
     if (tabName === 'management' && !skipAutoSelect) {
-        syncTaskSidebarRequestUrl();
+        syncManagementSidebarRequestUrls();
         const content = document.getElementById('management-content');
         const hasContent = content.querySelector('table') || content.querySelector('form');
 
@@ -126,14 +119,24 @@ function triggerAutoRefresh(container) {
     });
 }
 
+function submitFilterFormIfNeeded(formId, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (container.dataset.loaded === 'true' || container.dataset.loading === 'true') return;
+
+    const form = document.getElementById(formId);
+    if (!(form instanceof HTMLFormElement)) return;
+
+    container.dataset.loading = 'true';
+    form.requestSubmit();
+}
+
 // --- 更新侧边栏状态 ---
 export function updateSidebarState(btn) {
     document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active'));
     btn.classList.add('active');
     const hash = btn.getAttribute('data-hash');
-    if (hash === 'tasks') {
-        applyTasksSidebarRequestParams(btn);
-    }
+    syncSidebarRequestParams(btn);
     if (hash) {
         if (isManagementHash(hash)) {
             localStorage.setItem(STORAGE_KEY_MANAGEMENT_HASH, hash);
@@ -142,16 +145,11 @@ export function updateSidebarState(btn) {
     }
 }
 
-/**
- * 同步任务侧栏按钮请求 URL。
- *
- * 注意：必须在点击前预先写入，不能在 click 事件内临时改写，
- * 否则 HTMX 可能已读取旧 hx-get，导致首个请求丢失筛选参数。
- */
-export function syncTaskSidebarRequestUrl() {
-    const btn = document.querySelector('#tab-content-management .sidebar-btn[data-hash="tasks"]');
-    if (!btn) return;
-    applyTasksSidebarRequestParams(btn);
+export function syncManagementSidebarRequestUrls() {
+    document.querySelectorAll('#tab-content-management .sidebar-btn[data-filter-cache-key][data-filter-param-keys]')
+        .forEach((btn) => {
+            syncSidebarRequestParams(btn);
+        });
 }
 
 // --- 恢复 Tab ---
