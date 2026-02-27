@@ -4,7 +4,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.account_service import (
-    get_accounts_context,
+    build_accounts_context,
     build_account_edit_context,
     update_account_details,
 )
@@ -25,7 +25,7 @@ async def _render_management_accounts(
     page_size: int = 10,
 ):
     """渲染账号管理列表（内部复用，避免 Query 默认对象泄漏）。"""
-    context = get_accounts_context(
+    context = build_accounts_context(
         session=session,
         q=q,
         sort_by=sort_by,

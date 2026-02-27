@@ -8,12 +8,11 @@ from ptcgp_auto_v2.db.repositories import (
     ExchangeCardRequestRepository,
 )
 from ptcgp_auto_v2.services import ExchangeCardService
-from ptcgp_auto_v2.web.queries.owned_card_queries import build_owned_cards_next_page_url
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
-def list_owned_cards(
+def build_owned_cards_context(
+    session: Session,
     page: int,
     page_size: int,
     account_id: str | None,
@@ -24,8 +23,7 @@ def list_owned_cards(
     element: list[str],
     sort_by: str,
 ) -> dict[str, Any]:
-    """获取已拥有卡牌列表视图数据。"""
-    current_lang, t = get_current_i18n()
+    """构建已拥有卡牌列表视图上下文。"""
     repo = AccountCardRepository()
     account_id_value = parse_optional_int(account_id)
     items = repo.list_owned_cards(
@@ -43,25 +41,10 @@ def list_owned_cards(
     if not items and page > 0:
         return {"stop": True}
 
-    next_page_url = build_owned_cards_next_page_url(
-        page,
-        current_lang,
-        sort_by,
-        account_id_value,
-        rarity,
-        card_type,
-        set_code,
-        pack_name,
-        element,
-    )
-
     return {
         "stop": False,
         "items": items,
-        "next_page_url": next_page_url,
         "page": page,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 
@@ -69,7 +52,6 @@ def build_owned_card_modal_context(
     session: Session, card_id: int
 ) -> dict[str, Any] | None:
     """构建已拥有卡牌详情弹窗所需数据。"""
-    current_lang, t = get_current_i18n()
     card = session.get(Card, card_id)
     if not card:
         return None
@@ -91,8 +73,6 @@ def build_owned_card_modal_context(
         "total_accounts": table_context["total_items"],
         "total_count": table_context["total_count"],
         "exchange_table": table_context,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 
@@ -125,8 +105,6 @@ def build_owned_card_exchange_accounts_context(
     sort_order: str = "asc",
 ) -> dict[str, Any]:
     """构建已拥有卡牌弹窗中的交换账号分页表格上下文。"""
-    current_lang, t = get_current_i18n()
-
     normalized_page = max(page, 0)
     normalized_page_size = min(max(page_size, 1), 50)
     normalized_sort_by, normalized_sort_order = _normalize_exchange_sort(
@@ -147,8 +125,6 @@ def build_owned_card_exchange_accounts_context(
             "q": q,
             "sort_by": normalized_sort_by,
             "sort_order": normalized_sort_order,
-            "t": t,
-            "current_lang": current_lang,
         }
 
     repo = AccountCardRepository()
@@ -194,6 +170,4 @@ def build_owned_card_exchange_accounts_context(
         "q": q,
         "sort_by": normalized_sort_by,
         "sort_order": normalized_sort_order,
-        "t": t,
-        "current_lang": current_lang,
     }

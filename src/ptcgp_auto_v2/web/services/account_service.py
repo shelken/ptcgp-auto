@@ -16,17 +16,31 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
+from ptcgp_auto_v2.web.utils.filter_utils import (
+    normalize_query_text,
+    normalize_page,
+    normalize_page_size,
+    normalize_sort_order,
+)
 
 
-def _normalize_query_text(q: str | object | None) -> str:
-    """归一化搜索词，兜底非字符串输入。"""
-    if isinstance(q, str):
-        return q.strip().lower()
-    return ""
+def _match_account(item: Account, query: str) -> bool:
+    """判断账号是否匹配搜索词。"""
+    account_id_text = str(item.id or "")
+    nickname_text = (item.nickname or "").lower()
+    display_name_text = (item.display_name or "").lower()
+    friend_id_text = (item.friend_id or "").lower()
+    game_id_text = (item.game_id or "").lower()
+    return (
+        query in account_id_text
+        or query in nickname_text
+        or query in display_name_text
+        or query in friend_id_text
+        or query in game_id_text
+    )
 
 
-def get_accounts_context(
+def build_accounts_context(
     session: Session,
     q: str = "",
     sort_by: str = "id",
@@ -34,35 +48,22 @@ def get_accounts_context(
     page: int = 0,
     page_size: int = 10,
 ) -> dict:
-    """获取账号管理列表视图数据（统一列表协议：q/sort/page）。"""
-    current_lang, t = get_current_i18n()
+    """构建账号管理列表视图上下文（统一列表协议：q/sort/page）。"""
     repo = AccountRepository()
     accounts = repo.get_all()
 
-    normalized_q = _normalize_query_text(q)
+    normalized_q = normalize_query_text(q)
     allowed_sort_fields = {"id", "nickname", "friend_id"}
     normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
-    normalized_sort_order = "desc" if str(sort_order).lower() == "desc" else "asc"
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 100)
+    normalized_sort_order = normalize_sort_order(sort_order)
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
 
     if normalized_q:
-
-        def _match_account(item: Account) -> bool:
-            account_id_text = str(item.id or "")
-            nickname_text = (item.nickname or "").lower()
-            display_name_text = (item.display_name or "").lower()
-            friend_id_text = (item.friend_id or "").lower()
-            game_id_text = (item.game_id or "").lower()
-            return (
-                normalized_q in account_id_text
-                or normalized_q in nickname_text
-                or normalized_q in display_name_text
-                or normalized_q in friend_id_text
-                or normalized_q in game_id_text
-            )
-
-        accounts = [item for item in accounts if _match_account(item)]
+        accounts = [
+            item for item in accounts
+            if _match_account(item, normalized_q)
+        ]
 
     def _sort_value(item: Account):
         if normalized_sort_by == "nickname":
@@ -118,19 +119,16 @@ def get_accounts_context(
         "has_prev": has_prev,
         "has_next": has_next,
         "total_items": total_items,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 
 def build_account_edit_context(account_id: int) -> dict | None:
     """构建账号编辑弹窗数据。"""
-    current_lang, t = get_current_i18n()
     repo = AccountRepository()
     account = repo.get_by_id(account_id)
     if not account:
         return None
-    return {"account": account, "t": t, "current_lang": current_lang}
+    return {"account": account}
 
 
 def update_account_details(account_id: int, nickname: str, remark: str) -> None:
@@ -148,7 +146,6 @@ def build_account_plans_context(
     session: Session, account_id: int
 ) -> dict | None:
     """构建账号计划编辑弹窗数据。"""
-    current_lang, t = get_current_i18n()
     statement = (
         select(Account)
         .where(Account.id == account_id)
@@ -174,8 +171,6 @@ def build_account_plans_context(
         "account": account,
         "current_assocs": current_assocs,
         "available_plans": available_plans,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 

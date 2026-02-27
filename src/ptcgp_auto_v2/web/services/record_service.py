@@ -9,20 +9,20 @@ from ptcgp_auto_v2.web.queries.record_queries import (
     build_records_next_page_url,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n, resolve_label
+from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
 
-def list_records(
+def build_records_context(
     session: Session,
     page: int,
     page_size: int,
     rarity: list[str],
     card_type: list[str],
 ) -> dict[str, Any]:
-    """获取开包记录视图数据。"""
-    current_lang, t = get_current_i18n()
+    """构建开包记录视图上下文。"""
     results = fetch_records(session, page, page_size, rarity, card_type)
 
+    # 空数据时返回停止标记（用于无限滚动）
     if not results and page > 0:
         return {"stop": True}
 
@@ -75,7 +75,7 @@ def list_records(
                 "layout": layout_type,
                 "account_name": record.account.nickname
                 if record.account
-                else t.get("unknown_account", "Unknown"),
+                else "Unknown",
                 "opened_at": record.opened_at,
                 "current_points": current_points,
                 "series": series_code,
@@ -87,12 +87,7 @@ def list_records(
     if not records_data:
         return {"stop": True}
 
-    next_page_url = build_records_next_page_url(page, current_lang, rarity, card_type)
-
     return {
         "stop": False,
         "records": records_data,
-        "next_page_url": next_page_url,
-        "t": t,
-        "current_lang": current_lang,
     }

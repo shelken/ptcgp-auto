@@ -8,7 +8,7 @@ from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.services.owned_card_service import (
-    list_owned_cards,
+    build_owned_cards_context,
     build_owned_card_modal_context,
     build_owned_card_exchange_accounts_context,
 )
@@ -32,18 +32,20 @@ async def get_owned_cards(
     pack_name: list[str] = Query(default=[]),
     element: list[str] = Query(default=[]),
     sort_by: str = Query(default="acquired"),
+    session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌列表。"""
-    result = list_owned_cards(
-        page,
-        page_size,
-        account_id,
-        rarity,
-        card_type,
-        set_code,
-        pack_name,
-        element,
-        sort_by,
+    result = build_owned_cards_context(
+        session=session,
+        page=page,
+        page_size=page_size,
+        account_id=account_id,
+        rarity=rarity,
+        card_type=card_type,
+        set_code=set_code,
+        pack_name=pack_name,
+        element=element,
+        sort_by=sort_by,
     )
     if result.get("stop"):
         return ""
