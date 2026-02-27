@@ -9,7 +9,7 @@ from ptcgp_auto_v2.web.services.account_service import (
     update_account_details,
 )
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -33,7 +33,6 @@ async def _render_management_accounts(
         page=page,
         page_size=page_size,
     )
-    from ptcgp_auto_v2.web.utils.response_utils import render_template
     return render_template(request, "partials/account_list.html", context)
 
 
@@ -68,7 +67,6 @@ async def get_account_edit_modal(
     context = build_account_edit_context(account_id)
     if not context:
         return HTMLResponse("Account not found", status_code=404)
-    from ptcgp_auto_v2.web.utils.response_utils import render_template
     return render_template(request, "partials/modals/edit_account.html", context)
 
 
