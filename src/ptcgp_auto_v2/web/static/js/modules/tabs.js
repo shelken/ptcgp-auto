@@ -1,7 +1,4 @@
-import {
-    updateOwnedFilterGroupsState,
-    syncSidebarRequestParams,
-} from './features/filters/index.js';
+import { syncSidebarRequestParams } from './features/filters/index.js';
 import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { isManagementHash } from './constants.js';
 import { isElementInActiveTab } from './utils.js';
@@ -82,10 +79,14 @@ export function switchTab(tabName, options = {}) {
     if (tabName === 'owned-cards') {
         window.ownedCardsUserScrolled = false;
         submitFilterFormIfNeeded('owned-filter-form', 'owned-cards-container');
-        updateOwnedFilterGroupsState();
     }
 
     localStorage.setItem(STORAGE_KEY_TAB, tabName);
+
+    // 派发 Tab 切换事件
+    document.dispatchEvent(new CustomEvent('tab:switched', {
+        detail: { tabName }
+    }));
 
     if (tabName === 'management' && !skipAutoSelect) {
         syncManagementSidebarRequestUrls();

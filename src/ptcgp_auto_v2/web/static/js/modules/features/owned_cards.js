@@ -47,3 +47,14 @@ export function restoreOwnedGridCols() {
     const value = stored || '5';
     setOwnedGridCols(value);
 }
+
+// --- 监听 Tab 切换，设置滚动感知标签 ---
+document.addEventListener('tab:switched', (event) => {
+    const { tabName } = event.detail;
+    // owned-cards 标签激活时，设置滚动感知键
+    if (tabName === 'owned-cards') {
+        window.activeScrollAwareTab = 'ownedCardsUserScrolled';
+    } else {
+        window.activeScrollAwareTab = null;
+    }
+});

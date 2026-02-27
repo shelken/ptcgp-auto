@@ -1,5 +1,5 @@
 // --- 更新重置按钮状态 ---
-export function updateTaskResetButtonState(form) {
+function updateTaskResetButtonState(form) {
     if (!form) return;
     const statusSelect = form.querySelector('[name="status"]');
     const resetButton = document.getElementById('task-reset-completed-btn');
@@ -17,6 +17,14 @@ export function updateTaskResetButtonState(form) {
             : '';
     }
 }
+
+// --- 监听全局筛选事件 ---
+document.addEventListener('filter:saved', (event) => {
+    const { formId, form } = event.detail;
+    if (formId === 'task-filter-form') {
+        updateTaskResetButtonState(form);
+    }
+});
 
 // --- 初始化任务排序控件 ---
 export function initTaskSortControls(context = document) {
