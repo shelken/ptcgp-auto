@@ -10,7 +10,7 @@ from ptcgp_auto_v2.db.repositories import (
 from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.queries.owned_card_queries import build_owned_cards_next_page_url
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def list_owned_cards(
@@ -23,11 +23,9 @@ def list_owned_cards(
     pack_name: list[str],
     element: list[str],
     sort_by: str,
-    lang: str,
 ) -> dict[str, Any]:
     """获取已拥有卡牌列表视图数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = AccountCardRepository()
     account_id_value = parse_optional_int(account_id)
     items = repo.list_owned_cards(
@@ -68,11 +66,10 @@ def list_owned_cards(
 
 
 def build_owned_card_modal_context(
-    session: Session, card_id: int, lang: str
+    session: Session, card_id: int
 ) -> dict[str, Any] | None:
     """构建已拥有卡牌详情弹窗所需数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     card = session.get(Card, card_id)
     if not card:
         return None
@@ -80,7 +77,6 @@ def build_owned_card_modal_context(
     table_context = build_owned_card_exchange_accounts_context(
         session=session,
         card_id=card_id,
-        lang=current_lang,
         page=0,
         page_size=10,
         q="",
@@ -122,7 +118,6 @@ def _match_exchange_query(item: dict[str, Any], query: str) -> bool:
 def build_owned_card_exchange_accounts_context(
     session: Session,
     card_id: int,
-    lang: str,
     page: int = 0,
     page_size: int = 10,
     q: str = "",
@@ -130,8 +125,7 @@ def build_owned_card_exchange_accounts_context(
     sort_order: str = "asc",
 ) -> dict[str, Any]:
     """构建已拥有卡牌弹窗中的交换账号分页表格上下文。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
 
     normalized_page = max(page, 0)
     normalized_page_size = min(max(page_size, 1), 50)

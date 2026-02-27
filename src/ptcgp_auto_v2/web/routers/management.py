@@ -9,7 +9,6 @@ from ptcgp_auto_v2.web.services.account_service import (
     update_account_details,
 )
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.i18n import detect_lang
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -18,7 +17,6 @@ router = APIRouter()
 
 async def _render_management_accounts(
     request: Request,
-    lang: str | None,
     session: Session,
     q: str = "",
     sort_by: str = "id",
@@ -27,10 +25,8 @@ async def _render_management_accounts(
     page_size: int = 10,
 ):
     """渲染账号管理列表（内部复用，避免 Query 默认对象泄漏）。"""
-    current_lang = detect_lang(request, lang)
     context = get_accounts_context(
         session=session,
-        lang=current_lang,
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -45,7 +41,6 @@ async def _render_management_accounts(
 @router.get("/management/accounts", response_class=HTMLResponse)
 async def get_management_accounts(
     request: Request,
-    lang: str | None = Query(default=None),
     q: str = Query(default=""),
     sort_by: str = Query(default="id"),
     sort_order: str = Query(default="asc"),
@@ -56,7 +51,6 @@ async def get_management_accounts(
     """渲染账号管理列表。"""
     return await _render_management_accounts(
         request=request,
-        lang=lang,
         session=session,
         q=q,
         sort_by=sort_by,
@@ -70,11 +64,9 @@ async def get_management_accounts(
 async def get_account_edit_modal(
     request: Request,
     account_id: int,
-    lang: str | None = Query(default=None),
 ):
     """渲染账号编辑弹窗。"""
-    current_lang = detect_lang(request, lang)
-    context = build_account_edit_context(account_id, current_lang)
+    context = build_account_edit_context(account_id)
     if not context:
         return HTMLResponse("Account not found", status_code=404)
     context["request"] = request
@@ -86,7 +78,6 @@ async def get_account_edit_modal(
 async def update_account_details_api(
     request: Request,
     account_id: int,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """更新账号昵称与备注。"""
@@ -97,7 +88,6 @@ async def update_account_details_api(
 
     response = await _render_management_accounts(
         request=request,
-        lang=lang,
         session=session,
         q="",
         sort_by="id",

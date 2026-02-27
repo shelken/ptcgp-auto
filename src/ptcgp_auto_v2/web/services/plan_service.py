@@ -5,7 +5,7 @@ from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
 from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def _normalize_query_text(q: str | object | None) -> str:
@@ -16,7 +16,6 @@ def _normalize_query_text(q: str | object | None) -> str:
 
 
 def get_plans_context(
-    lang: str,
     q: str = "",
     sort_by: str = "id",
     sort_order: str = "asc",
@@ -24,8 +23,7 @@ def get_plans_context(
     page_size: int = 10,
 ) -> dict:
     """获取计划列表视图数据（统一列表协议：q/sort/page）。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = TaskPlanRepository()
     plans = repo.get_all()
 
@@ -76,10 +74,9 @@ def get_plans_context(
     }
 
 
-def build_plan_edit_context(plan_id: int | None, lang: str) -> dict:
+def build_plan_edit_context(plan_id: int | None) -> dict:
     """构建计划编辑弹窗数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     repo = TaskPlanRepository()
     plan = repo.get_by_id(plan_id) if plan_id else None
 

@@ -18,7 +18,7 @@ from ptcgp_auto_v2.web.services.task_service import (
     reset_completed_tasks_by_filters,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.i18n import detect_lang, get_translations
+from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -28,7 +28,6 @@ router = APIRouter()
 @router.get("/management/tasks", response_class=HTMLResponse)
 async def get_management_tasks(
     request: Request,
-    lang: str | None = Query(default=None),
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
@@ -39,7 +38,7 @@ async def get_management_tasks(
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染任务管理列表。"""
-    current_lang = detect_lang(request, lang)
+    current_lang = get_current_lang()
     t = get_translations(current_lang)
     repo = AccountRepository()
     accounts = repo.get_all()
@@ -116,7 +115,6 @@ async def get_management_tasks(
 @router.get("/management/tasks/reset-completed-modal", response_class=HTMLResponse)
 async def get_reset_completed_modal(
     request: Request,
-    lang: str | None = Query(default=None),
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
@@ -124,7 +122,7 @@ async def get_reset_completed_modal(
     sort_order: str = Query(default="asc"),
 ):
     """渲染重置完成任务确认弹窗。"""
-    current_lang = detect_lang(request, lang)
+    current_lang = get_current_lang()
     t = get_translations(current_lang)
 
     normalized_status = [item for item in status if item]
@@ -151,7 +149,6 @@ async def get_reset_completed_modal(
 @router.post("/api/tasks/reset-completed", response_class=HTMLResponse)
 async def reset_completed_tasks(
     request: Request,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """按筛选条件将完成任务重置为待执行。"""
@@ -172,7 +169,7 @@ async def reset_completed_tasks(
         account_id=parsed_account_id,
     )
 
-    current_lang = detect_lang(request, lang)
+    current_lang = get_current_lang()
     t = get_translations(current_lang)
     page = 0
     page_size = 10
@@ -243,11 +240,10 @@ async def get_tasks(
     account_id: str | None = Query(default=None),
     sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
     sort_order: str = Query(default="asc"),
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取任务列表（HTMX）。"""
-    current_lang = detect_lang(request, lang)
+    current_lang = get_current_lang()
     t = get_translations(current_lang)
     repo = AccountRepository()
     accounts = repo.get_all()

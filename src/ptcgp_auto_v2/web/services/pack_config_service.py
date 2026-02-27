@@ -2,7 +2,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import CardRepository, AccountPackConfigRepository
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def list_card_sets() -> list[dict]:
@@ -18,10 +18,9 @@ def list_set_boosters(set_code: str) -> list:
     return repo.get_pack_names_by_set(set_code)
 
 
-def build_pack_config_context(account_id: int, lang: str) -> dict:
+def build_pack_config_context(account_id: int) -> dict:
     """构建补充包配置弹窗数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
 
     config_repo = AccountPackConfigRepository()
     card_repo = CardRepository()

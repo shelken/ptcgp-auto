@@ -13,12 +13,11 @@ from ptcgp_auto_v2.web.queries.friendship_queries import (
     list_friend_requests,
     list_friendships,
 )
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def build_friendship_context(
     session: Session,
-    lang: str,
     account_id: int | None = None,
     from_account_id: int | None = None,
     q: str = "",
@@ -28,8 +27,7 @@ def build_friendship_context(
     page_size: int = 10,
 ) -> dict:
     """构建好友管理页面所需上下文数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     account_repo = AccountRepository()
     accounts = account_repo.get_all()
 

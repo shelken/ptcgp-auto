@@ -58,6 +58,36 @@ GAME_UTC_OFFSET_HOURS = 8
 if DEFAULT_LOCALE not in SUPPORTED_LOCALES:
     raise ValueError(f"DEFAULT_LOCALE={DEFAULT_LOCALE} 不在 SUPPORTED_LOCALES 中")
 
+# ========== Web 界面语言配置 ==========
+# Web 支持的语言文件（与 web/locales/ 目录下的文件对应）
+WEB_SUPPORTED_LANGS = ["en", "zh_CN"]
+
+# Web 语言键
+WEB_LANG_ZH = "zh_CN"
+WEB_LANG_EN = "en"
+
+# 数据库标签键（label_data 中使用的 key）
+DB_LABEL_KEY_ZH = "zh"
+DB_LABEL_KEY_EN = "en"
+
+# Web 语言到数据库标签键的映射（优先级列表，第一个是首选）
+WEB_LANG_TO_DB_LABEL_KEYS = {
+    WEB_LANG_ZH: [DB_LABEL_KEY_ZH, DB_LABEL_KEY_EN],
+    WEB_LANG_EN: [DB_LABEL_KEY_EN, DB_LABEL_KEY_ZH],
+}
+
+# 默认语言键
+DEFAULT_LANG_KEY = "en"
+
+# 调度配置
+METADATA_DEFAULT_NODE_ID = "all"
+METADATA_DEFAULT_SET_CODE = ""
+METADATA_DEFAULT_PACK_NAME = ""
+METADATA_DEFAULT_UI_STEP = 1
+
+# 卡牌 Key 格式模板
+CARD_KEY_FORMAT = "{set_code}-{number:03d}"
+
 # 调度配置
 DEFAULT_POLL_INTERVAL = 5.0  # 默认轮询间隔 (秒)
 DEFAULT_MAX_WORKERS = 4  # 默认最大工作线程数

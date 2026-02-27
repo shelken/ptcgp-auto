@@ -13,7 +13,6 @@ from ptcgp_auto_v2.web.services.friendship_service import (
     create_delete_request,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int, safe_get_string
-from ptcgp_auto_v2.web.utils.i18n import detect_lang
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
@@ -23,7 +22,6 @@ router = APIRouter()
 @router.get("/management/friendships", response_class=HTMLResponse)
 async def get_management_friendships(
     request: Request,
-    lang: str | None = Query(default=None),
     account_id: str | None = Query(default=None),
     from_account_id: str | None = Query(default=None),
     q: str = Query(default=""),
@@ -34,12 +32,10 @@ async def get_management_friendships(
     session: Session = Depends(get_fastapi_session),
 ):
     """渲染好友关系管理页面。"""
-    current_lang = detect_lang(request, lang)
     selected_account_id = parse_optional_int(account_id)
     selected_from_account_id = parse_optional_int(from_account_id)
     context = build_friendship_context(
         session=session,
-        lang=current_lang,
         account_id=selected_account_id,
         from_account_id=selected_from_account_id,
         q=q,
@@ -56,7 +52,6 @@ async def get_management_friendships(
 @router.post("/api/friendships/requests/add", response_class=HTMLResponse)
 async def post_add_friend_request(
     request: Request,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """从管理页面创建添加好友请求。"""
@@ -91,7 +86,6 @@ async def post_add_friend_request(
 
     response = await get_management_friendships(
         request=request,
-        lang=lang,
         account_id=str(selected_account_id)
         if selected_account_id is not None
         else None,
@@ -106,8 +100,7 @@ async def post_add_friend_request(
         session=session,
     )
 
-    current_lang = detect_lang(request, lang)
-    context = build_friendship_context(session=session, lang=current_lang)
+    context = build_friendship_context(session=session)
     t = context["t"]
     message = (
         t.get("msg_add_request_created")
@@ -123,7 +116,6 @@ async def post_add_friend_request(
 @router.post("/api/friendships/requests/delete", response_class=HTMLResponse)
 async def post_delete_friend_request(
     request: Request,
-    lang: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """从管理页面创建删除好友请求。"""
@@ -158,7 +150,6 @@ async def post_delete_friend_request(
 
     response = await get_management_friendships(
         request=request,
-        lang=lang,
         account_id=str(selected_account_id)
         if selected_account_id is not None
         else None,
@@ -173,8 +164,7 @@ async def post_delete_friend_request(
         session=session,
     )
 
-    current_lang = detect_lang(request, lang)
-    context = build_friendship_context(session=session, lang=current_lang)
+    context = build_friendship_context(session=session)
     t = context["t"]
     message = (
         t.get("msg_delete_request_created")
@@ -193,7 +183,6 @@ async def post_delete_friend_request(
 async def post_cancel_friend_request(
     request_id: int,
     request: Request,
-    lang: str | None = Query(default=None),
     selected_account_id: str | None = Query(default=None),
     selected_from_account_id: str | None = Query(default=None),
     q: str = Query(default=""),
@@ -207,7 +196,6 @@ async def post_cancel_friend_request(
     cancelled = cancel_pending_request(request_id=request_id)
     response = await get_management_friendships(
         request=request,
-        lang=lang,
         account_id=selected_account_id,
         from_account_id=selected_from_account_id,
         q=q,
@@ -218,8 +206,7 @@ async def post_cancel_friend_request(
         session=session,
     )
 
-    current_lang = detect_lang(request, lang)
-    context = build_friendship_context(session=session, lang=current_lang)
+    context = build_friendship_context(session=session)
     t = context["t"]
     message = (
         t.get("msg_request_cancelled")

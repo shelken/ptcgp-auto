@@ -35,7 +35,7 @@ from ptcgp_auto_v2.web.queries.notification_queries import (
     normalize_card_picker_sort,
     normalize_notification_sort,
 )
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 SCENE_OPTIONS = list(NOTIFICATION_SCENE_OPTIONS)
@@ -117,7 +117,6 @@ def list_cards_by_ids(session: Session, card_ids: list[int]) -> list[Card]:
 
 def build_notification_card_selector_context(
     session: Session,
-    lang: str,
     scene: str,
     selected_card_ids: list[int],
     q: str = "",
@@ -130,8 +129,7 @@ def build_notification_card_selector_context(
     page_size: int = 24,
 ) -> dict[str, Any]:
     """构建通知配置卡牌选择器上下文。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     normalized_page = max(page, 0)
     normalized_page_size = min(max(page_size, 1), 60)
     normalized_sort_by, normalized_sort_order = normalize_card_picker_sort(
@@ -181,7 +179,6 @@ def build_notification_card_selector_context(
 
 def build_notifications_context(
     session: Session,
-    lang: str,
     scene: Optional[str] = None,
     account_id: Optional[int] = None,
     is_read: Optional[bool] = None,
@@ -192,8 +189,7 @@ def build_notifications_context(
     page_size: int = 10,
 ) -> dict[str, Any]:
     """构建通知页面上下文。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     config_repo = NotificationConfigRepository()
     notification_repo = NotificationRepository()
 
@@ -255,12 +251,10 @@ def build_notifications_context(
 
 def build_recent_notifications_context(
     session: Session,
-    lang: str,
     limit: int = 5,
 ) -> dict[str, Any]:
     """构建最近通知下拉内容上下文。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     rows = list_recent_notifications(session, limit=limit)
     return {
         "t": t,
@@ -271,7 +265,6 @@ def build_recent_notifications_context(
 
 def build_notification_panel_context(
     session: Session,
-    lang: str,
     page: int = 0,
     page_size: int = 10,
 ) -> dict[str, Any]:
@@ -285,8 +278,7 @@ def build_notification_panel_context(
     Returns:
         dict: 包含 notifications, has_more, next_page, unread_count 等字段
     """
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     notification_repo = NotificationRepository()
 
     normalized_page = max(page, 0)

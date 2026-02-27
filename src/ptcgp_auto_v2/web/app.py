@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
-from ptcgp_auto_v2.web.utils.i18n import init_i18n
+from ptcgp_auto_v2.web.utils.i18n import init_i18n, detect_lang, set_lang_context
 from ptcgp_auto_v2.web.utils.template_env import init_templates
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime
 
@@ -49,6 +49,16 @@ templates.env.filters["rarity_display"] = get_rarity_display
 # 多语言初始化
 locales_dir = os.path.join(current_dir, "locales")
 init_i18n(locales_dir)
+
+@app.middleware("http")
+async def set_request_lang_context(request, call_next):
+    """统一在中间件设置语言上下文，路由层不再单独处理。"""
+    explicit_lang = request.query_params.get("lang")
+    current_lang = detect_lang(request, explicit_lang)
+    set_lang_context(current_lang)
+    response = await call_next(request)
+    return response
+
 
 # 路由挂载
 app.include_router(index.router)

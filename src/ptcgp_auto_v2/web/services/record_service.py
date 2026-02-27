@@ -9,7 +9,7 @@ from ptcgp_auto_v2.web.queries.record_queries import (
     build_records_next_page_url,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import get_translations, normalize_lang
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n, resolve_label
 
 
 def list_records(
@@ -18,11 +18,9 @@ def list_records(
     page_size: int,
     rarity: list[str],
     card_type: list[str],
-    lang: str,
 ) -> dict[str, Any]:
     """获取开包记录视图数据。"""
-    current_lang = normalize_lang(lang)
-    t = get_translations(current_lang)
+    current_lang, t = get_current_i18n()
     results = fetch_records(session, page, page_size, rarity, card_type)
 
     if not results and page > 0:
@@ -37,7 +35,6 @@ def list_records(
 
     points_map = fetch_pack_points_map(session, results)
     records_data = []
-    lang_key = "zh" if current_lang.startswith("zh") else "en"
 
     for record in results:
         sorted_cards = sorted(record.cards, key=lambda card: card.position)
@@ -63,18 +60,12 @@ def list_records(
 
         set_name_display = series_code
         if series_code in sets_map:
-            set_name_display = (
-                sets_map[series_code].get(lang_key)
-                or sets_map[series_code].get("en")
-                or series_code
-            )
+            set_name_display = resolve_label(sets_map[series_code], fallback=series_code)
 
         pack_name_display = record.pack_name or ""
         if record.pack_name in packs_map:
-            pack_name_display = (
-                packs_map[record.pack_name].get(lang_key)
-                or packs_map[record.pack_name].get("en")
-                or record.pack_name
+            pack_name_display = resolve_label(
+                packs_map[record.pack_name], fallback=record.pack_name
             )
 
         records_data.append(
