@@ -40,15 +40,15 @@ app = FastAPI(title="PTCGP Auto Web")
 static_path = os.path.join(current_dir, "static")
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
+# 多语言初始化（必须在模板初始化之前）
+locales_dir = os.path.join(current_dir, "locales")
+init_i18n(locales_dir)
+
 # 模板初始化
 templates_path = os.path.join(current_dir, "templates")
 templates = init_templates(templates_path)
 templates.env.filters["datetime"] = format_datetime
 templates.env.filters["rarity_display"] = get_rarity_display
-
-# 多语言初始化
-locales_dir = os.path.join(current_dir, "locales")
-init_i18n(locales_dir)
 
 @app.middleware("http")
 async def set_request_lang_context(request, call_next):
