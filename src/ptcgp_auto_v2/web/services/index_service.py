@@ -4,13 +4,10 @@ from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.repositories import CardRepository, NotificationRepository
 from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 def build_index_context(session: Session) -> dict:
     """构建首页渲染所需上下文。"""
-    current_lang, t = get_current_i18n()
-
     rarities = session.exec(select(distinct(Card.rarity)).order_by(Card.rarity)).all()
     rarities = [item for item in rarities if item]
     rarity_order = {
@@ -42,7 +39,6 @@ def build_index_context(session: Session) -> dict:
     notification_repo = NotificationRepository()
     unread_count = notification_repo.count_unread()
 
-    lang_key = "zh" if current_lang.startswith("zh") else "en"
     sets_data = [
         {"code": item.code, "label": parse_json_label(item.label_data)}
         for item in card_sets
@@ -62,8 +58,5 @@ def build_index_context(session: Session) -> dict:
         "elements": elements,
         "card_sets": sets_data,
         "packs": packs_data,
-        "lang_key": lang_key,
-        "t": t,
-        "current_lang": current_lang,
         "unread_count": unread_count,
     }

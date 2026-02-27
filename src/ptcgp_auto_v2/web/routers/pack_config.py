@@ -9,7 +9,7 @@ from ptcgp_auto_v2.web.services.pack_config_service import (
     build_pack_config_context,
     save_account_pack_config,
 )
-from ptcgp_auto_v2.web.services.account_service import get_accounts_context
+from ptcgp_auto_v2.web.services.account_service import build_accounts_context
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
 from ptcgp_auto_v2.web.utils.template_env import get_templates
 
@@ -69,7 +69,7 @@ async def save_account_pack_config_api(
 
     save_account_pack_config(account_id, pack_code, booster_name)
 
-    context = get_accounts_context(session)
+    context = build_accounts_context(session)
     context["request"] = request
     templates = get_templates()
     response = templates.TemplateResponse("partials/account_list.html", context)
