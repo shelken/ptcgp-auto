@@ -4,6 +4,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.record_service import build_records_list_context
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -28,5 +29,4 @@ async def get_records(
     )
     if result.get("stop"):
         return ""
-    from ptcgp_auto_v2.web.utils.response_utils import render_template
     return render_template(request, "partials/record_list.html", result)
