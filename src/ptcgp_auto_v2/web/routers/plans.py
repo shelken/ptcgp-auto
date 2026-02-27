@@ -16,7 +16,6 @@ from ptcgp_auto_v2.web.services.plan_service import (
     delete_plan_by_id,
 )
 from ptcgp_auto_v2.web.utils.i18n import get_current_lang, get_translations
-from ptcgp_auto_v2.web.utils.template_env import get_templates
 
 
 router = APIRouter()
@@ -24,6 +23,7 @@ router = APIRouter()
 
 async def _render_management_plans(
     request: Request,
+    session: Session,
     q: str = "",
     sort_by: str = "id",
     sort_order: str = "asc",
@@ -32,15 +32,15 @@ async def _render_management_plans(
 ):
     """渲染计划管理列表（内部复用，避免 Query 默认对象泄漏）。"""
     context = build_plans_list_context(
+        session=session,
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,
         page_size=page_size,
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/plan_list.html", context)
+    from ptcgp_auto_v2.web.utils.response_utils import render_template
+    return render_template(request, "partials/plan_list.html", context)
 
 
 @router.get("/management/plans", response_class=HTMLResponse)
@@ -51,10 +51,12 @@ async def get_management_plans(
     sort_order: str = Query(default="asc"),
     page: int = Query(default=0),
     page_size: int = Query(default=10),
+    session: Session = Depends(get_fastapi_session),
 ):
     """渲染计划管理列表。"""
     return await _render_management_plans(
         request=request,
+        session=session,
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -98,6 +100,7 @@ async def save_plan(
 
     response = await _render_management_plans(
         request=request,
+        session=session,
         q="",
         sort_by="id",
         sort_order="asc",
@@ -112,11 +115,13 @@ async def save_plan(
 async def delete_plan(
     request: Request,
     plan_id: int,
+    session: Session = Depends(get_fastapi_session),
 ):
     """删除计划。"""
     delete_plan_by_id(plan_id)
     return await _render_management_plans(
         request=request,
+        session=session,
         q="",
         sort_by="id",
         sort_order="asc",

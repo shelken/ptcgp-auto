@@ -3,7 +3,7 @@
 {% set image_base_url = image_sources.proxy_base_url %}
 {% set image_cdn_url = image_sources.cdn_base_url %}
 
-{% for item in records %}
+{% for item in items %}
 <div class="brutal-card p-8 flex flex-col md:flex-row gap-8">
     <!-- Left: Account & Pack Info -->
     <div class="w-full md:w-1/4 flex flex-col justify-between md:border-r-4 border-dashed border-subtle md:border-solid md:border-theme md:pr-8 pb-6 md:pb-0 border-b-4 md:border-b-0"
@@ -118,7 +118,7 @@
 {% endfor %}
 
 <!-- HTMX Infinite Scroll Trigger -->
-{% if records %}
+{% if items %}
 <div hx-get="{{ next_page_url }}"
      hx-trigger="revealed"
      hx-swap="outerHTML"
