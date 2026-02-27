@@ -43,8 +43,10 @@ class SyncPreview:
     """预览阶段统计出的增删改清单。"""
 
     new_set_count: int
+    new_set_codes: list[str]
     new_card_count: int
     new_pack_count: int
+    new_pack_rows: list[tuple[str, str]]
     new_card_pack_link_count: int
     update_rows: list["UpdateRow"]
     delete_rows: list["DeleteRow"]
@@ -466,8 +468,12 @@ def build_sync_payload(
         packs_to_upsert=packs_to_upsert,
         preview=SyncPreview(
             new_set_count=len(new_set_codes),
+            new_set_codes=sorted(new_set_codes),
             new_card_count=len(new_cards),
             new_pack_count=len(new_pack_names),
+            new_pack_rows=sorted(
+                (name, detected_packs[name]) for name in new_pack_names
+            ),
             new_card_pack_link_count=new_card_pack_link_count,
             update_rows=update_rows,
             delete_rows=delete_rows,
@@ -489,8 +495,14 @@ def show_preview(preview: SyncPreview) -> None:
     logger.info("=" * 50)
     logger.info("本次同步变更预览")
     logger.info("新增系列: %s", preview.new_set_count)
+    if preview.new_set_codes:
+        for set_code in preview.new_set_codes:
+            logger.info("  - [card_sets] %s", set_code)
     logger.info("新增卡牌: %s", preview.new_card_count)
     logger.info("新增卡包: %s", preview.new_pack_count)
+    if preview.new_pack_rows:
+        for pack_name, set_code in preview.new_pack_rows:
+            logger.info("  - [packs] %s (set_code=%s)", pack_name, set_code)
     logger.info("新增卡包关联: %s", preview.new_card_pack_link_count)
 
     logger.info("更新明细: %s", len(preview.update_rows))
