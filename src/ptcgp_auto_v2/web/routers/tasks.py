@@ -129,11 +129,10 @@ async def get_reset_completed_modal(
     sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
     parsed_account_id = parse_optional_int(account_id)
 
-    templates = get_templates()
-    return templates.TemplateResponse(
+    return render_template(
+        request,
         "partials/modals/reset_tasks_confirm.html",
         {
-            "request": request,
             "t": t,
             "current_lang": current_lang,
             "selected_status": normalized_status,
