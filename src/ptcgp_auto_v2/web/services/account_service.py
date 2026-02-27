@@ -40,7 +40,8 @@ def _match_account(item: Account, query: str) -> bool:
     )
 
 
-def build_accounts_context(
+def build_accounts_list_context(
+    *,
     session: Session,
     q: str = "",
     sort_by: str = "id",
@@ -78,12 +79,12 @@ def build_accounts_context(
         reverse=(normalized_sort_order == "desc"),
     )
 
-    total_items = len(accounts)
+    total = len(accounts)
     start = normalized_page * normalized_page_size
     end = start + normalized_page_size
     accounts_page = accounts[start:end]
     has_prev = normalized_page > 0
-    has_next = end < total_items
+    has_next = end < total
 
     config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
     all_configs = session.exec(config_stm).all()
@@ -108,7 +109,7 @@ def build_accounts_context(
                 auto_pack_map[account.id] = selected
 
     return {
-        "accounts": accounts_page,
+        "items": accounts_page,
         "pack_configs": pack_configs_map,
         "auto_pack_map": auto_pack_map,
         "q": q,
@@ -118,7 +119,7 @@ def build_accounts_context(
         "page_size": normalized_page_size,
         "has_prev": has_prev,
         "has_next": has_next,
-        "total_items": total_items,
+        "total": total,
     }
 
 

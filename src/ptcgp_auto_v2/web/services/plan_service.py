@@ -1,5 +1,7 @@
 import json
 
+from sqlmodel import Session
+
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
@@ -14,6 +16,8 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
 
 
 def build_plans_list_context(
+    *,
+    session: Session,
     q: str = "",
     sort_by: str = "id",
     sort_order: str = "asc",
@@ -51,21 +55,23 @@ def build_plans_list_context(
         reverse=(normalized_sort_order == "desc"),
     )
 
-    total_items = len(plans)
+    total = len(plans)
     start = normalized_page * normalized_page_size
     end = start + normalized_page_size
     plans_page = plans[start:end]
+    has_prev = normalized_page > 0
+    has_next = end < total
 
     return {
-        "plans": plans_page,
+        "items": plans_page,
         "q": q,
         "sort_by": normalized_sort_by,
         "sort_order": normalized_sort_order,
         "page": normalized_page,
         "page_size": normalized_page_size,
-        "has_prev": normalized_page > 0,
-        "has_next": end < total_items,
-        "total_items": total_items,
+        "has_prev": has_prev,
+        "has_next": has_next,
+        "total": total,
     }
 
 

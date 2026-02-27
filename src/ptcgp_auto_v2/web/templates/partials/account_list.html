@@ -49,7 +49,7 @@
         t.col_target_pack or 'Target Pack',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
     ], t) %}
-        {% for account in accounts %}
+        {% for account in items %}
             {% set nickname_cell %}
                 <div class="space-y-2 account-identity-cell">
                     <div class="font-bold text-base leading-tight">{{ account.nickname or (account.display_name or '-') }}</div>
@@ -180,6 +180,6 @@
 
     {% set account_prev_url = "/management/accounts?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ "&q=" ~ ((q or '')|urlencode) ~ "&sort_by=" ~ (sort_by or 'id') ~ "&sort_order=" ~ (sort_order or 'asc') %}
     {% set account_next_url = "/management/accounts?lang=" ~ current_lang ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ "&q=" ~ ((q or '')|urlencode) ~ "&sort_by=" ~ (sort_by or 'id') ~ "&sort_order=" ~ (sort_order or 'asc') %}
-    {{ data_table_pager(page or 0, has_prev, has_next, account_prev_url, account_next_url, '#management-content', total_items or 0, t) }}
+    {{ data_table_pager(page or 0, has_prev, has_next, account_prev_url, account_next_url, '#management-content', total or 0, t) }}
 {% endcall %}
 {% endcall %}

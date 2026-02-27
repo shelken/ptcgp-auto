@@ -12,14 +12,18 @@ from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
 from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
 
-def build_records_context(
+def build_records_list_context(
+    *,
     session: Session,
-    page: int,
-    page_size: int,
-    rarity: list[str],
-    card_type: list[str],
+    page: int = 0,
+    page_size: int = 10,
+    rarity: list[str] | None = None,
+    card_type: list[str] | None = None,
 ) -> dict[str, Any]:
-    """构建开包记录视图上下文。"""
+    """构建开包记录列表视图上下文（统一列表协议）。"""
+    rarity = rarity or []
+    card_type = card_type or []
+
     results = fetch_records(session, page, page_size, rarity, card_type)
 
     # 空数据时返回停止标记（用于无限滚动）
@@ -34,7 +38,7 @@ def build_records_context(
     packs_map = {item.name: parse_json_label(item.label_data) for item in all_packs}
 
     points_map = fetch_pack_points_map(session, results)
-    records_data = []
+    items = []
 
     for record in results:
         sorted_cards = sorted(record.cards, key=lambda card: card.position)
@@ -68,7 +72,7 @@ def build_records_context(
                 packs_map[record.pack_name], fallback=record.pack_name
             )
 
-        records_data.append(
+        items.append(
             {
                 "record": record,
                 "cards": sorted_cards,
@@ -84,10 +88,19 @@ def build_records_context(
             }
         )
 
-    if not records_data:
+    if not items:
         return {"stop": True}
+
+    # 计算分页信息
+    # 由于 fetch_records 返回的是固定 page_size 的数据，我们需要判断是否有更多数据
+    has_next = len(items) == page_size
+    has_prev = page > 0
 
     return {
         "stop": False,
-        "records": records_data,
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "has_prev": has_prev,
+        "has_next": has_next,
     }
