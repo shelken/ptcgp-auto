@@ -13,7 +13,7 @@
 ] %}
 
 {% set rows_content %}
-    {% for item in tasks %}
+    {% for item in items %}
         {% set account_cell %}
             <div>{{ item.account_name }}</div>
             <div class="text-xs text-muted">#{{ item.account_id }}</div>
@@ -102,12 +102,12 @@
         ]) }}
     {% endfor %}
 
-    {% if tasks|length == 0 and page == 0 %}
+    {% if items|length == 0 and page == 0 %}
         {% set empty_cell = ('<span class="text-muted">' ~ (t.empty_tasks or 'No tasks') ~ '</span>')|safe %}
         {{ table_row([empty_cell] + [''] * (table_headers|length - 1)) }}
     {% endif %}
 
-    {{ data_table_pager_row(table_headers|length, page, has_prev, has_more, prev_page_url, next_page_url, '#task-table-body', t) }}
+    {{ data_table_pager_row(table_headers|length, page, has_prev, has_next, prev_page_url, next_page_url, '#task-table-body', t) }}
 {% endset %}
 
 {% if table_only %}
