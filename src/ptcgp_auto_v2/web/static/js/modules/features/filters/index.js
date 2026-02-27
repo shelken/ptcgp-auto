@@ -1,20 +1,19 @@
 export {
-    serializeFormFilters,
-    applyFormFilters,
-    buildQueryParts,
-    saveFormFilters,
+    saveFilterCache,
+    saveFilterCacheByElement,
+    saveFilterCachesInContext,
+    restoreFilterCachesInContext,
+    restoreAllFilterCaches,
+    clearFilterCacheByFormId,
+    syncSidebarRequestParams,
 } from './shared_form.js';
 
 export {
-    saveFilters,
-    restoreFilters,
     clearFilters,
     refreshRecords,
 } from './records_filters.js';
 
 export {
-    saveOwnedFilters,
-    restoreOwnedFilters,
     clearOwnedFilterGroup,
     toggleOwnedFilterChip,
     toggleOwnedFilterGroup,
@@ -24,10 +23,6 @@ export {
 } from './owned_filters.js';
 
 export {
-    saveTasksFilters,
-    getStoredTasksFilters,
-    applyTasksSidebarRequestParams,
-    restoreTasksFilters,
     updateTaskResetButtonState,
     initTaskSortControls,
 } from './tasks_filters.js';

@@ -2,7 +2,7 @@
 {% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
 
 {% call auto_refresh_container("/management/friendships?lang=" ~ current_lang, '#friendship-state-form', 'outerHTML', 'space-y-6') %}
-<form id="friendship-state-form" class="hidden" hidden>
+<form id="friendship-state-form" class="hidden" hidden data-filter-cache-key="ptcgp_filter:friendships">
     <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
     <input type="hidden" name="from_account_id" value="{{ selected_from_account_id or '' }}">
     <input type="hidden" name="q" value="{{ q or '' }}">
@@ -156,7 +156,8 @@
     <form id="friendship-filter-form"
           hx-get="/management/friendships?lang={{ current_lang }}"
           hx-target="#management-content"
-          hx-swap="innerHTML">
+          hx-swap="innerHTML"
+          data-filter-cache-key="ptcgp_filter:friendships">
         <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
         <input type="hidden" name="from_account_id" value="{{ selected_from_account_id or '' }}">
         <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">

@@ -2,7 +2,7 @@
 {% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
 
 {% call auto_refresh_container("/management/daily-gift?lang=" ~ current_lang, '#daily-gift-state-form', 'outerHTML', 'space-y-6') %}
-<form id="daily-gift-state-form" class="hidden" hidden>
+<form id="daily-gift-state-form" class="hidden" hidden data-filter-cache-key="ptcgp_filter:daily-gift">
     <input type="hidden" name="biz_date_local" value="{{ selected_biz_date_local }}">
 </form>
 
@@ -16,7 +16,8 @@
         data-action="sync-daily-gift-submit"
         hx-get="/management/daily-gift?lang={{ current_lang }}"
         hx-target="#management-content"
-        hx-swap="innerHTML">
+        hx-swap="innerHTML"
+        data-filter-cache-key="ptcgp_filter:daily-gift">
             <input type="hidden" name="sort_by" value="{{ sort_by or 'updated_at' }}">
             <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
             <input type="hidden" name="page" value="0">

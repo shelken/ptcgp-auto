@@ -1,6 +1,6 @@
-import { restoreFilters, restoreOwnedFilters, updateOwnedFilterGroupsState } from './features/filters/index.js';
+import { restoreAllFilterCaches, updateOwnedFilterGroupsState } from './features/filters/index.js';
 import { restoreOwnedGridCols } from './features/owned_cards.js';
-import { restoreTab, currentTabName, syncTaskSidebarRequestUrl } from './tabs.js';
+import { restoreTab, syncManagementSidebarRequestUrls } from './tabs.js';
 import { initTheme } from './theme.js';
 import {
     initLang,
@@ -15,26 +15,17 @@ import { getNotificationDrawer } from './features/notification_panel.js';
 // 导出通知面板管理器供其他模块使用
 export { getNotificationDrawer };
 
-function restoreInitialTabData() {
-    if (currentTabName === 'records') {
-        restoreFilters();
-    }
-    if (currentTabName === 'owned-cards') {
-        restoreOwnedFilters();
-    }
-}
-
 // --- 初始化入口 ---
 export function initApp() {
     document.addEventListener('DOMContentLoaded', () => {
         initLang();
         initTheme();
 
+        restoreAllFilterCaches();
         bindAppEventHandlers(restoreRecordFilterPanelState);
 
-        syncTaskSidebarRequestUrl();
+        syncManagementSidebarRequestUrls();
         restoreTab();
-        restoreInitialTabData();
         updateOwnedFilterGroupsState();
 
         restoreViewMode();

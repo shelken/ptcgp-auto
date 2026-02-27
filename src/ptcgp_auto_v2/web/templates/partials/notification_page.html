@@ -86,7 +86,7 @@
 
 {% macro render_notification_list(t, current_lang, notifications, total, page, page_size, has_prev, has_next, selected_scene, selected_account_id, selected_is_read, q, sort_by, sort_order, unread_count, scene_options, accounts, account_name_map) %}
 {% call data_table_card(t.page_notifications or 'Notifications') %}
-<form id="notification-filter-form" hx-get="/management/notifications/list?lang={{ current_lang }}" hx-target="#notification-panel" hx-swap="outerHTML">
+<form id="notification-filter-form" hx-get="/management/notifications/list?lang={{ current_lang }}" hx-target="#notification-panel" hx-swap="outerHTML" data-filter-cache-key="ptcgp_filter:notifications">
     <input type="hidden" name="page" value="0">
     <input type="hidden" name="page_size" value="{{ page_size or 10 }}">
     <input type="hidden" name="sort_by" value="{{ sort_by or 'created_at' }}">

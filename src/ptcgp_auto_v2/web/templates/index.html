@@ -202,6 +202,7 @@
                       hx-target="#records-container"
                       hx-swap="innerHTML"
                       class="space-y-4"
+                      data-filter-cache-key="ptcgp_filter:records"
                       data-action="save-record-filters">
 
                     <!-- Rarity Filter -->
@@ -289,6 +290,7 @@
                               hx-target="#owned-cards-container"
                               hx-swap="innerHTML"
                               class="space-y-4"
+                              data-filter-cache-key="ptcgp_filter:owned-cards"
                               data-action="save-owned-filters">
 
                             <div>
@@ -524,6 +526,9 @@
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/tasks?lang={{ current_lang }}"
                                     hx-target="#management-content"
+                                    data-base-url="/management/tasks?lang={{ current_lang }}"
+                                    data-filter-cache-key="ptcgp_filter:tasks"
+                                    data-filter-param-keys="status,task_type,account_id,sort_by,sort_order,page,page_size"
                                     data-hash="tasks"
                                     data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_tasks or 'TASKS' }}">
@@ -536,6 +541,9 @@
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/metadata?lang={{ current_lang }}"
                                     hx-target="#management-content"
+                                    data-base-url="/management/metadata?lang={{ current_lang }}"
+                                    data-filter-cache-key="ptcgp_filter:metadata"
+                                    data-filter-param-keys="ui_step,selected_node_type,selected_node_id,selected_set_code,selected_pack_name,current_action"
                                     data-hash="metadata"
                                     data-action="update-sidebar-state"
                                     aria-label="{{ t.menu_metadata or 'METADATA' }}">
