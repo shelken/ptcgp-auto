@@ -7,13 +7,25 @@ from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 _templates: Jinja2Templates | None = None
 
 
-def _template_context_processor() -> dict:
-    """全局模板上下文注入 - 自动提供 t 和 current_lang"""
-    current_lang, t = get_current_i18n()
-    return {
-        "t": t,
-        "current_lang": current_lang,
-    }
+class _LazyI18nContext:
+    """延迟加载的 i18n 上下文，每次访问时重新计算"""
+
+    def __init__(self):
+        self._t = None
+        self._current_lang = None
+
+    def keys(self):
+        return ["t", "current_lang"]
+
+    def __getitem__(self, key):
+        if key == "t":
+            return get_current_i18n()[1]
+        if key == "current_lang":
+            return get_current_i18n()[0]
+        raise KeyError(key)
+
+    def __iter__(self):
+        return iter(self.keys())
 
 
 def init_templates(templates_path: str) -> Jinja2Templates:
@@ -21,8 +33,8 @@ def init_templates(templates_path: str) -> Jinja2Templates:
     global _templates
     _templates = Jinja2Templates(directory=templates_path)
     _templates.env.globals["build_card_image_bases"] = build_card_image_bases
-    # 注册全局上下文处理器，自动注入 t 和 current_lang
-    _templates.env.globals.update(_template_context_processor())
+    # 注册全局上下文处理器，自动注入 t 和 current_lang（延迟计算）
+    _templates.env.globals.update(_LazyI18nContext())
     return _templates
 
 
