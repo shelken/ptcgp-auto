@@ -42,6 +42,11 @@ PACK_CROP_RATIO = (0.18, 0.23, 0.82, 0.60)
 # 目标宽度（与旧手动模板一致 513px）
 TARGET_WIDTH = 513
 
+# 标准卡包图片尺寸（用于计算比例）
+# 来源: GitHub 上的标准卡包图片尺寸为 160x256
+STANDARD_PACK_WIDTH = 160
+STANDARD_PACK_HEIGHT = 256
+
 
 class PackImageManager:
     """
@@ -199,6 +204,10 @@ class PackImageManager:
         """
         裁剪图片，去除边框
 
+        通用处理逻辑：
+        1. 如果图片比例不符合标准（160:256），先从中心裁剪出标准比例的区域
+        2. 然后应用 PACK_CROP_RATIO 进行最终裁剪
+
         Args:
             img: 原始图片
 
@@ -206,6 +215,24 @@ class PackImageManager:
             裁剪后的图片（RGB 模式，不含透明通道）
         """
         w, h = img.size
+        current_ratio = w / h
+        standard_ratio = STANDARD_PACK_WIDTH / STANDARD_PACK_HEIGHT
+
+        # 如果比例不匹配（有额外边框），先从中心裁剪出标准比例的区域
+        if abs(current_ratio - standard_ratio) > 0.01:  # 允许 1% 误差
+            if current_ratio > standard_ratio:
+                # 图片太宽，从左右裁剪
+                new_width = int(h * standard_ratio)
+                left = (w - new_width) // 2
+                right = left + new_width
+                img = img.crop((left, 0, right, h))
+            else:
+                # 图片太高，从上下裁剪（理论上不应该出现）
+                new_height = int(w / standard_ratio)
+                top = (h - new_height) // 2
+                bottom = top + new_height
+                img = img.crop((0, top, w, bottom))
+            w, h = img.size
 
         left = int(w * PACK_CROP_RATIO[0])
         top = int(h * PACK_CROP_RATIO[1])
