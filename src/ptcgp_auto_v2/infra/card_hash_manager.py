@@ -321,6 +321,7 @@ class CardHashManager:
         target_hash: np.ndarray,
         set_code: Optional[str] = None,
         topk: int = TOPK_CANDIDATES,
+        exclude_promo: bool = False,
     ) -> List[Tuple[str, int, float, np.ndarray]]:
         """
         查找TopK最佳匹配候选（用于两阶段匹配的第一阶段）
@@ -329,6 +330,7 @@ class CardHashManager:
             target_hash: 目标Hash值
             set_code: 指定系列代码，为None则全局搜索
             topk: 返回候选数量（默认从 constants 导入）
+            exclude_promo: 全局模式时是否排除 PROMO 系列
 
         Returns:
             List[(set_code, card_number, similarity, hash_array), ...]
@@ -337,9 +339,19 @@ class CardHashManager:
         # 获取待匹配的hash集合
         if set_code is None:
             # 全局模式
-            if not self._all_loaded:
-                self.load_all_hashes()
-            source = self._global_cache
+            # exclude_promo=True 时，避免触发包含 PROMO 的全量加载
+            if exclude_promo:
+                if not self._global_cache:
+                    self.load_all_hashes(exclude_promo=True)
+                source = {
+                    key: hash_arr
+                    for key, hash_arr in self._global_cache.items()
+                    if not key.split("/", 1)[0].upper().startswith("PROMO")
+                }
+            else:
+                if not self._all_loaded:
+                    self.load_all_hashes()
+                source = self._global_cache
             # 转换格式: "A1/001" -> (set_code, number, hash)
             items = [
                 (key.split("/")[0], int(key.split("/")[1]), hash_arr)
