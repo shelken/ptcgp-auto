@@ -19,7 +19,6 @@ from .exchange_card_request import ExchangeCardRequest
 from .base import TimestampMixin
 from .notification import Notification
 from .notification_config import NotificationConfig
-from .metadata_sync_snapshot import MetadataSyncSnapshot
 from .pack_record import PackRecord
 from .pack_card import PackCard
 from .task_instance import TaskInstance
@@ -45,7 +44,6 @@ __all__ = [
     "AccountCard",
     "Notification",
     "NotificationConfig",
-    "MetadataSyncSnapshot",
     "Card",
     "CardSet",
     "CardPack",
