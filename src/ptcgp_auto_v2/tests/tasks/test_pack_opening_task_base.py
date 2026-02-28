@@ -245,6 +245,9 @@ class TestPackOpeningTaskBaseRecognize:
                 def get_pack_record_type(self):
                     return "test"
 
+                def get_rare_card_notify_message(self):
+                    return "测试获得稀有卡牌"
+
                 def is_completed(self):
                     return False
 
@@ -306,6 +309,9 @@ class TestPackOpeningTaskBaseRecognize:
             class ConcreteTestTask(PackOpeningTaskBase):
                 def get_pack_record_type(self):
                     return "test"
+
+                def get_rare_card_notify_message(self):
+                    return "测试获得稀有卡牌"
 
                 def is_completed(self):
                     return False
@@ -387,6 +393,9 @@ class TestPackOpeningTaskBaseRealBehavior:
                 def get_pack_record_type(self):
                     return "test"
 
+                def get_rare_card_notify_message(self):
+                    return "测试获得稀有卡牌"
+
                 def is_completed(self):
                     return False
 
@@ -430,6 +439,9 @@ class TestPackOpeningTaskBaseRealBehavior:
                 def get_pack_record_type(self):
                     return "test"
 
+                def get_rare_card_notify_message(self):
+                    return "测试获得稀有卡牌"
+
                 def is_completed(self):
                     return False
 
@@ -449,6 +461,53 @@ class TestPackOpeningTaskBaseRealBehavior:
             task.card_recognizer.scan.assert_called_with(
                 set_code="A1", similarity_threshold=0.68, debug=True
             )
+
+
+class TestPackOpeningTaskBaseNotifyMessage:
+    """稀有卡通知消息来源标记测试"""
+
+    def test_notify_message_uses_chinese_source_message(self):
+        """测试通知消息使用中文来源文案，而非 pack_type 英文值"""
+        from unittest.mock import Mock, patch
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "ptcgp_auto_v2.infra.model_manager": Mock(),
+                "ptcgp_auto_v2.infra.card_hash_manager": Mock(),
+                "ptcgp_auto_v2.infra.notifier": Mock(),
+            },
+        ):
+            from ptcgp_auto_v2.tasks.pack_opening_task_base import (
+                PackOpeningTaskBase,
+            )
+
+            class ConcreteTask(PackOpeningTaskBase):
+                def get_pack_record_type(self):
+                    return "daily_free"
+
+                def get_rare_card_notify_message(self):
+                    return "开包获得稀有卡牌"
+
+                def is_completed(self):
+                    return False
+
+                def handle_page(self, page_name, page_info):
+                    return None
+
+            task = object.__new__(ConcreteTask)
+            message = task.get_rare_card_notify_message()
+
+            # 验证返回中文文案，不含英文 pack_type
+            assert message in {
+                "开包获得稀有卡牌",
+                "礼物获得稀有卡牌",
+                "新手开包获得稀有卡牌",
+            }
+            # 确保不包含英文 pack_type 值
+            assert "daily_free" not in message
+            assert "gift_box" not in message
+            assert "init_tutorial" not in message
 
 
 if __name__ == "__main__":

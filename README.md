@@ -199,6 +199,7 @@ ptcgp-auto/
 │   ├── ptcgp_auto_v2/          # v2 核心代码
 │   │   ├── core/               # 核心框架 (调度器、执行器、任务基类)
 │   │   ├── tasks/              # 任务实现 (开包、送卡、交换等)
+│   │   │   ├── pack_opening_task_base.py  # 统一开包流程基类
 │   │   │   └── utils/          # 任务级共用逻辑
 │   │   ├── hooks/              # Hook 实现
 │   │   ├── services/           # 业务服务层
