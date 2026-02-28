@@ -181,6 +181,11 @@ class PackOpeningTaskBase(Task):
         """
         raise NotImplementedError("子类必须实现 get_pack_record_type 方法")
 
+    @abstractmethod
+    def get_rare_card_notify_message(self) -> str:
+        """获取稀有卡通知消息（中文来源标记），如：开包获得稀有卡牌"""
+        raise NotImplementedError("子类必须实现 get_rare_card_notify_message 方法")
+
     # ============================================================
     # 内部方法
     # ============================================================
@@ -332,7 +337,7 @@ class PackOpeningTaskBase(Task):
                 rows=rows,
                 account=self.account,
                 notifier=get_notifier(),
-                notify_message=f"{self.get_pack_record_type()}获得稀有卡牌",
+                notify_message=self.get_rare_card_notify_message(),
             )
         except Exception as e:
             logger.warning(f"保存高稀有度卡牌并通知失败: {e}")
