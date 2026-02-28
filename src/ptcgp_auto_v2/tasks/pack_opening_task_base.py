@@ -18,6 +18,7 @@ import time
 from abc import abstractmethod
 from typing import TYPE_CHECKING
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     Task,
@@ -28,7 +29,6 @@ from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.booster_inference import (
-    infer_pack_by_templates,
     infer_pack_by_cards,
 )
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
@@ -39,12 +39,12 @@ from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
     tap_opening_continue,
 )
 from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
-from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
     quick_tap,
     tap_center,
     tap_matched_element,
 )
+from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (
@@ -147,7 +147,6 @@ class PackOpeningTaskBase(Task):
 
         # 子包推断会话状态（单次开包生命周期）
         self._inferred_pack_context: dict[str, str] | None = None
-        self._loaded_dynamic_pack_templates: list[str] = []
 
     # ============================================================
     # 扩展点（子类覆写）
@@ -308,8 +307,8 @@ class PackOpeningTaskBase(Task):
             fixed_set_code=set_code,
         )
 
-        # 第二阶段：卡牌反推子包（兜底）
-        if self._inferred_pack_context is None and rows:
+        # 第二阶段：卡牌反推子包（仅在当前无目标包上下文时兜底）
+        if self.get_target_pack_context() is None and rows:
             inferred = self._infer_pack_by_cards(rows)
             if inferred:
                 self._inferred_pack_context = inferred
@@ -442,22 +441,22 @@ class PackOpeningTaskBase(Task):
     def _clear_pack_inference_session(self):
         """清理子包推断会话资源。
 
-        卸载动态加载的模板并清理推断上下文。
-        在落库成功后调用，防止模板常驻内存。
+        清理推断上下文，并通过资源管理器卸载已加载模板。
         """
         try:
-            template_matcher = self.recognizer[1] if self.recognizer else None
-            if template_matcher and self._loaded_dynamic_pack_templates:
-                template_matcher.unload_templates(self._loaded_dynamic_pack_templates)
-                logger.debug(
-                    f"[子包推断] 已卸载 {len(self._loaded_dynamic_pack_templates)} 个动态模板"
+            recognizer = getattr(self, "recognizer", None)
+            if recognizer:
+                _, template_matcher = recognizer
+                removed = PackImageManager().unload_loaded_booster_templates(
+                    template_matcher
                 )
-                self._loaded_dynamic_pack_templates.clear()
-
+                if removed:
+                    logger.debug(f"[子包推断] 已卸载 {removed} 个模板")
+        except Exception as e:
+            logger.warning(f"[子包推断] 清理模板资源失败: {e}")
+        finally:
             self._inferred_pack_context = None
             logger.debug("[子包推断] 会话上下文已清理")
-        except Exception as e:
-            logger.warning(f"[子包推断] 清理会话资源失败: {e}")
 
     def _preload_target_series_hash(self):
         """后台预加载目标系列 Hash"""
@@ -485,13 +484,12 @@ class PackOpeningTaskBase(Task):
         )
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
-        """滑动开包（第一阶段：模板推断）"""
+        """滑动开包。"""
         self._packs_opened_count += 1
         self._result_recognized = False
 
-        # 仅在无子包上下文时尝试推断
-        if self._inferred_pack_context is None:
-            inferred = self._try_infer_pack_on_swipe()
+        if self.get_target_pack_context() is None:
+            inferred = self._infer_pack_on_swipe()
             if inferred:
                 self._inferred_pack_context = inferred
                 logger.info(
@@ -500,89 +498,45 @@ class PackOpeningTaskBase(Task):
 
         return swipe_open_pack(self.adb, wait=2.5)
 
-    def _try_infer_pack_on_swipe(self) -> dict[str, str] | None:
-        """在滑动页尝试通过模板匹配推断子包（第一阶段）。
-
-        流程：
-        1. 从仓储获取所有非 PROMO 子包作为候选
-        2. 批量加载 packs_auto 模板（仅加载一次）
-        3. 在当前页面做多尺度匹配
-        4. 返回最佳匹配的子包信息
-
-        Returns:
-            {"pack_code": str, "booster_name": str, "source": "template", "score": float}
-            或 None（无有效匹配）
-        """
+    def _infer_pack_on_swipe(self) -> dict[str, str] | None:
+        """第一阶段：滑动页模板推断。"""
         if not self._card_repo:
             self._init_repositories()
 
-        try:
-            # 获取所有非 PROMO 子包作为候选
-            all_packs = self._card_repo.get_all_packs() if self._card_repo else []
-            candidates = []
-            for pack in all_packs:
-                if pack.name.upper().startswith("PROMO"):
-                    continue
-                # 规范化模板文件名，避免空格/符号导致加载失败
-                normalized_name = normalize_name_str(pack.name)
-                candidates.append(
-                    {
-                        "pack_code": pack.set_code,
-                        "booster_name": pack.name,
-                        "template": f"packs_auto/{normalized_name}",
-                    }
-                )
-
-            if not candidates:
-                logger.debug("[子包推断] 无可用候选子包")
-                return None
-
-            # 批量加载模板（仅加载一次）
-            template_matcher = self.recognizer[1] if self.recognizer else None
-            if not template_matcher:
-                logger.debug("[子包推断] 模板匹配器不可用")
-                return None
-
-            if not self._loaded_dynamic_pack_templates:
-                for candidate in candidates:
-                    template_name = candidate["template"]
-                    if template_matcher.load_template(template_name + ".png"):
-                        self._loaded_dynamic_pack_templates.append(template_name)
-
-                if not self._loaded_dynamic_pack_templates:
-                    logger.debug("[子包推断] 无法加载任何模板")
-                    return None
-
-                logger.debug(
-                    f"[子包推断] 已加载 {len(self._loaded_dynamic_pack_templates)} 个模板"
-                )
-
-            # 截图并多尺度匹配
-            screenshot = self.adb.screenshot()
-            if not screenshot:
-                return None
-
-            def matcher_fn(template_name: str) -> dict | None:
-                # 尝试多尺度匹配
-                for scale in [0.95, 1.0, 1.05]:
-                    match = template_matcher.find_with_scale(
-                        screenshot, template_name, scale, threshold=0.60
-                    )
-                    if match:
-                        return {"score": match.confidence, "box": match.box}
-                return None
-
-            result = infer_pack_by_templates(
-                candidate_templates=candidates,
-                matcher_fn=matcher_fn,
-                threshold=0.65,
-            )
-
-            return result
-
-        except Exception as e:
-            logger.warning(f"[子包推断-滑动页] 推断失败: {e}")
+        if not self.recognizer:
             return None
+
+        screenshot = self.adb.screenshot()
+        if not screenshot:
+            return None
+
+        settings = get_settings()
+        target_set_code = self._resolve_scan_set_code()
+        manager = PackImageManager()
+        _, template_matcher = self.recognizer
+
+        for pack in self._card_repo.get_all_packs() if self._card_repo else []:
+            if target_set_code and pack.set_code != target_set_code:
+                continue
+            if pack.name.upper().startswith("PROMO"):
+                continue
+            if not manager.ensure_template_ready(template_matcher, pack.name):
+                continue
+
+            template_name = manager.get_template_name(pack.name)
+            match = template_matcher.find_with_scale(
+                screenshot, template_name,
+                scale=settings.scale_pack_opening_swipe, 
+                threshold=settings.pack_template_threshold,
+            )
+            if match:
+                return {
+                    "pack_code": pack.set_code,
+                    "booster_name": pack.name,
+                    "source": "template",
+                }
+
+        return None
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """长按跳过卡牌展示"""

@@ -101,8 +101,8 @@ class TestRealResolveScanSetCode:
 class TestRealClearPackInferenceSession:
     """测试真实基类的 _clear_pack_inference_session 方法"""
 
-    def test_clears_context_and_unloads_templates(self, pack_opening_base):
-        """清理上下文并卸载模板"""
+    def test_clears_context(self, pack_opening_base):
+        """清理上下文"""
 
         class TestTask(pack_opening_base):
             def get_pack_record_type(self):
@@ -119,30 +119,11 @@ class TestRealClearPackInferenceSession:
 
         task = object.__new__(TestTask)
         task._inferred_pack_context = {"pack_code": "A2", "booster_name": "Mewtwo"}
-        task._loaded_dynamic_pack_templates = [
-            "packs_auto/Mewtwo",
-            "packs_auto/Charizard",
-        ]
-
-        # Mock recognizer (ocr, template_matcher)
-        mock_matcher = Mock()
-        task.recognizer = (Mock(), mock_matcher)
-
-        # 验证设置正确
-        assert task._loaded_dynamic_pack_templates == [
-            "packs_auto/Mewtwo",
-            "packs_auto/Charizard",
-        ]
 
         task._clear_pack_inference_session()
 
-        # 验证模板被卸载（方法内部会在清空列表前读取值）
-        assert mock_matcher.unload_templates.called
-        assert mock_matcher.unload_templates.call_count == 1
         # 验证上下文被清理
         assert task._inferred_pack_context is None
-        # 验证模板列表被清空（如果方法正常工作，应该已被清空）
-        assert task._loaded_dynamic_pack_templates == []
 
 
 class TestRealFinalizePackSession:
