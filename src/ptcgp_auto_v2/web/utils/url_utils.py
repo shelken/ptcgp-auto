@@ -25,9 +25,7 @@ def build_page_url(
     """
     query_params = {**(params or {}), "page": page}
     # 过滤掉 None 值
-    filtered_params = {
-        k: v for k, v in query_params.items() if v is not None
-    }
+    filtered_params = {k: v for k, v in query_params.items() if v is not None}
     if filtered_params:
         return f"{base_path}?{urlencode(filtered_params)}"
     return base_path
@@ -75,56 +73,3 @@ def build_tasks_page_url(
             query_parts.append(f"task_type={t}")
 
     return f"/api/tasks?{'&'.join(query_parts)}"
-
-
-def build_owned_cards_next_page_url(
-    page: int,
-    lang: str,
-    sort_by: str,
-    account_id: int | None,
-    rarity: list[str],
-    card_type: list[str],
-    set_code: list[str],
-    pack_name: list[str],
-    element: list[str],
-) -> str:
-    """构建拥有卡牌分页 URL。
-
-    Args:
-        page: 页码
-        lang: 语言
-        sort_by: 排序字段
-        account_id: 账号 ID
-        rarity: 稀有度筛选列表
-        card_type: 卡牌类型筛选列表
-        set_code: 系列代码筛选列表
-        pack_name: 卡包名称筛选列表
-        element: 元素筛选列表
-
-    Returns:
-        完整的 URL 字符串
-    """
-    params: list[tuple[str, str]] = [
-        ("page", str(page)),
-        ("lang", lang),
-        ("sort_by", sort_by),
-    ]
-    if account_id is not None:
-        params.append(("account_id", str(account_id)))
-    for r in rarity:
-        if r:
-            params.append(("rarity", r))
-    for ct in card_type:
-        if ct:
-            params.append(("card_type", ct))
-    for sc in set_code:
-        if sc:
-            params.append(("set_code", sc))
-    for pn in pack_name:
-        if pn:
-            params.append(("pack_name", pn))
-    for e in element:
-        if e:
-            params.append(("element", e))
-
-    return f"/api/owned-cards?{urlencode(params)}"
