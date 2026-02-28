@@ -300,39 +300,43 @@ class ClaimRewardsTask(Task):
     def _try_claim_buttons(
         self, ocr_results: list[dict], screenshot
     ) -> ActionResult | None:
-        """固定顺序点击：先全部领取，再领取/达成。"""
-        wait = 0.8
-        claim_all_patterns = get_text_patterns("reward_claim_all")
+        """尝试点击可领取的按钮（全部領取/領取/達成）
+
+        注意：只有"全部領取"按钮需要颜色检查（避免点击置灰按钮），
+        其他按钮（領取/達成）直接点击，不需要颜色检查。
+        """
         claim_patterns = get_text_patterns("reward_claim_buttons")
+        # 需要颜色检查的模式（全部領取的多语言版本）
+        color_check_patterns = get_text_patterns("reward_claim_all")
 
-        normalized_claim_all = {
-            "".join(pattern.lower().split()) for pattern in claim_all_patterns
-        }
-        single_claim_patterns = [
-            pattern
-            for pattern in claim_patterns
-            if "".join(pattern.lower().split()) not in normalized_claim_all
-        ]
+        wait = 0.8
+        for pattern in claim_patterns:
+            for item in ocr_results:
+                text = "".join(item["text"].lower().split())
+                if "".join(pattern.lower().split()) == text:
+                    box = item["box"]
 
-        claim_all_result = tap_text(
-            self.adb,
-            ocr_results,
-            claim_all_patterns,
-            wait=0.0,
-            exact=True,
-        )
-        single_result = tap_text(
-            self.adb,
-            ocr_results,
-            single_claim_patterns,
-            wait=wait,
-            exact=True,
-        )
+                    # 检查是否是"全部領取"，需要进行颜色检查
+                    normalized_pattern = "".join(pattern.lower().split())
+                    is_claim_all = any(
+                        normalized_pattern == "".join(cp.lower().split())
+                        for cp in color_check_patterns
+                    )
 
-        if single_result:
-            return single_result
-        if claim_all_result:
-            return ActionResult.ok(wait=wait)
+                    if is_claim_all:
+                        # 全部領取需要颜色检查
+                        if screenshot and is_button_clickable(
+                            screenshot, box, threshold=0.3
+                        ):
+                            logger.debug(f"  -> 点击全部领取按钮: {pattern}")
+                            return tap_box(self.adb, box, wait=wait)
+                        else:
+                            logger.debug(f"  -> 全部领取按钮 {pattern} 已置灰，跳过")
+                    else:
+                        # 其他按钮（領取/達成）直接点击，不需要颜色检查
+                        logger.debug(f"  -> 点击领取按钮: {pattern}")
+                        return tap_box(self.adb, box, wait=wait)
+
         return None
 
     def _handle_theme_collection(self, page_info: dict) -> ActionResult:
