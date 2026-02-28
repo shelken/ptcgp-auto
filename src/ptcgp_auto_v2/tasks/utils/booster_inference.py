@@ -14,55 +14,6 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-
-def infer_pack_by_templates(
-    *,
-    candidate_templates: list[dict],
-    matcher_fn: Callable[[str], Optional[dict]],
-    threshold: float = 0.65,
-) -> Optional[dict]:
-    """通过模板匹配推断子包（第一阶段）。
-
-    遍历所有候选模板，使用 matcher_fn 计算匹配分数，
-    返回超过阈值且分数最高的子包。
-
-    Args:
-        candidate_templates: 候选模板列表，每项包含 pack_code, booster_name, template
-        matcher_fn: 匹配函数，接收模板名，返回 {"score": float, "box": tuple} 或 None
-        threshold: 匹配阈值，默认 0.65
-
-    Returns:
-        推断结果 {"pack_code": str, "booster_name": str, "source": "template", "score": float}
-        或 None（无有效匹配）
-    """
-    if not candidate_templates:
-        return None
-
-    best_match = None
-    best_score = 0.0
-
-    for candidate in candidate_templates:
-        template_name = candidate.get("template", "")
-        if not template_name:
-            continue
-
-        match_result = matcher_fn(template_name)
-        if not match_result:
-            continue
-
-        score = match_result.get("score", 0.0)
-        if score >= threshold and score > best_score:
-            best_score = score
-            best_match = {
-                "pack_code": candidate["pack_code"],
-                "booster_name": candidate["booster_name"],
-                "source": "template",
-                "score": score,
-            }
-
-    return best_match
-
-
 def infer_pack_by_cards(
     *,
     detected_rows: list[dict],
