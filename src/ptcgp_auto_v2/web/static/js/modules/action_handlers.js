@@ -18,6 +18,7 @@ import { cancelExchangeForm, searchExchangeAccounts, showExchangeForm } from './
 import { setLang, setViewMode, toggleRecordFilterPanel } from './ui_preferences.js';
 import { getNotificationDrawer } from './features/notification_panel.js';
 
+
 function toggleSection(sectionId, iconId = null) {
     if (!sectionId) return;
     const section = document.getElementById(sectionId);
