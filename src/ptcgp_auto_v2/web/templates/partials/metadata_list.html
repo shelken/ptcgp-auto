@@ -10,7 +10,7 @@
     {% set selected_card = selected_card_key or '' %}
     {% set pack_cards = selected_pack_cards or [] %}
     {% set step = ui_step or 1 %}
-    {% set current_action_value = current_action or 'sync_supplement' %}
+    {% set current_action_value = current_action or 'update_new_series' %}
     {% set selected_snapshot_id = snapshot_id or '' %}
 
     <form id="metadata-state-form" hidden data-filter-cache-key="ptcgp_filter:metadata" data-restore-url="/management/metadata" data-restore-params="ui_step,selected_node_type,selected_node_id,selected_set_code,selected_pack_name,current_action,snapshot_id" data-restore-check-params="ui_step,selected_node_type,selected_set_code,snapshot_id">
@@ -86,7 +86,7 @@
                             <input type="hidden" name="node_id" value="all">
                             <input type="hidden" name="selected_set_code" value="">
                             <input type="hidden" name="selected_pack_name" value="">
-                            <input type="hidden" name="current_action" value="sync_supplement">
+                            <input type="hidden" name="current_action" value="{{ current_action_value }}">
                             <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
                             <button type="submit" class="w-full text-left px-2 py-1 border {% if node_type == 'root' %}border-theme bg-surface font-bold{% else %}border-subtle-light{% endif %}">
                                 {{ t.metadata_node_all or '全部' }}
@@ -99,7 +99,7 @@
                             <input type="hidden" name="node_id" value="{{ set.code }}">
                             <input type="hidden" name="selected_set_code" value="{{ set.code }}">
                             <input type="hidden" name="selected_pack_name" value="">
-                            <input type="hidden" name="current_action" value="sync_supplement">
+                            <input type="hidden" name="current_action" value="{{ current_action_value }}">
                             <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
                             <button type="submit" class="w-full text-left px-2 py-1 border font-mono {% if selected_set == set.code and node_type == 'set' %}border-theme bg-surface font-bold{% else %}border-subtle-light{% endif %}">
                                 {{ set.code }} - {{ set.display_name }}
@@ -120,7 +120,7 @@
                                 <input type="hidden" name="node_id" value="{{ pack.name }}">
                                 <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
                                 <input type="hidden" name="selected_pack_name" value="{{ pack.name }}">
-                                <input type="hidden" name="current_action" value="structure_supplement">
+                                <input type="hidden" name="current_action" value="{{ current_action_value }}">
                                 <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
                                 <button type="submit" class="w-full text-left px-2 py-1 border {% if selected_pack == pack.name and node_type == 'pack' %}border-theme bg-surface font-bold{% else %}border-subtle-light{% endif %}">
                                     {{ pack.display_name }}
@@ -144,7 +144,7 @@
                                 <input type="hidden" name="node_id" value="{{ card.key }}">
                                 <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
                                 <input type="hidden" name="selected_pack_name" value="{{ selected_pack }}">
-                                <input type="hidden" name="current_action" value="structure_force">
+                                <input type="hidden" name="current_action" value="{{ current_action_value }}">
                                 <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
                                 <button type="submit" class="w-full text-left px-2 py-1 border text-sm {% if selected_card == card.key and node_type == 'card' %}border-theme bg-surface font-bold{% else %}border-subtle-light{% endif %}">
                                     {{ card.key }} {{ card.display_name }}
@@ -164,64 +164,36 @@
             <div class="text-sm mb-2">{{ t.metadata_node_type or '类型' }}: <span class="font-bold">{{ node_type }}</span></div>
             <div class="text-sm mb-4">ID: <span class="font-mono">{{ node_id }}</span></div>
 
-            <form hx-get="/management/metadata?lang={{ current_lang }}"
-                  hx-target="#metadata-sync-root"
-                  hx-swap="outerHTML">
-                <input type="hidden" name="ui_step" value="2">
-                <input type="hidden" name="selected_node_type" value="{{ node_type }}">
-                <input type="hidden" name="selected_node_id" value="{{ node_id }}">
-                <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
-                <input type="hidden" name="selected_pack_name" value="{{ selected_pack }}">
-                <input type="hidden" name="current_action" value="{{ current_action_value }}">
-                <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
-                <button type="submit" class="brutal-btn w-full text-sm px-4 py-2">{{ t.metadata_next_preview or '下一步：预览该对象' }}</button>
-            </form>
+            {% set action_cards = available_action_cards or [] %}
+            <div class="mb-3 text-xs font-bold uppercase tracking-widest text-muted">{{ t.metadata_action_panel_title or '当前节点动作' }}</div>
+            <div class="text-xs text-muted mb-3">{{ t.metadata_step1_hint or 'Step1 仅生成预览；执行操作在 Step3 进行确认。' }}</div>
+            <div id="metadata-preview-loading" class="htmx-indicator text-xs text-muted mb-3">{{ t.metadata_preview_loading or '正在生成预览，请稍候（中文全量首次会较慢）...' }}</div>
 
-            <form class="mt-3"
-                  hx-post="/api/metadata/sync/preview?lang={{ current_lang }}"
-                  hx-target="#metadata-sync-root"
-                  hx-swap="outerHTML">
-                <input type="hidden" name="ui_step" value="2">
-                <input type="hidden" name="node_type" value="{{ node_type }}">
-                <input type="hidden" name="node_id" value="{{ node_id }}">
-                <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
-                <input type="hidden" name="selected_pack_name" value="{{ selected_pack }}">
-                <input type="hidden" name="current_action" value="{{ current_action_value }}">
-                <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
-                <input type="hidden" name="action" value="{{ current_action_value }}">
-                <input type="hidden" name="force_refresh" value="0">
-                <button type="submit" class="brutal-btn w-full text-sm px-4 py-2">{{ t.metadata_generate_preview_now or '直接生成预览' }}</button>
-            </form>
-
-            <form class="mt-3"
-                  hx-post="/api/metadata/sync/preview?lang={{ current_lang }}"
-                  hx-target="#metadata-sync-root"
-                  hx-swap="outerHTML">
-                <input type="hidden" name="ui_step" value="2">
-                <input type="hidden" name="node_type" value="{{ node_type }}">
-                <input type="hidden" name="node_id" value="{{ node_id }}">
-                <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
-                <input type="hidden" name="selected_pack_name" value="{{ selected_pack }}">
-                <input type="hidden" name="current_action" value="{{ current_action_value }}">
-                <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
-                <input type="hidden" name="action" value="{{ current_action_value }}">
-                <input type="hidden" name="force_refresh" value="1">
-                <button type="submit" class="brutal-btn w-full text-sm px-4 py-2">{{ t.metadata_generate_preview_force_refresh or '强制刷新并生成预览' }}</button>
-            </form>
-
-            <form class="mt-3"
-                  hx-post="/api/metadata/sync/execute?lang={{ current_lang }}"
-                  hx-target="#metadata-sync-root"
-                  hx-swap="outerHTML">
-                <input type="hidden" name="ui_step" value="3">
-                <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
-                <input type="hidden" name="node_type" value="{{ node_type }}">
-                <input type="hidden" name="node_id" value="{{ node_id }}">
-                <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
-                <input type="hidden" name="selected_pack_name" value="{{ selected_pack }}">
-                <input type="hidden" name="current_action" value="{{ current_action_value }}">
-                <button type="submit" class="brutal-btn w-full text-sm px-4 py-2" {% if not selected_snapshot_id %}disabled{% endif %}>{{ t.metadata_execute_disabled or '执行（需先预览）' }}</button>
-            </form>
+            {% for action_card in action_cards %}
+            <div class="border-2 border-subtle p-3 mb-3 bg-surface">
+                <div class="text-xs font-bold uppercase tracking-widest text-muted mb-2">{{ t.get(action_card.get('title_key')) or action_card.get('title_fallback') }}</div>
+                <div class="grid grid-cols-1 {% if (action_card.get('buttons') or [])|length > 1 %}md:grid-cols-2{% endif %} gap-2">
+                    {% for action_button in action_card.get('buttons', []) %}
+                    <form hx-post="/api/metadata/sync/preview?lang={{ current_lang }}"
+                          hx-target="#metadata-sync-root"
+                          hx-swap="outerHTML"
+                          hx-indicator="#metadata-preview-loading"
+                          hx-disabled-elt="button">
+                        <input type="hidden" name="ui_step" value="2">
+                        <input type="hidden" name="node_type" value="{{ node_type }}">
+                        <input type="hidden" name="node_id" value="{{ node_id }}">
+                        <input type="hidden" name="selected_set_code" value="{{ selected_set }}">
+                        <input type="hidden" name="selected_pack_name" value="{{ selected_pack }}">
+                        <input type="hidden" name="current_action" value="{{ action_button.get('action') }}">
+                        <input type="hidden" name="snapshot_id" value="{{ selected_snapshot_id }}">
+                        <input type="hidden" name="action" value="{{ action_button.get('action') }}">
+                        <input type="hidden" name="force_refresh" value="0">
+                        <button type="submit" class="w-full brutal-btn text-sm px-3 py-2 {% if current_action_value == action_button.get('action') %}border-theme{% endif %}">{{ t.get(action_button.get('label_key')) or action_button.get('label_fallback') }}</button>
+                    </form>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
     {% elif step == 2 %}
@@ -229,6 +201,7 @@
     {% set preview_summary = preview.get('summary', {}) %}
     {% set preview_payload = preview.get('payload', {}) %}
     {% set preview_snapshot_id = preview.get('snapshot_id', '') or selected_snapshot_id %}
+    {% set preview_sync_kind = preview_payload.get('sync_kind', current_action_value) %}
     <div class="brutal-card p-5">
         <h3 class="text-xl font-bold uppercase tracking-tight mb-2">{{ t.metadata_step_preview_diff or '预览变更' }}</h3>
         <div class="text-sm text-muted mb-4">{{ t.metadata_current_node or '当前对象' }}: {{ node_type }} / {{ node_id }}</div>
@@ -241,22 +214,61 @@
             </div>
             <div class="border-2 border-subtle p-3 bg-surface">
                 <div class="text-xs text-muted uppercase">Mode</div>
-                <div class="font-bold">{{ preview_payload.get('mode', '-') }}</div>
+                <div class="font-bold">{{ preview_payload.get('mode', '-') }}{% if preview_payload.get('mode') == 'force' %}（强制覆盖）{% elif preview_payload.get('mode') == 'supplement' %}（仅补充空缺）{% endif %}</div>
             </div>
             <div class="border-2 border-subtle p-3 bg-surface">
-                <div class="text-xs text-muted uppercase">Source</div>
-                <div class="font-bold">{{ preview_payload.get('source', '-') }}</div>
+                <div class="text-xs text-muted uppercase">Action</div>
+                <div class="font-bold">
+                    {% if preview_sync_kind == 'update_new_series' %}
+                        {{ t.metadata_action_update_new_series or '更新新系列' }}
+                    {% elif preview_sync_kind == 'update_data' %}
+                        {{ t.metadata_action_update_data or '更新数据' }}
+                    {% else %}
+                        {{ t.metadata_action_update_chinese or '更新中文' }}
+                    {% endif %}
+                </div>
             </div>
         </div>
 
+        {% if preview_sync_kind == 'update_chinese' %}
+        <div class="font-bold text-sm mb-2">{{ t.metadata_chinese_update_summary_title or '中文更新摘要（仅中文字段）' }}</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">sets zh</div><div class="font-bold">{{ preview_summary.get('localization_sets', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">packs zh</div><div class="font-bold">{{ preview_summary.get('localization_packs', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">cards zh</div><div class="font-bold">{{ preview_summary.get('localization_cards', 0) }}</div></div>
+        </div>
+        {% elif preview_sync_kind == 'update_new_series' %}
+        <div class="font-bold text-sm mb-2">{{ t.metadata_data_update_summary_title or '数据更新摘要（不含中文字段）' }}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">new sets</div><div class="font-bold">{{ preview_summary.get('upsert_sets', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">source</div><div class="font-bold">{{ preview_payload.get('source', '-') }}</div></div>
+        </div>
+        {% else %}
+        <div class="font-bold text-sm mb-2">{{ t.metadata_data_update_summary_title or '数据更新摘要（不含中文字段）' }}</div>
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
             <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">sets</div><div class="font-bold">{{ preview_summary.get('upsert_sets', 0) }}</div></div>
             <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">packs</div><div class="font-bold">{{ preview_summary.get('upsert_packs', 0) }}</div></div>
             <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">cards</div><div class="font-bold">{{ preview_summary.get('card_updates', 0) }}</div></div>
             <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">links +</div><div class="font-bold">{{ preview_summary.get('card_pack_links_to_add', 0) }}</div></div>
             <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">links -</div><div class="font-bold">{{ preview_summary.get('card_pack_links_to_remove', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">l10n cards</div><div class="font-bold">{{ preview_summary.get('localization_cards', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">source</div><div class="font-bold">{{ preview_payload.get('source', '-') }}</div></div>
         </div>
+        {% endif %}
+
+        {% set preview_items = preview.get('items', []) %}
+        {% if preview_items %}
+        <div class="border-2 border-subtle p-3 bg-surface mb-4">
+            <div class="font-bold text-sm mb-2">{{ t.metadata_preview_items_title or '预览对象清单' }}</div>
+            <div class="space-y-1 text-sm">
+                {% for item in preview_items %}
+                <div class="font-mono break-all">[{{ item.get('type', '-') }}] {{ item.get('id', '-') }} · {{ item.get('name', '-') }} · {{ item.get('action', '-') }}</div>
+                {% if item.get('changes') %}
+                <div class="text-xs text-muted mt-1 break-all pl-4 border-l-2 border-subtle">{{ item.get('changes') }}</div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         <details class="border-2 border-subtle p-3 bg-surface mb-4">
             <summary class="cursor-pointer font-bold text-sm">{{ t.metadata_preview_detail or '预览明细 JSON' }}</summary>

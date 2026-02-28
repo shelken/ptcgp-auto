@@ -44,8 +44,8 @@
                 data-searchable="true"
                 data-search-placeholder="{{ t.notification_set_search_placeholder or '搜索系列' }}">
                 <option value="">{{ t.label_all_sets or '全部系列' }}</option>
-                {% for code in set_codes %}
-                <option value="{{ code }}" {% if card_selector_set_code == code %}selected{% endif %}>{{ code }}</option>
+                {% for set_option in set_codes %}
+                <option value="{{ set_option.value }}" {% if card_selector_set_code == set_option.value %}selected{% endif %}>{{ set_option.display_name or set_option.value }}</option>
                 {% endfor %}
             </select>
             <select
@@ -54,8 +54,8 @@
                 data-searchable="true"
                 data-search-placeholder="{{ t.notification_pack_search_placeholder or '搜索子包' }}">
                 <option value="">{{ t.label_all_packs or '全部子包' }}</option>
-                {% for name in pack_names %}
-                <option value="{{ name }}" {% if card_selector_pack_name == name %}selected{% endif %}>{{ name }}</option>
+                {% for pack_option in pack_names %}
+                <option value="{{ pack_option.value }}" {% if card_selector_pack_name == pack_option.value %}selected{% endif %}>{{ pack_option.display_name or pack_option.value }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -73,7 +73,7 @@
                 <div class="owned-card-media">
                     <img
                         src="{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.png"
-                        alt="{{ card.name }}"
+                        alt="{{ card.display_name or card.name }}"
                         class="owned-card-image"
                         loading="lazy"
                         decoding="async"

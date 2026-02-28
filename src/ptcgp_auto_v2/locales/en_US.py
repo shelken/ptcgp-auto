@@ -86,6 +86,7 @@ TEXT_PATTERNS = {
     "open_pack_1": ["開封1包"],
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     "reward_claim_all": ["全部領取"],
+    "reward_task_title": ["任務報酬"],
     "reward_detail_page": ["報酬", "達成！"],
     "theme_collection": ["主題收藏"],
     "gift_box_page": ["禮物盒"],

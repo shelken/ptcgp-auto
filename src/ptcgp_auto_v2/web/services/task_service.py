@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
-
 from sqlmodel import Session, select
 
 from ptcgp_auto_v2.core.task_plan_utils import (
@@ -23,6 +22,7 @@ from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
     reset_completed_task_instances,
 )
+from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page,
@@ -30,10 +30,10 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
 )
 
 
-def build_tasks_page_url(
+def _build_tasks_page_url(
+    *,
     page: int,
     page_size: int,
-    lang: str,
     status: list[str],
     task_type: list[str],
     account_id: int | None,
@@ -41,7 +41,8 @@ def build_tasks_page_url(
     sort_order: str,
 ) -> str:
     """构建任务分页 URL。"""
-    params = [("page", page), ("page_size", page_size), ("lang", lang)]
+    current_lang = get_current_lang()
+    params = [("page", page), ("page_size", page_size), ("lang", current_lang)]
     for item in status:
         params.append(("status", item))
     for item in task_type:
@@ -79,12 +80,14 @@ def build_tasks_list_context(
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
 
-    instances, has_next = fetch_task_instances(
+    normalized_status = status or []
+    normalized_task_type = task_type or []
+    instances, has_next, total = fetch_task_instances(
         session=session,
         page=normalized_page,
         page_size=normalized_page_size,
-        status=status or [],
-        task_type=task_type or [],
+        status=normalized_status,
+        task_type=normalized_task_type,
         account_id=account_id,
         sort_by=sort_by,
         sort_order=sort_order,
@@ -189,18 +192,31 @@ def build_tasks_list_context(
 
         rows.append(row_data)
 
-    # 估算总数：当前页数量 + (是否有下一页 ? 估算更多)
-    estimated_total = len(rows) + (normalized_page * normalized_page_size)
-    if has_next:
-        estimated_total += normalized_page_size  # 至少还有一页
-
     return {
         "items": rows,
         "page": normalized_page,
         "page_size": normalized_page_size,
         "has_prev": normalized_page > 0,
         "has_next": has_next,
-        "total": estimated_total,
+        "total": total,
+        "next_page_url": _build_tasks_page_url(
+            page=normalized_page + 1,
+            page_size=normalized_page_size,
+            status=normalized_status,
+            task_type=normalized_task_type,
+            account_id=account_id,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        ),
+        "prev_page_url": _build_tasks_page_url(
+            page=max(normalized_page - 1, 0),
+            page_size=normalized_page_size,
+            status=normalized_status,
+            task_type=normalized_task_type,
+            account_id=account_id,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        ),
     }
 
 
@@ -246,9 +262,7 @@ def build_task_list_render_context(
     """构建任务列表模板渲染上下文。"""
     from ptcgp_auto_v2.core.task_base import TaskRegistry
     from ptcgp_auto_v2.core.task_status import TaskStatus
-    from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 
-    current_lang = get_current_lang()
     context = build_tasks_list_context(
         session=session,
         page=page,
@@ -260,26 +274,6 @@ def build_task_list_render_context(
         sort_order=sort_order,
     )
 
-    context["next_page_url"] = build_tasks_page_url(
-        page=page + 1,
-        page_size=page_size,
-        lang=current_lang,
-        status=status,
-        task_type=task_type,
-        account_id=account_id,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
-    context["prev_page_url"] = build_tasks_page_url(
-        page=max(page - 1, 0),
-        page_size=page_size,
-        lang=current_lang,
-        status=status,
-        task_type=task_type,
-        account_id=account_id,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
     context["status_options"] = [status_item.value for status_item in TaskStatus]
     context["task_types"] = TaskRegistry.all_types()
     context["accounts"] = list_task_filter_accounts()
@@ -289,7 +283,6 @@ def build_task_list_render_context(
     context["selected_sort_by"] = sort_by
     context["selected_sort_order"] = sort_order
     context["table_only"] = table_only
-    context["current_lang"] = current_lang
     return context
 
 

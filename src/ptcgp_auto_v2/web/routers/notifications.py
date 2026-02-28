@@ -19,7 +19,7 @@ from ptcgp_auto_v2.web.services.notification_service import (
     build_notifications_context,
     build_recent_notifications_context,
     get_task_type_options,
-    list_cards_by_ids,
+    list_card_views_by_ids,
     list_rarity_codes,
     normalize_scene,
 )
@@ -185,7 +185,10 @@ async def get_unread_count(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取未读通知数量（用于顶部图标徽标）。"""
-    from ptcgp_auto_v2.web.services.notification_service import get_unread_notification_count
+    from ptcgp_auto_v2.web.services.notification_service import (
+        get_unread_notification_count,
+    )
+
     count = get_unread_notification_count()
     if count <= 0:
         return ""
@@ -255,7 +258,7 @@ async def apply_notification_card_picker(
     context = {
         "scene": normalize_scene(scene) or "rare_card_obtained",
         "selected_card_ids": selected_ids,
-        "selected_cards": list_cards_by_ids(session, selected_ids),
+        "selected_cards": list_card_views_by_ids(session, selected_ids),
         "notification_view": "selected_cards",
     }
     response = render_template(request, "partials/notification_page.html", context)
@@ -286,7 +289,10 @@ async def mark_as_read(
     session: Session = Depends(get_fastapi_session),
 ):
     """标记单条通知为已读并刷新列表。"""
-    from ptcgp_auto_v2.web.services.notification_service import mark_notification_as_read
+    from ptcgp_auto_v2.web.services.notification_service import (
+        mark_notification_as_read,
+    )
+
     mark_notification_as_read(notification_id)
     response = await get_notifications_list(
         request=request,
@@ -559,7 +565,9 @@ async def mark_all_panel_notifications_read(
     )
     context["unread_count"] = 0  # 全部已读
 
-    response = render_template(request, "partials/notification_list_items.html", context)
+    response = render_template(
+        request, "partials/notification_list_items.html", context
+    )
 
     # 通过 HX-Trigger 通知前端更新 badge 和显示 toast
     message_template = (

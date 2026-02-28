@@ -8,8 +8,17 @@ from ptcgp_auto_v2.web.queries.record_queries import (
     fetch_pack_points_map,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import resolve_label
+from ptcgp_auto_v2.web.utils.i18n import resolve_label, resolve_card_name_from_data
 from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
+
+
+def _resolve_record_card_name(pack_card: Any) -> str:
+    """解析开包记录中的卡牌展示名（优先当前语言本地化）。"""
+    card = getattr(pack_card, "card", None)
+    fallback_name = str(getattr(pack_card, "card_name", "") or "")
+    if card is None:
+        return fallback_name
+    return resolve_card_name_from_data(card.data, fallback=fallback_name or card.name)
 
 
 def build_records_list_context(
@@ -46,6 +55,8 @@ def build_records_list_context(
 
     for record in results:
         sorted_cards = sorted(record.cards, key=lambda card: card.position)
+        for card in sorted_cards:
+            card.display_name = _resolve_record_card_name(card)
         card_count = len(sorted_cards)
         layout_type = "layout-3"
 

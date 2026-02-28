@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -11,6 +13,9 @@ from urllib.parse import quote
 import requests
 
 from .cache_store import TTLCacheStore
+
+# 创建 logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,8 +30,12 @@ class _MediaWikiClient:
             "https://wiki.52poke.com/api.php?action=query&format=json&formatversion=2"
             "&titles=Pok%C3%A9mon_Trading_Card_Game_Pocket&prop=links&pllimit=max"
         )
+        print(f"[52poke] API 请求: GET {url}", flush=True)
+        start = time.time()
         response = requests.get(url, timeout=self.timeout)
         response.raise_for_status()
+        elapsed = time.time() - start
+        print(f"[52poke] API 响应: 入口页 - {elapsed:.2f}s", flush=True)
         data = response.json()
         links = ((data.get("query") or {}).get("pages") or [{}])[0].get("links") or []
         return [str(item.get("title")) for item in links if item.get("title")]
@@ -43,10 +52,14 @@ class _MediaWikiClient:
         """按标题获取页面 wikitext。"""
         url = (
             "https://wiki.52poke.com/api.php?action=query&format=json&formatversion=2"
-            f"&titles={quote(title)}&prop=revisions&rvslots=main&rvprop=content"
+            f"&titles={quote(title)}&prop=revisions&rvslots=main&rvprop=content&converttitles=1"
         )
+        print(f"[52poke] API 请求: GET {url}", flush=True)
+        start = time.time()
         response = requests.get(url, timeout=self.timeout)
         response.raise_for_status()
+        elapsed = time.time() - start
+        print(f"[52poke] API 响应: {title} - {elapsed:.2f}s", flush=True)
         data = response.json()
         pages = (data.get("query") or {}).get("pages") or []
         if not pages:
@@ -74,7 +87,11 @@ class Poke52LocalizationService:
         scope_value: str | None,
         force_refresh: bool = False,
     ) -> dict[str, Any]:
-        """按范围构建本地化映射。"""
+        """按范围构建本地化映射。
+
+        优化：先获取所有系列和卡包列表，根据 scope 过滤后再请求卡包页面，
+        避免请求不需要的卡包页面。
+        """
         cache_key = f"localized_map:{scope_level}:{scope_value or 'all'}"
         if not force_refresh:
             cached = self._cache.get(cache_key)
@@ -82,7 +99,7 @@ class Poke52LocalizationService:
                 return cached
 
         entry_links = self._fetch_entry_links(force_refresh)
-        series_titles = [
+        all_series_titles = [
             title for title in entry_links if "系列" in title and "TCGP" in title
         ]
 
@@ -91,42 +108,128 @@ class Poke52LocalizationService:
             scope_level, scope_value
         )
 
+        # 根据 scope 过滤系列，减少不必要的请求
+        series_titles = self._filter_series_by_scope(
+            all_series_titles, scope_level, scope_value, target_set_code
+        )
+
+        # 第一阶段：获取所有系列和卡包列表（轻量级）
+        all_packs: list[tuple[str, str]] = []  # (series_title, pack_title)
         for series_title in series_titles:
             series_wikitext = self._fetch_series_wikitext(series_title, force_refresh)
             pack_titles = self._parse_pack_titles_from_series(series_wikitext)
             for pack_title in pack_titles:
-                if scope_level == "pack" and scope_value and pack_title != scope_value:
-                    continue
+                # 如果指定了 pack scope，提前过滤
+                if scope_level == "pack" and scope_value:
+                    # 注意：pack_value 可能带或不带（TCGP）后缀
+                    match = (
+                        pack_title == scope_value
+                        or pack_title == f"{scope_value}（TCGP）"
+                        or f"{pack_title}（TCGP）" == scope_value
+                    )
+                    if not match:
+                        continue
+                all_packs.append((series_title, pack_title))
+
+        # 第二阶段：按需获取卡包页面（重量级）
+        # 优化：使用 pack_setcode_map 缓存避免请求不需要的卡包
+        pack_setcode_map: dict[str, str] = self._cache.get("pack_setcode_map") or {}
+        print(f"[52poke] pack_setcode_map 缓存: {len(pack_setcode_map)} 条", flush=True)
+
+        # 如果已知 target_set_code，先用缓存映射过滤 pack 列表
+        packs_to_fetch = all_packs
+        if target_set_code and not force_refresh:
+            filtered_packs = []
+            for series_title, pack_title in all_packs:
+                cached_set_code = pack_setcode_map.get(pack_title)
+                if cached_set_code:
+                    # 已知映射，直接过滤
+                    if cached_set_code == target_set_code:
+                        filtered_packs.append((series_title, pack_title))
+                else:
+                    # 未知映射，需要获取
+                    filtered_packs.append((series_title, pack_title))
+            packs_to_fetch = filtered_packs
+            print(
+                f"[52poke] 过滤后需获取: {len(packs_to_fetch)}/{len(all_packs)} 个 pack",
+                flush=True,
+            )
+
+        print(f"[52poke] 开始并行获取 {len(packs_to_fetch)} 个卡包页面...", flush=True)
+
+        def fetch_single_pack(item: tuple[str, str]) -> dict[str, Any] | None:
+            """获取单个 pack 页面并解析。"""
+            series_title, pack_title = item
+            try:
                 pack_wikitext = self._fetch_pack_wikitext(pack_title, force_refresh)
                 set_code = self._parse_set_code(pack_wikitext)
                 set_name = self._parse_set_name(pack_wikitext)
+
+                # 缓存 pack -> set_code 映射
+                if set_code:
+                    pack_setcode_map[pack_title] = set_code
+
                 if not set_code:
-                    continue
+                    return None
 
+                # 根据 set/card scope 过滤
                 if scope_level == "set" and scope_value and set_code != scope_value:
-                    continue
+                    return None
+                if scope_level == "card" and set_code != target_set_code:
+                    return None
 
-                if set_name:
-                    results["sets"].append({"set_code": set_code, "zh": set_name})
-                    results["packs"].append(
-                        {
-                            "set_code": set_code,
-                            "pack_name": pack_title,
-                            "zh": set_name,
-                        }
-                    )
-
+                # 解析卡牌
+                cards = []
                 for number, localized_name in self._parse_card_rows(pack_wikitext):
-                    if scope_level == "card":
-                        if set_code != target_set_code or number != target_number:
-                            continue
-                    results["cards"].append(
+                    if scope_level == "card" and number != target_number:
+                        continue
+                    cards.append(
                         {
                             "set_code": set_code,
                             "number": number,
                             "localized_name": localized_name,
                         }
                     )
+
+                return {
+                    "set_code": set_code,
+                    "set_name": set_name,
+                    "pack_title": pack_title,
+                    "cards": cards,
+                }
+            except Exception as e:
+                print(f"[52poke] 获取 pack 失败 {pack_title}: {e}", flush=True)
+                return None
+
+        # 并行获取所有 pack 页面
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        fetched_results = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_pack = {
+                executor.submit(fetch_single_pack, item): item
+                for item in packs_to_fetch
+            }
+            for future in as_completed(future_to_pack):
+                result = future.result()
+                if result:
+                    fetched_results.append(result)
+
+        # 保存缓存
+        self._cache.set("pack_setcode_map", pack_setcode_map)
+        print(
+            f"[52poke] 并行获取完成，命中 {len(fetched_results)}/{len(packs_to_fetch)} 个 pack",
+            flush=True,
+        )
+
+        # 合并结果
+        # 注意：52poke 的"卡包"对应 set，不是 pack，所以只更新 set 和 card
+        for result in fetched_results:
+            if result["set_name"]:
+                results["sets"].append(
+                    {"set_code": result["set_code"], "zh": result["set_name"]}
+                )
+            results["cards"].extend(result["cards"])
 
         results["sets"] = self._dedupe_rows(results["sets"], ["set_code"])
         results["packs"] = self._dedupe_rows(
@@ -178,13 +281,19 @@ class Poke52LocalizationService:
         return value
 
     def _fetch_pack_wikitext(self, title: str, force_refresh: bool) -> str:
-        """读取卡包页 wikitext（带缓存）。"""
-        key = f"pack_wikitext:{title}"
+        """读取卡包页 wikitext（带缓存）。
+
+        注意：从系列页解析出的标题不含（TCGP）后缀，
+        但实际页面标题需要加上（TCGP）。
+        """
+        # 确保标题包含（TCGP）后缀
+        full_title = title if "（TCGP）" in title else f"{title}（TCGP）"
+        key = f"pack_wikitext:{full_title}"
         if not force_refresh:
             cached = self._cache.get(key)
             if cached is not None:
                 return str(cached)
-        value = self._client.fetch_pack_wikitext(title)
+        value = self._client.fetch_pack_wikitext(full_title)
         self._cache.set(key, value)
         return value
 
@@ -251,6 +360,29 @@ class Poke52LocalizationService:
         if number is None:
             raise ValueError(f"无法解析卡牌编号: {scope_value}")
         return set_code, number
+
+    def _filter_series_by_scope(
+        self,
+        all_series: list[str],
+        scope_level: str,
+        scope_value: str | None,
+        target_set_code: str | None,
+    ) -> list[str]:
+        """根据 scope 过滤需要获取的系列。
+
+        例如：set=A1 只需要 A 系列，不需要 B 系列。
+        """
+        if scope_level == "all" or not scope_value:
+            return all_series
+
+        # set/card scope：根据 set_code 前缀判断系列
+        if target_set_code:
+            prefix = target_set_code[0].upper() if target_set_code else None
+            if prefix:
+                return [t for t in all_series if f"{prefix}系列" in t]
+
+        # pack scope：需要获取所有系列来查找（暂时无法根据 pack 名定位系列）
+        return all_series
 
     def _dedupe_rows(
         self, rows: list[dict[str, Any]], keys: list[str]

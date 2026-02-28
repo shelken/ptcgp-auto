@@ -16,7 +16,7 @@
                 {{ t.label_set_code }}: {{ card.set_code }}
             </div>
             <div class="text-lg font-bold mb-2 break-words">
-                {{ card.name }}
+                {{ card_display_name or card.name }}
             </div>
             <div class="flex flex-wrap gap-1 mb-3">
                 <span class="brutal-tag text-xs">{{ t.label_card_number }} #{{ card.number }}</span>
@@ -35,7 +35,7 @@
                      style="transform-style: preserve-3d; transition: transform 0.1s ease-out;">
                     <img
                         src="{{ image_cdn_url }}/{{ card.set_code }}/{{ card.number }}.png"
-                        alt="{{ card.name }}"
+                        alt="{{ card_display_name or card.name }}"
                         class="owned-card-preview-image cursor-grab"
                         loading="lazy"
                         decoding="async"

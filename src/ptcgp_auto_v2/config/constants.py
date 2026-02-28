@@ -77,7 +77,7 @@ WEB_LANG_TO_DB_LABEL_KEYS = {
 }
 
 # 默认语言键
-DEFAULT_LANG_KEY = "en"
+DEFAULT_LANG_KEY = "zh_CN"
 
 # 调度配置
 METADATA_DEFAULT_NODE_ID = "all"

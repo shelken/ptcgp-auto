@@ -371,7 +371,7 @@
                                             <input type="checkbox" id="owned-set-{{ item.code }}" name="set_code" value="{{ item.code }}" class="hidden owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-set-{{ item.code }}" class="filter-label brutal-btn">
-                                                {{ item.label.get(lang_key) or item.label.get('en') or item.code }}
+                                                {{ item.display_name or item.code }}
                                             </label>
                                         </div>
                                         {% endfor %}
@@ -395,7 +395,7 @@
                                             <input type="checkbox" id="owned-pack-{{ item.name }}" name="pack_name" value="{{ item.name }}" class="hidden owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-pack-{{ item.name }}" class="filter-label brutal-btn">
-                                                {{ item.label.get(lang_key) or item.label.get('en') or item.name }}
+                                                {{ item.display_name or item.name }}
                                             </label>
                                         </div>
                                         {% endfor %}
