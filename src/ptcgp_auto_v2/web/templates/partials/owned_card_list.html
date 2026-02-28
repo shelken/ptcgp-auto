@@ -43,8 +43,9 @@
 </script>
 {% endif %}
 
-{% if items %}
-<div hx-get="{{ next_page_url }}"
+{% if has_next %}
+<div hx-get="/api/owned-cards?page={{ page + 1 }}&lang={{ current_lang }}"
+     hx-include="#owned-filter-form,#owned-sort-select"
      hx-trigger="revealed"
      hx-swap="outerHTML"
      class="h-12 w-full flex justify-center items-center opacity-0">
