@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # 常量定义（基于 1080x1920）
 # ============================================================
 
-# 过滤同行按钮的 y 坐标差值阈值
+# 領取紀錄 行过滤阈值（像素）
 Y_THRESHOLD = 50
 
 # 等待礼物盒加载时间 (s)
@@ -235,46 +235,70 @@ class ClaimGiftsTask(Task):
 
         return ActionResult.ok(wait=1.0)
 
+    def _filter_ocr_results_by_record(
+        self, ocr_results: list[dict], record_patterns: list[str]
+    ) -> list[dict]:
+        """按「領取紀錄」位置过滤 OCR：移除阈值线以下（含）项。"""
+        normalized_record_patterns = [
+            normalize_text(pattern) for pattern in record_patterns
+        ]
+        record_y = next(
+            (
+                (item["box"][1] + item["box"][3]) // 2
+                for item in ocr_results
+                if any(
+                    pattern in normalize_text(item["text"])
+                    for pattern in normalized_record_patterns
+                )
+            ),
+            None,
+        )
+        if record_y is None:
+            return ocr_results
+
+        cutoff_y = record_y - Y_THRESHOLD
+        return [
+            item
+            for item in ocr_results
+            if ((item["box"][1] + item["box"][3]) // 2) < cutoff_y
+        ]
+
     def _try_claim_buttons(self, ocr_results: list[dict]) -> ActionResult | None:
         """
         尝试点击可领取的按钮
 
-        按优先级：全部領取 > 領取
-        过滤掉与"領取紀錄"同行的"領取" Tab 按钮
+        按固定顺序：先全部領取，再領取
+        如果识别到"領取紀錄"，过滤掉其阈值线以下（含）的 OCR 项
         """
         claim_patterns = get_text_patterns("gift_claim_buttons")
         record_patterns = get_text_patterns("gift_record")
+        if not claim_patterns:
+            return None
 
-        # 获取"領取紀錄"的 y 坐标（用于过滤 Tab 按钮）
-        record_y = None
-        for item in ocr_results:
-            text = normalize_text(item["text"])
-            for pattern in record_patterns:
-                if normalize_text(pattern) in text:
-                    box = item["box"]
-                    record_y = (box[1] + box[3]) // 2
-                    break
-            if record_y:
-                break
+        claim_all_patterns = claim_patterns[:1]
+        single_claim_patterns = claim_patterns[1:]
+        filtered_ocr_results = self._filter_ocr_results_by_record(
+            ocr_results, record_patterns
+        )
 
-        # 按优先级遍历领取按钮
-        for pattern in claim_patterns:
-            for item in ocr_results:
-                text = normalize_text(item["text"])
-                if normalize_text(pattern) == text:
-                    box = item["box"]
-                    button_y = (box[1] + box[3]) // 2
+        wait = 1.5
+        claim_all_result = tap_text(
+            self.adb,
+            filtered_ocr_results,
+            claim_all_patterns,
+            wait=0.0,
+            exact=True,
+        )
+        single_result = tap_text(
+            self.adb,
+            filtered_ocr_results,
+            single_claim_patterns,
+            wait=wait,
+            exact=True,
+        )
 
-                    # 过滤与"領取紀錄"同行的"領取" Tab 按钮
-                    if (
-                        record_y
-                        and pattern != "全部領取"
-                        and abs(button_y - record_y) < Y_THRESHOLD
-                    ):
-                        logger.debug(f"  -> 跳过 Tab 按钮: {pattern} @ y={button_y}")
-                        continue
-
-                    logger.debug(f"  -> 点击领取按钮: {pattern}")
-                    return tap_box(self.adb, box, wait=1.5)
-
+        if single_result:
+            return single_result
+        if claim_all_result:
+            return ActionResult.ok(wait=wait)
         return None
