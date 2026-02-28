@@ -119,7 +119,8 @@
 
 <!-- HTMX Infinite Scroll Trigger -->
 {% if has_next %}
-<div hx-get="{{ next_page_url }}"
+<div hx-get="/api/records?page={{ page + 1 }}&lang={{ current_lang }}"
+     hx-include="#filter-form"
      hx-trigger="revealed"
      hx-swap="outerHTML"
      class="h-12 w-full flex justify-center items-center opacity-0">
