@@ -13,7 +13,7 @@ from ptcgp_auto_v2.web.services.exchange_card_service import (
     cancel_exchange_request,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -42,9 +42,7 @@ async def get_management_exchange_cards(
         page=max(page, 0),
         page_size=min(max(page_size, 1), 100),
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/exchange_card_list.html", context)
+    return render_template(request, "partials/exchange_card_list.html", context)
 
 
 @router.post(

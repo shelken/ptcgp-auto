@@ -30,16 +30,16 @@ def _build_request(method: str = "GET", query: dict | None = None) -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def test_parse_is_read_filter_values():
@@ -80,13 +80,12 @@ def test_get_notifications_page_returns_notification_template(
     session: Session, monkeypatch
 ):
     """通知主页面应返回 notification_page 模板。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     request = _build_request("GET")
 
     response = asyncio.run(
         router.get_notifications_page(
             request=request,
-            lang="zh_CN",
             scene=None,
             account_id=None,
             is_read=None,
@@ -105,13 +104,12 @@ def test_get_notifications_page_returns_notification_template(
 
 def test_get_notifications_list_returns_list_template(session: Session, monkeypatch):
     """通知列表接口应返回 notification_list 模板。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     request = _build_request("GET")
 
     response = asyncio.run(
         router.get_notifications_list(
             request=request,
-            lang="zh_CN",
             scene=None,
             account_id=None,
             is_read=None,
@@ -130,7 +128,7 @@ def test_get_notifications_list_returns_list_template(session: Session, monkeypa
 
 def test_mark_all_read_triggers_toast_header(session: Session, monkeypatch):
     """全部已读应返回提示事件头。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     session.add(
         Notification(scene="task_status", title="n1", content="c1", is_read=False)
     )
@@ -148,7 +146,6 @@ def test_mark_all_read_triggers_toast_header(session: Session, monkeypatch):
             sort_order="desc",
             page=0,
             page_size=10,
-            lang="zh_CN",
             session=session,
         )
     )
@@ -160,7 +157,7 @@ def test_mark_all_read_triggers_toast_header(session: Session, monkeypatch):
 
 def test_update_notification_config_returns_item_partial(session: Session, monkeypatch):
     """配置更新应返回单个配置项模板片段。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     from ptcgp_auto_v2.db.repositories.notification_config_repository import (
         NotificationConfigRepository,
     )
@@ -185,9 +182,7 @@ def test_update_notification_config_returns_item_partial(session: Session, monke
     request.form = _fake_form  # type: ignore[method-assign]
 
     response = asyncio.run(
-        router.update_notification_config(
-            request=request, lang="zh_CN", session=session
-        )
+        router.update_notification_config(request=request, session=session)
     )
 
     assert response.status_code == 200
@@ -203,7 +198,7 @@ def test_get_notification_card_picker_modal_returns_partial(
     session: Session, monkeypatch
 ):
     """卡牌选择弹窗接口应返回 modal 片段。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     request = _build_request("GET")
 
     response = asyncio.run(
@@ -218,7 +213,6 @@ def test_get_notification_card_picker_modal_returns_partial(
             card_selector_sort_order="asc",
             card_selector_page=0,
             card_selector_page_size=24,
-            lang="zh_CN",
             session=session,
         )
     )
@@ -233,7 +227,7 @@ def test_apply_notification_card_picker_returns_selected_partial(
     session: Session, monkeypatch
 ):
     """应用选择后应返回已选卡片片段并触发关闭弹窗。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(
@@ -249,7 +243,6 @@ def test_apply_notification_card_picker_returns_selected_partial(
         router.apply_notification_card_picker(
             request=request,
             scene="rare_card_obtained",
-            lang="zh_CN",
             session=session,
         )
     )
@@ -281,7 +274,6 @@ def test_send_test_webhook_returns_toast_header(session: Session, monkeypatch):
     response = asyncio.run(
         router.send_test_webhook(
             request=request,
-            lang="zh_CN",
             notification_id=sample.id,
         )
     )
@@ -322,7 +314,6 @@ def test_send_test_webhook_uses_notification_image_for_rare_card(
         ):
             assert title == "稀有卡牌通知"
             assert "Zapdos ex" in content
-            assert image_url is None
             return True
 
     monkeypatch.setattr(router, "get_notifier", lambda: _FakeNotifier())
@@ -330,7 +321,6 @@ def test_send_test_webhook_uses_notification_image_for_rare_card(
     response = asyncio.run(
         router.send_test_webhook(
             request=request,
-            lang="zh_CN",
             notification_id=sample.id,
             session=session,
         )

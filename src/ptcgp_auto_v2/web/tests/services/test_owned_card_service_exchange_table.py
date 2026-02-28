@@ -78,7 +78,6 @@ def test_exchange_accounts_context_supports_search(
     context = build_owned_card_exchange_accounts_context(
         session=session,
         card_id=card_id,
-        lang="zh_CN",
         page=0,
         page_size=20,
         q="1000000000000002",
@@ -98,7 +97,6 @@ def test_exchange_accounts_context_supports_sort_whitelist(
     context = build_owned_card_exchange_accounts_context(
         session=session,
         card_id=card_id,
-        lang="zh_CN",
         page=0,
         page_size=20,
         q="",
@@ -117,7 +115,6 @@ def test_exchange_accounts_context_supports_pagination(
     context = build_owned_card_exchange_accounts_context(
         session=session,
         card_id=card_id,
-        lang="zh_CN",
         page=1,
         page_size=2,
         q="",

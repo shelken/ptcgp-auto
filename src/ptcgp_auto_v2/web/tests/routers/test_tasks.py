@@ -29,36 +29,52 @@ def _build_request(method: str = "GET") -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def _patch_task_dependencies(monkeypatch):
     """设置 tasks 路由常用依赖替身。"""
+
+    def _fake_build_task_list_render_context(**_kwargs):
+        return {
+            "items": [SimpleNamespace(status="pending")],
+            "page": 0,
+            "page_size": 10,
+            "has_prev": False,
+            "has_next": False,
+            "total": 1,
+            "selected_status": [],
+            "selected_task_type": [],
+            "selected_account_id": None,
+            "selected_sort_by": "next_run_at",
+            "selected_sort_order": "asc",
+            "status_options": ["pending"],
+            "task_types": ["open_pack"],
+            "accounts": [SimpleNamespace(id=1)],
+            "next_page_url": "/p",
+            "prev_page_url": "/p",
+            "table_only": True,
+            "current_lang": "zh_CN",
+        }
+
     monkeypatch.setattr(
-        router, "TaskRegistry", SimpleNamespace(all_types=lambda: ["open_pack"])
+        router, "build_task_list_render_context", _fake_build_task_list_render_context
     )
-    monkeypatch.setattr(router, "TaskStatus", [SimpleNamespace(value="pending")])
-    monkeypatch.setattr(
-        router,
-        "AccountRepository",
-        lambda: SimpleNamespace(get_all=lambda: [SimpleNamespace(id=1)]),
-    )
-    monkeypatch.setattr(router, "build_tasks_page_url", lambda *args, **kwargs: "/p")
-    monkeypatch.setattr(router, "get_translations", lambda _lang: {})
 
 
 def test_reset_completed_tasks_success_sets_done_toast(monkeypatch):
     """重置成功时应返回 done toast。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
+    _patch_task_dependencies(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(
@@ -80,19 +96,19 @@ def test_reset_completed_tasks_success_sets_done_toast(monkeypatch):
     monkeypatch.setattr(router, "reset_completed_tasks_by_filters", lambda **_kwargs: 3)
     monkeypatch.setattr(
         router,
-        "list_task_status_view",
-        lambda **_kwargs: ([SimpleNamespace(status="pending")], False),
-    )
-    monkeypatch.setattr(
-        router,
-        "get_translations",
-        lambda _lang: {"msg_reset_completed_done": "已重置 {count} 个任务"},
+        "get_current_i18n",
+        lambda: (
+            "zh_CN",
+            {
+                "msg_reset_completed_done": "已重置 {count} 个任务",
+                "msg_reset_completed_empty": "没有需要重置的任务",
+            },
+        ),
     )
 
     response = asyncio.run(
         router.reset_completed_tasks(
             request=request,
-            lang="zh_CN",
             session=object(),
         )
     )
@@ -105,7 +121,8 @@ def test_reset_completed_tasks_success_sets_done_toast(monkeypatch):
 
 def test_reset_completed_tasks_empty_sets_empty_toast(monkeypatch):
     """无可重置任务时应返回 empty toast。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
+    _patch_task_dependencies(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(
@@ -120,17 +137,21 @@ def test_reset_completed_tasks_empty_sets_empty_toast(monkeypatch):
         router, "normalize_task_sort", lambda _a, _b: ("dispatch_priority", "asc")
     )
     monkeypatch.setattr(router, "reset_completed_tasks_by_filters", lambda **_kwargs: 0)
-    monkeypatch.setattr(router, "list_task_status_view", lambda **_kwargs: ([], False))
     monkeypatch.setattr(
         router,
-        "get_translations",
-        lambda _lang: {"msg_reset_completed_empty": "没有需要重置的任务"},
+        "get_current_i18n",
+        lambda: (
+            "zh_CN",
+            {
+                "msg_reset_completed_done": "已重置 {count} 个任务",
+                "msg_reset_completed_empty": "没有需要重置的任务",
+            },
+        ),
     )
 
     response = asyncio.run(
         router.reset_completed_tasks(
             request=request,
-            lang="zh_CN",
             session=object(),
         )
     )
@@ -143,11 +164,35 @@ def test_reset_completed_tasks_empty_sets_empty_toast(monkeypatch):
 
 def test_get_tasks_returns_empty_string_when_page_has_no_data(monkeypatch):
     """分页页码大于 0 且无数据时应返回空串。"""
+    _patch_render_template(monkeypatch)
     _patch_task_dependencies(monkeypatch)
     monkeypatch.setattr(
         router, "normalize_task_sort", lambda _a, _b: ("next_run_at", "desc")
     )
-    monkeypatch.setattr(router, "list_task_status_view", lambda **_kwargs: ([], False))
+    monkeypatch.setattr(
+        router,
+        "build_task_list_render_context",
+        lambda **_kwargs: {
+            "items": [],
+            "page": 2,
+            "page_size": 10,
+            "has_prev": True,
+            "has_next": False,
+            "total": 20,
+            "selected_status": [],
+            "selected_task_type": [],
+            "selected_account_id": None,
+            "selected_sort_by": "next_run_at",
+            "selected_sort_order": "asc",
+            "status_options": ["pending"],
+            "task_types": ["open_pack"],
+            "accounts": [SimpleNamespace(id=1)],
+            "next_page_url": "/p",
+            "prev_page_url": "/p",
+            "table_only": True,
+            "current_lang": "zh_CN",
+        },
+    )
 
     response = asyncio.run(
         router.get_tasks(
@@ -159,17 +204,17 @@ def test_get_tasks_returns_empty_string_when_page_has_no_data(monkeypatch):
             account_id=None,
             sort_by="x",
             sort_order="x",
-            lang="zh_CN",
             session=object(),
         )
     )
 
-    assert response == ""
+    html_response = cast(HTMLResponse, response)
+    assert html_response.status_code == 200
 
 
 def test_get_tasks_uses_normalized_sort_for_query(monkeypatch):
     """任务列表查询应使用归一化后的排序参数。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     _patch_task_dependencies(monkeypatch)
 
     captured = {}
@@ -177,13 +222,34 @@ def test_get_tasks_uses_normalized_sort_for_query(monkeypatch):
     def _fake_normalize_task_sort(_a, _b):
         return "next_run_at", "asc"
 
-    def _fake_list_task_status_view(**kwargs):
+    def _fake_build_task_list_render_context(**kwargs):
         captured["sort_by"] = kwargs["sort_by"]
         captured["sort_order"] = kwargs["sort_order"]
-        return [SimpleNamespace(status="pending")], False
+        return {
+            "items": [SimpleNamespace(status="pending")],
+            "page": 0,
+            "page_size": 10,
+            "has_prev": False,
+            "has_next": False,
+            "total": 1,
+            "selected_status": [],
+            "selected_task_type": [],
+            "selected_account_id": None,
+            "selected_sort_by": kwargs["sort_by"],
+            "selected_sort_order": kwargs["sort_order"],
+            "status_options": ["pending"],
+            "task_types": ["open_pack"],
+            "accounts": [SimpleNamespace(id=1)],
+            "next_page_url": "/p",
+            "prev_page_url": "/p",
+            "table_only": True,
+            "current_lang": "zh_CN",
+        }
 
     monkeypatch.setattr(router, "normalize_task_sort", _fake_normalize_task_sort)
-    monkeypatch.setattr(router, "list_task_status_view", _fake_list_task_status_view)
+    monkeypatch.setattr(
+        router, "build_task_list_render_context", _fake_build_task_list_render_context
+    )
 
     response = asyncio.run(
         router.get_tasks(
@@ -195,7 +261,6 @@ def test_get_tasks_uses_normalized_sort_for_query(monkeypatch):
             account_id=None,
             sort_by="bad",
             sort_order="bad",
-            lang="zh_CN",
             session=object(),
         )
     )

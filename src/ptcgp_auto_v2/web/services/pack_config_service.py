@@ -4,15 +4,15 @@ from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import CardRepository, AccountPackConfigRepository
 
 
-def list_card_sets() -> list[dict]:
-    """获取全部卡包系列列表。"""
+def build_card_sets_options() -> list[dict]:
+    """构建全部卡包系列选项。"""
     repo = CardRepository()
     sets = repo.get_all_sets()
     return [{"code": item.code, "name": item.name} for item in sets]
 
 
-def list_set_boosters(set_code: str) -> list:
-    """获取指定系列的补充包列表。"""
+def build_set_boosters_options(set_code: str) -> list:
+    """构建指定系列的补充包选项。"""
     repo = CardRepository()
     return repo.get_pack_names_by_set(set_code)
 
@@ -39,7 +39,7 @@ def build_pack_config_context(account_id: int) -> dict:
     }
 
 
-def save_account_pack_config(
+def build_save_account_pack_config(
     account_id: int, pack_code: str, booster_name: str
 ) -> None:
     """保存账号补充包配置。

@@ -6,10 +6,11 @@ from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.web.queries.record_queries import (
     fetch_records,
     fetch_pack_points_map,
-    build_records_next_page_url,
+    build_records_page_url,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import resolve_label
+from ptcgp_auto_v2.web.utils.i18n import get_current_lang, resolve_label
+from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 
 
 def build_records_list_context(
@@ -21,14 +22,18 @@ def build_records_list_context(
     card_type: list[str] | None = None,
 ) -> dict[str, Any]:
     """构建开包记录列表视图上下文（统一列表协议）。"""
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
     rarity = rarity or []
     card_type = card_type or []
 
-    results = fetch_records(session, page, page_size, rarity, card_type)
-
-    # 空数据时返回停止标记（用于无限滚动）
-    if not results and page > 0:
-        return {"stop": True}
+    results, has_next = fetch_records(
+        session,
+        normalized_page,
+        normalized_page_size,
+        rarity,
+        card_type,
+    )
 
     card_repo = CardRepository()
     all_sets = card_repo.get_all_sets()
@@ -88,19 +93,29 @@ def build_records_list_context(
             }
         )
 
-    if not items:
-        return {"stop": True}
-
-    # 计算分页信息
-    # 由于 fetch_records 返回的是固定 page_size 的数据，我们需要判断是否有更多数据
-    has_next = len(items) == page_size
-    has_prev = page > 0
+    current_lang = get_current_lang()
 
     return {
-        "stop": False,
         "items": items,
-        "page": page,
-        "page_size": page_size,
-        "has_prev": has_prev,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": normalized_page > 0,
         "has_next": has_next,
+        "total": (normalized_page * normalized_page_size)
+        + len(items)
+        + (normalized_page_size if has_next else 0),
+        "next_page_url": build_records_page_url(
+            page=normalized_page + 1,
+            page_size=normalized_page_size,
+            lang=current_lang,
+            rarity=rarity,
+            card_type=card_type,
+        ),
+        "prev_page_url": build_records_page_url(
+            page=max(normalized_page - 1, 0),
+            page_size=normalized_page_size,
+            lang=current_lang,
+            rarity=rarity,
+            card_type=card_type,
+        ),
     }
