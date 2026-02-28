@@ -11,7 +11,7 @@
         <!-- Target Series (Pack Code) -->
         {% set series_options = [{'value': '', 'label': t.label_no_pack_auto or '无（自动选择）'}] %}
         {% for set in card_sets %}
-        {% set _ = series_options.append({'value': set.code, 'label': set.name ~ ' (' ~ set.code ~ ')'}) %}
+        {% set _ = series_options.append({'value': set.code, 'label': (set.display_name or set.name) ~ ' (' ~ set.code ~ ')'}) %}
         {% endfor %}
         {% set series_attrs = {
             'hx-get': '/partials/boosters-options',
@@ -23,7 +23,7 @@
         <!-- Target Booster (Booster Name) -->
         {% set booster_options = [{'value': '', 'label': t.label_select_booster or '-- Select Booster --'}] %}
         {% for booster in current_boosters %}
-        {% set _ = booster_options.append({'value': booster, 'label': booster}) %}
+        {% set _ = booster_options.append({'value': booster.name, 'label': booster.display_name or booster.name}) %}
         {% endfor %}
         {{ select_field('booster_name', t.label_target_booster or 'Target Booster', booster_options, config.booster_name if config else '', element_id='booster-select', t=t) }}
 

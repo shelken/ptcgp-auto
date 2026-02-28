@@ -247,29 +247,6 @@ git commit -m "test(web): cover metadata sync e2e flow and update playbook"
 
 ---
 
-### Task 8: 文档与落地校验
-
-**Files:**
-- Modify: `docs/plans/2026-02-27-metadata-sync-management.md`
-- Optional Create: `docs/plans/2026-02-27-metadata-sync-management-design.md`
-- Optional Modify: `README.md`（若页面功能对外说明有变化）
-
-**Step 1: 文档更新**
-- 记录最终 API 契约、快照结构、缓存策略、force 语义（仅覆盖不删除）。
-
-**Step 2: 最终命令校验**
-- Run:
-  - `PYTHONPATH=src pytest src/ptcgp_auto_v2/web/tests -v`
-  - `PYTHONPATH=src pytest src/ptcgp_auto_v2/tests/services/test_flibustier_sync_service.py src/ptcgp_auto_v2/tests/services/test_poke52_localization_service.py -v`
-
-**Step 3: Commit**
-```bash
-git add docs/plans/2026-02-27-metadata-sync-management.md docs/plans/2026-02-27-metadata-sync-management-design.md README.md
-git commit -m "docs(metadata): document sync console design and contracts"
-```
-
----
-
 ### Task 9: 左侧导航改为“层次中心”交互（系列 -> 卡包 -> 卡牌）
 
 > 背景问题：当前左侧以参数表单为主（来源/范围/模式并列），不符合“用户先选对象层次，再触发动作”的使用方式。

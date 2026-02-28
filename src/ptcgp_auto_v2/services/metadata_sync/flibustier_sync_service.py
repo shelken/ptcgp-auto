@@ -59,10 +59,13 @@ class FlibustierSyncService:
 
         operations: dict[str, Any] = {"sets": [], "packs": [], "cards": []}
 
-        for set_item in filtered_sets:
-            op = self._build_set_operation(set_item, mode)
-            if op is not None:
-                operations["sets"].append(op)
+        # card / pack 级同步只关注目标对象，避免把系列更新混入预览结果。
+        include_set_operations = scope_level in {"all", "set"}
+        if include_set_operations:
+            for set_item in filtered_sets:
+                op = self._build_set_operation(set_item, mode)
+                if op is not None:
+                    operations["sets"].append(op)
 
         detected_packs: dict[str, str] = {}
         for card_item in filtered_cards:
@@ -267,7 +270,9 @@ class FlibustierSyncService:
         if not code:
             return None
         existing_set = self._repo.get_set_by_code(code)
+        print(f"[flibustier] set code={code}, existing={existing_set is not None}", flush=True)
         if mode == "supplement" and existing_set is not None:
+            print(f"[flibustier] supplement mode, set exists, skip", flush=True)
             return None
 
         incoming_name = set_item.get("name", {})
@@ -287,12 +292,36 @@ class FlibustierSyncService:
             set_name = str(incoming_name)
             label_dict.setdefault("en", set_name)
 
+        # 计算字段变化
+        changed_values: list[dict[str, str]] = []
+        new_release_date = set_item.get("releaseDate")
+        new_total_cards = int(set_item.get("count") or 0)
+        new_label_data = json.dumps(label_dict, ensure_ascii=False)
+
+        if existing_set is None:
+            # 新增：记录所有字段的新值
+            changed_values.append({"field": "name", "from": "", "to": set_name})
+            if new_release_date:
+                changed_values.append({"field": "release_date", "from": "", "to": str(new_release_date)})
+            if new_total_cards:
+                changed_values.append({"field": "total_cards", "from": "0", "to": str(new_total_cards)})
+        else:
+            # 更新：对比变化
+            if existing_set.name != set_name:
+                changed_values.append({"field": "name", "from": existing_set.name or "", "to": set_name})
+            if str(existing_set.release_date or "") != str(new_release_date or ""):
+                changed_values.append({"field": "release_date", "from": str(existing_set.release_date or ""), "to": str(new_release_date or "")})
+            if (existing_set.total_cards or 0) != new_total_cards:
+                changed_values.append({"field": "total_cards", "from": str(existing_set.total_cards or 0), "to": str(new_total_cards)})
+
         return {
             "code": code,
             "name": set_name,
-            "release_date": set_item.get("releaseDate"),
-            "total_cards": int(set_item.get("count") or 0),
-            "label_data": json.dumps(label_dict, ensure_ascii=False),
+            "release_date": new_release_date,
+            "total_cards": new_total_cards,
+            "label_data": new_label_data,
+            "op_type": "create" if existing_set is None else "update",
+            "changed_values": changed_values,
         }
 
     def _build_card_operation(
@@ -314,6 +343,7 @@ class FlibustierSyncService:
         if mode == "supplement" and existing_card is not None:
             needs_upsert = False
 
+        # data 字段与历史 sync_metadata.py 逻辑保持一致：写入原始 cards.json 条目
         incoming_card = {
             "set_code": set_code,
             "number": number,
@@ -329,6 +359,55 @@ class FlibustierSyncService:
             "data": json.dumps(card_item, ensure_ascii=False),
         }
 
+        changed_fields: list[str] = []
+        changed_values: list[dict[str, str]] = []
+        if existing_card is None:
+            # 新增：不显示 data 字段变化（其他字段已足够）
+            changed_fields = [
+                "set_code",
+                "number",
+                "name",
+                "rarity",
+                "image_url",
+                "element",
+                "type",
+                "stage",
+                "health",
+                "weakness",
+                "retreat_cost",
+            ]
+            for field in changed_fields:
+                changed_values.append(
+                    {
+                        "field": field,
+                        "from": "",
+                        "to": str(incoming_card.get(field) or ""),
+                    }
+                )
+        else:
+            for field in [
+                "name",
+                "rarity",
+                "image_url",
+                "element",
+                "type",
+                "stage",
+                "health",
+                "weakness",
+                "retreat_cost",
+            ]:
+                before_value = getattr(existing_card, field)
+                after_value = incoming_card[field]
+                if before_value != after_value:
+                    changed_fields.append(field)
+                    changed_values.append(
+                        {
+                            "field": field,
+                            "from": "" if before_value is None else str(before_value),
+                            "to": "" if after_value is None else str(after_value),
+                        }
+                    )
+
         incoming_pack_names = sorted({str(item) for item in card_item.get("packs", [])})
         existing_pack_names: list[str] = []
         existing_card_id: int | None = None
@@ -340,11 +419,29 @@ class FlibustierSyncService:
         if not needs_upsert and not add_pack_names:
             return None
 
+        op_type = "create" if existing_card is None else "update"
+        if mode == "force" and existing_card is not None:
+            op_type = "force"
+        if not needs_upsert and add_pack_names:
+            op_type = "link"
+
+        if mode == "force" and existing_card is not None and not changed_values:
+            changed_values.append(
+                {
+                    "field": "__force__",
+                    "from": "same",
+                    "to": "same",
+                }
+            )
+
         return {
             "card": incoming_card,
             "existing_card_id": existing_card_id,
             "needs_upsert": needs_upsert,
             "add_pack_names": add_pack_names,
+            "op_type": op_type,
+            "changed_fields": changed_fields,
+            "changed_values": changed_values,
         }
 
     def _build_pack_operation(
@@ -352,7 +449,9 @@ class FlibustierSyncService:
     ) -> dict[str, Any] | None:
         """构建卡包写入动作。"""
         existing_pack = self._repo.get_pack_by_name(pack_name)
+        print(f"[flibustier] pack name={pack_name}, existing={existing_pack is not None}", flush=True)
         if mode == "supplement" and existing_pack is not None:
+            print(f"[flibustier] supplement mode, pack exists, skip", flush=True)
             return None
         if (
             existing_pack is not None
@@ -360,10 +459,24 @@ class FlibustierSyncService:
             and mode != "force"
         ):
             return None
+
+        # 计算字段变化
+        changed_values: list[dict[str, str]] = []
+        if existing_pack is None:
+            # 新增
+            changed_values.append({"field": "name", "from": "", "to": pack_name})
+            changed_values.append({"field": "set_code", "from": "", "to": set_code})
+        else:
+            # 更新
+            if existing_pack.set_code != set_code:
+                changed_values.append({"field": "set_code", "from": existing_pack.set_code or "", "to": set_code})
+
         return {
             "name": pack_name,
             "set_code": set_code,
             "label_data": json.dumps({"en": pack_name}, ensure_ascii=False),
+            "op_type": "create" if existing_pack is None else "update",
+            "changed_values": changed_values,
         }
 
     def _normalize_number(self, value: Any) -> int | None:

@@ -144,3 +144,68 @@ def test_build_metadata_context_keeps_ui_state_fields(monkeypatch, memory_engine
     assert context["ui_step"] == 2
     assert context["selected_node_type"] == "set"
     assert context["selected_node_id"] == "A1"
+
+
+def test_resolve_sync_request_update_data_keeps_scope() -> None:
+    """更新数据动作应映射到 flibustier + supplement，且保留节点范围。"""
+    result = metadata_service.resolve_sync_request(
+        node_type="pack",
+        node_id="PackA",
+        action="update_data_supplement",
+    )
+    assert result["source"] == "flibustier"
+    assert result["mode"] == "supplement"
+    assert result["scope_level"] == "pack"
+    assert result["scope_value"] == "PackA"
+
+
+def test_resolve_sync_request_update_chinese_uses_52poke() -> None:
+    """更新中文动作应仅走 52poke supplement。"""
+    result = metadata_service.resolve_sync_request(
+        node_type="set",
+        node_id="A1",
+        action="update_chinese_supplement",
+    )
+    assert result["source"] == "52poke"
+    assert result["mode"] == "supplement"
+    assert result["scope_level"] == "set"
+    assert result["scope_value"] == "A1"
+
+
+def test_resolve_sync_request_update_new_series_only_all_scope() -> None:
+    """更新新系列仅允许根节点范围。"""
+    result = metadata_service.resolve_sync_request(
+        node_type="root",
+        node_id="all",
+        action="update_new_series",
+    )
+    assert result["source"] == "flibustier"
+    assert result["mode"] == "supplement"
+    assert result["scope_level"] == "all"
+    assert result["scope_value"] is None
+
+    try:
+        metadata_service.resolve_sync_request(
+            node_type="pack",
+            node_id="PackA",
+            action="update_new_series",
+        )
+        assert False, "预期 update_new_series 在非 root 下抛错"
+    except ValueError as exc:
+        assert "仅支持根节点" in str(exc)
+
+
+def test_resolve_sync_request_force_modes() -> None:
+    """覆盖动作应映射到 force 模式。"""
+    data_result = metadata_service.resolve_sync_request(
+        node_type="set",
+        node_id="A1",
+        action="update_data_force",
+    )
+    zh_result = metadata_service.resolve_sync_request(
+        node_type="set",
+        node_id="A1",
+        action="update_chinese_force",
+    )
+    assert data_result["mode"] == "force"
+    assert zh_result["mode"] == "force"

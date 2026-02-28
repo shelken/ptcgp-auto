@@ -147,3 +147,31 @@ def test_list_notification_selectable_cards_supports_pack_filter(session: Sessio
     assert total == 1
     assert len(rows) == 1
     assert rows[0].id == 920001
+
+
+def test_list_notification_selectable_cards_supports_localized_name_search(
+    session: Session,
+):
+    """卡牌选择器搜索应命中 data.localized_name。"""
+    session.add(
+        Card(
+            id=920003,
+            set_code="A1",
+            number=3,
+            name="Card EN",
+            rarity="RR",
+            image_url="https://example.com/c.png",
+            data='{"localized_name":{"zh":"卡牌中文名"}}',
+        )
+    )
+    session.commit()
+
+    rows, total = list_notification_selectable_cards(
+        session=session,
+        q="中文名",
+        page=0,
+        page_size=24,
+    )
+    assert total == 1
+    assert len(rows) == 1
+    assert rows[0].id == 920003

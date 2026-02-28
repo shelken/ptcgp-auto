@@ -2,9 +2,6 @@ import json
 from typing import Any
 
 from ptcgp_auto_v2.db.repositories import CardRepository
-from ptcgp_auto_v2.db.repositories.metadata_sync_snapshot_repository import (
-    MetadataSyncSnapshotRepository,
-)
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (
     FlibustierSyncService,
 )
@@ -13,6 +10,7 @@ from ptcgp_auto_v2.services.metadata_sync.poke52_localization_service import (
     Poke52LocalizationService,
 )
 from ptcgp_auto_v2.web.services.metadata_sync_service import (
+    _METADATA_SYNC_PREVIEW_CACHE,
     build_default_check_context,
     check_sources,
     execute_sync,
@@ -22,13 +20,37 @@ from ptcgp_auto_v2.web.queries.metadata_queries import build_label_dict
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
 
 
-_SYNC_ACTION_MAP: dict[str, dict[str, str]] = {
-    "structure_supplement": {"source": "flibustier", "mode": "supplement"},
-    "structure_force": {"source": "flibustier", "mode": "force"},
-    "sync_supplement": {"source": "full", "mode": "supplement"},
-    "sync_force": {"source": "full", "mode": "force"},
-    "localize_supplement": {"source": "52poke", "mode": "supplement"},
-    "localize_force": {"source": "52poke", "mode": "force"},
+_SYNC_ACTION_MAP: dict[str, dict[str, Any]] = {
+    "update_new_series": {
+        "source": "flibustier",
+        "mode": "supplement",
+        "sync_kind": "update_new_series",
+        "allowed_nodes": {"root"},
+    },
+    "update_data_supplement": {
+        "source": "flibustier",
+        "mode": "supplement",
+        "sync_kind": "update_data",
+        "allowed_nodes": {"root", "set", "pack", "card"},
+    },
+    "update_data_force": {
+        "source": "flibustier",
+        "mode": "force",
+        "sync_kind": "update_data",
+        "allowed_nodes": {"root", "set", "pack", "card"},
+    },
+    "update_chinese_supplement": {
+        "source": "52poke",
+        "mode": "supplement",
+        "sync_kind": "update_chinese",
+        "allowed_nodes": {"root", "set", "pack", "card"},
+    },
+    "update_chinese_force": {
+        "source": "52poke",
+        "mode": "force",
+        "sync_kind": "update_chinese",
+        "allowed_nodes": {"root", "set", "pack", "card"},
+    },
 }
 
 _NODE_SCOPE_MAP: dict[str, str] = {
@@ -50,6 +72,7 @@ def build_metadata_context(
     selected_set_code: str = "",
     selected_pack_name: str = "",
     snapshot_id: str = "",
+    current_action: str = "",
 ) -> dict:
     """构建元数据管理视图数据。"""
     from ptcgp_auto_v2.web.utils.i18n import resolve_label
@@ -91,6 +114,13 @@ def build_metadata_context(
     sync_check = build_default_check_context()
     snapshot_preview = _load_snapshot_preview(snapshot_id)
 
+    available_actions = _get_actions_for_node(selected_context["selected_node_type"])
+    available_action_cards = _build_action_cards(available_actions)
+    normalized_action = _normalize_action_for_node(
+        node_type=selected_context["selected_node_type"],
+        action=current_action,
+    )
+
     return {
         "ui_step": ui_step,
         "sets": sets_data,
@@ -101,33 +131,11 @@ def build_metadata_context(
         "sync_preview_json": json.dumps(snapshot_preview, ensure_ascii=False)
         if snapshot_preview
         else "",
-        "current_action": _default_action_for_node(
-            node_type=selected_context["selected_node_type"]
-        ),
+        "current_action": normalized_action,
+        "available_actions": available_actions,
+        "available_action_cards": available_action_cards,
         **selected_context,
     }
-
-
-def update_set_label(code: str, label_zh: str) -> None:
-    """更新卡包系列中文名。"""
-    repo = CardRepository()
-    card_set = repo.get_set_by_code(code)
-    if not card_set:
-        return
-    labels = parse_json_label(card_set.label_data)
-    labels[_get_zh_label_key()] = label_zh
-    repo.update_set_label(code, json.dumps(labels, ensure_ascii=False))
-
-
-def update_pack_label(name: str, label_zh: str) -> None:
-    """更新补充包中文名。"""
-    repo = CardRepository()
-    pack = repo.get_pack_by_name(name)
-    if not pack:
-        return
-    labels = parse_json_label(pack.label_data)
-    labels[_get_zh_label_key()] = label_zh
-    repo.update_pack_label(name, json.dumps(labels, ensure_ascii=False))
 
 
 def preview_metadata_sync(
@@ -142,20 +150,19 @@ def preview_metadata_sync(
     repo = CardRepository()
     flibustier_service = FlibustierSyncService(repo, cache=_METADATA_REMOTE_CACHE)
     poke52_service = Poke52LocalizationService(cache=_METADATA_REMOTE_CACHE)
-    snapshot_repo = MetadataSyncSnapshotRepository()
 
     sets_data: dict[str, list[dict[str, Any]]] = {}
     cards_data: list[dict[str, Any]] = []
     extra_map: dict[tuple[str, int], dict[str, Any]] = {}
-    if resolved["source"] in {"flibustier", "full"}:
+    if resolved["source"] == "flibustier":
         sets_data, cards_data, extra_map = flibustier_service.fetch_remote_metadata(
             force_refresh=force_refresh
         )
 
     return preview_sync(
-        snapshot_repo=snapshot_repo,
         flibustier_service=flibustier_service,
         poke52_service=poke52_service,
+        sync_kind=str(resolved["sync_kind"]),
         source=resolved["source"],
         mode=resolved["mode"],
         scope_level=resolved["scope_level"],
@@ -171,7 +178,6 @@ def execute_metadata_sync(snapshot_id: str) -> dict[str, Any]:
     """执行元数据同步。"""
     repo = CardRepository()
     return execute_sync(
-        snapshot_repo=MetadataSyncSnapshotRepository(),
         flibustier_service=FlibustierSyncService(repo),
         snapshot_id=snapshot_id,
     )
@@ -222,6 +228,10 @@ def resolve_sync_request(
         raise ValueError(f"不支持的节点类型: {node_type}")
 
     resolved = _SYNC_ACTION_MAP[normalized_action]
+    allowed_nodes = resolved["allowed_nodes"]
+    if normalized_node_type not in allowed_nodes:
+        raise ValueError(f"动作 {action} 仅支持根节点")
+
     scope_level = _NODE_SCOPE_MAP[normalized_node_type]
     scope_value: str | None = None
     if normalized_node_type != "root":
@@ -229,9 +239,14 @@ def resolve_sync_request(
         if not scope_value:
             raise ValueError("节点标识不能为空")
 
+    if normalized_action == "update_new_series":
+        scope_level = "all"
+        scope_value = None
+
     return {
-        "source": resolved["source"],
-        "mode": resolved["mode"],
+        "source": str(resolved["source"]),
+        "mode": str(resolved["mode"]),
+        "sync_kind": str(resolved["sync_kind"]),
         "scope_level": scope_level,
         "scope_value": scope_value,
     }
@@ -340,49 +355,150 @@ def _guess_pack_name_by_card(repo: CardRepository, card_key: str) -> str:
 
 
 def _load_snapshot_preview(snapshot_id: str) -> dict[str, Any] | None:
-    """按 snapshot_id 读取快照预览数据，供 Step2/Step3 透传展示。"""
+    """按 snapshot_id 读取缓存快照预览数据，供 Step2/Step3 透传展示。"""
     normalized_snapshot_id = (snapshot_id or "").strip()
     if not normalized_snapshot_id:
         return None
-    snapshot = MetadataSyncSnapshotRepository().get_snapshot(
-        normalized_snapshot_id,
-        include_expired=True,
-    )
-    if snapshot is None:
+    cached_snapshot = _METADATA_SYNC_PREVIEW_CACHE.get(normalized_snapshot_id)
+    if cached_snapshot is None or not isinstance(cached_snapshot, dict):
         return None
-    payload = _parse_json_dict(snapshot.payload_json)
-    summary = _parse_json_dict(snapshot.summary_json)
+
+    payload = cached_snapshot.get("payload")
+    summary = cached_snapshot.get("summary")
+    if not isinstance(payload, dict):
+        payload = {}
+    if not isinstance(summary, dict):
+        summary = {}
+
+    items = cached_snapshot.get("items")
+    if not isinstance(items, list):
+        items = []
+
     return {
-        "snapshot_id": snapshot.snapshot_id,
+        "snapshot_id": normalized_snapshot_id,
         "summary": summary,
         "payload": payload,
-        "status": snapshot.status,
+        "items": items,
+        "status": "previewed",
     }
-
-
-def _parse_json_dict(raw: str | None) -> dict[str, Any]:
-    """安全解析 JSON 字典。"""
-    if not raw:
-        return {}
-    try:
-        value = json.loads(raw)
-    except (TypeError, ValueError):
-        return {}
-    return value if isinstance(value, dict) else {}
 
 
 def _default_action_for_node(node_type: str) -> str:
     """根据节点类型返回默认动作。"""
-    if node_type == "card":
-        return "structure_force"
-    if node_type == "pack":
-        return "structure_supplement"
-    if node_type == "set":
-        return "sync_supplement"
-    return "sync_supplement"
+    if node_type == "root":
+        return "update_new_series"
+    return "update_data_supplement"
 
 
-def _get_zh_label_key() -> str:
-    """获取中文对应的标签键（通过 map 查找）"""
-    from ptcgp_auto_v2.config.constants import WEB_LANG_ZH, WEB_LANG_TO_DB_LABEL_KEYS
-    return WEB_LANG_TO_DB_LABEL_KEYS[WEB_LANG_ZH][0]
+def _get_actions_for_node(node_type: str) -> list[str]:
+    """根据节点类型返回可用动作。"""
+    if node_type == "root":
+        return [
+            "update_new_series",
+            "update_data_supplement",
+            "update_data_force",
+            "update_chinese_supplement",
+            "update_chinese_force",
+        ]
+    if node_type in {"set", "pack", "card"}:
+        return [
+            "update_data_supplement",
+            "update_data_force",
+            "update_chinese_supplement",
+            "update_chinese_force",
+        ]
+    return [
+        "update_new_series",
+        "update_data_supplement",
+        "update_data_force",
+        "update_chinese_supplement",
+        "update_chinese_force",
+    ]
+
+
+def _normalize_action_for_node(node_type: str, action: str) -> str:
+    """将动作归一为节点允许范围内的值。"""
+    available_actions = _get_actions_for_node(node_type)
+    normalized_action = (action or "").strip().lower()
+    if normalized_action in available_actions:
+        return normalized_action
+    return _default_action_for_node(node_type)
+
+
+def _build_action_cards(available_actions: list[str]) -> list[dict[str, Any]]:
+    """将动作列表转换为卡片展示结构。"""
+    cards: list[dict[str, Any]] = []
+
+    if "update_new_series" in available_actions:
+        cards.append(
+            {
+                "title_key": "metadata_action_update_new_series",
+                "title_fallback": "更新新系列",
+                "buttons": [
+                    {
+                        "action": "update_new_series",
+                        "label_key": "metadata_action_update_new_series",
+                        "label_fallback": "更新新系列",
+                        "mode": "supplement",
+                    }
+                ],
+            }
+        )
+
+    data_buttons: list[dict[str, str]] = []
+    if "update_data_supplement" in available_actions:
+        data_buttons.append(
+            {
+                "action": "update_data_supplement",
+                "label_key": "metadata_mode_supplement",
+                "label_fallback": "补充",
+                "mode": "supplement",
+            }
+        )
+    if "update_data_force" in available_actions:
+        data_buttons.append(
+            {
+                "action": "update_data_force",
+                "label_key": "metadata_mode_force",
+                "label_fallback": "覆盖",
+                "mode": "force",
+            }
+        )
+    if data_buttons:
+        cards.append(
+            {
+                "title_key": "metadata_action_update_data",
+                "title_fallback": "更新数据",
+                "buttons": data_buttons,
+            }
+        )
+
+    chinese_buttons: list[dict[str, str]] = []
+    if "update_chinese_supplement" in available_actions:
+        chinese_buttons.append(
+            {
+                "action": "update_chinese_supplement",
+                "label_key": "metadata_mode_supplement",
+                "label_fallback": "补充",
+                "mode": "supplement",
+            }
+        )
+    if "update_chinese_force" in available_actions:
+        chinese_buttons.append(
+            {
+                "action": "update_chinese_force",
+                "label_key": "metadata_mode_force",
+                "label_fallback": "覆盖",
+                "mode": "force",
+            }
+        )
+    if chinese_buttons:
+        cards.append(
+            {
+                "title_key": "metadata_action_update_chinese",
+                "title_fallback": "更新中文",
+                "buttons": chinese_buttons,
+            }
+        )
+
+    return cards

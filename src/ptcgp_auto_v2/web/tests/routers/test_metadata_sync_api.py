@@ -81,7 +81,7 @@ def test_sync_preview_api_returns_preview_id(monkeypatch):
                 {
                     "node_type": "set",
                     "node_id": "A1",
-                    "action": "sync_force",
+                    "action": "update_data_supplement",
                     "ui_step": "2",
                     "selected_set_code": "A1",
                     "selected_pack_name": "",
@@ -106,7 +106,7 @@ def test_sync_execute_api_returns_error_when_snapshot_missing(monkeypatch):
     response = asyncio.run(
         router.execute_metadata_sync_api(
             request=_build_request("POST", {"snapshot_id": "x", "ui_step": "3"}),
-                    )
+        )
     )
 
     assert response.status_code == 400
@@ -141,7 +141,7 @@ def test_sync_check_api_refreshes_context(monkeypatch):
     response = asyncio.run(
         router.check_metadata_sync_api(
             request=_build_request("POST", {"ui_step": "1"}),
-                    )
+        )
     )
 
     assert response.status_code == 200
@@ -220,7 +220,7 @@ def test_sync_preview_api_uses_node_action_params(monkeypatch):
                 {
                     "node_type": "pack",
                     "node_id": "PackA",
-                    "action": "localize_supplement",
+                    "action": "update_chinese_supplement",
                     "selected_set_code": "A1",
                     "selected_pack_name": "PackA",
                     "ui_step": "2",
@@ -234,5 +234,5 @@ def test_sync_preview_api_uses_node_action_params(monkeypatch):
     assert captured == {
         "node_type": "pack",
         "node_id": "PackA",
-        "action": "localize_supplement",
+        "action": "update_chinese_supplement",
     }
