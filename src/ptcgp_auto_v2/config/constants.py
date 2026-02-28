@@ -127,9 +127,18 @@ DEFAULT_WEB_PORT = 8000
 # 模板缩放比例
 # 注: 模板现在只裁剪不缩放(103x95)，比原来(513x473)小5倍
 # 因此比例要放大5倍来补偿
+# 最小包的比例，也就是扩展包列表页
 SCALE_PACK_SERIES_SELECT = 1.15  # 旧值: 0.23
+# 同系列选多个子包时的比例
 SCALE_PACK_LIST = 4.05  # 旧值: 0.81
-SCALE_PACK_DETAIL = 5.05  # 旧值: 1.0
+# 点击开包前比例
+SCALE_PACK_DETAIL = 5.25  # 旧值: 1.05
+# 游戏主页 比例
+SCALE_PACK_HOME = 2.52
+# 「pack_opening_select」 比例
+SCALE_PACK_OPENING_SELECT = 4.46
+# 「pack_opening_swipe」 比例
+SCALE_PACK_OPENING_SWIPE = 7.66
 
 
 # ========== YOLO + 感知哈希识别配置 ==========
