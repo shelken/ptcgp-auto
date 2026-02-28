@@ -13,7 +13,6 @@ from .exchange_card_request_repository import ExchangeCardRequestRepository
 from .friendship_repository import FriendshipRepository
 from .notification_repository import NotificationRepository
 from .notification_config_repository import NotificationConfigRepository
-from .metadata_sync_snapshot_repository import MetadataSyncSnapshotRepository
 from .pack_record_repository import PackRecordRepository
 from .task_instance_repository import TaskInstanceRepository
 from .task_plan_repository import TaskPlanRepository
@@ -33,7 +32,6 @@ __all__ = [
     "FriendshipRepository",
     "NotificationRepository",
     "NotificationConfigRepository",
-    "MetadataSyncSnapshotRepository",
     "PackRecordRepository",
     "TaskInstanceRepository",
     "TaskPlanRepository",

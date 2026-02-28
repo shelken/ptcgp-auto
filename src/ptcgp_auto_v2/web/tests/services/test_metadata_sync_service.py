@@ -3,13 +3,8 @@
 
 from __future__ import annotations
 
-import json
-
-from ptcgp_auto_v2.db.models import MetadataSyncSnapshot
-from ptcgp_auto_v2.db.repositories.metadata_sync_snapshot_repository import (
-    MetadataSyncSnapshotRepository,
-)
 from ptcgp_auto_v2.web.services.metadata_sync_service import (
+    _METADATA_SYNC_PREVIEW_CACHE,
     check_sources,
     execute_sync,
     preview_sync,
@@ -95,9 +90,7 @@ def test_preview_sync_only_52poke_source_skips_flibustier_build() -> None:
         def build_plan(self, **_kwargs):
             raise AssertionError("source=52poke 不应触发 flibustier build_plan")
 
-    repo = MetadataSyncSnapshotRepository()
     result = preview_sync(
-        snapshot_repo=repo,
         flibustier_service=_Only52PokeFlibustier(),  # type: ignore[arg-type]
         poke52_service=_FakePoke52Service(),
         source="52poke",
@@ -127,10 +120,8 @@ def test_check_sources_contains_three_channels() -> None:
 
 
 def test_preview_sync_creates_snapshot_with_summary() -> None:
-    """预览应生成快照并返回 summary。"""
-    repo = MetadataSyncSnapshotRepository()
+    """预览应生成缓存快照并返回 summary。"""
     result = preview_sync(
-        snapshot_repo=repo,
         flibustier_service=_FakeFlibustierSyncService(),
         poke52_service=_FakePoke52Service(),
         source="full",
@@ -145,21 +136,17 @@ def test_preview_sync_creates_snapshot_with_summary() -> None:
 
     assert result["snapshot_id"]
     assert result["summary"]["upsert_sets"] == 1
-    row: MetadataSyncSnapshot | None = repo.get_snapshot(
-        result["snapshot_id"], include_expired=True
-    )
-    assert row is not None
-    assert row.status == "previewed"
-    payload = json.loads(row.payload_json)
+    cached = _METADATA_SYNC_PREVIEW_CACHE.get(result["snapshot_id"])
+    assert isinstance(cached, dict)
+    payload = cached.get("payload", {})
+    assert isinstance(payload, dict)
     assert payload["flibustier"]["summary"]["upsert_sets"] == 1
 
 
 def test_execute_sync_rejects_missing_snapshot() -> None:
     """不存在快照时应抛出错误。"""
-    repo = MetadataSyncSnapshotRepository()
     try:
         execute_sync(
-            snapshot_repo=repo,
             flibustier_service=_FakeFlibustierSyncService(),
             snapshot_id="not-found",
         )
@@ -170,10 +157,8 @@ def test_execute_sync_rejects_missing_snapshot() -> None:
 
 def test_execute_sync_applies_localization_in_supplement_mode() -> None:
     """执行同步时应写入 52poke 本地化（supplement）。"""
-    snapshot_repo = MetadataSyncSnapshotRepository()
     flib = _FakeFlibustierSyncService()
     preview = preview_sync(
-        snapshot_repo=snapshot_repo,
         flibustier_service=flib,
         poke52_service=_FakePoke52Service(),
         source="full",
@@ -187,7 +172,6 @@ def test_execute_sync_applies_localization_in_supplement_mode() -> None:
     )
 
     result = execute_sync(
-        snapshot_repo=snapshot_repo,
         flibustier_service=flib,
         snapshot_id=preview["snapshot_id"],
     )
