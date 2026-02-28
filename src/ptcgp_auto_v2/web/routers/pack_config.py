@@ -26,7 +26,8 @@ async def get_card_sets():
 @router.get("/api/card-sets/{set_code}/boosters")
 async def get_set_boosters(set_code: str):
     """获取指定系列补充包列表。"""
-    return build_set_boosters_options(set_code)
+    options = build_set_boosters_options(set_code)
+    return [item["name"] if isinstance(item, dict) else item for item in options]
 
 
 @router.get(

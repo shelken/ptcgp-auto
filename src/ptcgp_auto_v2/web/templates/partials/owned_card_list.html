@@ -12,11 +12,11 @@
         hx-get="/api/owned-cards/modal?card_id={{ item.card.id }}&lang={{ current_lang }}"
         hx-target="#modal-content"
         hx-swap="innerHTML"
-        title="{{ item.card.name }}">
+        title="{{ item.card_display_name or item.card.name }}">
         <div class="owned-card-media">
             <img
                 src="{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.png&w=400&output=png"
-                alt="{{ item.card.name }}"
+                alt="{{ item.card_display_name or item.card.name }}"
                 class="owned-card-image"
                 loading="lazy"
                 decoding="async"

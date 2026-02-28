@@ -3,7 +3,7 @@
 from sqlmodel import Session
 
 from ptcgp_auto_v2.config.assets import build_card_image_urls
-from ptcgp_auto_v2.db.models import Account, Card, Notification
+from ptcgp_auto_v2.db.models import Account, Card, CardSet, Notification, Pack
 from ptcgp_auto_v2.web.services.notification_service import (
     build_notification_panel_context,
     build_notification_card_selector_context,
@@ -111,8 +111,63 @@ def test_build_notification_card_selector_context_uses_code_filter(session: Sess
     )
 
     assert len(context["cards"]) == 1
-    assert context["cards"][0].id == 900101
+    assert context["cards"][0]["id"] == 900101
+    assert context["cards"][0]["display_name"] == "卡1"
     assert context["card_selector_total"] == 1
+
+
+def test_build_notification_card_selector_context_prefers_localized_names(
+    session: Session,
+):
+    """卡牌/系列/子包显示应优先当前语言本地化。"""
+    session.add(
+        CardSet(
+            code="A2",
+            name="Set A2",
+            label_data='{"zh":"系列A2"}',
+        )
+    )
+    session.add(
+        Pack(
+            name="Mewtwo",
+            set_code="A2",
+            label_data='{"zh":"超梦包"}',
+        )
+    )
+    session.add(
+        Card(
+            id=900103,
+            number=3,
+            name="Card EN",
+            rarity="RR",
+            type="Pokemon",
+            set_code="A2",
+            image_url="https://example.com/3.png",
+            data='{"localized_name":{"zh":"卡牌中文"}}',
+        )
+    )
+    session.commit()
+
+    set_lang_context("zh_CN")
+    context = build_notification_card_selector_context(
+        session=session,
+        scene="rare_card_obtained",
+        selected_card_ids=[900103],
+        set_code="A2",
+        page=0,
+        page_size=24,
+    )
+
+    assert context["cards"][0]["display_name"] == "卡牌中文"
+    assert context["selected_cards"][0]["display_name"] == "卡牌中文"
+    assert any(
+        item["value"] == "A2" and item["display_name"] == "系列A2"
+        for item in context["set_codes"]
+    )
+    assert any(
+        item["value"] == "Mewtwo" and item["display_name"] == "超梦包"
+        for item in context["pack_names"]
+    )
 
 
 def test_list_rarity_codes_excludes_r_from_notification_options(session: Session):

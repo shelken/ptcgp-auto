@@ -95,7 +95,7 @@ def test_preview_then_execute_flow_success(monkeypatch):
                 {
                     "node_type": "root",
                     "node_id": "all",
-                    "action": "sync_supplement",
+                    "action": "update_data_supplement",
                     "ui_step": "2",
                     "selected_set_code": "",
                     "selected_pack_name": "",
@@ -106,6 +106,7 @@ def test_preview_then_execute_flow_success(monkeypatch):
     )
     assert preview_resp.status_code == 200
     assert "snap-ok" in bytes(preview_resp.body).decode("utf-8")
+    assert "'ui_step': 2" in bytes(preview_resp.body).decode("utf-8")
 
     execute_resp = asyncio.run(
         router.execute_metadata_sync_api(
@@ -124,6 +125,7 @@ def test_preview_then_execute_flow_success(monkeypatch):
     )
     assert execute_resp.status_code == 200
     assert "set_label_updates" in bytes(execute_resp.body).decode("utf-8")
+    assert "'ui_step': 1" in bytes(execute_resp.body).decode("utf-8")
 
 
 def test_execute_flow_rejects_expired_snapshot(monkeypatch):

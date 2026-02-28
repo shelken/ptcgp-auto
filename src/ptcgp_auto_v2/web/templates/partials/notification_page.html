@@ -10,7 +10,7 @@
     {% if selected_rows %}
     <div class="flex flex-wrap gap-2">
         {% for card in selected_rows %}
-        <span class="brutal-tag text-xs">#{{ card.id }} {{ card.name }}</span>
+        <span class="brutal-tag text-xs">#{{ card.id }} {{ card.display_name or card.name }}</span>
         {% endfor %}
     </div>
     {% endif %}

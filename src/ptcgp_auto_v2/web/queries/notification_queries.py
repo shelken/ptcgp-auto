@@ -136,6 +136,7 @@ def list_notification_selectable_cards(
         statement = statement.where(
             or_(
                 col(Card.name).ilike(f"%{q_text}%"),
+                cast(col(Card.data), String).ilike(f"%{q_text}%"),
                 cast(col(Card.number), String).ilike(f"%{q_text}%"),
                 col(Card.set_code).ilike(f"%{q_text}%"),
             )

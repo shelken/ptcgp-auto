@@ -93,6 +93,7 @@ def test_preview_sync_only_52poke_source_skips_flibustier_build() -> None:
     result = preview_sync(
         flibustier_service=_Only52PokeFlibustier(),  # type: ignore[arg-type]
         poke52_service=_FakePoke52Service(),
+        sync_kind="update_chinese",
         source="52poke",
         mode="supplement",
         scope_level="set",
@@ -124,7 +125,8 @@ def test_preview_sync_creates_snapshot_with_summary() -> None:
     result = preview_sync(
         flibustier_service=_FakeFlibustierSyncService(),
         poke52_service=_FakePoke52Service(),
-        source="full",
+        sync_kind="update_data",
+        source="flibustier",
         mode="force",
         scope_level="set",
         scope_value="A1",
@@ -161,7 +163,8 @@ def test_execute_sync_applies_localization_in_supplement_mode() -> None:
     preview = preview_sync(
         flibustier_service=flib,
         poke52_service=_FakePoke52Service(),
-        source="full",
+        sync_kind="update_data",
+        source="flibustier",
         mode="supplement",
         scope_level="set",
         scope_value="A1",
@@ -189,3 +192,69 @@ def test_check_sources_keeps_all_channels() -> None:
         poke52_stats={"series": 3, "packs": 4},
     )
     assert set(result.keys()) == {"local", "flibustier", "poke52"}
+
+
+def test_preview_sync_new_series_only_keeps_new_set_operations() -> None:
+    """更新新系列预览应保留新增系列及其关联 pack/card 更新。"""
+
+    class _NewSeriesFlibustier:
+        def build_plan(self, **_kwargs):
+            return {
+                "mode": "supplement",
+                "scope_level": "all",
+                "scope_value": None,
+                "summary": {
+                    "upsert_sets": 2,
+                    "upsert_packs": 1,
+                    "card_updates": 1,
+                    "card_pack_links_to_add": 1,
+                    "card_pack_links_to_remove": 0,
+                },
+                "operations": {
+                    "sets": [
+                        {"code": "A1", "name": "old", "op_type": "update"},
+                        {"code": "A2", "name": "new", "op_type": "create"},
+                    ],
+                    "packs": [{"name": "PackA", "set_code": "A2"}],
+                    "cards": [
+                        {
+                            "card": {
+                                "set_code": "A2",
+                                "number": 1,
+                                "name": "CardA",
+                                "rarity": "C",
+                                "image_url": "a.webp",
+                                "data": "{}",
+                            },
+                            "existing_card_id": None,
+                            "needs_upsert": True,
+                            "add_pack_names": ["PackA"],
+                        }
+                    ],
+                },
+            }
+
+    result = preview_sync(
+        flibustier_service=_NewSeriesFlibustier(),  # type: ignore[arg-type]
+        poke52_service=_FakePoke52Service(),
+        sync_kind="update_new_series",
+        source="flibustier",
+        mode="supplement",
+        scope_level="all",
+        scope_value=None,
+        force_refresh=False,
+        remote_sets_data={},
+        remote_cards_data=[],
+        remote_extra_map={},
+    )
+
+    payload = result["payload"]
+    assert len(payload["flibustier"]["operations"]["sets"]) == 1
+    assert payload["flibustier"]["operations"]["sets"][0]["code"] == "A2"
+    assert len(payload["flibustier"]["operations"]["packs"]) == 1
+    assert payload["flibustier"]["operations"]["packs"][0]["set_code"] == "A2"
+    assert len(payload["flibustier"]["operations"]["cards"]) == 1
+    assert payload["flibustier"]["operations"]["cards"][0]["card"]["set_code"] == "A2"
+    assert result["summary"]["upsert_sets"] == 1
+    assert result["summary"]["upsert_packs"] == 1
+    assert result["summary"]["card_updates"] == 1

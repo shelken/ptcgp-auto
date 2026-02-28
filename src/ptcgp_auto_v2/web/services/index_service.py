@@ -4,6 +4,7 @@ from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.repositories import CardRepository, NotificationRepository
 from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
+from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
 
 def build_index_context(session: Session) -> dict:
@@ -39,18 +40,28 @@ def build_index_context(session: Session) -> dict:
     notification_repo = NotificationRepository()
     unread_count = notification_repo.count_unread()
 
-    sets_data = [
-        {"code": item.code, "label": parse_json_label(item.label_data)}
-        for item in card_sets
-    ]
-    packs_data = [
-        {
-            "name": item.name,
-            "set_code": item.set_code,
-            "label": parse_json_label(item.label_data),
-        }
-        for item in packs
-    ]
+    sets_data = []
+    for item in card_sets:
+        label_dict = parse_json_label(item.label_data)
+        sets_data.append(
+            {
+                "code": item.code,
+                "label": label_dict,
+                "display_name": resolve_label(label_dict, fallback=item.code),
+            }
+        )
+
+    packs_data = []
+    for item in packs:
+        label_dict = parse_json_label(item.label_data)
+        packs_data.append(
+            {
+                "name": item.name,
+                "set_code": item.set_code,
+                "label": label_dict,
+                "display_name": resolve_label(label_dict, fallback=item.name),
+            }
+        )
 
     return {
         "rarities": rarities,

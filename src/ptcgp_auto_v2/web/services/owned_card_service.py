@@ -9,6 +9,12 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
+from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data
+
+
+def _resolve_card_display_name(card: Card) -> str:
+    """解析卡牌展示名（优先当前语言本地化）。"""
+    return resolve_card_name_from_data(card.data, fallback=card.name)
 
 
 def build_owned_cards_list_context(
@@ -62,6 +68,11 @@ def build_owned_cards_list_context(
     if has_next:
         total += normalized_page_size
 
+    for item in items:
+        card = item.get("card") if isinstance(item, dict) else None
+        if isinstance(card, Card):
+            item["card_display_name"] = _resolve_card_display_name(card)
+
     return {
         "items": items,
         "page": normalized_page,
@@ -92,6 +103,7 @@ def build_owned_card_modal_context(
     exchange_blocked = card.rarity in ExchangeCardService.NON_EXCHANGEABLE_RARITIES
     return {
         "card": card,
+        "card_display_name": _resolve_card_display_name(card),
         "accounts": table_context["accounts"],
         "exchange_blocked": exchange_blocked,
         "total_accounts": table_context["total_items"],

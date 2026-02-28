@@ -21,9 +21,9 @@ from ptcgp_auto_v2.db.models import (
     Card,
     Notification,
     NotificationConfig,
-    Pack,
 )
 from ptcgp_auto_v2.db.repositories import (
+    CardRepository,
     NotificationConfigRepository,
     NotificationRepository,
 )
@@ -35,6 +35,7 @@ from ptcgp_auto_v2.web.queries.notification_queries import (
     normalize_card_picker_sort,
     normalize_notification_sort,
 )
+from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data, resolve_label_json
 
 SCENE_OPTIONS = list(NOTIFICATION_SCENE_OPTIONS)
 TASK_STATUS_OPTIONS = list(NOTIFICATION_TASK_STATUS_OPTIONS)
@@ -116,6 +117,24 @@ def list_cards_by_ids(session: Session, card_ids: list[int]) -> list[Card]:
     return [card_map[card_id] for card_id in card_ids if card_id in card_map]
 
 
+def list_card_views_by_ids(
+    session: Session, card_ids: list[int]
+) -> list[dict[str, Any]]:
+    """按给定顺序查询卡牌展示视图。"""
+    return [_build_card_view(card) for card in list_cards_by_ids(session, card_ids)]
+
+
+def _build_card_view(card: Card) -> dict[str, Any]:
+    """构建卡牌展示视图（当前语言优先）。"""
+    return {
+        "id": card.id,
+        "set_code": card.set_code,
+        "number": card.number,
+        "name": card.name,
+        "display_name": resolve_card_name_from_data(card.data, fallback=card.name),
+    }
+
+
 def build_notification_card_selector_context(
     session: Session,
     scene: str,
@@ -147,15 +166,28 @@ def build_notification_card_selector_context(
         page=normalized_page,
         page_size=normalized_page_size,
     )
-    set_codes = list(session.exec(select(Card.set_code).distinct()).all())
-    set_codes = sorted([item for item in set_codes if item])
-    pack_names = list(session.exec(select(Pack.name).order_by(Pack.name)).all())
-    pack_names = [item for item in pack_names if item]
-    selected_card_rows = list_cards_by_ids(session, selected_card_ids)
+    card_repo = CardRepository()
+    set_options = [
+        {
+            "value": item.code,
+            "display_name": resolve_label_json(item.label_data, fallback=item.code),
+        }
+        for item in card_repo.get_all_sets()
+    ]
+    pack_options = [
+        {
+            "value": item.name,
+            "display_name": resolve_label_json(item.label_data, fallback=item.name),
+        }
+        for item in card_repo.get_all_packs()
+        if item.name
+    ]
+    selected_card_rows = list_card_views_by_ids(session, selected_card_ids)
+    card_rows = [_build_card_view(card) for card in cards]
 
     return {
         "scene": scene,
-        "cards": cards,
+        "cards": card_rows,
         "selected_card_ids": selected_card_ids,
         "selected_cards": selected_card_rows,
         "card_selector_q": q,
@@ -170,8 +202,8 @@ def build_notification_card_selector_context(
         "card_selector_has_prev": normalized_page > 0,
         "card_selector_has_next": (normalized_page + 1) * normalized_page_size < total,
         "rarity_codes": list_rarity_codes(session),
-        "set_codes": set_codes,
-        "pack_names": pack_names,
+        "set_codes": set_options,
+        "pack_names": pack_options,
     }
 
 

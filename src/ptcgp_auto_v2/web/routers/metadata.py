@@ -5,8 +5,6 @@ from fastapi.responses import HTMLResponse
 
 from ptcgp_auto_v2.web.services.metadata_service import (
     build_metadata_context,
-    update_set_label,
-    update_pack_label,
     preview_metadata_sync,
     execute_metadata_sync,
     check_metadata_sources,
@@ -26,7 +24,7 @@ async def get_management_metadata(
     selected_set_code: str = Query(default=""),
     selected_pack_name: str = Query(default=""),
     ui_step: int = Query(default=1),
-    current_action: str = Query(default="sync_supplement"),
+    current_action: str = Query(default="update_new_series"),
     snapshot_id: str = Query(default=""),
 ):
     """渲染元数据管理页面。"""
@@ -37,33 +35,9 @@ async def get_management_metadata(
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
         snapshot_id=snapshot_id,
+        current_action=current_action,
     )
-    context["current_action"] = current_action
     return render_template(request, "partials/metadata_list.html", context)
-
-
-@router.post("/api/metadata/set/{code}/label")
-async def update_set_label_api(
-    request: Request,
-    code: str,
-):
-    """更新卡包系列中文名。"""
-    form = await request.form()
-    label_zh = safe_get_string(form, "label_zh") or ""
-    update_set_label(code, label_zh)
-    return await get_management_metadata(request)
-
-
-@router.post("/api/metadata/pack/{name}/label")
-async def update_pack_label_api(
-    request: Request,
-    name: str,
-):
-    """更新补充包中文名。"""
-    form = await request.form()
-    label_zh = safe_get_string(form, "label_zh") or ""
-    update_pack_label(name, label_zh)
-    return await get_management_metadata(request)
 
 
 @router.post("/api/metadata/sync/preview")
@@ -74,7 +48,7 @@ async def preview_metadata_sync_api(
     form = await request.form()
     node_type = safe_get_string(form, "node_type") or "root"
     node_id = safe_get_string(form, "node_id") or "all"
-    action = safe_get_string(form, "action") or "sync_supplement"
+    action = safe_get_string(form, "action") or "update_new_series"
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
     current_action = safe_get_string(form, "current_action") or action
@@ -105,8 +79,8 @@ async def preview_metadata_sync_api(
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
         snapshot_id=result.get("snapshot_id") or snapshot_id,
+        current_action=current_action,
     )
-    context["current_action"] = current_action
     context["sync_preview"] = result
     context["sync_preview_json"] = preview_json
     return render_template(request, "partials/metadata_list.html", context)
@@ -123,12 +97,7 @@ async def execute_metadata_sync_api(
     node_id = safe_get_string(form, "node_id") or "all"
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
-    current_action = safe_get_string(form, "current_action") or "sync_supplement"
-    ui_step_raw = safe_get_string(form, "ui_step") or "3"
-    try:
-        ui_step = int(ui_step_raw)
-    except ValueError:
-        ui_step = 3
+    current_action = safe_get_string(form, "current_action") or "update_new_series"
 
     try:
         result = execute_metadata_sync(snapshot_id)
@@ -136,14 +105,14 @@ async def execute_metadata_sync_api(
         return HTMLResponse(str(exc), status_code=400)
 
     context = build_metadata_context(
-        ui_step=ui_step,
+        ui_step=1,
         selected_node_type=node_type,
         selected_node_id=node_id,
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
         snapshot_id=snapshot_id,
+        current_action=current_action,
     )
-    context["current_action"] = current_action
     context["sync_execute_result"] = result
     context["sync_execute_result_json"] = json.dumps(result, ensure_ascii=False)
     return render_template(request, "partials/metadata_list.html", context)
@@ -159,7 +128,7 @@ async def check_metadata_sync_api(
     node_id = safe_get_string(form, "node_id") or "all"
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
-    current_action = safe_get_string(form, "current_action") or "sync_supplement"
+    current_action = safe_get_string(form, "current_action") or "update_new_series"
     snapshot_id = safe_get_string(form, "snapshot_id") or ""
     ui_step_raw = safe_get_string(form, "ui_step") or "1"
     try:
@@ -173,8 +142,8 @@ async def check_metadata_sync_api(
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
         snapshot_id=snapshot_id,
+        current_action=current_action,
     )
-    context["current_action"] = current_action
     context["sync_check"] = check_metadata_sources()
     return render_template(request, "partials/metadata_list.html", context)
 
@@ -189,7 +158,7 @@ async def select_metadata_node_api(
     node_id = safe_get_string(form, "node_id") or "all"
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
-    current_action = safe_get_string(form, "current_action") or "sync_supplement"
+    current_action = safe_get_string(form, "current_action") or "update_new_series"
     snapshot_id = safe_get_string(form, "snapshot_id") or ""
     ui_step_raw = safe_get_string(form, "ui_step") or "1"
     try:
@@ -204,6 +173,6 @@ async def select_metadata_node_api(
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
         snapshot_id=snapshot_id,
+        current_action=current_action,
     )
-    context["current_action"] = current_action
     return render_template(request, "partials/metadata_list.html", context)
