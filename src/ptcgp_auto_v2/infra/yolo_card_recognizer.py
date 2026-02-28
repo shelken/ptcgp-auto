@@ -255,7 +255,10 @@ class YoloCardRecognizer:
 
             # 获取TopK候选（第一阶段）
             topk_candidates = self.hash_manager.find_topk_candidates(
-                base_hash, set_code=set_code, topk=TOPK_CANDIDATES
+                base_hash,
+                set_code=set_code,
+                topk=TOPK_CANDIDATES,
+                exclude_promo=exclude_promo,
             )
 
             if not topk_candidates:
