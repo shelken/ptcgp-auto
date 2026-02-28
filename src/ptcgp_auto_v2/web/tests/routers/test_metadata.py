@@ -27,31 +27,44 @@ def _build_request(method: str = "GET") -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def test_get_management_metadata_renders_template(monkeypatch):
     """元数据管理页应渲染列表模板。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     monkeypatch.setattr(
         router,
         "build_metadata_context",
-        lambda _lang: {"rows": [], "t": {}, "current_lang": "zh_CN"},
+        lambda **_kwargs: {
+            "rows": [],
+            "t": {},
+            "current_lang": "zh_CN",
+            "sets": [],
+            "packs_by_set": {},
+            "sync_check": {},
+            "selected_node_type": "root",
+            "selected_node_id": "all",
+            "selected_set_code": "",
+            "selected_pack_name": "",
+            "selected_card_key": "",
+            "selected_pack_cards": [],
+            "ui_step": _kwargs.get("ui_step", 1),
+        },
     )
 
     response = asyncio.run(
         router.get_management_metadata(
             request=_build_request("GET"),
-            lang="zh_CN",
         )
     )
     assert response.status_code == 200
@@ -60,7 +73,7 @@ def test_get_management_metadata_renders_template(monkeypatch):
 
 def test_update_set_label_refreshes_management_partial(monkeypatch):
     """更新系列名后应返回管理页片段。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(
@@ -74,7 +87,21 @@ def test_update_set_label_refreshes_management_partial(monkeypatch):
     monkeypatch.setattr(
         router,
         "build_metadata_context",
-        lambda _lang: {"rows": [], "t": {}, "current_lang": "zh_CN"},
+        lambda **_kwargs: {
+            "rows": [],
+            "t": {},
+            "current_lang": "zh_CN",
+            "sets": [],
+            "packs_by_set": {},
+            "sync_check": {},
+            "selected_node_type": "root",
+            "selected_node_id": "all",
+            "selected_set_code": "",
+            "selected_pack_name": "",
+            "selected_card_key": "",
+            "selected_pack_cards": [],
+            "ui_step": _kwargs.get("ui_step", 1),
+        },
     )
     monkeypatch.setattr(
         router,
@@ -83,7 +110,7 @@ def test_update_set_label_refreshes_management_partial(monkeypatch):
     )
 
     response = asyncio.run(
-        router.update_set_label_api(request=request, code="A1", lang="zh_CN")
+        router.update_set_label_api(request=request, code="A1")
     )
     assert response.status_code == 200
     assert called == {"code": "A1", "label_zh": "系列A"}
@@ -91,7 +118,7 @@ def test_update_set_label_refreshes_management_partial(monkeypatch):
 
 def test_update_pack_label_refreshes_management_partial(monkeypatch):
     """更新补充包名后应返回管理页片段。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(
@@ -105,7 +132,21 @@ def test_update_pack_label_refreshes_management_partial(monkeypatch):
     monkeypatch.setattr(
         router,
         "build_metadata_context",
-        lambda _lang: {"rows": [], "t": {}, "current_lang": "zh_CN"},
+        lambda **_kwargs: {
+            "rows": [],
+            "t": {},
+            "current_lang": "zh_CN",
+            "sets": [],
+            "packs_by_set": {},
+            "sync_check": {},
+            "selected_node_type": "root",
+            "selected_node_id": "all",
+            "selected_set_code": "",
+            "selected_pack_name": "",
+            "selected_card_key": "",
+            "selected_pack_cards": [],
+            "ui_step": _kwargs.get("ui_step", 1),
+        },
     )
     monkeypatch.setattr(
         router,
@@ -114,7 +155,7 @@ def test_update_pack_label_refreshes_management_partial(monkeypatch):
     )
 
     response = asyncio.run(
-        router.update_pack_label_api(request=request, name="p1", lang="zh_CN")
+        router.update_pack_label_api(request=request, name="p1")
     )
     assert response.status_code == 200
     assert called == {"name": "p1", "label_zh": "补充包A"}

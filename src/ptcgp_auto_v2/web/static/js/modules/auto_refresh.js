@@ -5,17 +5,21 @@ export function buildAutoRefreshUrl(container) {
     const baseUrl = container.dataset.autoRefresh;
     if (!baseUrl) return null;
 
-    const includeSelector = container.dataset.refreshInclude;
-    if (!includeSelector) {
-        return baseUrl;
-    }
-
-    const params = new URLSearchParams();
+    const parsedUrl = new URL(baseUrl, window.location.origin);
+    const params = new URLSearchParams(parsedUrl.search);
     params.set('page', '0');
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lang') || 'en';
-    params.set('lang', lang);
+    if (!params.has('lang')) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const lang = urlParams.get('lang') || 'en';
+        params.set('lang', lang);
+    }
+
+    const includeSelector = container.dataset.refreshInclude;
+    if (!includeSelector) {
+        parsedUrl.search = params.toString();
+        return parsedUrl.pathname + (parsedUrl.search ? parsedUrl.search : '');
+    }
 
     const selectors = includeSelector.split(',').map((item) => item.trim()).filter(Boolean);
     selectors.forEach((selector) => {
@@ -25,15 +29,16 @@ export function buildAutoRefreshUrl(container) {
         if (element.tagName === 'FORM') {
             const formData = new FormData(element);
             formData.forEach((value, key) => {
-                params.append(key, value);
+                params.set(key, String(value));
             });
             return;
         }
 
         if (element.name) {
-            params.append(element.name, element.value || '');
+            params.set(element.name, element.value || '');
         }
     });
 
-    return `${baseUrl}?${params.toString()}`;
+    parsedUrl.search = params.toString();
+    return parsedUrl.pathname + (parsedUrl.search ? parsedUrl.search : '');
 }
