@@ -518,15 +518,17 @@ class PackOpeningTaskBase(Task):
         for pack in self._card_repo.get_all_packs() if self._card_repo else []:
             if target_set_code and pack.set_code != target_set_code:
                 continue
-            if pack.name.upper().startswith("PROMO"):
+            # 使用 set_code 过滤 PROMO，避免名称不是 "PROMO*"（如 "Vol. 1"）时误入候选
+            if (pack.set_code or "").upper().startswith("PROMO"):
                 continue
             if not manager.ensure_template_ready(template_matcher, pack.name):
                 continue
 
             template_name = manager.get_template_name(pack.name)
             match = template_matcher.find_with_scale(
-                screenshot, template_name,
-                scale=settings.scale_pack_opening_swipe, 
+                screenshot,
+                template_name,
+                scale=settings.scale_pack_opening_swipe,
                 threshold=settings.pack_template_threshold,
             )
             if match:
