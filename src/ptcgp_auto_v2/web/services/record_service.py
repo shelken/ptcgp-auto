@@ -21,6 +21,18 @@ def _resolve_record_card_name(pack_card: Any) -> str:
     return resolve_card_name_from_data(card.data, fallback=fallback_name or card.name)
 
 
+def _build_record_card_view(pack_card: Any) -> dict[str, Any]:
+    """构建记录页卡牌视图模型，避免直接给 ORM 模型动态加字段。"""
+    return {
+        "display_name": _resolve_record_card_name(pack_card),
+        "card_name": str(getattr(pack_card, "card_name", "") or ""),
+        "rarity": str(getattr(pack_card, "rarity", "") or ""),
+        "is_new": bool(getattr(pack_card, "is_new", False)),
+        "position": int(getattr(pack_card, "position", 0) or 0),
+        "card": getattr(pack_card, "card", None),
+    }
+
+
 def build_records_list_context(
     *,
     session: Session,
@@ -55,9 +67,8 @@ def build_records_list_context(
 
     for record in results:
         sorted_cards = sorted(record.cards, key=lambda card: card.position)
-        for card in sorted_cards:
-            card.display_name = _resolve_record_card_name(card)
-        card_count = len(sorted_cards)
+        card_views = [_build_record_card_view(card) for card in sorted_cards]
+        card_count = len(card_views)
         layout_type = "layout-3"
 
         if card_count == 6:
@@ -92,7 +103,7 @@ def build_records_list_context(
         items.append(
             {
                 "record": record,
-                "cards": sorted_cards,
+                "cards": card_views,
                 "layout": layout_type,
                 "account_name": record.account.nickname
                 if record.account

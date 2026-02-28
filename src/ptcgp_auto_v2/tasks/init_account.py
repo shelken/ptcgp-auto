@@ -244,6 +244,10 @@ class InitAccountTask(PackOpeningTaskBase):
         """返回 pack 记录类型：教程初始包"""
         return "init_tutorial"
 
+    def get_rare_card_notify_message(self) -> str:
+        """返回稀有卡通知消息：新手初始化"""
+        return "新手开包获得稀有卡牌"
+
     def should_prepare_pack_resources(self) -> bool:
         """初始化任务不需要准备卡包图片资源"""
         return False

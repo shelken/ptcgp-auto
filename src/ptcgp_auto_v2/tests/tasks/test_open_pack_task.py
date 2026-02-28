@@ -1,11 +1,6 @@
-import sys
 import unittest
 from unittest.mock import Mock, patch
-from pathlib import Path
 from types import SimpleNamespace
-
-src_dir = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.tasks.open_pack import HOME_CHECK_THRESHOLD, OpenPackTask
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
@@ -63,6 +58,34 @@ class FakePageDetector:
             self._template_index += 1
             return match
         return None
+
+
+class TestOpenPackConstantsCleanup(unittest.TestCase):
+    """测试清理死代码常量"""
+
+    def test_no_dead_skip_reason_constants(self):
+        """验证已移除无用的跳过原因常量"""
+        import ptcgp_auto_v2.tasks.open_pack as open_pack_module
+
+        # 确保未使用的常量已被移除
+        self.assertFalse(
+            hasattr(open_pack_module, "SKIP_REASON_NO_ACCOUNT_ID"),
+            "应移除 SKIP_REASON_NO_ACCOUNT_ID 常量",
+        )
+        self.assertFalse(
+            hasattr(open_pack_module, "SKIP_REASON_NO_PACK_CONFIG"),
+            "应移除 SKIP_REASON_NO_PACK_CONFIG 常量",
+        )
+
+    def test_home_check_threshold_exists(self):
+        """验证仍在使用的常量存在"""
+        import ptcgp_auto_v2.tasks.open_pack as open_pack_module
+
+        self.assertTrue(
+            hasattr(open_pack_module, "HOME_CHECK_THRESHOLD"),
+            "HOME_CHECK_THRESHOLD 常量应存在",
+        )
+        self.assertEqual(open_pack_module.HOME_CHECK_THRESHOLD, 3)
 
 
 class TestOpenPackHandleHome(unittest.TestCase):
@@ -240,8 +263,8 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         kwargs = mock_save.call_args.kwargs
         self.assertIn("notifier", kwargs)
         self.assertIn("rows", kwargs)
-        # 基类使用 get_pack_record_type() 构建通知消息
-        self.assertEqual("daily_free获得稀有卡牌", kwargs.get("notify_message"))
+        # 基类使用 get_rare_card_notify_message() 获取中文通知消息
+        self.assertEqual("开包获得稀有卡牌", kwargs.get("notify_message"))
 
 
 class TestOpenPackPrepareResourcesFailure(unittest.TestCase):

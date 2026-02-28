@@ -113,6 +113,10 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         """返回 pack 记录类型：礼物盒"""
         return "gift_box"
 
+    def get_rare_card_notify_message(self) -> str:
+        """返回稀有卡通知消息：礼物盒领取"""
+        return "礼物获得稀有卡牌"
+
     def should_prepare_pack_resources(self) -> bool:
         """礼物盒不需要准备卡包图片资源"""
         return False

@@ -64,11 +64,6 @@ BASE_PACK_SERIES_SCROLL_DISTANCE_Y = 307  # 1920 * 0.16
 HOME_CHECK_THRESHOLD = 3
 
 
-# 跳过原因常量
-SKIP_REASON_NO_ACCOUNT_ID = "账号 ID 为空"
-SKIP_REASON_NO_PACK_CONFIG = "未配置开包目标"
-
-
 # ============================================================
 # 页面识别规则
 # ============================================================
@@ -155,6 +150,10 @@ class OpenPackTask(PackOpeningTaskBase):
     def get_pack_record_type(self) -> str:
         """返回 pack 记录类型：每日免费包"""
         return "daily_free"
+
+    def get_rare_card_notify_message(self) -> str:
+        """返回稀有卡通知消息：每日开包"""
+        return "开包获得稀有卡牌"
 
     def get_target_pack_context(self) -> dict[str, str] | None:
         """获取目标卡包上下文"""
