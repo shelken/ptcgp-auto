@@ -5,7 +5,6 @@
 管理内存中的Hash索引，负责确保系列Hash就绪，提供匹配接口。
 """
 
-import heapq
 import logging
 import threading
 from typing import Dict, List, Optional, Set, Tuple
@@ -46,8 +45,18 @@ class CardHashManager:
         self._downloader = ImageResourceManager() if enable_download else None
         self._enable_download = enable_download
 
-    def ensure_series_ready(self, set_code: str) -> bool:
-        """确保某系列所有卡牌都有Hash值（下载缺失卡牌并计算）"""
+    def ensure_series_ready(self, set_code: str, exclude_promo: bool = False) -> bool:
+        """确保某系列所有卡牌都有Hash值（下载缺失卡牌并计算）
+
+        Args:
+            set_code: 系列代码
+            exclude_promo: 是否排除 PROMO 系列（开包场景使用）
+        """
+        # 排除 PROMO 系列
+        if exclude_promo and set_code.upper().startswith("PROMO"):
+            logger.debug(f"[HashManager] 跳过 PROMO 系列: {set_code}")
+            return True
+
         # 1. 查询缺失Hash的卡牌
         all_missing = self._repo.get_cards_without_hash(set_code)
 
@@ -142,9 +151,13 @@ class CardHashManager:
 
         logger.info(f"系列 {set_code} Hash索引加载完成，共 {len(hash_data)} 张卡牌")
 
-    def load_all_hashes(self) -> bool:
-        """加载所有系列Hash到内存（全局模式）"""
-        if self._all_loaded:
+    def load_all_hashes(self, exclude_promo: bool = False) -> bool:
+        """加载所有系列Hash到内存（全局模式）
+
+        Args:
+            exclude_promo: 是否排除 PROMO 系列
+        """
+        if self._all_loaded and not exclude_promo:
             return True
 
         # 获取所有系列
@@ -152,14 +165,19 @@ class CardHashManager:
 
         for card_set in all_sets:
             set_code = card_set.code
+            # 排除 PROMO 系列
+            if exclude_promo and set_code.upper().startswith("PROMO"):
+                logger.debug(f"[HashManager] 加载全局Hash时跳过 PROMO 系列: {set_code}")
+                continue
             # 确保系列就绪（下载缺失图片并计算Hash）
-            self.ensure_series_ready(set_code)
+            self.ensure_series_ready(set_code, exclude_promo=exclude_promo)
             # 加载到全局缓存
             if set_code in self._series_cache:
                 for number, hash_arr in self._series_cache[set_code].items():
                     self._global_cache[f"{set_code}/{number:03d}"] = hash_arr
 
-        self._all_loaded = True
+        if not exclude_promo:
+            self._all_loaded = True
         logger.info(f"全局Hash索引加载完成，共 {len(self._global_cache)} 张卡牌")
         return True
 
