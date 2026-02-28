@@ -10,31 +10,29 @@
 - 设置昵称
 - 选择初始卡包
 - 开包引导流程
+
+继承 PackOpeningTaskBase，教程开包接入统一识别与开包记录流程，pack_type 设为 init_tutorial。
 """
 
 import logging
 import time
 from datetime import datetime
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
-from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
-from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
-    long_press_opening_card,
-    swipe_card_register,
-    swipe_open_pack,
-    tap_opening_continue,
+from ptcgp_auto_v2.tasks.pack_opening_task_base import (
+    PackOpeningTaskBase,
+    build_pack_opening_pages,
 )
+from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.utils.gesture import (
-    clear_text,
     click_close,
     input_text,
     is_text_visible,
@@ -58,50 +56,13 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 常量定义（基于 1080x1920 基准分辨率）
-# ============================================================
-
-# 昵称输入框 Y 坐标（基准 1080x1920）
-INPUT_BOX_Y = 860
-
-# 国家/地区按钮兜底点击位置（当 OCR 无法识别时使用）
-# 位置：屏幕中央水平，Y 坐标 745（基于 1920 高度）
-BASE_COUNTRY_BTN_Y = 745
-
-# 国家/地区列表滚动距离（基于 1920 高度）
-BASE_COUNTRY_SCROLL_DISTANCE_Y = 576  # 1920 * 0.30
-
-# 未知页面兜底点击点位（基于 1080x1920）
-BASE_UNKNOWN_TOP_TAP_Y = 10
-BASE_UNKNOWN_TASK_TAP_X = 960
-BASE_UNKNOWN_TASK_TAP_Y = 1740
-
-# 主页兜底完成阈值：当已完成「选择喜欢的卡牌」后，连续识别到主页达到该次数即判定完成
-HOME_FALLBACK_THRESHOLD = 8
-
-
-class InitAccountPhase(Enum):
-    """新账号初始化任务阶段（仅用于页面间流转）"""
-
-    INIT = auto()  # 初始化
-    SELECT_COUNTRY = auto()  # 选择国家/地区
-    TERMS_PRIVACY = auto()  # 条款与隐私
-    CREATE_SAVE = auto()  # 创建存档
-    ACCOUNT_LINK = auto()  # 账号链接
-    SET_NICKNAME = auto()  # 设置昵称
-    SELECT_PACK = auto()  # 选择初始卡包
-    SWIPE_OPEN = auto()  # 滑动开包引导
-    COMPLETED = auto()  # 初始化完成
-
-
-# ============================================================
-# 页面识别规则
+# 页面识别规则（合并通用开包页面）
 # ============================================================
 
 
 def _build_init_pages() -> list[dict]:
-    """构建新账号初始化任务页面规则"""
-    return [
+    """构建新账号初始化任务页面规则（合并通用开包页面）"""
+    task_specific_pages = [
         # 選擇國家 / 請選擇您居住的國家
         {
             "name": "init_select_country",
@@ -164,12 +125,6 @@ def _build_init_pages() -> list[dict]:
             "exact_match": True,
             "priority": 99,
         },
-        # 橫向滑動來開封
-        {
-            "name": "init_swipe_open",
-            "identifiers": get_text_patterns("init_swipe_open"),
-            "priority": 99,
-        },
         # 下一步
         {
             "name": "init_next_step",
@@ -209,36 +164,54 @@ def _build_init_pages() -> list[dict]:
             "identifiers": get_text_patterns("init_select_favorite_card"),
             "priority": 99,
         },
-        # 開封結果 / 開包點數 / 閃亮沙子
-        {
-            "name": "pack_opening_result",
-            "identifiers": get_text_patterns("pack_opening_result"),
-            "priority": 99,
-        },
-        # 快进按钮
-        {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
-        # 向上輕滑卡牌
-        {
-            "name": "pack_card_register",
-            "identifiers": get_text_patterns("pack_card_register"),
-            "priority": 99,
-        },
-        # 長按 / 長按以跳過 / 長按開封
-        {
-            "name": "pack_opening_card",
-            "identifiers": get_text_patterns("long_press"),
-            "priority": 99,
-        },
     ]
+    return task_specific_pages + build_pack_opening_pages()
+
+
+# ============================================================
+# 常量定义（基于 1080x1920 基准分辨率）
+# ============================================================
+
+# 昵称输入框 Y 坐标（基准 1080x1920）
+INPUT_BOX_Y = 860
+
+# 国家/地区按钮兜底点击位置（当 OCR 无法识别时使用）
+BASE_COUNTRY_BTN_Y = 745
+
+# 国家/地区列表滚动距离（基于 1920 高度）
+BASE_COUNTRY_SCROLL_DISTANCE_Y = 576  # 1920 * 0.30
+
+# 未知页面兜底点击点位（基于 1080x1920）
+BASE_UNKNOWN_TOP_TAP_Y = 10
+BASE_UNKNOWN_TASK_TAP_X = 960
+BASE_UNKNOWN_TASK_TAP_Y = 1740
+
+# 主页兜底完成阈值：当已完成「选择喜欢的卡牌」后，连续识别到主页达到该次数即判定完成
+HOME_FALLBACK_THRESHOLD = 8
+
+
+class InitAccountPhase(Enum):
+    """新账号初始化任务阶段（仅用于页面间流转）"""
+
+    INIT = auto()  # 初始化
+    SELECT_COUNTRY = auto()  # 选择国家/地区
+    TERMS_PRIVACY = auto()  # 条款与隐私
+    CREATE_SAVE = auto()  # 创建存档
+    ACCOUNT_LINK = auto()  # 账号链接
+    SET_NICKNAME = auto()  # 设置昵称
+    SELECT_PACK = auto()  # 选择初始卡包
+    SWIPE_OPEN = auto()  # 滑动开包引导
+    COMPLETED = auto()  # 初始化完成
 
 
 @TaskRegistry.register("init_account")
-class InitAccountTask(Task):
+class InitAccountTask(PackOpeningTaskBase):
     """
     新账号初始化任务
 
     自动完成新账号的完整初始化流程，采用状态机管理各阶段。
     此任务为一次性任务，完成后不会再次执行。
+    继承 PackOpeningTaskBase，教程开包接入统一识别与开包记录流程。
     """
 
     task_type = "init_account"
@@ -263,24 +236,32 @@ class InitAccountTask(Task):
         self._phase = InitAccountPhase.INIT
         self._action_cache: dict[str, bool | int] = {}
 
-    def _get_target_nickname(self) -> str:
-        """获取目标昵称，格式为 前缀 + 账号ID（如果没有账号则只有前缀）"""
-        if self.account and self.account.id:
-            return f"{self.NICKNAME_PREFIX}{self.account.id}"
-        return self.NICKNAME_PREFIX
+    # ============================================================
+    # 扩展点实现（PackOpeningTaskBase 要求）
+    # ============================================================
 
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return bool(self._action_cache.get(key, False))
+    def get_pack_record_type(self) -> str:
+        """返回 pack 记录类型：教程初始包"""
+        return "init_tutorial"
 
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
+    def should_prepare_pack_resources(self) -> bool:
+        """初始化任务不需要准备卡包图片资源"""
+        return False
+
+    # ============================================================
+    # 任务生命周期
+    # ============================================================
 
     def on_start(self):
         """任务开始前的初始化"""
         logger.info("开始新账号初始化任务")
         self._phase = InitAccountPhase.INIT
+
+        # 初始化基类的仓储和数据
+        self._init_repositories()
+        self._action_cache.clear()
+        self._packs_opened_count = 0
+        self._result_recognized = False
 
     def is_completed(self) -> bool:
         """判断任务是否已完成"""
@@ -290,12 +271,12 @@ class InitAccountTask(Task):
         """处理识别到的页面"""
         logger.debug(f"处理页面: {page_name}, 当前阶段: {self._phase.name}")
 
-        # 仅在“连续主页”场景累计计数；一旦离开主页立即重置
+        # 仅在"连续主页"场景累计计数；一旦离开主页立即重置
         if page_name != "game_home_main":
             self._action_cache.pop("home_consecutive_count", None)
 
-        # 页面处理器映射
-        handlers = {
+        # 初始化任务特定页面处理器（优先于通用处理器）
+        specific_handlers = {
             "speed_up_button": self._handle_speed_up,
             "init_select_country": self._handle_select_country,
             "init_terms_privacy": self._handle_terms_privacy,
@@ -307,7 +288,6 @@ class InitAccountTask(Task):
             "init_confirm_settings": self._handle_confirm_settings,
             "init_select_pack": self._handle_select_pack,
             "init_decide": lambda p: self._tap_text_exact(p, "init_decide", "決定"),
-            "init_swipe_open": self._handle_swipe_open,
             "init_next_step": lambda p: self._tap_text_exact(
                 p, "init_next_step", "下一步"
             ),
@@ -318,10 +298,9 @@ class InitAccountTask(Task):
             "init_select_favorite_card": self._handle_select_favorite_card,
             "init_enjoy": self._handle_enjoy,
             "game_home_main": self._handle_game_home_main,
-            "pack_opening_result": self._handle_pack_opening_result,
-            "pack_card_register": self._handle_card_register,
-            "pack_opening_card": self._handle_opening_card,
         }
+        # 合并：特定处理器优先覆盖通用处理器
+        handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
 
         handler = handlers.get(page_name)
         if handler:
@@ -390,7 +369,6 @@ class InitAccountTask(Task):
 
             base_plan = plan_repo.get_by_name("base")
             if base_plan and self.account.id:
-                # 使用 add_secondary_plan 或 update_plan_associations 添加计划
                 account_repo.add_secondary_plan(
                     account_id=self.account.id, plan_id=base_plan.id, priority=0
                 )
@@ -431,7 +409,7 @@ class InitAccountTask(Task):
         return swipe(self.adb, start, end, wait=2.0)
 
     def _handle_country_list_overlay(self, ocr_results: list[dict]) -> ActionResult:
-        """处理国家列表弹层：循环执行“点国家 + 点OK”，找不到则滑动。"""
+        """处理国家列表弹层：循环执行"点国家 + 点OK"，找不到则滑动。"""
         matched_country = self._find_allowed_country(ocr_results, exact=True)
         if matched_country:
             logger.info(f"  -> 国家列表弹层：点击允许国家 {matched_country}")
@@ -474,7 +452,6 @@ class InitAccountTask(Task):
             return None
 
         if is_country_form_ready:
-            # 主表单里已显示有效国家，直接标记完成，避免误触再次打开列表。
             self._mark_action_done("select_country_country_clicked")
             return None
 
@@ -565,17 +542,7 @@ class InitAccountTask(Task):
         return None
 
     def _handle_select_country(self, page_info: dict) -> ActionResult:
-        """
-        处理选择国家/地区页面
-
-        流程：
-        1. 点击「國家/地區」打开列表
-        2. 从上往下滑动查找 TARGET_COUNTRY
-        3. 点击 TARGET_COUNTRY
-        4. 点击「年」，上滑选择年份
-        5. 点击「月」，点击 2
-        6. 点击 OK
-        """
+        """处理选择国家/地区页面"""
         ocr_results = page_info.get("ocr_results", [])
 
         if self._is_country_list_overlay(ocr_results):
@@ -624,15 +591,7 @@ class InitAccountTask(Task):
         return ActionResult.ok()
 
     def _handle_terms_privacy(self, page_info: dict) -> ActionResult:
-        """
-        处理条款与隐私页面
-
-        流程：
-        1. 点击「使用條款」
-        2. 点击「隱私權政策」
-        3. 点击所有 icon_gray_yes 模板直到消失
-        4. 点击 OK
-        """
+        """处理条款与隐私页面"""
         ocr_results = page_info.get("ocr_results", [])
         screenshot, _ = self.page_detector.get_last_page_context()
 
@@ -706,17 +665,7 @@ class InitAccountTask(Task):
         return result or ActionResult.ok(wait=1.0)
 
     def _handle_set_nickname(self, page_info: dict) -> ActionResult:
-        """
-        处理设置昵称页面
-
-        流程：
-        1. 检测昵称是否已正确设置（精确匹配）
-        2. 检测是否有异常提示（需要清空重输）
-        3. 点击铅笔图标进入输入页面
-        4. 点击输入框
-        5. 输入昵称
-        6. 点击 OK
-        """
+        """处理设置昵称页面"""
         ocr_results = page_info.get("ocr_results", [])
         screenshot, _ = self.page_detector.get_last_page_context()
 
@@ -728,24 +677,7 @@ class InitAccountTask(Task):
             result = tap_ok(self.adb, ocr_results, wait=1.0)
             return result or ActionResult.ok(wait=1.0)
 
-        # 步骤 2: 检测异常提示（如 "請勿使用本名"），需要清空重新输入
-        # if is_text_visible(ocr_results, get_text_patterns("init_nickname_warning")):
-        #     logger.info("  -> 检测到昵称异常提示，清空重新输入")
-        #     # 清空输入框并重新输入
-        #     clear_text(
-        #         self.adb,
-        #         self.adb.center_x(),
-        #         self.adb.scaled_y(INPUT_BOX_Y),
-        #         max_chars=20,
-        #     )
-        #     logger.info(f"  -> 输入昵称: {target_nickname}")
-        #     self.adb.device.send_keys(target_nickname)
-        #     time.sleep(0.5)
-        #     # 点击 OK 确认
-        #     result = tap_ok(self.adb, ocr_results, wait=1.0)
-        #     return result or ActionResult.ok(wait=1.0)
-
-        # 步骤 3: 点击铅笔图标进入编辑
+        # 步骤 2: 点击铅笔图标进入编辑
         match = self.page_detector.find_template_with_scale(
             "icon_pencil", screenshot=screenshot
         )
@@ -753,18 +685,17 @@ class InitAccountTask(Task):
             logger.info("  -> 点击铅笔图标编辑昵称")
             return tap_box(self.adb, match.box, wait=1.0)
 
-        # 步骤 4: 点击输入框并输入昵称（首次输入）
+        # 步骤 3: 点击输入框并输入昵称（首次输入）
         result = tap(
             self.adb, self.adb.center_x(), self.adb.scaled_y(INPUT_BOX_Y), wait=1.0
         )
         if result:
             logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
-            # 等待键盘弹出
             time.sleep(1.0)
             input_text(self.adb, target_nickname, wait=0.5)
             time.sleep(0.5)
 
-        # 步骤 5: 点击 OK
+        # 步骤 4: 点击 OK
         result = tap_ok(self.adb, ocr_results, wait=1.0)
         return result or ActionResult.ok(wait=1.0)
 
@@ -780,11 +711,6 @@ class InitAccountTask(Task):
         """处理选择初始卡包页面"""
         logger.info("  -> 选择初始卡包")
         return tap_center(self.adb, wait=1.0)
-
-    def _handle_swipe_open(self, page_info: dict) -> ActionResult:
-        """处理滑动开包引导页面"""
-        logger.info("  -> 滑动开包")
-        return swipe_open_pack(self.adb, wait=2.5)
 
     def _handle_tap_to_flip(self, page_info: dict) -> ActionResult:
         """处理翻开卡牌页面"""
@@ -828,21 +754,20 @@ class InitAccountTask(Task):
         )
         return tap_result or ActionResult.ok(wait=0.5)
 
-    def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
-        """处理开包结果页面（复用开包通用动作）"""
-        return tap_opening_continue(
-            self.adb, page_info.get("ocr_results", []), wait=1.5
-        )
+    # ============================================================
+    # 辅助方法
+    # ============================================================
 
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
-        """处理卡牌登录页面（复用开包通用动作）"""
-        return swipe_card_register(self.adb)
+    def _get_target_nickname(self) -> str:
+        """获取目标昵称，格式为 前缀 + 账号ID（如果没有账号则只有前缀）"""
+        if self.account and self.account.id:
+            return f"{self.NICKNAME_PREFIX}{self.account.id}"
+        return self.NICKNAME_PREFIX
 
-    def _handle_opening_card(self, page_info: dict) -> ActionResult:
-        """处理卡牌展示页面（复用开包通用动作）"""
-        result = long_press_opening_card(
-            self.adb, page_info.get("ocr_results", []), wait=3.0
-        )
-        if result:
-            return result
-        return ActionResult.ok(wait=3.0)
+    def _is_action_done(self, key: str) -> bool:
+        """检查操作是否已完成"""
+        return bool(self._action_cache.get(key, False))
+
+    def _mark_action_done(self, key: str):
+        """标记操作已完成"""
+        self._action_cache[key] = True

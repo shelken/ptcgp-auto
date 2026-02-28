@@ -161,7 +161,7 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
 
         task.bind_account(SimpleNamespace(id=1, display_name="tester"))
-        task.target_pack = {"pack_code": "A1", "booster_name": "Test"}
+        task._target_pack = {"pack_code": "A1", "booster_name": "Test"}
 
         high_card = SimpleNamespace(id=101, name="High", rarity="SR")
         low_card = SimpleNamespace(id=202, name="Low", rarity="C")
@@ -172,7 +172,7 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         task._account_card_repo = Mock()
 
         task.card_recognizer = Mock()
-        task.card_recognizer.scan_pack_result.return_value = [
+        task.card_recognizer.scan.return_value = [
             DetectedCard(
                 set_code="A1",
                 card_number=1,
@@ -207,7 +207,7 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
 
         task.bind_account(SimpleNamespace(id=1, display_name="tester"))
-        task.target_pack = {"pack_code": "A1", "booster_name": "Test"}
+        task._target_pack = {"pack_code": "A1", "booster_name": "Test"}
 
         high_card = SimpleNamespace(id=101, name="High", rarity="SR")
         task._card_repo = Mock()
@@ -216,7 +216,7 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         task._account_card_repo = Mock()
 
         task.card_recognizer = Mock()
-        task.card_recognizer.scan_pack_result.return_value = [
+        task.card_recognizer.scan.return_value = [
             DetectedCard(
                 set_code="A1",
                 card_number=1,
@@ -227,9 +227,11 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
             )
         ]
 
-        with patch("ptcgp_auto_v2.tasks.open_pack.get_notifier") as mock_get_notifier:
+        with patch(
+            "ptcgp_auto_v2.tasks.pack_opening_task_base.get_notifier"
+        ) as mock_get_notifier:
             with patch(
-                "ptcgp_auto_v2.tasks.open_pack.save_high_rarity_cards"
+                "ptcgp_auto_v2.tasks.pack_opening_task_base.save_high_rarity_cards"
             ) as mock_save:
                 mock_get_notifier.return_value = Mock()
                 task._recognize_cards()
@@ -238,7 +240,68 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         kwargs = mock_save.call_args.kwargs
         self.assertIn("notifier", kwargs)
         self.assertIn("rows", kwargs)
-        self.assertEqual("开包获得稀有卡牌", kwargs.get("notify_message"))
+        # 基类使用 get_pack_record_type() 构建通知消息
+        self.assertEqual("daily_free获得稀有卡牌", kwargs.get("notify_message"))
+
+
+class TestOpenPackPrepareResourcesFailure(unittest.TestCase):
+    """测试资源准备失败状态传播"""
+
+    @patch("ptcgp_auto_v2.db.repositories.AccountPackConfigRepository")
+    def test_on_start_sets_failed_when_prepare_resources_fails(self, mock_repo_cls):
+        """测试资源准备失败时设置 _failed 和 _fail_reason"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+
+        # 绑定账号
+        task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+
+        # Mock 配置仓库返回有配置
+        mock_config_repo = Mock()
+        mock_config = Mock()
+        mock_config.pack_code = "A1"
+        mock_config.booster_name = "Test Pack"
+        mock_config_repo.get_by_account_and_type.return_value = mock_config
+        mock_repo_cls.return_value = mock_config_repo
+
+        # Mock _prepare_image_resources 返回失败
+        task._prepare_image_resources = Mock(return_value=False)
+
+        # 调用 on_start
+        task.on_start()
+
+        # 验证失败状态
+        self.assertTrue(task._failed)
+        self.assertEqual(task._fail_reason, "准备卡包图片资源失败")
+        self.assertTrue(task.is_completed())
+
+    @patch("ptcgp_auto_v2.db.repositories.AccountPackConfigRepository")
+    def test_handle_page_returns_fail_when_resources_failed(self, mock_repo_cls):
+        """测试资源准备失败后 handle_page 返回失败结果"""
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+
+        task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+
+        # Mock 配置仓库返回有配置
+        mock_config_repo = Mock()
+        mock_config = Mock()
+        mock_config.pack_code = "A1"
+        mock_config.booster_name = "Test Pack"
+        mock_config_repo.get_by_account_and_type.return_value = mock_config
+        mock_repo_cls.return_value = mock_config_repo
+
+        # Mock _prepare_image_resources 返回失败
+        task._prepare_image_resources = Mock(return_value=False)
+
+        task.on_start()
+
+        # 验证 handle_page 返回失败
+        result = task.handle_page("game_home_main", {"ocr_results": []})
+        self.assertFalse(result.success)
+        self.assertEqual(result.error, "准备卡包图片资源失败")
 
 
 if __name__ == "__main__":
