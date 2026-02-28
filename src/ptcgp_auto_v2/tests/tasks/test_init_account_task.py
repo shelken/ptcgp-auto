@@ -132,7 +132,7 @@ class TestInitAccountPages(unittest.TestCase):
             "init_confirm_settings",
             "init_select_pack",
             "init_decide",
-            "init_swipe_open",
+            "pack_opening_swipe",  # 统一为通用开包页面
             "init_next_step",
             "init_open_pack",
             "init_tap_to_flip",
@@ -467,18 +467,18 @@ class TestHandleSetNickname(unittest.TestCase):
         self.assertIn("skn1", adb.inputs, "应该输入了目标昵称")
 
 
-class TestHandleSwipeOpen(unittest.TestCase):
-    """测试滑动开包页面处理"""
+class TestHandleOpeningSwipe(unittest.TestCase):
+    """测试滑动开包页面处理（继承自 PackOpeningTaskBase）"""
 
     def test_swipes_horizontally(self):
-        """测试横向滑动（调用开包通用工具）"""
+        """测试横向滑动（调用基类通用方法）"""
         adb = FakeAdb()
         ocr_results = []
         page_detector = FakePageDetector(ocr_results=ocr_results)
         recognizer = MockRecognizer()
         task = InitAccountTask(adb, recognizer=recognizer, page_detector=page_detector)
 
-        result = task._handle_swipe_open({"ocr_results": ocr_results})
+        result = task._handle_opening_swipe({"ocr_results": ocr_results})
 
         self.assertTrue(result.success)
         self.assertEqual(1, len(adb.swipes))

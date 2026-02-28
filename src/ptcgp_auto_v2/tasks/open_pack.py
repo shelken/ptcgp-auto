@@ -4,12 +4,12 @@
 
 采用字典映射处理页面，使用 action_cache 管理页面内操作状态。
 流程：主页检测免费包 → 选择系列 → 选择子包 → 开包 → 登录图鉴 → 回到主页检查
+
+继承 PackOpeningTaskBase，复用统一开包流程，保留主页与选包业务入口。
 """
 
 import logging
-import threading
-import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.config.constants import (
     PACK_AUTO_EXCLUDE_SET_CODES,
@@ -21,24 +21,13 @@ from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
-from ptcgp_auto_v2.infra.model_manager import get_model_manager
-from ptcgp_auto_v2.infra.notifier import get_notifier
-from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
-from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
-from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
-    long_press_opening_card,
-    swipe_card_register,
-    swipe_open_pack,
-    tap_opening_continue,
-)
-from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
-    map_detected_cards,
+from ptcgp_auto_v2.tasks.pack_opening_task_base import (
+    PackOpeningTaskBase,
+    build_pack_opening_pages,
 )
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 from ptcgp_auto_v2.utils.gesture import (
@@ -46,11 +35,8 @@ from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     quick_tap,
     scroll_until_template,
-    swipe,
     tap_bottom_close,
     tap_box,
-    tap_center,
-    tap_matched_element,
     tap_right_side,
     tap_template_or_text,
     tap_template_with_scale,
@@ -58,14 +44,7 @@ from ptcgp_auto_v2.utils.gesture import (
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Card
-    from ptcgp_auto_v2.db.repositories import (
-        AccountCardRepository,
-        AccountPackConfigRepository,
-        AccountPackPointRepository,
-        CardRepository,
-        PackRecordRepository,
-    )
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +74,9 @@ SKIP_REASON_NO_PACK_CONFIG = "未配置开包目标"
 # ============================================================
 
 
-def _build_pack_pages() -> list[dict]:
-    """构建开包任务页面规则"""
-    return [
+def _build_open_pack_pages() -> list[dict]:
+    """构建开包任务特定页面规则（与通用开包页面合并）"""
+    task_specific_pages = [
         # 選擇擴充組
         {
             "name": "pack_series_select",
@@ -111,36 +90,6 @@ def _build_pack_pages() -> list[dict]:
             "identifiers": get_text_patterns("pack_list"),
             "match_all": True,
             "exclude_identifiers": get_text_patterns("pack_list_exclude"),
-            "priority": 99,
-        },
-        # 橫向滑動來開封
-        {
-            "name": "pack_opening_swipe",
-            "identifiers": get_text_patterns("pack_opening_swipe"),
-            "priority": 99,
-        },
-        # 點擊想开封的擴充包
-        {
-            "name": "pack_opening_select",
-            "identifiers": get_text_patterns("pack_opening_select"),
-            "priority": 99,
-        },
-        # 長按开封
-        {
-            "name": "pack_opening_card",
-            "identifiers": get_text_patterns("long_press"),
-            "priority": 99,
-        },
-        # 開封結果 / 開包點數 / 閃亮沙子
-        {
-            "name": "pack_opening_result",
-            "identifiers": get_text_patterns("pack_opening_result"),
-            "priority": 99,
-        },
-        # 向上輕滑卡牌
-        {
-            "name": "pack_card_register",
-            "identifiers": get_text_patterns("pack_card_register"),
             "priority": 99,
         },
         # 開封
@@ -164,99 +113,80 @@ def _build_pack_pages() -> list[dict]:
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 99,
         },
-        # 快进按钮
-        {"name": "speed_up_button", "templates": ["btn_speed_up"], "priority": 99},
     ]
+    return task_specific_pages + build_pack_opening_pages()
 
 
 @TaskRegistry.register("open_pack")
-class OpenPackTask(Task):
+class OpenPackTask(PackOpeningTaskBase):
     """
     开包任务
 
     流程：主页检测免费包 → 进入开包流程 → 选择系列 → 选择子包 → 开封 → 滑动开包 → 识别结果 → 返回主页检查
+
+    继承 PackOpeningTaskBase，复用开包页面处理、识别和记录保存。
     """
 
     task_type = "open_pack"
     reset_type = ResetType.DAILY
     max_iterations = 100
     max_unknown_pages = 15
-    pages = _build_pack_pages()
+    pages = _build_open_pack_pages()
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-        # 初始化 YOLO+Hash 卡牌识别器
-        self.card_recognizer = YoloCardRecognizer(
-            adb=adb,
-            model_manager=get_model_manager(),
-            hash_manager=get_card_hash_manager(),
-        )
-
-        # 页面内操作缓存（用于记录当前页面已完成操作）
-        self._action_cache: dict[str, bool] = {}
-
         # 任务状态
         self._home_check_count = 0  # 主页无免费包检查次数
-        self._packs_opened_count = 0  # 本次任务已开包数量
-        self._result_recognized = False  # 本次开包是否已识别结果
-        self._skip_reason: Optional[str] = None  # 跳过原因
         self._completed = False  # 任务完成标志
         self._skipped = False  # 任务跳过标志
-        self._failed = False  # 任务失败标志
         self._fail_reason: Optional[str] = None  # 失败原因
 
         # 目标卡包配置
-        self.target_pack: dict[str, str] | None = None
+        self._target_pack: dict[str, str] | None = None
 
-        # 数据仓储（延迟加载）
-        self._pack_config_repo: "AccountPackConfigRepository | None" = None
-        self._pack_record_repo: "PackRecordRepository | None" = None
-        self._card_repo: "CardRepository | None" = None
-        self._pack_point_repo: "AccountPackPointRepository | None" = None
-        self._account_card_repo: "AccountCardRepository | None" = None
+        # 数据仓储（基类已初始化，此处仅用于类型提示）
+        self._pack_config_repo = None
 
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return self._action_cache.get(key, False)
+    # ============================================================
+    # 扩展点实现（PackOpeningTaskBase 要求）
+    # ============================================================
 
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
+    def get_pack_record_type(self) -> str:
+        """返回 pack 记录类型：每日免费包"""
+        return "daily_free"
 
-    def _reset_action_cache(self):
-        """重置操作缓存（进入新页面时调用）"""
-        self._action_cache.clear()
+    def get_target_pack_context(self) -> dict[str, str] | None:
+        """获取目标卡包上下文"""
+        return self._target_pack
+
+    def should_prepare_pack_resources(self) -> bool:
+        """open_pack 需要准备卡包图片资源"""
+        return True
+
+    # ============================================================
+    # 任务生命周期
+    # ============================================================
 
     def on_start(self):
         """任务开始前的初始化"""
-        from ptcgp_auto_v2.db.repositories import (
-            AccountCardRepository,
-            AccountPackConfigRepository,
-            AccountPackPointRepository,
-            CardRepository,
-            PackRecordRepository,
-        )
+        from ptcgp_auto_v2.db.repositories import AccountPackConfigRepository
 
-        self._account_card_repo = AccountCardRepository()
+        self._init_repositories()
         self._pack_config_repo = AccountPackConfigRepository()
-        self._pack_record_repo = PackRecordRepository()
-        self._card_repo = CardRepository()
-        self._pack_point_repo = AccountPackPointRepository()
 
         self._action_cache.clear()
         self._home_check_count = 0
         self._packs_opened_count = 0
         self._completed = False
         self._skipped = False
-        self._failed = False
-        self._fail_reason = None
+        self._failed = False  # 任务失败标志
+        self._result_recognized = False
 
         # 检查账号 ID
         if self.account.id is None:
             logger.error(f"账号 {self.account.display_name} ID 为空")
             self._skipped = True
-            self._skip_reason = SKIP_REASON_NO_ACCOUNT_ID
             return
 
         # 加载开包配置
@@ -282,10 +212,9 @@ class OpenPackTask(Task):
                     f"账号 {self.account.display_name} 无法找到可用的开包目标，任务跳过"
                 )
                 self._skipped = True
-                self._skip_reason = SKIP_REASON_NO_PACK_CONFIG
                 return
 
-            self.target_pack = {
+            self._target_pack = {
                 "pack_code": selected["pack_code"],
                 "booster_name": selected["booster_name"],
             }
@@ -297,37 +226,28 @@ class OpenPackTask(Task):
                 selected.get("candidate_count"),
             )
         else:
-            self.target_pack = {
+            self._target_pack = {
                 "pack_code": config.pack_code,
                 "booster_name": config.booster_name,
             }
             logger.info(f"目标卡包: {config.pack_code}/{config.booster_name}")
 
         # 准备图片资源
-        if not self._prepare_image_resources():
-            self._failed = True
-            self._fail_reason = "准备卡包图片资源失败"
-            return
+        if self.should_prepare_pack_resources():
+            if not self._prepare_image_resources():
+                logger.error("准备卡包图片资源失败")
+                self._failed = True
+                self._fail_reason = "准备卡包图片资源失败"
+                return
 
-        pack_code = self.target_pack.get("pack_code") if self.target_pack else None
-
-        # 预加载目标系列 Hash（后台线程，不阻塞任务启动）
-        if pack_code:
-
-            def _preload_hash():
-                try:
-                    self.card_recognizer.hash_manager.ensure_series_ready(pack_code)
-                    logger.debug(f"目标系列 {pack_code} Hash 预加载完成")
-                except Exception as e:
-                    logger.warning(f"预加载系列 {pack_code} Hash 失败: {e}")
-
-            threading.Thread(target=_preload_hash, daemon=True).start()
+        # 预加载目标系列 Hash
+        self._preload_target_series_hash()
 
     def _prepare_image_resources(self) -> bool:
         """准备图片资源（失败将直接结束任务）"""
-        pack_code = self.target_pack.get("pack_code") if self.target_pack else None
+        pack_code = self._target_pack.get("pack_code") if self._target_pack else None
         booster_name = (
-            self.target_pack.get("booster_name") if self.target_pack else None
+            self._target_pack.get("booster_name") if self._target_pack else None
         )
         if not pack_code or not booster_name:
             return False
@@ -359,8 +279,8 @@ class OpenPackTask(Task):
         return True
 
     def is_completed(self) -> bool:
-        """判断任务是否已完成"""
-        return self._completed or self._skipped
+        """判断任务是否已完成或失败"""
+        return self._completed or self._skipped or self._failed
 
     def was_skipped(self) -> bool:
         """判断任务是否被跳过"""
@@ -370,22 +290,19 @@ class OpenPackTask(Task):
         """处理识别到的页面"""
         if self._failed:
             return ActionResult.fail(self._fail_reason or "准备卡包图片资源失败")
+
         logger.debug(f"处理页面: {page_name}")
 
-        # 页面处理器映射
-        handlers = {
+        # 任务特定页面处理器（优先于通用处理器）
+        specific_handlers = {
             "game_home_main": self._handle_home,
             "pack_series_select": self._handle_pack_series_select,
             "pack_list": self._handle_pack_list,
             "pack_detail": self._handle_pack_detail,
             "pack_hourglass_popup": self._handle_hourglass_popup,
-            "pack_opening_swipe": self._handle_opening_swipe,
-            "pack_opening_card": self._handle_opening_card,
-            "pack_card_register": self._handle_card_register,
-            "pack_opening_result": self._handle_pack_opening_result,
-            "pack_opening_select": self._handle_pack_opening_select,
-            "speed_up_button": self._handle_speed_up,
         }
+        # 合并：特定处理器优先覆盖通用处理器
+        handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
 
         handler = handlers.get(page_name)
         if handler:
@@ -399,12 +316,6 @@ class OpenPackTask(Task):
         logger.debug("未知页面，点击屏幕上方兜底")
         return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), times=3)
 
-    def _handle_speed_up(self, page_info: dict) -> ActionResult:
-        """处理快进按钮"""
-        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok(
-            wait=0.5
-        )
-
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
         logger.info(
@@ -416,7 +327,7 @@ class OpenPackTask(Task):
             logger.info(f"本次共开 {self._packs_opened_count} 包")
 
     # ============================================================
-    # 页面处理方法
+    # 页面处理方法（任务特定）
     # ============================================================
 
     def _handle_home(self, page_info: dict) -> ActionResult:
@@ -504,7 +415,7 @@ class OpenPackTask(Task):
             template_name,
             scale=settings.scale_pack_series_select,
             max_attempts=max_attempts,
-            base_distance_y=BASE_PACK_SERIES_SCROLL_DISTANCE_Y,  # 步进调小，避免跳过
+            base_distance_y=BASE_PACK_SERIES_SCROLL_DISTANCE_Y,
             steps=SWIPE_STEPS_SCROLL,
             wait=1,
         )
@@ -571,7 +482,7 @@ class OpenPackTask(Task):
 
     def _extract_pack_points(self, ocr_results: list[dict]) -> None:
         """从 OCR 结果中提取并保存开包点数"""
-        if not (self.account.id and self.target_pack and self._pack_point_repo):
+        if not (self.account.id and self._target_pack and self._pack_point_repo):
             return
 
         try:
@@ -583,7 +494,7 @@ class OpenPackTask(Task):
                 if match:
                     points_str = match.group(1).replace(",", "")
                     points = int(points_str)
-                    series = self.target_pack.get("pack_code", "Unknown")
+                    series = self._target_pack.get("pack_code", "Unknown")
                     self._pack_point_repo.upsert_points(self.account.id, series, points)
                     logger.debug(f"  -> 更新开包点数: {series} = {points}pt")
                     break
@@ -598,7 +509,7 @@ class OpenPackTask(Task):
             return ActionResult.fail("截图失败")
 
         # 检查当前卡包是否是目标卡包
-        if self.target_pack:
+        if self._target_pack:
             settings = get_settings()
             template_name = self._get_target_template_name()
             if not template_name:
@@ -662,156 +573,20 @@ class OpenPackTask(Task):
         logger.debug("  -> 点击屏幕底部关闭弹窗")
         return tap_bottom_close(self.adb, BASE_POPUP_CLOSE_TAP_Y, wait=1.0)
 
-    def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
-        """滑动开包"""
-        self._packs_opened_count += 1
-        self._result_recognized = False
-        return swipe_open_pack(self.adb, wait=2.5)
-
-    def _handle_opening_card(self, page_info: dict) -> ActionResult:
-        """长按跳过卡牌展示"""
-        ocr_results = page_info.get("ocr_results", [])
-        wait = 3.0
-        result = long_press_opening_card(self.adb, ocr_results, wait=wait)
-        if result:
-            return result
-
-        self._home_check_count = 0
-        return ActionResult.ok(wait=wait)
-
-    def _handle_pack_opening_select(self, page_info: dict) -> ActionResult:
-        """点击选择要开的扩充包"""
-        logger.debug("  -> 点击屏幕中心选择扩充包")
-        return tap_center(self.adb, wait=1.0)
-
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
-        """向上滑动卡牌登录图鉴"""
-        logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
-        return swipe_card_register(self.adb)
-
-    def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
-        """处理开包结果页：识别卡牌并点击继续"""
-        if not self._result_recognized:
-            self._recognize_cards()
-        return tap_opening_continue(
-            self.adb, page_info.get("ocr_results", []), wait=1.5
-        )
-
-    def _recognize_cards(self):
-        """识别卡牌并保存记录（YOLO+Hash 版本）。"""
-        set_code = (
-            self.target_pack.get("pack_code", "Unknown")
-            if self.target_pack
-            else "Unknown"
-        )
-        cards = self._scan_cards_with_retry(set_code, max_retries=3)
-
-        if not cards:
-            self._result_recognized = True
-            return
-
-        if self._packs_opened_count == 0:
-            self._packs_opened_count = 1
-
-        rows = map_detected_cards(
-            cards=cards,
-            card_repo=self._card_repo,
-            fixed_set_code=set_code,
-        )
-        current_batch_cards = [
-            {
-                "card_name": row.get("card_name"),
-                "rarity": row.get("rarity"),
-                "card_id": row.get("card_id"),
-                "is_new": bool(row.get("is_new", False)),
-                "position": row.get("position"),
-                "confidence": float(row.get("confidence") or 0.0),
-                "hash_similarity": float(row.get("hash_similarity") or 0.0),
-            }
-            for row in rows
-        ]
-
-        self._save_pack_record(current_batch_cards)
-
-        if self._account_card_repo and self.account.id:
-            self._save_high_rarity_cards(rows)
-        logger.debug("==================================")
-        self._result_recognized = True
-
-    def _scan_cards_with_retry(
-        self, set_code: str, max_retries: int
-    ) -> list[DetectedCard]:
-        """识别开包结果，失败时按固定次数重试。"""
-        for attempt in range(max_retries):
-            try:
-                cards = self.card_recognizer.scan_pack_result(
-                    set_code, similarity_threshold=0.68, debug=True
-                )
-            except RuntimeError as e:
-                logger.error(f"识别卡牌失败: {e}")
-                cards = []
-
-            if cards:
-                return cards
-
-            if attempt < max_retries - 1:
-                logger.debug(f"未识别到卡牌，等待重试 ({attempt + 1}/{max_retries})")
-                time.sleep(2.0)
-
-        logger.warning(f"卡牌识别连续失败 {max_retries} 次，跳过识别")
-        return []
-
-    def _save_pack_record(self, current_batch_cards: list[dict]) -> None:
-        """保存本次开包记录到数据库。"""
-        if not (self._pack_record_repo and self.account.id):
-            return
-
-        try:
-            pack_code = self.target_pack.get("pack_code") if self.target_pack else None
-            pack_name = (
-                self.target_pack.get("booster_name") if self.target_pack else None
-            )
-
-            self._pack_record_repo.create_for_account(
-                self.account.id,
-                pack_type="daily_free",
-                pack_code=pack_code,
-                pack_name=pack_name,
-                cards=current_batch_cards,
-            )
-            card_names = [
-                f"{card['card_name']}({card['rarity']})" for card in current_batch_cards
-            ]
-            logger.info(
-                f"已保存开包记录: {pack_code}/{pack_name} ({len(current_batch_cards)} 张): {', '.join(card_names)}"
-            )
-        except Exception as e:
-            logger.error(f"保存开包记录失败: {e}")
-
-    def _save_high_rarity_cards(self, rows: list[dict]) -> None:
-        """记录高稀有度卡牌并在保存路径内通知。"""
-        try:
-            save_high_rarity_cards(
-                account_card_repo=self._account_card_repo,
-                account_id=self.account.id,
-                rows=rows,
-                account=self.account,
-                notifier=get_notifier(),
-                notify_message="开包获得稀有卡牌",
-            )
-        except Exception as e:
-            logger.warning(f"保存高稀有度卡牌并通知失败: {e}")
+    # ============================================================
+    # 辅助方法
+    # ============================================================
 
     def _get_target_series(self) -> Optional[str]:
         """根据 pack_code 获取目标系列（A/B）"""
-        if not self.target_pack:
+        if not self._target_pack:
             return None
-        pack_code = self.target_pack["pack_code"]
+        pack_code = self._target_pack["pack_code"]
         return pack_code[0].upper() if pack_code else None
 
     def _get_target_template_name(self) -> Optional[str]:
         """获取目标卡包的模板名称"""
-        if not self.target_pack:
+        if not self._target_pack:
             return None
-        booster_name = normalize_name_str(self.target_pack["booster_name"])
+        booster_name = normalize_name_str(self._target_pack["booster_name"])
         return f"packs_auto/{booster_name}"

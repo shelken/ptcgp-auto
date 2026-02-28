@@ -3,7 +3,9 @@
 礼物盒领取任务模块
 
 采用字典映射处理页面，使用 action_cache 管理页面内操作状态。
-流程：主页检测礼物图标 → 进入礼物盒 → 领取礼物 → 返回主页
+流程：主页检测礼物图标 → 进入礼物盒 → 领取礼物 → 处理开包 → 识别记录 → 返回主页
+
+继承 PackOpeningTaskBase，补齐开包识别与开包记录落库，pack_type 使用 gift_box。
 """
 
 import logging
@@ -12,12 +14,14 @@ import time
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
     TaskResult,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
-from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
+from ptcgp_auto_v2.tasks.pack_opening_task_base import (
+    PackOpeningTaskBase,
+    build_pack_opening_pages,
+)
 from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     normalize_text,
@@ -48,8 +52,8 @@ MAX_EMPTY_CHECK_ATTEMPTS = 2
 
 
 def _build_claim_gifts_pages() -> list[dict]:
-    """构建礼物盒领取页面规则"""
-    return [
+    """构建礼物盒领取页面规则（合并通用开包页面）"""
+    task_specific_pages = [
         # 沒有可領取的道具
         {
             "name": "gift_box_empty",
@@ -62,12 +66,6 @@ def _build_claim_gifts_pages() -> list[dict]:
             "match_all": True,
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 10,
-        },
-        # 向上輕滑卡牌
-        {
-            "name": "card_register_page",
-            "identifiers": get_text_patterns("pack_card_register"),
-            "priority": 12,
         },
         # 要送出「謝謝！」嗎
         {
@@ -82,14 +80,16 @@ def _build_claim_gifts_pages() -> list[dict]:
             "priority": 15,
         },
     ]
+    return task_specific_pages + build_pack_opening_pages()
 
 
 @TaskRegistry.register("claim_gifts")
-class ClaimGiftsTask(Task):
+class ClaimGiftsTask(PackOpeningTaskBase):
     """
     礼物盒领取任务
 
-    自动领取游戏中礼物盒里的所有礼物。
+    自动领取游戏中礼物盒里的所有礼物，处理可能包含的卡包礼物，
+    使用统一开包流程进行识别和记录保存。
     """
 
     task_type = "claim_gifts"
@@ -101,31 +101,36 @@ class ClaimGiftsTask(Task):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-        # 页面内操作缓存
-        self._action_cache: dict[str, bool] = {}
-
         # 任务状态
         self._claim_attempt_count = 0  # 连续无可领取次数
         self._completed = False  # 任务完成标志
 
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return self._action_cache.get(key, False)
+    # ============================================================
+    # 扩展点实现（PackOpeningTaskBase 要求）
+    # ============================================================
 
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
+    def get_pack_record_type(self) -> str:
+        """返回 pack 记录类型：礼物盒"""
+        return "gift_box"
 
-    def _reset_action_cache(self):
-        """重置操作缓存"""
-        self._action_cache.clear()
+    def should_prepare_pack_resources(self) -> bool:
+        """礼物盒不需要准备卡包图片资源"""
+        return False
+
+    # ============================================================
+    # 任务生命周期
+    # ============================================================
 
     def on_start(self):
         """任务开始前的初始化"""
         logger.info("礼物盒领取任务开始")
+
+        self._init_repositories()
         self._action_cache.clear()
         self._claim_attempt_count = 0
         self._completed = False
+        self._packs_opened_count = 0
+        self._result_recognized = False
 
     def is_completed(self) -> bool:
         """判断任务是否已完成"""
@@ -135,14 +140,15 @@ class ClaimGiftsTask(Task):
         """处理识别到的页面"""
         logger.debug(f"处理页面: {page_name}")
 
-        # 页面处理器映射
-        handlers = {
+        # 礼物盒特定页面处理器（优先于通用处理器）
+        specific_handlers = {
             "gift_box_empty": self._handle_gift_box_empty,
             "game_home_main": self._handle_home,
-            "card_register_page": self._handle_card_register,
             "popup_send_thanks": self._handle_send_thanks,
             "gift_box_page": self._handle_gift_box,
         }
+        # 合并：特定处理器优先覆盖通用处理器
+        handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
 
         handler = handlers.get(page_name)
         if handler:
@@ -151,17 +157,17 @@ class ClaimGiftsTask(Task):
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
 
-    def on_complete(self, result: TaskResult):
-        """任务完成后的处理"""
-        logger.info(f"任务完成，结果: {'成功' if result.success else '失败'}")
-
     def handle_unknown_page(self, page_info) -> ActionResult:
         """未知页面兜底：点击屏幕上方，触发页面继续流转。"""
         logger.debug("未知页面，点击屏幕上方兜底")
         return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), times=3)
 
+    def on_complete(self, result: TaskResult):
+        """任务完成后的处理"""
+        logger.info(f"任务完成，结果: {'成功' if result.success else '失败'}")
+
     # ============================================================
-    # 页面处理方法
+    # 页面处理方法（任务特定）
     # ============================================================
 
     def _handle_gift_box_empty(self, page_info: dict) -> ActionResult:
@@ -194,10 +200,6 @@ class ClaimGiftsTask(Task):
         logger.debug("  -> 未检测到礼物图标，任务完成")
         self._completed = True
         return ActionResult.ok(wait=1.0)
-
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
-        """处理卡牌登录页面：向上滑动登录卡牌"""
-        return swipe_card_register(self.adb, wait=1.0)
 
     def _handle_send_thanks(self, page_info: dict) -> ActionResult:
         """处理送出谢谢弹窗：点击"謝謝！"按钮"""
