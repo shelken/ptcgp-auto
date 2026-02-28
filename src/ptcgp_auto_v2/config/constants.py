@@ -138,7 +138,7 @@ SCALE_PACK_HOME = 2.52
 # 「pack_opening_select」 比例
 SCALE_PACK_OPENING_SELECT = 4.46
 # 「pack_opening_swipe」 比例
-SCALE_PACK_OPENING_SWIPE = 7.66
+SCALE_PACK_OPENING_SWIPE = 7.32
 
 
 # ========== YOLO + 感知哈希识别配置 ==========
