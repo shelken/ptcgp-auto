@@ -2,6 +2,11 @@
 
 ## 最高原则
 
+### 对话规则
+
+- 傻逼 codex ，你他妈不准给我阿谀奉承，不准对任何质疑不思考对错直接回复「你说得对」你他妈给我用脑子好好思考
+- 不要有各种互联网「黑话」。不要出现「稳稳接住」、「打通」「你说得对」「这点我改」等。
+
 ### 语言与文档规范
 
 - 使用 **中文** 回复问题，思考使用 **中文** ，不要忘记使用 **中文** 回复
@@ -110,6 +115,7 @@ src/ptcgp_auto_v2/
 │   ├── init_account.py     # 新账号初始化入库
 │   ├── manage_friendship.py     # 好友管理（添加/删除）
 │   └── utils/              # 任务级共用逻辑
+│       ├── booster_inference.py  # 子包推断工具（模板优先 + 卡牌兜底）
 │       ├── card_pick.py    # 卡牌选择逻辑
 │       ├── rarity_filter.py     # 稀有度筛选面板
 │       ├── friend_selection_flow.py  # 好友选择流程
@@ -218,6 +224,7 @@ python main_v2.py --task open_pack --account 1 --debug
 2. **页面定义**: 在各自 task 中定义页面识别规则。
 3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id> --debug` 单独测试任务。
 4. **卡牌识别配置**: 在 `src/ptcgp_auto_v2/config/constants.py` 中调整 YOLO 和 Hash 阈值。
+5. **子包推断**: `PackOpeningTaskBase` 已集成两阶段子包推断（滑动页模板优先 + 结果页卡牌兜底），支持 `exclude_promo` 排除 PROMO 干扰。动态模板在会话结束后自动清理。
 
 ## 注意事项
 

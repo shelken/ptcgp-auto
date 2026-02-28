@@ -18,7 +18,6 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_TEMPLATE_THRESHOLD,
     TEMPLATE_BASE_WIDTH,
 )
-from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 logger = logging.getLogger(__name__)
 
@@ -486,3 +485,35 @@ class TemplateMatcher:
             f"[模板@{scale:.2f}] 未找到 {template_name}, 最高置信度={max_val:.2f}"
         )
         return None
+
+    def unload_templates(self, template_names: list[str]) -> int:
+        """批量卸载模板。
+
+        从内存中移除指定的模板，同时同步 _loaded_pack_templates 列表。
+        不会影响核心模板（非 packs_auto/ 前缀的模板）。
+
+        Args:
+            template_names: 要卸载的模板名称列表
+
+        Returns:
+            成功卸载的模板数量
+        """
+        removed = 0
+        normalized_names = set()
+
+        for name in template_names:
+            normalized = self._normalize_name(name)
+            normalized_names.add(normalized)
+            if normalized in self.templates:
+                del self.templates[normalized]
+                removed += 1
+                logger.debug(f"[模板] 已卸载: {normalized}")
+
+        # 同步 _loaded_pack_templates，移除已卸载的模板
+        self._loaded_pack_templates = [
+            n
+            for n in self._loaded_pack_templates
+            if self._normalize_name(n) not in normalized_names
+        ]
+
+        return removed

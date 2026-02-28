@@ -169,6 +169,8 @@ class ClaimGiftsTask(PackOpeningTaskBase):
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
         logger.info(f"任务完成，结果: {'成功' if result.success else '失败'}")
+        # 清理开包推断会话资源（无论成功与否）
+        self.finalize_pack_session()
 
     # ============================================================
     # 页面处理方法（任务特定）

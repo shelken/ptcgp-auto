@@ -325,6 +325,9 @@ class OpenPackTask(PackOpeningTaskBase):
         if result.success and not result.skipped and self._packs_opened_count > 0:
             logger.info(f"本次共开 {self._packs_opened_count} 包")
 
+        # 清理开包推断会话资源（无论成功与否）
+        self.finalize_pack_session()
+
     # ============================================================
     # 页面处理方法（任务特定）
     # ============================================================

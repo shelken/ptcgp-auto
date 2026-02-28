@@ -363,6 +363,9 @@ class InitAccountTask(PackOpeningTaskBase):
         if result.success and self.account:
             self._assign_base_plan()
 
+        # 清理开包推断会话资源（无论成功与否）
+        self.finalize_pack_session()
+
     def _assign_base_plan(self):
         """为完成的账号分配 base 计划"""
         from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
