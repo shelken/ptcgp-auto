@@ -10,7 +10,7 @@ YOLO + 感知哈希卡牌识别器
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import cv2
@@ -122,14 +122,25 @@ class YoloCardRecognizer:
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
         debug: bool = False,
         resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
+        exclude_promo: bool = False,
     ) -> List[DetectedCard]:
-        """通用扫描接口，支持全局或指定系列"""
+        """通用扫描接口，支持全局或指定系列
+
+        Args:
+            set_code: 指定系列代码，None 表示全局模式
+            obb_threshold: YOLO 检测置信度阈值
+            similarity_threshold: Hash 匹配相似度阈值
+            debug: 是否输出调试信息
+            resolve_name: 卡牌名称解析函数
+            exclude_promo: 是否排除 PROMO 系列（开包场景使用）
+        """
         results, total, _ = self._scan_common(
             set_code=set_code,
             obb_threshold=obb_threshold,
             similarity_threshold=similarity_threshold,
             debug=debug,
             resolve_name=resolve_name,
+            exclude_promo=exclude_promo,
         )
 
         logger.info(f"识别完成: {len(results)}/{total} 张卡牌匹配成功")
@@ -192,6 +203,7 @@ class YoloCardRecognizer:
         similarity_threshold: float,
         debug: bool,
         resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
+        exclude_promo: bool = False,
     ) -> Tuple[List[DetectedCard], int, List[DetectedCard]]:
         """
         通用扫描内部逻辑 - 实现两阶段匹配
@@ -204,13 +216,15 @@ class YoloCardRecognizer:
             logger.warning("YOLO模型尚未加载完成")
             return [], 0, []
 
-        # 2. 确保Hash已就绪
+        # 2. 确保Hash已就绪（exclude_promo=True 时排除 PROMO 系列）
         if set_code:
-            if not self.hash_manager.ensure_series_ready(set_code):
+            if not self.hash_manager.ensure_series_ready(
+                set_code, exclude_promo=exclude_promo
+            ):
                 logger.error(f"无法确保系列 {set_code} Hash就绪")
                 return [], 0, []
         else:
-            if not self.hash_manager.load_all_hashes():
+            if not self.hash_manager.load_all_hashes(exclude_promo=exclude_promo):
                 logger.error("无法加载全局Hash索引")
                 return [], 0, []
 

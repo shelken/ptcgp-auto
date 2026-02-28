@@ -76,12 +76,25 @@ class CardRepository:
             statement = select(Pack).order_by(Pack.set_code, Pack.name)
             return list(session.exec(statement).all())
 
-    def get_pack_names_by_set(self, set_code: str) -> List[str]:
-        """按系列获取子包名称列表。"""
+    def get_pack_names_by_set(
+        self, set_code: str, exclude_promo: bool = False
+    ) -> List[str]:
+        """按系列获取子包名称列表。
+
+        Args:
+            set_code: 系列代码
+            exclude_promo: 是否排除 PROMO 前缀的子包
+        """
         with Session(get_engine()) as session:
-            statement = (
-                select(Pack.name).where(Pack.set_code == set_code).order_by(Pack.name)
-            )
+            statement = select(Pack.name).where(Pack.set_code == set_code)
+
+            if exclude_promo:
+                # 过滤 PROMO 前缀（不区分大小写）
+                statement = statement.where(
+                    func.upper(col(Pack.name)).not_like("PROMO%")
+                )
+
+            statement = statement.order_by(Pack.name)
             return list(session.exec(statement).all())
 
     def get_packs_by_set_prefixes(
@@ -411,3 +424,41 @@ class CardRepository:
             )
             cards = session.exec(statement).all()
             return {card.number: card.perceptual_hash for card in cards}
+
+    def get_card_pack_names_batch(
+        self, card_ids: list[int], exclude_promo: bool = False
+    ) -> dict[int, list[str]]:
+        """批量获取卡牌关联的子包名称。
+
+        Args:
+            card_ids: 卡牌ID列表
+            exclude_promo: 是否排除 PROMO 前缀的子包
+
+        Returns:
+            {card_id: [pack_name, ...]} 映射
+        """
+        if not card_ids:
+            return {}
+
+        with Session(get_engine()) as session:
+            # 构建基础查询
+            statement = select(CardPack.card_id, CardPack.pack_name).where(
+                col(CardPack.card_id).in_(card_ids)
+            )
+
+            if exclude_promo:
+                # 过滤 PROMO 前缀（不区分大小写）
+                statement = statement.where(
+                    func.upper(col(CardPack.pack_name)).not_like("PROMO%")
+                )
+
+            results = session.exec(statement).all()
+
+            # 聚合结果
+            mapping: dict[int, list[str]] = {}
+            for card_id, pack_name in results:
+                if card_id not in mapping:
+                    mapping[card_id] = []
+                mapping[card_id].append(pack_name)
+
+            return mapping
