@@ -55,19 +55,3 @@ def fetch_pack_points_map(
     for point in points_records:
         points_map[(point.account_id, point.series)] = point.points
     return points_map
-
-
-def build_records_page_url(
-    page: int,
-    page_size: int,
-    lang: str,
-    rarity: list[str],
-    card_type: list[str],
-) -> str:
-    """构建记录分页 URL。"""
-    page_url = f"/api/records?page={page}&page_size={page_size}&lang={lang}"
-    for item in rarity:
-        page_url += f"&rarity={item}"
-    for item in card_type:
-        page_url += f"&card_type={item}"
-    return page_url

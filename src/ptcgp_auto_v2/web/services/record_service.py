@@ -6,10 +6,9 @@ from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.web.queries.record_queries import (
     fetch_records,
     fetch_pack_points_map,
-    build_records_page_url,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import get_current_lang, resolve_label
+from ptcgp_auto_v2.web.utils.i18n import resolve_label
 from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 
 
@@ -69,7 +68,9 @@ def build_records_list_context(
 
         set_name_display = series_code
         if series_code in sets_map:
-            set_name_display = resolve_label(sets_map[series_code], fallback=series_code)
+            set_name_display = resolve_label(
+                sets_map[series_code], fallback=series_code
+            )
 
         pack_name_display = record.pack_name or ""
         if record.pack_name in packs_map:
@@ -93,8 +94,6 @@ def build_records_list_context(
             }
         )
 
-    current_lang = get_current_lang()
-
     return {
         "items": items,
         "page": normalized_page,
@@ -104,18 +103,4 @@ def build_records_list_context(
         "total": (normalized_page * normalized_page_size)
         + len(items)
         + (normalized_page_size if has_next else 0),
-        "next_page_url": build_records_page_url(
-            page=normalized_page + 1,
-            page_size=normalized_page_size,
-            lang=current_lang,
-            rarity=rarity,
-            card_type=card_type,
-        ),
-        "prev_page_url": build_records_page_url(
-            page=max(normalized_page - 1, 0),
-            page_size=normalized_page_size,
-            lang=current_lang,
-            rarity=rarity,
-            card_type=card_type,
-        ),
     }

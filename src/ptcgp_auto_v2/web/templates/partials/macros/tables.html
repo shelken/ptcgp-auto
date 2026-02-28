@@ -33,16 +33,6 @@
 </tr>
 {% endmacro %}
 
-{% macro action_button(icon, title, onclick, active=false, small=true) %}
-<button type="button" 
-        onclick="{{ onclick }}" 
-        class="brutal-btn{% if active %} active{% endif %}{% if small %} text-sm px-3 py-1{% endif %}" 
-        title="{{ title }}"
-        aria-label="{{ title }}">
-    {{ icon }}
-</button>
-{% endmacro %}
-
 {% macro status_chip(status, t, key_prefix='status_', reason='', tone='') %}
 {% set label = t[key_prefix ~ status] or status %}
 {% set resolved_tone = tone %}
@@ -74,18 +64,4 @@
      {% if include_selector %}data-refresh-include="{{ include_selector }}"{% endif %}>
     {{ caller() }}
 </div>
-{% endmacro %}
-
-{% macro pagination(url, current_page=0, has_more=true, t={}) %}
-{% if has_more %}
-<div hx-get="{{ url }}" 
-     hx-trigger="revealed" 
-     hx-swap="outerHTML"
-     class="h-12 w-full flex justify-center items-center opacity-0">
-</div>
-{% else %}
-<div class="text-center py-8 text-muted font-mono text-sm border-t-2 border-subtle-light mt-4">
-    {{ t.end_of_list or 'End of list' }}
-</div>
-{% endif %}
 {% endmacro %}
