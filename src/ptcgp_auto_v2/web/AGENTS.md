@@ -2,8 +2,7 @@
 
 ## 最高原则
 
-- 每次遇到新问题并解决了，必须把正确方式写回下面的常见问题与注意点，简洁点，必须先抽象出问题所在，不是直接说明具体细节，而是只要用关键词提及就行。
-- 每次写ui界面时，先把当前的main.css文件读一遍
+- 编写代码前，先阅读一次项目根目录的`AGENTS.md`
 
 ## 目录结构
 
@@ -218,7 +217,7 @@ src/ptcgp_auto_v2/web/
 - **管理页时间渲染规范**：管理类 partial（如 friendship）中的时间列必须使用 `.relative-time + data-iso + data-tooltip` 结构，禁止仅输出 `|datetime` 绝对时间。
 - **Tooltip**：优先使用 `data-tooltip` + 自定义样式，避免依赖浏览器原生 title 在主题/样式下不可见。
 - **筛选条件缓存**：所有列表页面的筛选条件必须缓存（如 localStorage），避免刷新/切换后需要重新选择；恢复时注意不要触发重复请求。
-- **筛选统一策略**：所有带筛选的列表页面必须使用统一的序列化/恢复逻辑（`serializeFormFilters`/`applyFormFilters`/`buildQueryParts`），避免各页面各写一套。
+- **筛选统一策略**：所有带筛选页面仅允许通过 `features/filters/shared_form.js` 统一入口读写缓存（`data-filter-cache-key`）；禁止页面私有缓存模块与旧 key 兼容分支。
 - **自定义 Select 初始化兜底**：HTMX/动态插入 DOM 后需确保自定义 Select 被自动初始化（可使用 MutationObserver 兜底），防止退回浏览器默认样式。
 - **相对时间更新**：筛选/分页追加后要重新更新相对时间；`updateRelativeTimes` 需要能处理根节点与其最近容器。
 - **相对时间展示一致**：所有列表中的时间字段统一使用“相对时间 + 悬浮具体时间”，并在 HTMX 替换后重算，避免筛选后回退成绝对时间。
@@ -279,6 +278,18 @@ src/ptcgp_auto_v2/web/
 - **space-y 与隐藏表单间距陷阱**：`auto_refresh_container` 使用 `space-y-*` 时，前置状态表单必须带原生 `hidden` 属性（不仅是 `.hidden` 类），否则会对后续卡片错误施加顶部间距。
 - **操作面板与记录面板分层**：如 friendship 的“添加/删除请求”属于操作面板，不得按记录表格筛选逻辑混入；搜索/排序/分页仅放在记录表格面板。
 - **Modal 固定模式原则**：拥有卡牌弹窗使用固定模式（`data-modal-mode="owned-card-fixed"`），禁止再次引入双滚动（外层 `#modal-content` 与内层列表同时滚动）。
+- **元数据同步快照原则**：同步执行必须消费预览快照（`snapshot_id`），禁止无预览直接写库；快照需有过期控制与已执行状态。
+- **元数据范围归一化原则**：同步范围字段（all/set/pack/card）提交前必须在前端归一化为单一 `scope_value`，避免后端处理歧义参数。
+- **远端抓取复用原则**：脚本与 Web 端的 flibustier 抓取逻辑必须复用同一服务实现，禁止双份逻辑漂移。
+- **元数据层次驱动原则**：元数据管理左侧必须以“系列 -> 卡包 -> 卡牌”层次树为主，用户先选节点再执行动作；禁止回退为平铺参数筛选主导。
+- **节点动作协议原则**：元数据同步接口应接收 `node_type/node_id/action` 语义参数并在后端推导 source/scope/mode，避免前端手工拼装执行范围。
+- **元数据自动刷新状态原则**：metadata 页面自动刷新必须通过单一状态表单（`#metadata-state-form`）透传 `lang/ui_step/selected_node_type/selected_node_id/selected_set_code/selected_pack_name`，禁止依赖零散隐藏字段。
+- **元数据语言解析原则**：构建 metadata 视图时语言键应优先依据请求语言参数（如 `zh_CN`）判断，再做 normalize 回退；避免在测试或异常环境下误回退 `en` 导致中文界面显示英文。
+- **脚本服务统一原则（metadata）**：`scripts/sync_metadata.py` 仅做入口编排，必须完整复用 `FlibustierSyncService` 的抓取/计划/执行，不得再保留平行实现。
+- **metadata 动作状态透传原则**：自动刷新与局部请求必须同时透传 `current_action`，否则会出现“节点正确但动作回退”的隐性状态错位。
+- **执行节奏约束原则**：当用户明确要求“先实现后统一补测”时，开发阶段停止新增测试文件与测试分支，收尾阶段再集中测试。
+- **metadata 刷新模型原则**：metadata 属于强交互流程页，不应启用被动 `data-auto-refresh`；所有请求必须由用户显式动作触发（节点选择/检查/预览/执行）。
+- **metadata 收敛执行基线**：涉及 metadata 控制台与 Web 统一规范收敛时，统一以 `docs/plans/2026-02-27-metadata-sync-management-design.md` 中“待办回填（合并版，一字不漏）+ Phase1~Phase5 + 合并验收清单（待办）”作为唯一执行与验收基线，禁止并行维护第二套待办口径。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录
