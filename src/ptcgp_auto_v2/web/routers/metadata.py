@@ -12,7 +12,7 @@ from ptcgp_auto_v2.web.services.metadata_service import (
     check_metadata_sources,
 )
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -27,6 +27,7 @@ async def get_management_metadata(
     selected_pack_name: str = Query(default=""),
     ui_step: int = Query(default=1),
     current_action: str = Query(default="sync_supplement"),
+    snapshot_id: str = Query(default=""),
 ):
     """渲染元数据管理页面。"""
     context = build_metadata_context(
@@ -35,11 +36,10 @@ async def get_management_metadata(
         selected_node_id=selected_node_id,
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
+        snapshot_id=snapshot_id,
     )
     context["current_action"] = current_action
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/metadata_list.html", context)
+    return render_template(request, "partials/metadata_list.html", context)
 
 
 @router.post("/api/metadata/set/{code}/label")
@@ -78,6 +78,7 @@ async def preview_metadata_sync_api(
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
     current_action = safe_get_string(form, "current_action") or action
+    snapshot_id = safe_get_string(form, "snapshot_id") or ""
     ui_step_raw = safe_get_string(form, "ui_step") or "2"
     force_refresh = (safe_get_string(form, "force_refresh") or "0") == "1"
     try:
@@ -103,13 +104,12 @@ async def preview_metadata_sync_api(
         selected_node_id=node_id,
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
+        snapshot_id=result.get("snapshot_id") or snapshot_id,
     )
     context["current_action"] = current_action
-    context["request"] = request
     context["sync_preview"] = result
     context["sync_preview_json"] = preview_json
-    templates = get_templates()
-    return templates.TemplateResponse("partials/metadata_list.html", context)
+    return render_template(request, "partials/metadata_list.html", context)
 
 
 @router.post("/api/metadata/sync/execute")
@@ -141,13 +141,12 @@ async def execute_metadata_sync_api(
         selected_node_id=node_id,
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
+        snapshot_id=snapshot_id,
     )
     context["current_action"] = current_action
-    context["request"] = request
     context["sync_execute_result"] = result
     context["sync_execute_result_json"] = json.dumps(result, ensure_ascii=False)
-    templates = get_templates()
-    return templates.TemplateResponse("partials/metadata_list.html", context)
+    return render_template(request, "partials/metadata_list.html", context)
 
 
 @router.post("/api/metadata/sync/check")
@@ -161,6 +160,7 @@ async def check_metadata_sync_api(
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
     current_action = safe_get_string(form, "current_action") or "sync_supplement"
+    snapshot_id = safe_get_string(form, "snapshot_id") or ""
     ui_step_raw = safe_get_string(form, "ui_step") or "1"
     try:
         ui_step = int(ui_step_raw)
@@ -172,12 +172,11 @@ async def check_metadata_sync_api(
         selected_node_id=node_id,
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
+        snapshot_id=snapshot_id,
     )
     context["current_action"] = current_action
-    context["request"] = request
     context["sync_check"] = check_metadata_sources()
-    templates = get_templates()
-    return templates.TemplateResponse("partials/metadata_list.html", context)
+    return render_template(request, "partials/metadata_list.html", context)
 
 
 @router.post("/api/metadata/node/select")
@@ -191,6 +190,7 @@ async def select_metadata_node_api(
     selected_set_code = safe_get_string(form, "selected_set_code") or ""
     selected_pack_name = safe_get_string(form, "selected_pack_name") or ""
     current_action = safe_get_string(form, "current_action") or "sync_supplement"
+    snapshot_id = safe_get_string(form, "snapshot_id") or ""
     ui_step_raw = safe_get_string(form, "ui_step") or "1"
     try:
         ui_step = int(ui_step_raw)
@@ -203,8 +203,7 @@ async def select_metadata_node_api(
         selected_node_id=node_id,
         selected_set_code=selected_set_code,
         selected_pack_name=selected_pack_name,
+        snapshot_id=snapshot_id,
     )
     context["current_action"] = current_action
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/metadata_list.html", context)
+    return render_template(request, "partials/metadata_list.html", context)

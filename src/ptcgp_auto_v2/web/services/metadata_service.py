@@ -20,7 +20,6 @@ from ptcgp_auto_v2.web.services.metadata_sync_service import (
 )
 from ptcgp_auto_v2.web.queries.metadata_queries import build_label_dict
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 _SYNC_ACTION_MAP: dict[str, dict[str, str]] = {
@@ -50,11 +49,11 @@ def build_metadata_context(
     selected_node_id: str = "all",
     selected_set_code: str = "",
     selected_pack_name: str = "",
+    snapshot_id: str = "",
 ) -> dict:
-    """构建元数据管理视图数据。语言在最底层自动处理"""
+    """构建元数据管理视图数据。"""
     from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
-    current_lang, t = get_current_i18n()
     repo = CardRepository()
     sets = repo.get_all_sets()
     packs = repo.get_all_packs()
@@ -90,19 +89,22 @@ def build_metadata_context(
 
     # 进入页面默认不触发远端请求，避免仅打开管理页就访问 flibustier/52poke。
     sync_check = build_default_check_context()
+    snapshot_preview = _load_snapshot_preview(snapshot_id)
 
     return {
         "ui_step": ui_step,
         "sets": sets_data,
         "packs_by_set": packs_by_set,
         "sync_check": sync_check,
-        "lang_key": current_lang,
+        "snapshot_id": snapshot_id,
+        "sync_preview": snapshot_preview or {},
+        "sync_preview_json": json.dumps(snapshot_preview, ensure_ascii=False)
+        if snapshot_preview
+        else "",
         "current_action": _default_action_for_node(
             node_type=selected_context["selected_node_type"]
         ),
         **selected_context,
-        "t": t,
-        "current_lang": current_lang,
     }
 
 
@@ -280,17 +282,25 @@ def _build_selected_context(
     selected_pack_cards: list[dict[str, Any]] = []
     if set_code and pack_name:
         from ptcgp_auto_v2.web.utils.i18n import resolve_label
+
         cards = repo.get_cards_by_pack(pack_name=pack_name, set_code=set_code)
-        selected_pack_cards = [
-            {
-                "set_code": card.set_code,
-                "number": card.number,
-                "name": card.name,
-                "display_name": resolve_label(card.data, fallback=card.name) if card.data else card.name,
-                "key": f"{card.set_code}-{card.number:03d}",
-            }
-            for card in cards
-        ]
+        for card in cards:
+            card_data = parse_json_label(card.data)
+            localized_name = card_data.get("localized_name") if card_data else {}
+            if isinstance(localized_name, dict):
+                display_name = resolve_label(localized_name, fallback=card.name)
+            else:
+                display_name = resolve_label(card_data, fallback=card.name)
+
+            selected_pack_cards.append(
+                {
+                    "set_code": card.set_code,
+                    "number": card.number,
+                    "name": card.name,
+                    "display_name": display_name,
+                    "key": f"{card.set_code}-{card.number:03d}",
+                }
+            )
 
     return {
         "selected_node_type": node_type,
@@ -327,6 +337,38 @@ def _guess_pack_name_by_card(repo: CardRepository, card_key: str) -> str:
     if not pack_names:
         return ""
     return pack_names[0]
+
+
+def _load_snapshot_preview(snapshot_id: str) -> dict[str, Any] | None:
+    """按 snapshot_id 读取快照预览数据，供 Step2/Step3 透传展示。"""
+    normalized_snapshot_id = (snapshot_id or "").strip()
+    if not normalized_snapshot_id:
+        return None
+    snapshot = MetadataSyncSnapshotRepository().get_snapshot(
+        normalized_snapshot_id,
+        include_expired=True,
+    )
+    if snapshot is None:
+        return None
+    payload = _parse_json_dict(snapshot.payload_json)
+    summary = _parse_json_dict(snapshot.summary_json)
+    return {
+        "snapshot_id": snapshot.snapshot_id,
+        "summary": summary,
+        "payload": payload,
+        "status": snapshot.status,
+    }
+
+
+def _parse_json_dict(raw: str | None) -> dict[str, Any]:
+    """安全解析 JSON 字典。"""
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _default_action_for_node(node_type: str) -> str:
