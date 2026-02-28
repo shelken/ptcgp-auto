@@ -27,21 +27,21 @@ def _build_request(method: str = "GET") -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def test_save_plan_refresh_passes_plain_query_values(monkeypatch):
     """保存计划后刷新列表时，传给服务层的查询参数应是原生类型。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace()
@@ -51,8 +51,9 @@ def test_save_plan_refresh_passes_plain_query_values(monkeypatch):
 
     monkeypatch.setattr(router, "upsert_plan_from_form", lambda form: None)
 
-    def _fake_get_plans_context(
-        lang: str,
+    def _fake_build_plans_list_context(
+        *,
+        session,
         q: str = "",
         sort_by: str = "id",
         sort_order: str = "asc",
@@ -65,7 +66,7 @@ def test_save_plan_refresh_passes_plain_query_values(monkeypatch):
         assert isinstance(page, int)
         assert isinstance(page_size, int)
         return {
-            "plans": [],
+            "items": [],
             "q": q,
             "sort_by": sort_by,
             "sort_order": sort_order,
@@ -73,13 +74,13 @@ def test_save_plan_refresh_passes_plain_query_values(monkeypatch):
             "page_size": page_size,
             "has_prev": False,
             "has_next": False,
-            "total_items": 0,
-            "t": {},
-            "current_lang": "zh_CN",
+            "total": 0,
         }
 
-    monkeypatch.setattr(router, "get_plans_context", _fake_get_plans_context)
+    monkeypatch.setattr(
+        router, "build_plans_list_context", _fake_build_plans_list_context
+    )
 
-    response = asyncio.run(router.save_plan(request=request, lang="zh_CN"))
+    response = asyncio.run(router.save_plan(request=request, session=object()))
     assert response.status_code == 200
     assert response.headers.get("HX-Trigger") == "closeModal"

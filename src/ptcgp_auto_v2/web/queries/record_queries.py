@@ -14,8 +14,8 @@ def fetch_records(
     page_size: int,
     rarity: list[str],
     card_type: list[str],
-) -> list[PackRecord]:
-    """查询开包记录（支持筛选与分页）。"""
+) -> tuple[list[PackRecord], bool]:
+    """查询开包记录（支持筛选与分页）并返回是否还有下一页。"""
     query = select(PackRecord).distinct().order_by(desc(PackRecord.opened_at))
 
     if rarity or card_type:
@@ -26,8 +26,12 @@ def fetch_records(
             query = query.where(col(Card.type).in_(card_type))
 
     offset = page * page_size
-    query = query.offset(offset).limit(page_size)
-    return list(session.exec(query).all())
+    query = query.offset(offset).limit(page_size + 1)
+    rows = list(session.exec(query).all())
+    has_next = len(rows) > page_size
+    if has_next:
+        rows = rows[:page_size]
+    return rows, has_next
 
 
 def fetch_pack_points_map(
@@ -53,13 +57,17 @@ def fetch_pack_points_map(
     return points_map
 
 
-def build_records_next_page_url(
-    page: int, lang: str, rarity: list[str], card_type: list[str]
+def build_records_page_url(
+    page: int,
+    page_size: int,
+    lang: str,
+    rarity: list[str],
+    card_type: list[str],
 ) -> str:
     """构建记录分页 URL。"""
-    next_page_url = f"/api/records?page={page + 1}&lang={lang}"
+    page_url = f"/api/records?page={page}&page_size={page_size}&lang={lang}"
     for item in rarity:
-        next_page_url += f"&rarity={item}"
+        page_url += f"&rarity={item}"
     for item in card_type:
-        next_page_url += f"&card_type={item}"
-    return next_page_url
+        page_url += f"&card_type={item}"
+    return page_url

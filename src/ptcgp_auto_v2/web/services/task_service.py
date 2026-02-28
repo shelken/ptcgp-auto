@@ -12,9 +12,13 @@ from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
-from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
+from ptcgp_auto_v2.db.repositories import (
+    AccountRepository,
+    CardRepository,
+    PackRecordRepository,
+    TaskInstanceRepository,
+)
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
-from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
     reset_completed_task_instances,
@@ -28,6 +32,7 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
 
 def build_tasks_page_url(
     page: int,
+    page_size: int,
     lang: str,
     status: list[str],
     task_type: list[str],
@@ -36,7 +41,7 @@ def build_tasks_page_url(
     sort_order: str,
 ) -> str:
     """构建任务分页 URL。"""
-    params = [("page", page), ("lang", lang)]
+    params = [("page", page), ("page_size", page_size), ("lang", lang)]
     for item in status:
         params.append(("status", item))
     for item in task_type:
@@ -74,7 +79,7 @@ def build_tasks_list_context(
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
 
-    instances, has_more = fetch_task_instances(
+    instances, has_next = fetch_task_instances(
         session=session,
         page=normalized_page,
         page_size=normalized_page_size,
@@ -185,9 +190,8 @@ def build_tasks_list_context(
         rows.append(row_data)
 
     # 估算总数：当前页数量 + (是否有下一页 ? 估算更多)
-    # 由于 has_more 机制，我们知道是否有更多数据
     estimated_total = len(rows) + (normalized_page * normalized_page_size)
-    if has_more:
+    if has_next:
         estimated_total += normalized_page_size  # 至少还有一页
 
     return {
@@ -195,7 +199,7 @@ def build_tasks_list_context(
         "page": normalized_page,
         "page_size": normalized_page_size,
         "has_prev": normalized_page > 0,
-        "has_next": has_more,
+        "has_next": has_next,
         "total": estimated_total,
     }
 
@@ -219,6 +223,74 @@ def recompute_next_run_at_for_account(
         next_run_at, _, _, _ = compute_next_run_for_instance(instance, account_cache)
         instance.next_run_at = next_run_at
     repo.update_next_run_at(instances)
+
+
+def list_task_filter_accounts() -> list[Account]:
+    """获取任务筛选可用账号列表。"""
+    repo = AccountRepository()
+    return repo.get_all()
+
+
+def build_task_list_render_context(
+    *,
+    session: Session,
+    page: int,
+    page_size: int,
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+    sort_by: str,
+    sort_order: str,
+    table_only: bool,
+) -> dict[str, Any]:
+    """构建任务列表模板渲染上下文。"""
+    from ptcgp_auto_v2.core.task_base import TaskRegistry
+    from ptcgp_auto_v2.core.task_status import TaskStatus
+    from ptcgp_auto_v2.web.utils.i18n import get_current_lang
+
+    current_lang = get_current_lang()
+    context = build_tasks_list_context(
+        session=session,
+        page=page,
+        page_size=page_size,
+        status=status,
+        task_type=task_type,
+        account_id=account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+    context["next_page_url"] = build_tasks_page_url(
+        page=page + 1,
+        page_size=page_size,
+        lang=current_lang,
+        status=status,
+        task_type=task_type,
+        account_id=account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    context["prev_page_url"] = build_tasks_page_url(
+        page=max(page - 1, 0),
+        page_size=page_size,
+        lang=current_lang,
+        status=status,
+        task_type=task_type,
+        account_id=account_id,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    context["status_options"] = [status_item.value for status_item in TaskStatus]
+    context["task_types"] = TaskRegistry.all_types()
+    context["accounts"] = list_task_filter_accounts()
+    context["selected_status"] = status
+    context["selected_task_type"] = task_type
+    context["selected_account_id"] = account_id
+    context["selected_sort_by"] = sort_by
+    context["selected_sort_order"] = sort_order
+    context["table_only"] = table_only
+    context["current_lang"] = current_lang
+    return context
 
 
 def reset_completed_tasks_by_filters(

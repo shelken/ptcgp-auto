@@ -54,7 +54,6 @@ def test_daily_gift_context_supports_record_search_sort_pagination(session: Sess
 
     context = build_daily_gift_context(
         session=session,
-        lang="zh_CN",
         biz_date_local="2026-02-17",
         q="9999",
         sort_by="updated_at",
@@ -68,7 +67,6 @@ def test_daily_gift_context_supports_record_search_sort_pagination(session: Sess
 
     paged = build_daily_gift_context(
         session=session,
-        lang="zh_CN",
         biz_date_local="2026-02-17",
         q="",
         sort_by="updated_at",

@@ -25,7 +25,7 @@ from ptcgp_auto_v2.web.services.notification_service import (
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 router = APIRouter()
 
@@ -117,11 +117,8 @@ async def _render_notification_page(
         page_size=page_size,
     )
     context = _build_notifications_page_context(session, filters)
-    context["request"] = request
     context["notification_view"] = notification_view
-
-    templates = get_templates()
-    return templates.TemplateResponse("partials/notification_page.html", context)
+    return render_template(request, "partials/notification_page.html", context)
 
 
 @router.get("/management/notifications", response_class=HTMLResponse)
@@ -206,10 +203,8 @@ async def get_recent_notifications(
         session=session,
         limit=min(max(limit, 1), 20),
     )
-    context["request"] = request
     context["notification_view"] = "recent"
-    templates = get_templates()
-    return templates.TemplateResponse("partials/notification_page.html", context)
+    return render_template(request, "partials/notification_page.html", context)
 
 
 @router.get("/management/notifications/card-picker-modal", response_class=HTMLResponse)
@@ -243,9 +238,7 @@ async def get_notification_card_picker_modal(
         page=max(card_selector_page, 0),
         page_size=min(max(card_selector_page_size, 1), 60),
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/modals/card_picker_modal.html", context)
+    return render_template(request, "partials/modals/card_picker_modal.html", context)
 
 
 @router.post("/management/notifications/card-picker/apply", response_class=HTMLResponse)
@@ -255,20 +248,17 @@ async def apply_notification_card_picker(
     session: Session = Depends(get_fastapi_session),
 ):
     """应用卡牌选择结果并回填到配置表单。"""
-    current_lang, t = get_current_i18n()
+    _, t = get_current_i18n()
     form = await request.form()
     selected_ids = _parse_unique_int_ids(form.getlist("notify_card_ids"))
 
     context = {
-        "request": request,
         "scene": normalize_scene(scene) or "rare_card_obtained",
         "selected_card_ids": selected_ids,
         "selected_cards": list_cards_by_ids(session, selected_ids),
-        "t": t,
         "notification_view": "selected_cards",
     }
-    templates = get_templates()
-    response = templates.TemplateResponse("partials/notification_page.html", context)
+    response = render_template(request, "partials/notification_page.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {
             "closeModal": True,
@@ -334,7 +324,7 @@ async def mark_all_as_read(
         mark_all_notifications_as_read,
     )
 
-    current_lang, t = get_current_i18n()
+    _, t = get_current_i18n()
     filters = _build_notification_list_filters(
         scene=scene,
         account_id=account_id,
@@ -386,7 +376,7 @@ async def update_notification_config(
         update_notification_config as update_config,
     )
 
-    current_lang, t = get_current_i18n()
+    _, t = get_current_i18n()
     form = await request.form()
 
     scene = normalize_scene(str(form.get("scene") or ""))
@@ -420,17 +410,14 @@ async def update_notification_config(
 
     message = t.get("notification_config_saved") or "配置已保存"
 
-    templates = get_templates()
-    response = templates.TemplateResponse(
+    response = render_template(
+        request,
         "partials/notification_page.html",
         {
-            "request": request,
             "config": build_config_view(updated_config),
             "task_type_options": get_task_type_options(),
             "task_status_options": TASK_STATUS_OPTIONS,
             "rarity_codes": list_rarity_codes(session),
-            "t": t,
-            "current_lang": current_lang,
             "notification_view": "config_item",
             "selected_card_ids": None,
             "selected_cards": None,
@@ -459,7 +446,7 @@ async def send_test_webhook(
     """发送企业微信测试消息。"""
     from ptcgp_auto_v2.web.services.notification_service import get_notification_by_id
 
-    current_lang, t = get_current_i18n()
+    _, t = get_current_i18n()
 
     notification = None
     if notification_id is not None:
@@ -524,11 +511,7 @@ async def get_notification_panel(
         page=0,
         page_size=10,
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse(
-        "partials/notification_panel_content.html", context
-    )
+    return render_template(request, "partials/notification_panel_content.html", context)
 
 
 @router.get("/notifications/load-more", response_class=HTMLResponse)
@@ -547,9 +530,7 @@ async def get_notification_load_more(
         page=page,
         page_size=10,
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/notification_list_items.html", context)
+    return render_template(request, "partials/notification_list_items.html", context)
 
 
 @router.post("/notifications/panel/mark-all-read", response_class=HTMLResponse)
@@ -566,7 +547,7 @@ async def mark_all_panel_notifications_read(
         mark_all_notifications_as_read,
     )
 
-    current_lang, t = get_current_i18n()
+    _, t = get_current_i18n()
 
     count = mark_all_notifications_as_read()
 
@@ -576,13 +557,9 @@ async def mark_all_panel_notifications_read(
         page=0,
         page_size=10,
     )
-    context["request"] = request
     context["unread_count"] = 0  # 全部已读
 
-    templates = get_templates()
-    response = templates.TemplateResponse(
-        "partials/notification_list_items.html", context
-    )
+    response = render_template(request, "partials/notification_list_items.html", context)
 
     # 通过 HX-Trigger 通知前端更新 badge 和显示 toast
     message_template = (

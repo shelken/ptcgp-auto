@@ -12,6 +12,7 @@ from ptcgp_auto_v2.web.services.notification_service import (
     list_rarity_codes,
     normalize_scene,
 )
+from ptcgp_auto_v2.web.utils.i18n import set_lang_context
 
 
 def test_list_rarity_codes_returns_db_codes(session: Session):
@@ -57,9 +58,9 @@ def test_build_notifications_context_contains_accounts_and_configs(session: Sess
     )
     session.commit()
 
+    set_lang_context("zh_CN")
     context = build_notifications_context(
         session=session,
-        lang="zh_CN",
         scene="task_status",
         account_id=account.id,
         page=0,
@@ -99,9 +100,9 @@ def test_build_notification_card_selector_context_uses_code_filter(session: Sess
     )
     session.commit()
 
+    set_lang_context("zh_CN")
     context = build_notification_card_selector_context(
         session=session,
-        lang="zh_CN",
         scene="rare_card_obtained",
         selected_card_ids=[900101],
         rarity="RR",
@@ -180,9 +181,8 @@ def test_notification_panel_image_url_should_follow_owned_cards_wsrv_pattern(
     )
     session.commit()
 
-    context = build_notification_panel_context(
-        session=session, lang="zh_CN", page=0, page_size=10
-    )
+    set_lang_context("zh_CN")
+    context = build_notification_panel_context(session=session, page=0, page_size=10)
     image_url = context["notifications"][0]["image_url"]
 
     assert image_url is not None

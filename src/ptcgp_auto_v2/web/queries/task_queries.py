@@ -22,7 +22,7 @@ def fetch_task_instances(
     sort_by: str,
     sort_order: str,
 ) -> tuple[list[TaskInstance], bool]:
-    """查询任务实例列表并返回是否还有下一页。"""
+    """查询任务实例列表并返回是否有下一页。"""
     statement = select(TaskInstance).options(
         selectinload(cast(Any, TaskInstance.account))  # type: ignore[arg-type]
         .selectinload(cast(Any, Account.task_plan_associations))  # type: ignore[arg-type]
@@ -41,10 +41,10 @@ def fetch_task_instances(
     statement = statement.offset(offset).limit(page_size + 1)
     instances = list(session.exec(statement).all())
 
-    has_more = len(instances) > page_size
-    if has_more:
+    has_next = len(instances) > page_size
+    if has_next:
         instances = instances[:page_size]
-    return instances, has_more
+    return instances, has_next
 
 
 def reset_completed_task_instances(

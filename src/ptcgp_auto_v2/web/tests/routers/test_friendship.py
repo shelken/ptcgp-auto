@@ -29,16 +29,16 @@ def _build_request(method: str = "GET", query: dict | None = None) -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 class _FakeSession:
@@ -53,12 +53,11 @@ class _FakeSession:
 
 def test_get_management_friendships_renders_template(monkeypatch):
     """好友管理页应渲染 friendship 列表模板。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     request = _build_request("GET")
 
     def _fake_build_friendship_context(
         session,
-        lang,
         account_id,
         from_account_id,
         q,
@@ -74,7 +73,7 @@ def test_get_management_friendships_renders_template(monkeypatch):
         assert sort_order == "desc"
         assert page == 0
         assert page_size == 10
-        return {"items": [], "t": {}, "current_lang": lang}
+        return {"items": [], "t": {}, "current_lang": "zh_CN"}
 
     monkeypatch.setattr(
         router, "build_friendship_context", _fake_build_friendship_context
@@ -83,7 +82,6 @@ def test_get_management_friendships_renders_template(monkeypatch):
     response = asyncio.run(
         router.get_management_friendships(
             request=request,
-            lang="zh_CN",
             account_id="12",
             from_account_id="34",
             q="abc",
@@ -125,7 +123,6 @@ def test_post_add_friend_request_passes_filters_and_sets_success_toast(monkeypat
 
     async def _fake_get_management_friendships(
         request,
-        lang,
         account_id,
         from_account_id,
         q,
@@ -151,17 +148,16 @@ def test_post_add_friend_request_passes_filters_and_sets_success_toast(monkeypat
     monkeypatch.setattr(
         router,
         "build_friendship_context",
-        lambda session, lang: {
+        lambda session: {
             "t": {"msg_add_request_created": "添加成功"},
-            "current_lang": lang,
-        },
+            "current_lang": "zh_CN",
+        }
     )
 
     fake_account = SimpleNamespace(friend_id="F123")
     response = asyncio.run(
         router.post_add_friend_request(
             request=request,
-            lang="zh_CN",
             session=_FakeSession(account=fake_account),
         )
     )
@@ -212,17 +208,16 @@ def test_post_delete_friend_request_failure_sets_skip_toast(monkeypatch):
     monkeypatch.setattr(
         router,
         "build_friendship_context",
-        lambda session, lang: {
+        lambda session: {
             "t": {"msg_delete_request_skipped_not_friend": "不是好友"},
-            "current_lang": lang,
-        },
+            "current_lang": "zh_CN",
+        }
     )
 
     fake_account = SimpleNamespace(friend_id="F456")
     response = asyncio.run(
         router.post_delete_friend_request(
             request=request,
-            lang="zh_CN",
             session=_FakeSession(account=fake_account),
         )
     )
@@ -245,9 +240,9 @@ def test_post_cancel_friend_request_sets_success_toast(monkeypatch):
     monkeypatch.setattr(
         router,
         "build_friendship_context",
-        lambda session, lang: {
+        lambda session: {
             "t": {"msg_request_cancelled": "取消成功"},
-            "current_lang": lang,
+            "current_lang": "zh_CN",
         },
     )
 
@@ -255,7 +250,6 @@ def test_post_cancel_friend_request_sets_success_toast(monkeypatch):
         router.post_cancel_friend_request(
             request_id=101,
             request=_build_request("POST"),
-            lang="zh_CN",
             selected_account_id="7",
             selected_from_account_id="8",
             q="kw",

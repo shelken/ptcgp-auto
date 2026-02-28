@@ -27,21 +27,21 @@ def _build_request(method: str = "GET") -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def test_get_management_exchange_cards_renders_template(monkeypatch):
     """交换记录管理页应渲染列表模板。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
     monkeypatch.setattr(
         router,
         "build_exchange_card_context",
@@ -51,7 +51,6 @@ def test_get_management_exchange_cards_renders_template(monkeypatch):
     response = asyncio.run(
         router.get_management_exchange_cards(
             request=_build_request("GET"),
-            lang="zh_CN",
             account_id="1",
             status="pending",
             q="kw",
@@ -90,7 +89,6 @@ def test_post_cancel_exchange_request_success_sets_success_toast(monkeypatch):
         router.post_cancel_exchange_request(
             request_id=1,
             request=_build_request("POST"),
-            lang="zh_CN",
             account_id="1",
             status="pending",
             q="kw",
@@ -128,7 +126,6 @@ def test_post_cancel_exchange_request_failure_sets_failed_toast(monkeypatch):
         router.post_cancel_exchange_request(
             request_id=2,
             request=_build_request("POST"),
-            lang="zh_CN",
             account_id="1",
             status="pending",
             q="kw",

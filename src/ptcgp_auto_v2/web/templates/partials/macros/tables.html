@@ -67,9 +67,9 @@
 {{ status_chip(status, t) }}
 {% endmacro %}
 
-{% macro auto_refresh_container(refresh_url, include_selector='', swap='outerHTML', class_name='') %}
+{% macro auto_refresh_container(refresh_url, include_selector='', swap='outerHTML', class_name='', auto_refresh_enabled=true) %}
 <div class="{{ class_name }}"
-     data-auto-refresh="{{ refresh_url }}"
+     {% if auto_refresh_enabled %}data-auto-refresh="{{ refresh_url }}"{% endif %}
      data-refresh-swap="{{ swap }}"
      {% if include_selector %}data-refresh-include="{{ include_selector }}"{% endif %}>
     {{ caller() }}

@@ -27,29 +27,29 @@ def _build_request(method: str = "GET") -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def test_get_card_sets_returns_service_result(monkeypatch):
     """卡包系列接口应透传 service 返回。"""
-    monkeypatch.setattr(router, "list_card_sets", lambda: [{"code": "A1"}])
+    monkeypatch.setattr(router, "build_card_sets_options", lambda: [{"code": "A1"}])
     result = asyncio.run(router.get_card_sets())
     assert result == [{"code": "A1"}]
 
 
 def test_get_boosters_options_renders_partial(monkeypatch):
     """补充包选项接口应返回 options partial。"""
-    _patch_templates(monkeypatch)
-    monkeypatch.setattr(router, "list_set_boosters", lambda _set_code: ["Pikachu"])
+    _patch_render_template(monkeypatch)
+    monkeypatch.setattr(router, "build_set_boosters_options", lambda _set_code: ["Pikachu"])
 
     response = asyncio.run(
         router.get_boosters_options(
@@ -63,7 +63,7 @@ def test_get_boosters_options_renders_partial(monkeypatch):
 
 def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypatch):
     """保存配置后应刷新账号列表并触发 closeModal。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(
@@ -84,13 +84,13 @@ def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypat
         called["booster_name"] = booster_name
 
     monkeypatch.setattr(
-        router, "save_account_pack_config", _fake_save_account_pack_config
+        router, "build_save_account_pack_config", _fake_save_account_pack_config
     )
     monkeypatch.setattr(
         router,
-        "get_accounts_context",
-        lambda _session, _lang: {
-            "accounts": [],
+        "build_accounts_list_context",
+        lambda **_kwargs: {
+            "items": [],
             "pack_configs": {},
             "auto_pack_map": {},
             "q": "",
@@ -100,9 +100,7 @@ def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypat
             "page_size": 10,
             "has_prev": False,
             "has_next": False,
-            "total_items": 0,
-            "t": {},
-            "current_lang": "zh_CN",
+            "total": 0,
         },
     )
 
@@ -110,7 +108,6 @@ def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypat
         router.save_account_pack_config_api(
             request=request,
             account_id=3,
-            lang="zh_CN",
             session=object(),
         )
     )
