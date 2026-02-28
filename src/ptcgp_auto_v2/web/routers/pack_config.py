@@ -4,10 +4,10 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.pack_config_service import (
-    list_card_sets,
-    list_set_boosters,
+    build_card_sets_options,
+    build_set_boosters_options,
     build_pack_config_context,
-    save_account_pack_config,
+    build_save_account_pack_config,
 )
 from ptcgp_auto_v2.web.services.account_service import build_accounts_list_context
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
@@ -20,13 +20,13 @@ router = APIRouter()
 @router.get("/api/card-sets")
 async def get_card_sets():
     """获取卡包系列列表。"""
-    return list_card_sets()
+    return build_card_sets_options()
 
 
 @router.get("/api/card-sets/{set_code}/boosters")
 async def get_set_boosters(set_code: str):
     """获取指定系列补充包列表。"""
-    return list_set_boosters(set_code)
+    return build_set_boosters_options(set_code)
 
 
 @router.get(
@@ -47,7 +47,7 @@ async def get_boosters_options(
     pack_code: str = Query(...),
 ):
     """获取补充包选项 HTML。"""
-    boosters = list_set_boosters(pack_code)
+    boosters = build_set_boosters_options(pack_code)
     return render_template(
         request, "partials/options_boosters.html", {"boosters": boosters}
     )
@@ -64,7 +64,7 @@ async def save_account_pack_config_api(
     pack_code = safe_get_string(form, "pack_code") or ""
     booster_name = safe_get_string(form, "booster_name") or ""
 
-    save_account_pack_config(account_id, pack_code, booster_name)
+    build_save_account_pack_config(account_id, pack_code, booster_name)
 
     context = build_accounts_list_context(session=session)
     response = render_template(request, "partials/account_list.html", context)

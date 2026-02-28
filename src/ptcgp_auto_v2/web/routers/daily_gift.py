@@ -4,7 +4,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.daily_gift_service import build_daily_gift_context
-from ptcgp_auto_v2.web.utils.template_env import get_templates
+from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
 router = APIRouter()
@@ -31,6 +31,4 @@ async def get_management_daily_gift(
         page=max(page, 0),
         page_size=min(max(page_size, 1), 100),
     )
-    context["request"] = request
-    templates = get_templates()
-    return templates.TemplateResponse("partials/daily_gift_list.html", context)
+    return render_template(request, "partials/daily_gift_list.html", context)

@@ -27,21 +27,21 @@ def _build_request(method: str = "GET") -> Request:
     return Request(scope, receive)
 
 
-def _patch_templates(monkeypatch):
-    """替换模板引擎，避免依赖真实模板渲染。"""
+def _patch_render_template(monkeypatch):
+    """替换 render_template，避免依赖真实模板渲染。"""
 
-    class _FakeTemplates:
-        def TemplateResponse(self, name, context):
-            return HTMLResponse(
-                content=f"tpl:{name};keys:{','.join(sorted(context.keys()))}"
-            )
-
-    monkeypatch.setattr(router, "get_templates", lambda: _FakeTemplates())
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda _request, template, context: HTMLResponse(
+            content=f"tpl:{template};keys:{','.join(sorted(context.keys()))}"
+        ),
+    )
 
 
 def test_update_account_details_refresh_passes_plain_query_values(monkeypatch):
     """保存账号信息后刷新列表时，传给服务层的查询参数应是原生类型。"""
-    _patch_templates(monkeypatch)
+    _patch_render_template(monkeypatch)
 
     async def _fake_form():
         return SimpleNamespace(get=lambda _key, default=None: default)
@@ -53,9 +53,9 @@ def test_update_account_details_refresh_passes_plain_query_values(monkeypatch):
         router, "update_account_details", lambda *_args, **_kwargs: None
     )
 
-    def _fake_get_accounts_context(
+    def _fake_build_accounts_list_context(
+        *,
         session,
-        lang: str,
         q: str = "",
         sort_by: str = "id",
         sort_order: str = "asc",
@@ -68,7 +68,7 @@ def test_update_account_details_refresh_passes_plain_query_values(monkeypatch):
         assert isinstance(page, int)
         assert isinstance(page_size, int)
         return {
-            "accounts": [],
+            "items": [],
             "pack_configs": {},
             "auto_pack_map": {},
             "q": q,
@@ -78,18 +78,17 @@ def test_update_account_details_refresh_passes_plain_query_values(monkeypatch):
             "page_size": page_size,
             "has_prev": False,
             "has_next": False,
-            "total_items": 0,
-            "t": {},
-            "current_lang": "zh_CN",
+            "total": 0,
         }
 
-    monkeypatch.setattr(router, "get_accounts_context", _fake_get_accounts_context)
+    monkeypatch.setattr(
+        router, "build_accounts_list_context", _fake_build_accounts_list_context
+    )
 
     response = asyncio.run(
         router.update_account_details_api(
             request=request,
             account_id=1,
-            lang="zh_CN",
             session=object(),
         )
     )
