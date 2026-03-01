@@ -47,6 +47,14 @@ WEB_LANG_TO_DB_LABEL_KEYS = {
 # 默认语言键（Web 层默认）
 DEFAULT_LANG_KEY = "zh_CN"
 
+# Web 语言归一化回退候选（用于 Accept-Language / cookie 等非标准值输入）
+WEB_ZH_FALLBACK_LANG_KEYS = ["zh_CN", "zh_TW", "zh_HK", "zh"]
+WEB_EN_FALLBACK_LANG_KEYS = ["en"]
+
+# 卡图资源目录 locale（ptcgp-assets 使用的目录名）
+CARD_IMAGE_LOCALE_ZH = "zh-TW"
+CARD_IMAGE_LOCALE_EN = "en-US"
+
 
 # ========== 语言映射工具函数 ==========
 def get_label_candidates(web_lang: str) -> list[str]:
@@ -99,6 +107,14 @@ def locale_to_web_lang(locale: str) -> str:
         "en_US": "en",
     }
     return mapping.get(locale, DEFAULT_LANG_KEY)
+
+
+def resolve_card_image_locale_by_web_lang(web_lang: str) -> str:
+    """将 Web 语言键转换为卡图资源目录 locale。"""
+    normalized = (web_lang or "").lower()
+    if normalized.startswith("zh"):
+        return CARD_IMAGE_LOCALE_ZH
+    return CARD_IMAGE_LOCALE_EN
 
 
 def _parse_json_object(raw: str | dict[str, Any] | None) -> dict[str, Any]:

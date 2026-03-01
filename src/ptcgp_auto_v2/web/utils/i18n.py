@@ -8,6 +8,8 @@ from fastapi import Request
 from ptcgp_auto_v2.config.lang import (
     WEB_LANG_TO_DB_LABEL_KEYS,
     DEFAULT_LANG_KEY,
+    WEB_LANG_EN,
+    WEB_ZH_FALLBACK_LANG_KEYS,
     resolve_localized_text,
 )
 
@@ -44,10 +46,10 @@ def load_translations() -> None:
                 _translations[lang] = json.load(file)
 
 
-def get_translations(lang: str = "en") -> Dict[str, Any]:
+def get_translations(lang: str = WEB_LANG_EN) -> Dict[str, Any]:
     """按语言获取翻译字典（开发模式下每次刷新）。"""
     load_translations()
-    return _translations.get(lang, _translations.get("en", {}))
+    return _translations.get(lang, _translations.get(WEB_LANG_EN, {}))
 
 
 def normalize_lang(lang: str) -> str:
@@ -60,12 +62,12 @@ def normalize_lang(lang: str) -> str:
         if key.lower() == normalized:
             return key
     if normalized.startswith("zh"):
-        for candidate in ("zh_CN", "zh_TW", "zh_HK", "zh"):
+        for candidate in WEB_ZH_FALLBACK_LANG_KEYS:
             if candidate in _translations:
                 return candidate
-    if normalized.startswith("en") and "en" in _translations:
-        return "en"
-    return next(iter(_translations.keys()), "en")
+    if normalized.startswith("en") and WEB_LANG_EN in _translations:
+        return WEB_LANG_EN
+    return next(iter(_translations.keys()), WEB_LANG_EN)
 
 
 def detect_lang(request: Request, explicit_lang: str | None) -> str:
@@ -84,7 +86,7 @@ def detect_lang(request: Request, explicit_lang: str | None) -> str:
         if normalized in _translations:
             return normalized
 
-    return normalize_lang("en")
+    return normalize_lang(WEB_LANG_EN)
 
 
 def _parse_accept_language(value: str) -> list[str]:

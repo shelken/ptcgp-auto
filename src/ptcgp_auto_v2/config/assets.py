@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """静态资源相关常量与 URL 构造工具。"""
 
+from ptcgp_auto_v2.config.lang import resolve_card_image_locale_by_web_lang
+
 # 卡牌图片仓库与代理基础地址（统一单一来源）
 CARD_IMAGE_REPO_BASE_URL = (
     "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/images"
@@ -11,10 +13,7 @@ CARD_IMAGE_CDN_ROOT_URL = "https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main
 
 def resolve_card_image_locale(lang: str) -> str:
     """根据语言解析图片资源 locale。"""
-    normalized = (lang or "").lower()
-    if normalized.startswith("zh"):
-        return "zh-TW"
-    return "en-US"
+    return resolve_card_image_locale_by_web_lang(lang)
 
 
 def build_card_image_bases(lang: str) -> dict[str, str]:
