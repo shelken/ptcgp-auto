@@ -130,9 +130,9 @@ DEFAULT_WEB_PORT = 8000
 # 最小包的比例，也就是扩展包列表页
 SCALE_PACK_SERIES_SELECT = 1.15  # 旧值: 0.23
 # 同系列选多个子包时的比例
-SCALE_PACK_LIST = 4.1  #
+SCALE_PACK_LIST = 4.1
 # 点击开包前比例
-SCALE_PACK_DETAIL = 5.25  # 旧值: 1.05
+SCALE_PACK_DETAIL = 5.1
 # 游戏主页 比例
 SCALE_PACK_HOME = 2.52
 # 「pack_opening_select」 比例
