@@ -25,14 +25,21 @@ def get_engine():
     """
     global _engine
     if _engine is None:
+        # 确保数据库 Schema 已初始化并完成自动补列迁移。
+        # 注意：项目的 auto-migration 逻辑实现于 db/connection.py，
+        # Web/任务等所有通过 SQLModel engine 访问数据库的入口都必须在这里先触发一次。
+        from ptcgp_auto_v2.db.connection import get_database
+
+        get_database()
+
         settings = get_settings()
-        # Check if using SQLite
-        if "sqlite" in settings.db_path.scheme if hasattr(settings.db_path, "scheme") else "sqlite" in str(settings.db_path):
-             # For SQLite, use NullPool to avoid QueuePool limit errors in multithreaded envs
-             # and ensure connections are closed immediately.
-            _engine = create_engine(f"sqlite:///{settings.db_path}", echo=False, poolclass=NullPool)
-        else:
-            _engine = create_engine(f"sqlite:///{settings.db_path}", echo=False)
+        # 当前仅支持 SQLite，本项目同时在多线程场景运行。
+        # 使用 NullPool 避免 QueuePool 在多线程/多连接下的限制与泄漏风险。
+        _engine = create_engine(
+            f"sqlite:///{settings.db_path}",
+            echo=False,
+            poolclass=NullPool,
+        )
     return _engine
 
 
