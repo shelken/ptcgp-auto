@@ -17,7 +17,7 @@ from ptcgp_auto_v2.config.assets import build_card_cdn_image_url
 from ptcgp_auto_v2.config.constants import NOTIFICATION_TASK_STATUS_DEFAULTS
 from ptcgp_auto_v2.config.lang import (
     DEFAULT_LOCALE,
-    locale_to_web_lang,
+    TASK_LOCALE_TO_WEB_LANG,
     resolve_localized_text,
 )
 from ptcgp_auto_v2.config.notification import (
@@ -162,7 +162,7 @@ class Notifier:
     def _resolve_card_display_name(card: "Card") -> str:
         """解析卡牌显示名（与 Web 同一映射逻辑）。"""
         fallback_name = str(getattr(card, "name", ""))
-        web_lang = locale_to_web_lang(DEFAULT_LOCALE)
+        web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
         return resolve_localized_text(
             raw_data=getattr(card, "data", None),
             web_lang=web_lang,
@@ -176,7 +176,7 @@ class Notifier:
         if pack is None:
             return ""
         fallback_name = str(getattr(pack, "name", ""))
-        web_lang = locale_to_web_lang(DEFAULT_LOCALE)
+        web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
         return resolve_localized_text(
             raw_data=getattr(pack, "label_data", None),
             web_lang=web_lang,
@@ -234,7 +234,7 @@ class Notifier:
             return False
 
         account_name = self._resolve_account_name(account)
-        web_lang = locale_to_web_lang(DEFAULT_LOCALE)
+        web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
         rarity_display = get_rarity_display(rarity, web_lang)
         card_display_name = self._resolve_card_display_name(card)
         pack_display_name = self._resolve_pack_display_name(pack)
@@ -274,7 +274,7 @@ class Notifier:
             return build_card_cdn_image_url(
                 set_code=set_code,
                 card_number=card_number,
-                lang=locale_to_web_lang(DEFAULT_LOCALE),
+                lang=TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN"),
                 ext="png",
             )
         return None
