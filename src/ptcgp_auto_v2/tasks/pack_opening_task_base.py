@@ -309,52 +309,26 @@ class PackOpeningTaskBase(Task):
 
         # 第二阶段：卡牌反推子包（仅在当前无目标包上下文时兜底）
         if self.get_target_pack_context() is None and rows:
-            inferred = self._infer_pack_by_cards(rows)
+            from ptcgp_auto_v2.db.models import Card
+
+            cards = [
+                row["card_obj"] for row in rows if isinstance(row.get("card_obj"), Card)
+            ]
+            inferred = infer_pack_by_cards(cards)
             if inferred:
                 self._inferred_pack_context = inferred
                 logger.info(
                     f"[子包推断-结果页] 反推识别: {inferred.get('pack_code')}/{inferred.get('booster_name') or '未确定'}"
                 )
 
-        current_batch_cards = [
-            {
-                "card_name": row.get("card_name"),
-                "rarity": row.get("rarity"),
-                "card_id": row.get("card_id"),
-                "is_new": bool(row.get("is_new", False)),
-                "position": row.get("position"),
-                "confidence": float(row.get("confidence") or 0.0),
-                "hash_similarity": float(row.get("hash_similarity") or 0.0),
-            }
-            for row in rows
-        ]
-
-        self._save_pack_record(current_batch_cards)
+        self._save_pack_record(rows)
 
         if self._account_card_repo and self.account.id:
             self._save_high_rarity_cards(rows)
         logger.debug("==================================")
         self._result_recognized = True
 
-    def _infer_pack_by_cards(self, rows: list[dict]) -> dict[str, str] | None:
-        """通过卡牌反推子包（第二阶段兜底）。
-
-        Args:
-            rows: 识别到的卡牌行数据，每项包含 card_obj（需要已加载 packs 关系）
-
-        Returns:
-            {"pack_code": str, "booster_name": str|None, "source": "cards"}
-            或 None（无法确定）
-        """
-        from ptcgp_auto_v2.db.models import Card
-
-        cards = [
-            row["card_obj"] for row in rows if isinstance(row.get("card_obj"), Card)
-        ]
-
-        return infer_pack_by_cards(cards)
-
-    def _save_pack_record(self, current_batch_cards: list[dict]) -> None:
+    def _save_pack_record(self, rows: list[dict]) -> None:
         """保存本次开包记录到数据库"""
         self._init_repositories()
 
@@ -371,14 +345,12 @@ class PackOpeningTaskBase(Task):
                 pack_type=self.get_pack_record_type(),
                 pack_code=pack_code,
                 pack_name=pack_name,
-                cards=current_batch_cards,
+                cards=rows,
             )
-            card_names = [
-                f"{card['card_name']}({card['rarity']})" for card in current_batch_cards
-            ]
+            card_names = [f"{row['card_name']}({row['rarity']})" for row in rows]
             logger.info(
                 f"已保存开包记录: {pack_code}/{pack_name} "
-                f"({len(current_batch_cards)} 张): {', '.join(card_names)}"
+                f"({len(rows)} 张): {', '.join(card_names)}"
             )
 
         except Exception as e:
