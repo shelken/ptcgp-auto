@@ -120,9 +120,6 @@ class PackOpeningTaskBase(Task):
     子类通过覆写扩展点方法实现差异化行为。
     """
 
-    # 通用开包页面规则（与任务特定页面合并）
-    pack_opening_pages: list[dict] = []
-
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
@@ -533,11 +530,6 @@ class PackOpeningTaskBase(Task):
             self.adb, page_info.get("ocr_results", []), wait=1.5
         )
 
-    def _handle_unknown_pack_page(self, page_info) -> ActionResult:
-        """开包流程中的未知页面兜底"""
-        logger.debug("未知页面，点击屏幕上方兜底")
-        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), times=3)
-
     # ============================================================
     # 通用开包 Handler 自动分发
     # ============================================================
@@ -560,25 +552,6 @@ class PackOpeningTaskBase(Task):
             "pack_opening_result": self._handle_pack_opening_result,
             "speed_up_button": self._handle_speed_up,
         }
-
-    # ============================================================
-    # 子类可覆写的钩子
-    # ============================================================
-
-    def on_pack_opening_start(self):
-        """开包流程开始前的钩子
-
-        子类可覆写以执行额外的初始化逻辑。
-        """
-        pass
-
-    def on_pack_record_saved(self, cards: list[dict]):
-        """开包记录保存后的钩子
-
-        Args:
-            cards: 已保存的卡牌列表
-        """
-        pass
 
     def finalize_pack_session(self):
         """开包会话结束时的清理钩子
