@@ -358,6 +358,9 @@ class PackOpeningTaskBase(Task):
 
         except Exception as e:
             logger.error(f"保存开包记录失败: {e}")
+        finally:
+            # 清理推断会话（只卸载 mark_as_pack=True 的模板）
+            self._clear_pack_inference_session()
 
     def _save_high_rarity_cards(self, rows: list[dict]) -> None:
         """记录高稀有度卡牌并通知"""
