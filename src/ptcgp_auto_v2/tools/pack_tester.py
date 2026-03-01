@@ -132,7 +132,7 @@ def test_match(
         return None
 
     # 3. 加载模板
-    from ptcgp_auto.debug_tools.non_interactive import (
+    from ptcgp_auto_v2.tools.non_interactive import (
         _load_template_from_path,
         _find_and_load_system_template,
     )
@@ -165,7 +165,7 @@ def test_match(
     else:
         # 自动扫描最佳比例
         print("自动扫描最佳缩放比例...")
-        from ptcgp_auto.debug_tools.card_matcher import scan_best_scale
+        from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
 
         best_scale, best_conf = scan_best_scale(recognizer, screenshot, loaded_name)
         print(f"\n最佳比例: {best_scale:.3f}, 置信度: {best_conf:.4f}")
@@ -427,9 +427,9 @@ def test_crop_adjust(
         processed.save(temp_path)
 
         # 加载并测试匹配
-        from ptcgp_auto.debug_tools.non_interactive import _load_template_from_path
+        from ptcgp_auto_v2.tools.non_interactive import _load_template_from_path
         from ptcgp_auto.recognizer import get_recognizer
-        from ptcgp_auto.debug_tools.card_matcher import scan_best_scale
+        from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
 
         recognizer = get_recognizer()
         template_name = _load_template_from_path(recognizer, temp_path)
@@ -725,9 +725,9 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         return
 
     # 5. 加载模板并测试匹配
-    from ptcgp_auto.debug_tools.non_interactive import _load_template_from_path
+    from ptcgp_auto_v2.tools.non_interactive import _load_template_from_path
     from ptcgp_auto.recognizer import get_recognizer
-    from ptcgp_auto.debug_tools.card_matcher import scan_best_scale
+    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
 
     recognizer = get_recognizer()
     pack_path = manager.get_pack_path(booster_name)
