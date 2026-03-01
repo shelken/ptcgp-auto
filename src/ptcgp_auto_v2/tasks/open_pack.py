@@ -378,6 +378,16 @@ class OpenPackTask(PackOpeningTaskBase):
         if not template_name:
             return ActionResult.fail("未配置目标卡包模板")
 
+        # 确保模板已加载（第一包结束后可能被卸载）
+        if self._target_pack:
+            booster_name = self._target_pack.get("booster_name")
+            if booster_name and self.recognizer:
+                from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
+
+                manager = PackImageManager()
+                _, template_matcher = self.recognizer
+                manager.ensure_template_ready(template_matcher, booster_name)
+
         # 1. 模板匹配查找目标扩充包
         result = tap_template_with_scale(
             self.page_detector,
@@ -434,6 +444,16 @@ class OpenPackTask(PackOpeningTaskBase):
         template_name = self._get_target_template_name()
         if not template_name:
             return ActionResult.fail("未配置目标卡包模板")
+
+        # 确保模板已加载（第一包结束后可能被卸载）
+        if self._target_pack:
+            booster_name = self._target_pack.get("booster_name")
+            if booster_name and self.recognizer:
+                from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
+
+                manager = PackImageManager()
+                _, template_matcher = self.recognizer
+                manager.ensure_template_ready(template_matcher, booster_name)
 
         # 直接判断当前是否匹配目标包模板
         match = self.page_detector.find_template_with_scale(
