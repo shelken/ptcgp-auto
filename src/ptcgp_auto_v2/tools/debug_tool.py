@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PTCGP 调试工具 - 精简版
+PTCGP 调试工具 - v2 版本
 
 用于调试和测试的 CLI 工具，支持模板匹配、OCR识别、区域截取等功能。
+完全基于 v2 infra 层实现。
 
 基本用法:
     python debug_tool.py -a 5555 --ocr
@@ -22,30 +23,22 @@ from typing import TYPE_CHECKING
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
-from ptcgp_auto import config
-from ptcgp_auto.recognizer import get_recognizer
+from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
+from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.infra.ocr import OcrEngine
+from ptcgp_auto_v2.infra.template import TemplateMatcher
 from ptcgp_auto_v2.tools.context import get_adb, set_current_address
-from ptcgp_auto_v2.tools.template_loader import (
-    load_system_template,
-    load_template_from_path,
-)
 
 if TYPE_CHECKING:
     from typing import Optional, Tuple
     from PIL import Image
-    from ptcgp_auto.adb_controller import AdbController
-    from ptcgp_auto.recognizer import Recognizer
 
 
 # =============================================================================
 # 常量定义
 # =============================================================================
 
-# 卡包测试支持的动作列表
 PACK_TEST_ACTIONS = ["download", "compare", "match", "batch", "roi", "list", "clear"]
-
-# 不需要 ADB 连接的命令
-NO_ADB_COMMANDS = {"list", "clear", "download", "compare"}
 
 
 # =============================================================================
@@ -157,18 +150,19 @@ def handle_screenshot(adb: AdbController) -> None:
     print(f"SCREENSHOT: {filepath}")
 
 
-def handle_ocr(adb: AdbController, recognizer: Recognizer) -> None:
+def handle_ocr(adb: AdbController) -> None:
     """处理 --ocr 命令"""
     img = take_screenshot(adb)
     if img is None:
         return
 
-    results = recognizer.ocr_full_screen(img)
+    ocr = OcrEngine()
+    results = ocr.recognize(img)
 
     items = []
-    for item in results:
-        text = item["text"]
-        box = item["box"]
+    for result in results:
+        text = result.text
+        box = result.box
         cx = (box[0] + box[2]) // 2
         cy = (box[1] + box[3]) // 2
         items.append(f'"{text}"@({cx},{cy})')
@@ -178,7 +172,6 @@ def handle_ocr(adb: AdbController, recognizer: Recognizer) -> None:
 
 def handle_template(
     adb: AdbController,
-    recognizer: Recognizer,
     template_name: str,
     scale: float | None,
     threshold: float | None,
@@ -186,22 +179,47 @@ def handle_template(
     roi_str: str | None,
 ) -> None:
     """处理 --template 命令"""
-    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
-
     img = take_screenshot(adb)
     if img is None:
         return
 
+    # 初始化模板匹配器
+    matcher = TemplateMatcher()
+    if img.width > 0:
+        matcher.set_screen_width(img.width)
+
     # 加载模板
     if template_name.startswith("/") or template_name.startswith("~"):
-        loaded_name = load_template_from_path(recognizer, template_name)
-        if loaded_name is None:
+        # 绝对路径 - 直接使用文件名作为模板名
+        path = Path(template_name).expanduser()
+        if not path.exists():
+            print(f"ERROR: 模板文件不存在: {path}")
             return
-        template_name = loaded_name
+        # 使用 stem 作为模板名，加载文件
+        template_key = path.stem
+        import cv2
+        template_img = cv2.imread(str(path))
+        if template_img is None:
+            print(f"ERROR: 无法读取模板: {path}")
+            return
+        # 缩放到屏幕比例
+        scale_ratio = img.width / matcher.base_width
+        if abs(scale_ratio - 1.0) > 0.01:
+            new_w = int(template_img.shape[1] * scale_ratio)
+            new_h = int(template_img.shape[0] * scale_ratio)
+            template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        matcher.templates[template_key] = template_img
+        print(f"LOADED: {template_key} <- {path} ({template_img.shape[1]}x{template_img.shape[0]})")
+        template_name = template_key
     else:
-        found_name = load_system_template(recognizer, template_name)
-        if found_name:
-            template_name = found_name
+        # 系统模板 - 尝试加载
+        if not matcher._load_template_file(Path(matcher.templates_dir) / f"{template_name}.png"):
+            # 尝试递归搜索
+            candidates = list(matcher.templates_dir.rglob(f"{template_name}.png"))
+            if candidates:
+                matcher._load_template_file(candidates[0])
+
+    threshold = threshold or DEFAULT_TEMPLATE_THRESHOLD
 
     # ROI 处理
     roi_offset = (0, 0)
@@ -213,41 +231,40 @@ def handle_template(
         img, roi_offset = crop_image(img, roi)
         print(f"ROI enabled: region={roi}")
 
-    threshold = threshold or config.TEMPLATE_THRESHOLD
-
     if all_matches:
-        _print_all_matches(recognizer, img, template_name, roi_offset)
+        _print_all_matches(matcher, img, template_name, roi_offset, threshold)
     else:
-        _print_single_match(recognizer, img, template_name, scale, threshold, roi_offset)
+        _print_single_match(matcher, img, template_name, scale, threshold, roi_offset)
 
 
 def _print_all_matches(
-    recognizer: Recognizer,
+    matcher: TemplateMatcher,
     img: Image.Image,
     template_name: str,
     roi_offset: Tuple[int, int],
+    threshold: float,
 ) -> None:
     """打印所有匹配位置"""
-    boxes = recognizer.find_all_templates(img, template_name)
+    matches = matcher.find_all(img, template_name, threshold=threshold)
 
-    if not boxes:
+    if not matches:
         print(f"TEMPLATES: {template_name} NOT_FOUND")
         return
 
-    print(f"TEMPLATES({len(boxes)}): {template_name}")
+    print(f"TEMPLATES({len(matches)}): {template_name}")
     offset_x, offset_y = roi_offset
 
-    for i, box in enumerate(boxes, 1):
-        x1, y1, x2, y2 = box
+    for i, match in enumerate(matches, 1):
+        x1, y1, x2, y2 = match.box
         cx, cy = (x1 + x2) // 2 + offset_x, (y1 + y2) // 2 + offset_y
         print(
             f"  {i}: ({x1 + offset_x},{y1 + offset_y})-({x2 + offset_x},{y2 + offset_y}) "
-            f"center=({cx},{cy})"
+            f"center=({cx},{cy}) conf={match.confidence:.4f}"
         )
 
 
 def _print_single_match(
-    recognizer: Recognizer,
+    matcher: TemplateMatcher,
     img: Image.Image,
     template_name: str,
     scale: float | None,
@@ -255,41 +272,36 @@ def _print_single_match(
     roi_offset: Tuple[int, int],
 ) -> None:
     """打印单个匹配位置"""
-    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
-
     if scale:
-        confidence = recognizer.get_template_confidence_at_scale(img, template_name, scale)
-        box = recognizer.find_template_at_scale(img, template_name, scale)
+        match = matcher.find_with_scale(img, template_name, scale, threshold=threshold)
     else:
-        confidence = recognizer.get_template_confidence(img, template_name)
-        box = recognizer.find_template(img, template_name)
+        match = matcher.find(img, template_name, threshold=threshold)
 
-    print(f"CONFIDENCE: {confidence:.4f} threshold={threshold}")
-
-    offset_x, offset_y = roi_offset
-
-    if box:
-        cx = (box[0] + box[2]) // 2 + offset_x
-        cy = (box[1] + box[3]) // 2 + offset_y
+    if match:
+        print(f"CONFIDENCE: {match.confidence:.4f} threshold={threshold}")
+        offset_x, offset_y = roi_offset
+        x1, y1, x2, y2 = match.box
+        cx = (x1 + x2) // 2 + offset_x
+        cy = (y1 + y2) // 2 + offset_y
         print(
             f"TEMPLATE: {template_name} @ "
-            f"({box[0] + offset_x},{box[1] + offset_y})-({box[2] + offset_x},{box[3] + offset_y}) "
+            f"({x1 + offset_x},{y1 + offset_y})-({x2 + offset_x},{y2 + offset_y}) "
             f"center=({cx},{cy})"
         )
     else:
         print(f"TEMPLATE: {template_name} NOT_FOUND")
         if scale is None:
-            _suggest_best_scale(recognizer, img, template_name, threshold)
+            _suggest_best_scale(matcher, img, template_name, threshold)
 
 
 def _suggest_best_scale(
-    recognizer: Recognizer, img: Image.Image, template_name: str, threshold: float
+    matcher: TemplateMatcher, img: Image.Image, template_name: str, threshold: float
 ) -> None:
     """扫描并建议最佳缩放比例"""
-    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
+    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
 
     print("\nAUTO_SCALE: 扫描...")
-    best_scale, best_conf = scan_best_scale(recognizer, img, template_name)
+    best_scale, best_conf = scan_best_scale_with_matcher(matcher, img, template_name)
     print(f"BEST_SCALE: {best_scale} confidence={best_conf:.4f}")
 
     if best_conf >= threshold:
@@ -516,11 +528,10 @@ def main() -> None:
     if args.screenshot:
         handle_screenshot(adb)
     elif args.ocr:
-        handle_ocr(adb, get_recognizer())
+        handle_ocr(adb)
     elif args.template:
         handle_template(
             adb,
-            get_recognizer(),
             args.template,
             scale=args.scale,
             threshold=args.threshold,
