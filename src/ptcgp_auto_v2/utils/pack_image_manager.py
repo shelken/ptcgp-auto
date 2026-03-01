@@ -298,12 +298,15 @@ class PackImageManager:
         safe_name = normalize_name_str(booster_name)
         return f"packs_auto/{safe_name}"
 
-    def load_template_for_booster(self, template_matcher, booster_name: str) -> bool:
+    def load_template_for_booster(
+        self, template_matcher, booster_name: str, *, mark_as_pack: bool = True
+    ) -> bool:
         """加载指定子包模板到模板匹配器。
 
         Args:
             template_matcher: TemplateMatcher 实例
             booster_name: 子包名称
+            mark_as_pack: 是否标记为 pack 模板（可被推断会话清理卸载）
 
         Returns:
             True 表示模板已可用（已存在或本次加载成功）
@@ -316,7 +319,7 @@ class PackImageManager:
         loaded = bool(
             template_matcher.load_template(
                 f"{template_name}.png",
-                is_pack_template=True,
+                is_pack_template=mark_as_pack,
             )
         )
         if loaded:
@@ -325,19 +328,24 @@ class PackImageManager:
             logger.warning(f"模板加载失败: {template_name}")
         return loaded
 
-    def ensure_template_ready(self, template_matcher, booster_name: str) -> bool:
+    def ensure_template_ready(
+        self, template_matcher, booster_name: str, *, mark_as_pack: bool = True
+    ) -> bool:
         """确保子包图片已就绪并加载模板。
 
         Args:
             template_matcher: TemplateMatcher 实例
             booster_name: 子包名称
+            mark_as_pack: 是否标记为 pack 模板（可被推断会话清理卸载）
 
         Returns:
             True 表示图片与模板均可用
         """
         if not self.ensure_pack_ready(booster_name):
             return False
-        return self.load_template_for_booster(template_matcher, booster_name)
+        return self.load_template_for_booster(
+            template_matcher, booster_name, mark_as_pack=mark_as_pack
+        )
 
     def unload_loaded_booster_templates(self, template_matcher) -> int:
         """卸载当前模板匹配器中已标记的子包模板。"""
