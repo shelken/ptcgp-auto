@@ -358,9 +358,6 @@ class PackOpeningTaskBase(Task):
 
         except Exception as e:
             logger.error(f"保存开包记录失败: {e}")
-        finally:
-            # 无论成功与否都清理推断会话
-            self._clear_pack_inference_session()
 
     def _save_high_rarity_cards(self, rows: list[dict]) -> None:
         """记录高稀有度卡牌并通知"""
