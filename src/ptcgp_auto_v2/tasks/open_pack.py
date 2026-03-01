@@ -261,7 +261,10 @@ class OpenPackTask(PackOpeningTaskBase):
                 return False
 
             _, template_matcher = self.recognizer
-            if not manager.ensure_template_ready(template_matcher, booster_name):
+            # mark_as_pack=False: 任务目标模板不被推断会话清理卸载
+            if not manager.ensure_template_ready(
+                template_matcher, booster_name, mark_as_pack=False
+            ):
                 logger.error(f"准备卡包图片资源失败: {booster_name}")
                 return False
             logger.debug(f"已预加载目标卡包模板，卡牌系列: {pack_code}")
