@@ -1,7 +1,26 @@
 # -*- coding: utf-8 -*-
 """
 全局常量定义
+
+注意：语言相关配置已统一迁移到 lang.py，请从该模块导入。
+本文件保留重新导出以保持向后兼容。
 """
+
+# 从 lang.py 重新导出语言配置（单一真相来源）
+from ptcgp_auto_v2.config.lang import (
+    DEFAULT_LOCALE,
+    DEFAULT_OCR_LANGUAGES,
+    LOCALE_TO_OCR_LANGUAGE,
+    OCR_LANGUAGE_TO_LOCALE,
+    SUPPORTED_LOCALES,
+    WEB_LANG_TO_DB_LABEL_KEYS,
+    DEFAULT_LANG_KEY,
+    WEB_SUPPORTED_LANGS,
+    WEB_LANG_ZH,
+    WEB_LANG_EN,
+    DB_LABEL_KEY_ZH,
+    DB_LABEL_KEY_EN,
+)
 
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
 PACK_TEMPLATE_THRESHOLD = 0.7  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
@@ -41,43 +60,8 @@ TEMPLATE_BASE_WIDTH = 1080  # 模板基准宽度
 # OCR 配置
 DEFAULT_OCR_LEVEL = "accurate"  # 默认 OCR 识别级别 ("fast" or "accurate")
 
-# 语言配置（locale 文件名 <-> OCR 语言代码）
-# 单一真相来源：只维护这一个映射，其他常量全部由它派生
-LOCALE_TO_OCR_LANGUAGE = {
-    "zh_Hant": "zh-Hant",
-    "en_US": "en-US",
-}
-DEFAULT_LOCALE = "zh_Hant"
-SUPPORTED_LOCALES = list(LOCALE_TO_OCR_LANGUAGE.keys())
-OCR_LANGUAGE_TO_LOCALE = {value: key for key, value in LOCALE_TO_OCR_LANGUAGE.items()}
-DEFAULT_OCR_LANGUAGES = list(LOCALE_TO_OCR_LANGUAGE.values())  # 默认 OCR 语言
-
 # 游戏刷新时间配置（游戏固定 UTC 06:00 刷新；通过偏移换算本地刷新时刻）
 GAME_UTC_OFFSET_HOURS = 8
-
-if DEFAULT_LOCALE not in SUPPORTED_LOCALES:
-    raise ValueError(f"DEFAULT_LOCALE={DEFAULT_LOCALE} 不在 SUPPORTED_LOCALES 中")
-
-# ========== Web 界面语言配置 ==========
-# Web 支持的语言文件（与 web/locales/ 目录下的文件对应）
-WEB_SUPPORTED_LANGS = ["en", "zh_CN"]
-
-# Web 语言键
-WEB_LANG_ZH = "zh_CN"
-WEB_LANG_EN = "en"
-
-# 数据库标签键（label_data 中使用的 key）
-DB_LABEL_KEY_ZH = "zh"
-DB_LABEL_KEY_EN = "en"
-
-# Web 语言到数据库标签键的映射（优先级列表，第一个是首选）
-WEB_LANG_TO_DB_LABEL_KEYS = {
-    WEB_LANG_ZH: [DB_LABEL_KEY_ZH, DB_LABEL_KEY_EN],
-    WEB_LANG_EN: [DB_LABEL_KEY_EN, DB_LABEL_KEY_ZH],
-}
-
-# 默认语言键
-DEFAULT_LANG_KEY = "zh_CN"
 
 # 调度配置
 METADATA_DEFAULT_NODE_ID = "all"
