@@ -340,58 +340,19 @@ class PackOpeningTaskBase(Task):
         """通过卡牌反推子包（第二阶段兜底）。
 
         Args:
-            rows: 识别到的卡牌行数据，每项包含 set_code, card_id
+            rows: 识别到的卡牌行数据，每项包含 card_obj（需要已加载 packs 关系）
 
         Returns:
             {"pack_code": str, "booster_name": str|None, "source": "cards"}
             或 None（无法确定）
         """
-        if not self._card_repo:
-            self._init_repositories()
+        from ptcgp_auto_v2.db.models import Card
 
-        if not rows:
-            return None
+        cards = [
+            row["card_obj"] for row in rows if isinstance(row.get("card_obj"), Card)
+        ]
 
-        try:
-            # 构建 detected_rows 格式
-            detected_rows = [
-                {"set_code": row.get("set_code"), "card_id": row.get("card_id")}
-                for row in rows
-                if row.get("set_code") and row.get("card_id")
-            ]
-
-            if not detected_rows:
-                return None
-
-            # 获取所有卡牌ID
-            card_ids = [row["card_id"] for row in detected_rows]
-
-            # 批量获取卡牌子包关系（排除 PROMO）
-            card_pack_mapping = self._card_repo.get_card_pack_names_batch(
-                card_ids, exclude_promo=True
-            )
-
-            # 获取系列子包映射
-            set_codes = list(set(row["set_code"] for row in detected_rows))
-            pack_names_by_set = {}
-            for set_code in set_codes:
-                packs = self._card_repo.get_pack_names_by_set(
-                    set_code, exclude_promo=True
-                )
-                if packs:
-                    pack_names_by_set[set_code] = packs
-
-            result = infer_pack_by_cards(
-                detected_rows=detected_rows,
-                pack_names_by_set=pack_names_by_set,
-                card_pack_mapping=card_pack_mapping,
-            )
-
-            return result
-
-        except Exception as e:
-            logger.warning(f"[子包推断-结果页] 反推失败: {e}")
-            return None
+        return infer_pack_by_cards(cards)
 
     def _save_pack_record(self, current_batch_cards: list[dict]) -> None:
         """保存本次开包记录到数据库"""
