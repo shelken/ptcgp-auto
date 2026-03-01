@@ -20,12 +20,101 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.db.repositories import AccountBattleProgressRepository
 from ptcgp_auto_v2.locales import get_text_patterns
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# 停止条件类
+# ============================================================
+
+class StopCondition:
+    """停止条件基类"""
+
+    def __init__(self, config: dict):
+        self.config = config
+
+    def check(self, task: "BattleTask") -> bool:
+        """检查是否满足停止条件，子类实现"""
+        return False
+
+
+class TimeLimitCondition(StopCondition):
+    """A: 时间限制停止条件
+
+    配置示例: {"type": "time", "value": 30}
+    """
+
+    def check(self, task: "BattleTask") -> bool:
+        if not task._start_time:
+            return False
+        minutes = self.config.get("value", 0)
+        elapsed = datetime.now() - task._start_time
+        return elapsed >= timedelta(minutes=minutes)
+
+
+class BattleCountCondition(StopCondition):
+    """B: 对战次数停止条件
+
+    配置示例: {"type": "count", "value": 10}
+    """
+
+    def check(self, task: "BattleTask") -> bool:
+        count = self.config.get("value", 0)
+        return task._battle_count >= count
+
+
+class HourglassCondition(StopCondition):
+    """C: 沙漏获取停止条件
+
+    配置示例: {"type": "hourglass", "value": 3}
+    """
+
+    def check(self, task: "BattleTask") -> bool:
+        # TODO: 实现沙漏数量检查
+        return False
+
+
+class LevelCompleteCondition(StopCondition):
+    """D: 等级完成停止条件
+
+    配置示例: {"type": "level_complete", "set_code": "A1", "level": "精英"}
+    """
+
+    def check(self, task: "BattleTask") -> bool:
+        set_code = self.config.get("set_code")
+        level = self.config.get("level")
+        if not set_code or not level:
+            return False
+        return task._progress_repo.is_level_completed(
+            task._account_id, set_code, level
+        )
+
+
+class NoRewardCondition(StopCondition):
+    """E: 无首次过关奖励停止条件
+
+    配置示例: {"type": "no_reward"}
+    """
+
+    def check(self, task: "BattleTask") -> bool:
+        # TODO: 实现无奖励检测
+        return False
+
+
+# 停止条件工厂
+STOP_CONDITION_FACTORIES = {
+    "time": TimeLimitCondition,
+    "count": BattleCountCondition,
+    "hourglass": HourglassCondition,
+    "level_complete": LevelCompleteCondition,
+    "no_reward": NoRewardCondition,
+}
 
 
 # ============================================================
@@ -212,20 +301,69 @@ class BattleTask(Task):
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
+        # 数据仓库
+        self._progress_repo = AccountBattleProgressRepository()
         # 运行时状态
-        self._stop_conditions: list[dict] = []
+        self._account_id: int = 0
+        self._stop_conditions: list[StopCondition] = []
         self._start_time: Optional[datetime] = None
         self._battle_count: int = 0
         self._hourglass_before: int = 0
+        self._hourglass_gained: int = 0
+        # 目标配置
+        self._target_set_code: str = ""
+        self._target_level: str = ""
 
     def on_start(self):
-        """加载停止条件"""
+        """加载停止条件和目标配置"""
         logger.info("[BattleTask] 任务开始")
-        # TODO: 从 task_instance 加载停止条件
+
+        # 从 task_context 获取配置
+        task_instance = getattr(self, 'task_instance', None)
+        if task_instance:
+            self._account_id = getattr(task_instance, 'account_id', 0)
+            config = getattr(task_instance, 'config', {}) or {}
+
+            # 解析停止条件
+            stop_conditions_config = config.get('stop_conditions', [])
+            self._stop_conditions = self._parse_stop_conditions(stop_conditions_config)
+
+            # 获取目标系列和等级（从第一个 level_complete 条件或默认配置）
+            for condition in stop_conditions_config:
+                if condition.get('type') == 'level_complete':
+                    self._target_set_code = condition.get('set_code', '')
+                    self._target_level = condition.get('level', '')
+                    break
+
+            logger.info(
+                f"[BattleTask] 目标: {self._target_set_code} {self._target_level}, "
+                f"停止条件: {len(self._stop_conditions)}个"
+            )
+
+        self._start_time = datetime.now()
+
+    def _parse_stop_conditions(self, configs: list[dict]) -> list[StopCondition]:
+        """解析停止条件配置"""
+        conditions = []
+        for config in configs:
+            condition_type = config.get('type')
+            factory = STOP_CONDITION_FACTORIES.get(condition_type)
+            if factory:
+                conditions.append(factory(config))
+            else:
+                logger.warning(f"[BattleTask] 未知的停止条件类型: {condition_type}")
+        return conditions
 
     def is_completed(self) -> bool:
-        """检查停止条件"""
-        # TODO: 实现停止条件检查
+        """检查是否满足任一停止条件"""
+        if not self._stop_conditions:
+            return False
+
+        for condition in self._stop_conditions:
+            if condition.check(self):
+                logger.info(f"[BattleTask] 停止条件满足: {condition.config}")
+                return True
+
         return False
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
