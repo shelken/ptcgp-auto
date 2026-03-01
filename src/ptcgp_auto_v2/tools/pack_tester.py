@@ -131,53 +131,64 @@ def test_match(
         print("✗ 截图失败")
         return None
 
-    # 3. 加载模板
-    from ptcgp_auto_v2.tools.template_loader import load_template_from_path
-    from ptcgp_auto.recognizer import get_recognizer
+    # 3. 加载模板到 TemplateMatcher
+    from ptcgp_auto_v2.infra.template import TemplateMatcher
+    import cv2
 
-    recognizer = get_recognizer()
+    matcher = TemplateMatcher()
+    if screenshot.width > 0:
+        matcher.set_screen_width(screenshot.width)
+
     pack_path = manager.get_pack_path(booster_name)
     template_name = manager.get_template_name(booster_name)
 
     # 加载模板（使用绝对路径）
-    loaded_name = load_template_from_path(recognizer, str(pack_path))
-    if not loaded_name:
+    template_img = cv2.imread(str(pack_path))
+    if template_img is None:
         print(f"✗ 加载模板失败: {pack_path}")
         return None
+
+    # 缩放到屏幕比例
+    scale_ratio = screenshot.width / matcher.base_width
+    if abs(scale_ratio - 1.0) > 0.01:
+        new_w = int(template_img.shape[1] * scale_ratio)
+        new_h = int(template_img.shape[0] * scale_ratio)
+        template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    matcher.templates[template_name] = template_img
+    print(f"LOADED: {template_name} <- {pack_path} ({template_img.shape[1]}x{template_img.shape[0]})")
 
     # 4. 执行匹配
     if scale:
         # 指定比例匹配
         print(f"使用指定缩放比例: {scale}")
-        confidence = recognizer.get_template_confidence_at_scale(
-            screenshot, loaded_name, scale
-        )
-        if confidence >= threshold:
-            box = recognizer.find_template_at_scale(screenshot, loaded_name, scale)
-            print(f"✓ 匹配成功! 置信度: {confidence:.4f}, 位置: {box}")
-            return (confidence, box)
+        match = matcher.find_with_scale(screenshot, template_name, scale, threshold=threshold)
+        if match:
+            print(f"✓ 匹配成功! 置信度: {match.confidence:.4f}, 位置: {match.box}")
+            return (match.confidence, match.box)
         else:
+            confidence = matcher.get_confidence(screenshot, template_name)
             print(f"✗ 未匹配. 置信度: {confidence:.4f} (阈值: {threshold})")
             return None
     else:
         # 自动扫描最佳比例
         print("自动扫描最佳缩放比例...")
-        from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
+        from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
 
-        best_scale, best_conf = scan_best_scale(recognizer, screenshot, loaded_name)
+        best_scale, best_conf = scan_best_scale_with_matcher(matcher, screenshot, template_name)
         print(f"\n最佳比例: {best_scale:.3f}, 置信度: {best_conf:.4f}")
 
         if best_conf >= threshold:
-            box = recognizer.find_template_at_scale(screenshot, loaded_name, best_scale)
-            print(f"✓ 匹配成功! 位置: {box}")
-            print(f"\n推荐命令:")
-            print(
-                f"  python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
-            )
-            return (best_conf, box)
-        else:
-            print(f"✗ 未达到阈值. 建议调整裁剪参数后重试")
-            return None
+            match = matcher.find_with_scale(screenshot, template_name, best_scale)
+            if match:
+                print(f"✓ 匹配成功! 位置: {match.box}")
+                print(f"\n推荐命令:")
+                print(
+                    f"  python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
+                )
+                return (best_conf, match.box)
+        print(f"✗ 未达到阈值. 建议调整裁剪参数后重试")
+        return None
 
 
 def test_batch(
@@ -424,27 +435,38 @@ def test_crop_adjust(
         processed.save(temp_path)
 
         # 加载并测试匹配
-        from ptcgp_auto_v2.tools.template_loader import load_template_from_path
-        from ptcgp_auto.recognizer import get_recognizer
-        from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
+        from ptcgp_auto_v2.infra.template import TemplateMatcher
+        from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
+        import cv2
 
-        recognizer = get_recognizer()
-        template_name = load_template_from_path(recognizer, temp_path)
+        matcher = TemplateMatcher()
+        if screenshot.width > 0:
+            matcher.set_screen_width(screenshot.width)
 
-        if not template_name:
+        template_name = f"{booster_name}_adjust"
+        template_img = cv2.imread(temp_path)
+        if template_img is None:
             os.remove(temp_path)
             os.rmdir(temp_dir)
             return None
 
+        # 缩放到屏幕比例
+        scale_ratio = screenshot.width / matcher.base_width
+        if abs(scale_ratio - 1.0) > 0.01:
+            new_w = int(template_img.shape[1] * scale_ratio)
+            new_h = int(template_img.shape[0] * scale_ratio)
+            template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        matcher.templates[template_name] = template_img
+
         # 如果指定了固定 scale，直接使用；否则自动扫描
         if fixed_scale:
             best_scale = fixed_scale
-            best_conf = recognizer.get_template_confidence_at_scale(
-                screenshot, template_name, best_scale
-            )
+            match = matcher.find_with_scale(screenshot, template_name, best_scale)
+            best_conf = match.confidence if match else 0.0
         else:
-            best_scale, best_conf = scan_best_scale(
-                recognizer, screenshot, template_name
+            best_scale, best_conf = scan_best_scale_with_matcher(
+                matcher, screenshot, template_name
             )
 
         # 清理
@@ -722,21 +744,35 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         return
 
     # 5. 加载模板并测试匹配
-    from ptcgp_auto_v2.tools.template_loader import load_template_from_path
-    from ptcgp_auto.recognizer import get_recognizer
-    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
+    from ptcgp_auto_v2.infra.template import TemplateMatcher
+    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
+    import cv2
 
-    recognizer = get_recognizer()
+    matcher = TemplateMatcher()
+    if screenshot.width > 0:
+        matcher.set_screen_width(screenshot.width)
+
     pack_path = manager.get_pack_path(booster_name)
+    template_name = manager.get_template_name(booster_name)
 
-    loaded_name = load_template_from_path(recognizer, str(pack_path))
-    if not loaded_name:
+    template_img = cv2.imread(str(pack_path))
+    if template_img is None:
         print(f"✗ 加载模板失败: {pack_path}")
         return
 
+    # 缩放到屏幕比例
+    scale_ratio = screenshot.width / matcher.base_width
+    if abs(scale_ratio - 1.0) > 0.01:
+        new_w = int(template_img.shape[1] * scale_ratio)
+        new_h = int(template_img.shape[0] * scale_ratio)
+        template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    matcher.templates[template_name] = template_img
+    print(f"LOADED: {template_name} <- {pack_path} ({template_img.shape[1]}x{template_img.shape[0]})")
+
     # 6. 扫描最佳匹配
     print(f"\n正在测试匹配...")
-    best_scale, best_conf = scan_best_scale(recognizer, screenshot, loaded_name)
+    best_scale, best_conf = scan_best_scale_with_matcher(matcher, screenshot, template_name)
 
     print(f"\n{'=' * 60}")
     print(f"测试结果: {booster_name}")
