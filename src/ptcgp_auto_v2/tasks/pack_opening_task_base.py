@@ -141,6 +141,7 @@ class PackOpeningTaskBase(Task):
         self._pack_record_repo: "PackRecordRepository | None" = None
         self._card_repo: "CardRepository | None" = None
         self._account_card_repo: "AccountCardRepository | None" = None
+        self._pack_point_repo: "AccountPackPointRepository | None" = None
 
         # 子包推断会话状态（单次开包生命周期）
         self._inferred_pack_context: dict[str, str] | None = None
@@ -217,6 +218,7 @@ class PackOpeningTaskBase(Task):
 
         from ptcgp_auto_v2.db.repositories import (
             AccountCardRepository,
+            AccountPackPointRepository,
             CardRepository,
             PackRecordRepository,
         )
@@ -224,6 +226,7 @@ class PackOpeningTaskBase(Task):
         self._account_card_repo = AccountCardRepository()
         self._pack_record_repo = PackRecordRepository()
         self._card_repo = CardRepository()
+        self._pack_point_repo = AccountPackPointRepository()
 
     def _resolve_scan_set_code(self) -> str | None:
         """解析要使用的 set_code
