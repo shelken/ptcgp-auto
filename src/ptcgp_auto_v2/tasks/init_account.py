@@ -33,6 +33,7 @@ from ptcgp_auto_v2.tasks.pack_opening_task_base import (
 )
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.utils.gesture import (
+    clear_text,
     click_close,
     input_text,
     is_text_visible,
@@ -693,14 +694,13 @@ class InitAccountTask(PackOpeningTaskBase):
             return tap_box(self.adb, match.box, wait=1.0)
 
         # 步骤 3: 点击输入框并输入昵称（首次输入）
-        result = tap(
-            self.adb, self.adb.center_x(), self.adb.scaled_y(INPUT_BOX_Y), wait=1.0
-        )
+        focus_x = self.adb.center_x()
+        focus_y = self.adb.scaled_y(INPUT_BOX_Y)
+        result = tap(self.adb, focus_x, focus_y, wait=0.6)
         if result:
-            logger.info(f"  -> 点击输入框，输入昵称: {target_nickname}")
-            time.sleep(1.0)
+            logger.info(f"  -> 点击输入框，清空后输入昵称: {target_nickname}")
+            clear_text(self.adb, focus_x, focus_y, max_chars=24, wait=0.2)
             input_text(self.adb, target_nickname, wait=0.5)
-            time.sleep(0.5)
 
         # 步骤 4: 点击 OK
         result = tap_ok(self.adb, ocr_results, wait=1.0)
