@@ -187,12 +187,24 @@ class CardRepository:
             session.commit()
             return True
 
-    def get_card_by_set_and_number(self, set_code: str, number: int) -> Optional[Card]:
-        """根据系列和编号获取卡牌"""
+    def get_card_by_set_and_number(
+        self, set_code: str, number: int, *, load_packs: bool = False
+    ) -> Optional[Card]:
+        """根据系列和编号获取卡牌
+
+        Args:
+            set_code: 系列代码
+            number: 卡牌编号
+            load_packs: 是否 eager load packs 关系
+        """
         with Session(get_engine()) as session:
             statement = select(Card).where(
                 Card.set_code == set_code, Card.number == number
             )
+            if load_packs:
+                from sqlalchemy.orm import selectinload
+
+                statement = statement.options(selectinload(Card.packs))
             return session.exec(statement).first()
 
     def get_card_by_template_name(

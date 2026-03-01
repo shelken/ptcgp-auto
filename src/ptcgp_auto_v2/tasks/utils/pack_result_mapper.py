@@ -23,7 +23,10 @@ def map_detected_cards(
         set_code = fixed_set_code or card.set_code
         card_obj: Optional["Card"] = None
         if card_repo is not None and set_code:
-            card_obj = card_repo.get_card_by_set_and_number(set_code, card.card_number)
+            # 使用 eager loading 加载 packs 关系，供后续子包推断使用
+            card_obj = card_repo.get_card_by_set_and_number(
+                set_code, card.card_number, load_packs=True
+            )
 
         rows.append(
             {
