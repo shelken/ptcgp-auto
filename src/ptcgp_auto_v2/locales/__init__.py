@@ -16,9 +16,6 @@ logger = logging.getLogger(__name__)
 # 缓存已加载的语言包
 _loaded_locales: Dict[str, Any] = {}
 
-# 默认 locale（与 config/lang.py 保持一致，避免循环导入）
-_DEFAULT_LOCALE = "zh_Hant"
-
 
 def _get_default_locale() -> str:
     """获取默认 locale（延迟导入避免循环依赖）"""

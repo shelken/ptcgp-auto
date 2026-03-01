@@ -103,8 +103,12 @@ RARITY_CODE_REVERSE = {
 }
 
 
-def get_rarity_display(rarity_code: str, lang: str = "zh_CN") -> str:
+def get_rarity_display(rarity_code: str, lang: str | None = None) -> str:
     """获取稀有度展示文案。"""
+    from ptcgp_auto_v2.config.lang import DEFAULT_LANG_KEY
+
+    if not lang:
+        lang = DEFAULT_LANG_KEY
     meta = RARITY_META.get(rarity_code)
     if not meta:
         return rarity_code
