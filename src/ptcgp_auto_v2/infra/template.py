@@ -145,7 +145,7 @@ class TemplateMatcher:
 
         Args:
             template_path: 模板文件路径（相对于 templates 目录），如 "packs_auto/Gardevoir.png"
-            is_pack_template: 是否标记为 pack template（用于卡牌识别）
+            is_pack_template: 是否标记为 pack template（用于任务级使用）
 
         Returns:
             True 表示成功
@@ -157,7 +157,9 @@ class TemplateMatcher:
         return self._load_template_file(file_path, is_pack_template=is_pack_template)
 
     def _load_template_file(
-        self, file_path: Path, is_pack_template: bool = False
+        self,
+        file_path: Path,
+        is_pack_template: bool = False,
     ) -> bool:
         """加载单个模板文件（内部方法）"""
         try:
