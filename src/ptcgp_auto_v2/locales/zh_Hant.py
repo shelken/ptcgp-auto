@@ -89,6 +89,44 @@ TEXT_PATTERNS = {
     "popup_clean_and_download": ["清除快取", "重新下載"],
     "error_code_103_011_05400": ["103-011-05400"],
     "_scene_restart_game": ["Sign in"],
+    # ============================================================
+    # 对战任务相关（全部以 battle_ 开头）
+    # ============================================================
+    # 战败提示弹窗
+    "battle_defeat_popup": ["前往任務"],
+    # 继续对战确认
+    "battle_continue_confirm": ["是", "要繼續上次中斷的對戰嗎？"],
+    # 经验值结算页面
+    "battle_exp_result": ["玩家經驗值"],
+    # 对战记录页面
+    "battle_record_page": ["對戰紀錄"],
+    # 对战中
+    "battle_in_progress": [
+        "請將基礎寶可夢放置於戰鬥場",
+        "你是先攻",
+        "你是後攻",
+        "對戰對手",
+    ],
+    # 对战准备页面（牌组详情）
+    "battle_prepare": ["對戰！", "首次過關報酬"],
+    # 卡组列表页面
+    "battle_deck_list": ["擴充組"],
+    # 系列选择页面（扩充组选择）
+    "battle_expansion_select": ["選擇擴充組"],
+    # 难度选择页面
+    "battle_level_select": ["分級對戰"],
+    # 教程完成提示
+    "battle_tutorial_complete_hint": ["若想知道更詳細的規則"],
+    # 教程列表页面
+    "battle_tutorial_list": ["玩法"],
+    # 主对战菜单
+    "battle_main_menu": ["與他人對戰"],
+    # 单人对战按钮
+    "battle_solo_button": ["單人對戰"],
+    # 误入开包页面
+    "battle_show_pack": ["提供比例", "其他擴充包"],
+    # 对战模式选择页面（分级对战 + 随机对战）
+    "battle_mode_select": ["分級對戰", "隨機對戰"],
     ## 游戏外
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
