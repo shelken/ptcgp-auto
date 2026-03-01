@@ -16,6 +16,7 @@ import logging
 import threading
 import time
 from abc import abstractmethod
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ptcgp_auto_v2.config.settings import get_settings
@@ -139,10 +140,9 @@ class PackOpeningTaskBase(Task):
         self._packs_opened_count = 0  # 本次任务已开包数量
         self._result_recognized = False  # 本次开包是否已识别结果
 
-        # 数据仓储（延迟加载）
+        # 数据仓储（延迟初始化）
         self._pack_record_repo: "PackRecordRepository | None" = None
         self._card_repo: "CardRepository | None" = None
-        self._pack_point_repo: "AccountPackPointRepository | None" = None
         self._account_card_repo: "AccountCardRepository | None" = None
 
         # 子包推断会话状态（单次开包生命周期）
@@ -214,10 +214,12 @@ class PackOpeningTaskBase(Task):
         self._action_cache.clear()
 
     def _init_repositories(self):
-        """初始化数据仓储"""
+        """初始化数据仓储（如未初始化）"""
+        if self._card_repo is not None:
+            return
+
         from ptcgp_auto_v2.db.repositories import (
             AccountCardRepository,
-            AccountPackPointRepository,
             CardRepository,
             PackRecordRepository,
         )
@@ -225,7 +227,6 @@ class PackOpeningTaskBase(Task):
         self._account_card_repo = AccountCardRepository()
         self._pack_record_repo = PackRecordRepository()
         self._card_repo = CardRepository()
-        self._pack_point_repo = AccountPackPointRepository()
 
     def _resolve_scan_set_code(self) -> str | None:
         """解析要使用的 set_code
@@ -288,6 +289,8 @@ class PackOpeningTaskBase(Task):
 
     def _recognize_cards(self):
         """识别卡牌并保存记录（YOLO+Hash 版本）"""
+        self._init_repositories()
+
         # 注意：None 表示全局识别模式，不兜底成 "Unknown"
         set_code = self._resolve_scan_set_code()
         cards = self._scan_cards_with_retry(set_code, max_retries=3)
@@ -356,6 +359,8 @@ class PackOpeningTaskBase(Task):
 
     def _save_pack_record(self, current_batch_cards: list[dict]) -> None:
         """保存本次开包记录到数据库"""
+        self._init_repositories()
+
         if not (self._pack_record_repo and self.account.id):
             return
 
@@ -537,7 +542,7 @@ class PackOpeningTaskBase(Task):
     # 通用开包 Handler 自动分发
     # ============================================================
 
-    def build_pack_opening_handlers(self) -> dict[str, callable]:
+    def build_pack_opening_handlers(self) -> dict[str, Callable]:
         """构建通用开包页面处理器映射
 
         返回通用开包流程中所有页面的处理器字典。
