@@ -4,7 +4,7 @@
 """
 
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
-PACK_TEMPLATE_THRESHOLD = 0.75  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
+PACK_TEMPLATE_THRESHOLD = 0.7  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
 PACK_SERIES_CODES = ["A", "B"]  # 扩充包系列代号（仅用于切换次数控制）
 PACK_AUTO_STRATEGIES = [
     "latest",
@@ -130,7 +130,7 @@ DEFAULT_WEB_PORT = 8000
 # 最小包的比例，也就是扩展包列表页
 SCALE_PACK_SERIES_SELECT = 1.15  # 旧值: 0.23
 # 同系列选多个子包时的比例
-SCALE_PACK_LIST = 4.05  # 旧值: 0.81
+SCALE_PACK_LIST = 4.1  #
 # 点击开包前比例
 SCALE_PACK_DETAIL = 5.25  # 旧值: 1.05
 # 游戏主页 比例
