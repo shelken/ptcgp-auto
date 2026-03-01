@@ -9,112 +9,37 @@
 import json
 from typing import Any
 
-# ========== 核心语言配置（任务/OCR 层） ==========
-# locale 文件名 <-> OCR 语言代码映射
-LOCALE_TO_OCR_LANGUAGE = {
-    "zh_Hant": "zh-Hant",
-    "en_US": "en-US",
-}
-
-DEFAULT_LOCALE = "zh_Hant"
-SUPPORTED_LOCALES = list(LOCALE_TO_OCR_LANGUAGE.keys())
-OCR_LANGUAGE_TO_LOCALE = {v: k for k, v in LOCALE_TO_OCR_LANGUAGE.items()}
-DEFAULT_OCR_LANGUAGES = list(LOCALE_TO_OCR_LANGUAGE.values())
-
-# 运行时校验
-if DEFAULT_LOCALE not in SUPPORTED_LOCALES:
-    raise ValueError(f"DEFAULT_LOCALE={DEFAULT_LOCALE} 不在 SUPPORTED_LOCALES 中")
-
 
 # ========== Web 界面语言配置 ==========
-# Web 支持的语言文件（与 web/locales/ 目录下的文件对应）
-WEB_SUPPORTED_LANGS = ["en", "zh_CN"]
+# 只保留标准 Web 语言键；不提供任何别名/归一化。
+DEFAULT_LANG_KEY: str = "zh_CN"
 
-# Web 语言键
-WEB_LANG_ZH = "zh_CN"
-WEB_LANG_EN = "en"
 
-# 数据库标签键（label_data 中使用的 key）
-DB_LABEL_KEY_ZH = "zh"
-DB_LABEL_KEY_EN = "en"
+# ========== 核心语言配置（任务/OCR 层） ==========
+# 注意：这里所有值都必须是确定常量，不允许通过推断/派生生成。
 
-# Web 语言到数据库标签键的映射（优先级列表，第一个是首选）
-WEB_LANG_TO_DB_LABEL_KEYS = {
-    WEB_LANG_ZH: [DB_LABEL_KEY_ZH, DB_LABEL_KEY_EN],
-    WEB_LANG_EN: [DB_LABEL_KEY_EN, DB_LABEL_KEY_ZH],
+# 任务层默认 locale（对应 locales/*.py 文件名）
+DEFAULT_LOCALE: str = "zh_Hant"
+
+# OCR 默认语言列表（Apple Vision Framework 语言代码）
+DEFAULT_OCR_LANGUAGES: list[str] = ["zh-Hant", "en-US"]
+
+
+# 单一映射：标准 web_lang -> 数据库 label key 优先级
+WEB_LANG_TO_DB_LABEL_KEYS: dict[str, list[str]] = {
+    "zh_CN": ["zh", "en"],
+    "en": ["en", "zh"],
 }
 
-# 默认语言键（Web 层默认）
-DEFAULT_LANG_KEY = "zh_CN"
-
-# Web 语言归一化回退候选（用于 Accept-Language / cookie 等非标准值输入）
-WEB_ZH_FALLBACK_LANG_KEYS = ["zh_CN", "zh_TW", "zh_HK", "zh"]
-WEB_EN_FALLBACK_LANG_KEYS = ["en"]
-
-# 卡图资源目录 locale（ptcgp-assets 使用的目录名）
-CARD_IMAGE_LOCALE_ZH = "zh-TW"
-CARD_IMAGE_LOCALE_EN = "en-US"
+TASK_LOCALE_TO_WEB_LANG: dict[str, str] = {"zh_Hant": "zh_CN", "en_US": "en"}
 
 
 # ========== 语言映射工具函数 ==========
 def get_label_candidates(web_lang: str) -> list[str]:
-    """
-    获取指定 Web 语言的标签候选列表（按优先级）
-
-    Args:
-        web_lang: Web 层语言键（如 "zh_CN", "en"）
-
-    Returns:
-        标签键优先级列表
-    """
+    """获取指定 Web 语言的标签候选列表（按优先级）。"""
     return WEB_LANG_TO_DB_LABEL_KEYS.get(
         web_lang, WEB_LANG_TO_DB_LABEL_KEYS[DEFAULT_LANG_KEY]
     )
-
-
-def web_lang_to_locale(web_lang: str) -> str:
-    """
-    将 Web 语言键转换为任务层 locale
-
-    Args:
-        web_lang: Web 层语言键（如 "zh_CN", "en"）
-
-    Returns:
-        任务层 locale（如 "zh_Hant", "en_US"）
-    """
-    mapping = {
-        "zh_CN": "zh_Hant",
-        "zh_TW": "zh_Hant",
-        "zh_HK": "zh_Hant",
-        "zh": "zh_Hant",
-        "en": "en_US",
-    }
-    return mapping.get(web_lang, DEFAULT_LOCALE)
-
-
-def locale_to_web_lang(locale: str) -> str:
-    """
-    将任务层 locale 转换为 Web 语言键
-
-    Args:
-        locale: 任务层 locale（如 "zh_Hant", "en_US"）
-
-    Returns:
-        Web 层语言键
-    """
-    mapping = {
-        "zh_Hant": "zh_CN",
-        "en_US": "en",
-    }
-    return mapping.get(locale, DEFAULT_LANG_KEY)
-
-
-def resolve_card_image_locale_by_web_lang(web_lang: str) -> str:
-    """将 Web 语言键转换为卡图资源目录 locale。"""
-    normalized = (web_lang or "").lower()
-    if normalized.startswith("zh"):
-        return CARD_IMAGE_LOCALE_ZH
-    return CARD_IMAGE_LOCALE_EN
 
 
 def _parse_json_object(raw: str | dict[str, Any] | None) -> dict[str, Any]:
