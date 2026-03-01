@@ -3,17 +3,20 @@
 """
 PTCGP 调试工具 - 精简版
 
-保留功能：
-- --screenshot: 截图并保存
-- --ocr: OCR识别
-- --template: 模板匹配（支持 --all 输出所有匹配位置）
-- --crop: 交互式区域截取
-- --test-pack: 卡包测试功能
+用于调试和测试的 CLI 工具，支持模板匹配、OCR识别、区域截取等功能。
+
+基本用法:
+    python debug_tool.py -a 5555 --ocr
+    python debug_tool.py -a 5555 --template icon_yes --scale 0.67
+    python debug_tool.py -a 5555 --test-pack match --booster Charizard
 """
+
+from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # 添加项目路径
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
@@ -22,32 +25,146 @@ sys.path.insert(0, str(ROOT_DIR / "src"))
 from ptcgp_auto import config
 from ptcgp_auto.recognizer import get_recognizer
 from ptcgp_auto_v2.tools.context import get_adb, set_current_address
+from ptcgp_auto_v2.tools.template_loader import (
+    load_system_template,
+    load_template_from_path,
+)
+
+if TYPE_CHECKING:
+    from typing import Optional, Tuple
+    from PIL import Image
+    from ptcgp_auto.adb_controller import AdbController
+    from ptcgp_auto.recognizer import Recognizer
 
 
-def run_screenshot(adb):
-    """截图并保存"""
+# =============================================================================
+# 常量定义
+# =============================================================================
+
+# 卡包测试支持的动作列表
+PACK_TEST_ACTIONS = ["download", "compare", "match", "batch", "roi", "list", "clear"]
+
+# 不需要 ADB 连接的命令
+NO_ADB_COMMANDS = {"list", "clear", "download", "compare"}
+
+
+# =============================================================================
+# 工具函数
+# =============================================================================
+
+def parse_address(address: str | None) -> Tuple[Optional[str], Optional[int]]:
+    """
+    解析 ADB 地址字符串
+
+    Args:
+        address: 地址字符串，格式为 "host:port" 或 "port"
+
+    Returns:
+        (host, port) 元组，如果解析失败返回 (None, None)
+    """
+    if not address:
+        return None, None
+
+    if ":" in address:
+        parts = address.split(":")
+        return parts[0], int(parts[1])
+    return None, int(address)
+
+
+def take_screenshot(adb: AdbController) -> Optional[Image.Image]:
+    """
+    截图并返回图像对象
+
+    Args:
+        adb: ADB 控制器实例
+
+    Returns:
+        PIL Image 对象，失败返回 None
+    """
     img = adb.screenshot()
-    if not img:
+    if img is None:
         print("ERROR: 截图失败")
+    return img
+
+
+def save_screenshot(img: Image.Image, filename: str = "screenshot.png") -> Path:
+    """
+    保存截图到调试目录
+
+    Args:
+        img: PIL Image 对象
+        filename: 保存文件名
+
+    Returns:
+        保存的文件路径
+    """
+    from ptcgp_auto_v2.tools.context import get_debug_dir
+
+    debug_dir = get_debug_dir()
+    filepath = debug_dir / filename
+    img.save(filepath)
+    return filepath
+
+
+def parse_roi(roi_str: str) -> Optional[Tuple[int, int, int, int]]:
+    """
+    解析 ROI 字符串
+
+    Args:
+        roi_str: ROI 字符串，格式为 "x,y,w,h"
+
+    Returns:
+        (x, y, w, h) 元组，解析失败返回 None
+    """
+    try:
+        parts = roi_str.split(",")
+        if len(parts) != 4:
+            return None
+        return tuple(int(p.strip()) for p in parts)
+    except (ValueError, AttributeError):
+        return None
+
+
+def crop_image(
+    img: Image.Image, roi: Tuple[int, int, int, int]
+) -> Tuple[Image.Image, Tuple[int, int]]:
+    """
+    裁剪图像
+
+    Args:
+        img: 原始图像
+        roi: (x, y, w, h) 裁剪区域
+
+    Returns:
+        (裁剪后的图像, (offset_x, offset_y)) 元组
+    """
+    x, y, w, h = roi
+    cropped = img.crop((x, y, x + w, y + h))
+    return cropped, (x, y)
+
+
+# =============================================================================
+# 命令处理函数
+# =============================================================================
+
+def handle_screenshot(adb: AdbController) -> None:
+    """处理 --screenshot 命令"""
+    img = take_screenshot(adb)
+    if img is None:
         return
 
-    from ptcgp_auto_v2.tools.context import get_debug_dir
-    debug_dir = get_debug_dir()
-    filepath = debug_dir / "screenshot.png"
-    img.save(filepath)
+    filepath = save_screenshot(img)
     print(f"SCREENSHOT: {filepath}")
 
 
-def run_ocr(adb, recognizer):
-    """OCR识别"""
-    img = adb.screenshot()
-    if not img:
-        print("ERROR: 截图失败")
+def handle_ocr(adb: AdbController, recognizer: Recognizer) -> None:
+    """处理 --ocr 命令"""
+    img = take_screenshot(adb)
+    if img is None:
         return
 
     results = recognizer.ocr_full_screen(img)
 
-    # 打印结果
     items = []
     for item in results:
         text = item["text"]
@@ -55,66 +172,91 @@ def run_ocr(adb, recognizer):
         cx = (box[0] + box[2]) // 2
         cy = (box[1] + box[3]) // 2
         items.append(f'"{text}"@({cx},{cy})')
+
     print(f"OCR({len(results)}): {', '.join(items)}")
 
 
-def run_template(adb, recognizer, template_name, scale=None, threshold=None, all_matches=False, roi=None):
-    """
-    模板匹配
-
-    Args:
-        all_matches: 如果为 True，输出所有匹配位置
-    """
-    from ptcgp_auto.recognizer_parts.template_matcher import _normalize_template_name
+def handle_template(
+    adb: AdbController,
+    recognizer: Recognizer,
+    template_name: str,
+    scale: float | None,
+    threshold: float | None,
+    all_matches: bool,
+    roi_str: str | None,
+) -> None:
+    """处理 --template 命令"""
     from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
-    from ptcgp_auto_v2.tools.non_interactive import _load_template_from_path, _find_and_load_system_template
 
-    img = adb.screenshot()
-    if not img:
-        print("ERROR: 截图失败")
+    img = take_screenshot(adb)
+    if img is None:
         return
 
     # 加载模板
     if template_name.startswith("/") or template_name.startswith("~"):
-        # 绝对路径
-        loaded_name = _load_template_from_path(recognizer, template_name)
-        if not loaded_name:
+        loaded_name = load_template_from_path(recognizer, template_name)
+        if loaded_name is None:
             return
         template_name = loaded_name
     else:
-        # 系统模板
-        found_name = _find_and_load_system_template(recognizer, template_name)
+        found_name = load_system_template(recognizer, template_name)
         if found_name:
             template_name = found_name
 
-    # ROI处理
+    # ROI 处理
     roi_offset = (0, 0)
-    if roi:
-        try:
-            rx, ry, rw, rh = map(int, roi.split(","))
-            img = img.crop((rx, ry, rx + rw, ry + rh))
-            roi_offset = (rx, ry)
-            print(f"ROI enabled: region=({rx},{ry},{rw},{rh})")
-        except Exception as e:
-            print(f"Invalid ROI format: {e}")
+    if roi_str:
+        roi = parse_roi(roi_str)
+        if roi is None:
+            print(f"Invalid ROI format: {roi_str}")
             return
+        img, roi_offset = crop_image(img, roi)
+        print(f"ROI enabled: region={roi}")
 
     threshold = threshold or config.TEMPLATE_THRESHOLD
 
-    # 所有匹配模式
     if all_matches:
-        boxes = recognizer.find_all_templates(img, template_name)
-        if boxes:
-            print(f"TEMPLATES({len(boxes)}): {template_name}")
-            for i, box in enumerate(boxes, 1):
-                x1, y1, x2, y2 = box
-                cx, cy = (x1 + x2) // 2 + roi_offset[0], (y1 + y2) // 2 + roi_offset[1]
-                print(f"  {i}: ({x1 + roi_offset[0]},{y1 + roi_offset[1]})-({x2 + roi_offset[0]},{y2 + roi_offset[1]}) center=({cx},{cy})")
-        else:
-            print(f"TEMPLATES: {template_name} NOT_FOUND")
+        _print_all_matches(recognizer, img, template_name, roi_offset)
+    else:
+        _print_single_match(recognizer, img, template_name, scale, threshold, roi_offset)
+
+
+def _print_all_matches(
+    recognizer: Recognizer,
+    img: Image.Image,
+    template_name: str,
+    roi_offset: Tuple[int, int],
+) -> None:
+    """打印所有匹配位置"""
+    boxes = recognizer.find_all_templates(img, template_name)
+
+    if not boxes:
+        print(f"TEMPLATES: {template_name} NOT_FOUND")
         return
 
-    # 单匹配模式
+    print(f"TEMPLATES({len(boxes)}): {template_name}")
+    offset_x, offset_y = roi_offset
+
+    for i, box in enumerate(boxes, 1):
+        x1, y1, x2, y2 = box
+        cx, cy = (x1 + x2) // 2 + offset_x, (y1 + y2) // 2 + offset_y
+        print(
+            f"  {i}: ({x1 + offset_x},{y1 + offset_y})-({x2 + offset_x},{y2 + offset_y}) "
+            f"center=({cx},{cy})"
+        )
+
+
+def _print_single_match(
+    recognizer: Recognizer,
+    img: Image.Image,
+    template_name: str,
+    scale: float | None,
+    threshold: float,
+    roi_offset: Tuple[int, int],
+) -> None:
+    """打印单个匹配位置"""
+    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
+
     if scale:
         confidence = recognizer.get_template_confidence_at_scale(img, template_name, scale)
         box = recognizer.find_template_at_scale(img, template_name, scale)
@@ -124,186 +266,92 @@ def run_template(adb, recognizer, template_name, scale=None, threshold=None, all
 
     print(f"CONFIDENCE: {confidence:.4f} threshold={threshold}")
 
+    offset_x, offset_y = roi_offset
+
     if box:
-        cx = (box[0] + box[2]) // 2 + roi_offset[0]
-        cy = (box[1] + box[3]) // 2 + roi_offset[1]
-        print(f"TEMPLATE: {template_name} @ ({box[0] + roi_offset[0]},{box[1] + roi_offset[1]})-({box[2] + roi_offset[0]},{box[3] + roi_offset[1]}) center=({cx},{cy})")
+        cx = (box[0] + box[2]) // 2 + offset_x
+        cy = (box[1] + box[3]) // 2 + offset_y
+        print(
+            f"TEMPLATE: {template_name} @ "
+            f"({box[0] + offset_x},{box[1] + offset_y})-({box[2] + offset_x},{box[3] + offset_y}) "
+            f"center=({cx},{cy})"
+        )
     else:
         print(f"TEMPLATE: {template_name} NOT_FOUND")
-        if not scale:
-            print("\nAUTO_SCALE: 扫描...")
-            best_scale, best_conf = scan_best_scale(recognizer, img, template_name)
-            print(f"BEST_SCALE: {best_scale} confidence={best_conf:.4f}")
-            if best_conf >= threshold:
-                print(f"✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}")
+        if scale is None:
+            _suggest_best_scale(recognizer, img, template_name, threshold)
 
 
-def run_crop(adb):
-    """交互式区域截取"""
+def _suggest_best_scale(
+    recognizer: Recognizer, img: Image.Image, template_name: str, threshold: float
+) -> None:
+    """扫描并建议最佳缩放比例"""
+    from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
+
+    print("\nAUTO_SCALE: 扫描...")
+    best_scale, best_conf = scan_best_scale(recognizer, img, template_name)
+    print(f"BEST_SCALE: {best_scale} confidence={best_conf:.4f}")
+
+    if best_conf >= threshold:
+        print(
+            f"✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}"
+        )
+
+
+def handle_crop(adb: AdbController) -> None:
+    """处理 --crop 命令"""
     from ptcgp_auto_v2.tools.region_selector import select_and_save_template
 
-    screenshot = adb.screenshot()
-    if not screenshot:
-        print("ERROR: 截图失败")
+    img = take_screenshot(adb)
+    if img is None:
         return
 
     print("正在打开区域选择器...")
     print("操作说明：拖拽框选区域 → 回车/空格确认 → 在终端输入模板名称")
-    select_and_save_template(screenshot)
+    select_and_save_template(img)
 
 
-def run_pack_test(args):
-    """运行卡包测试命令"""
+def handle_pack_test(args: argparse.Namespace) -> None:
+    """处理 --test-pack 命令"""
     from ptcgp_auto_v2.tools.pack_tester import (
-        test_download, test_compare, test_match, test_batch,
-        test_roi_interactive, test_quick_match, list_all_packs, clear_packs
+        clear_packs,
+        list_all_packs,
+        test_batch,
+        test_compare,
+        test_download,
+        test_match,
+        test_quick_match,
+        test_roi_interactive,
     )
 
     action = args.test_pack
+    booster = args.booster
+    scale = args.scale
+    threshold = args.threshold or 0.8
 
+    # 不需要 ADB 的命令
     if action == "list":
         list_all_packs()
         return
 
     if action == "clear":
-        clear_packs(args.booster)
+        clear_packs(booster)
         return
 
     if action == "download":
-        if not args.booster:
-            print("错误: --download 需要指定 --booster 参数")
+        if not booster:
+            print("错误: download 需要指定 --booster 参数")
             print("示例: python debug_tool.py --test-pack download --booster Charizard,Mewtwo")
             return
-        boosters = [b.strip() for b in args.booster.split(",")]
-        test_download(boosters)
+        test_download([b.strip() for b in booster.split(",")])
         return
 
     if action == "compare":
-        if not args.booster:
-            print("错误: --compare 需要指定 --booster 参数")
+        if not booster:
+            print("错误: compare 需要指定 --booster 参数")
             print("示例: python debug_tool.py --test-pack compare --booster Charizard")
             return
-        test_compare(args.booster)
-        return
-
-    # 以下命令需要 ADB 连接
-    adb = get_adb()
-    if not adb.connect():
-        print("ERROR: ADB 连接失败")
-        return
-
-    if action == "match":
-        if not args.booster:
-            print("错误: --match 需要指定 --booster 参数")
-            print("示例: python debug_tool.py -a PORT --test-pack match --booster Charizard")
-            return
-        threshold = args.threshold or 0.8
-        test_match(adb, args.booster, scale=args.scale, threshold=threshold)
-        return
-
-    if action == "batch":
-        threshold = args.threshold or 0.8
-        boosters = None
-        if args.booster:
-            boosters = [b.strip() for b in args.booster.split(",")]
-        test_batch(adb, boosters=boosters, scale=args.scale, threshold=threshold)
-        return
-
-    if action == "roi":
-        if args.quick:
-            threshold = args.threshold or 0.8
-            test_quick_match(adb, threshold=threshold)
-            return
-        if not args.booster:
-            print("错误: --roi 需要指定 --booster 参数或使用 --quick 参数")
-            print("示例: python debug_tool.py -a PORT --test-pack roi --booster Charizard")
-            print("      python debug_tool.py -a PORT --test-pack roi --quick  # 快速测试模式")
-            return
-        threshold = args.threshold or 0.8
-        test_roi_interactive(adb, args.booster, threshold=threshold, scale=args.scale)
-        return
-
-
-def main():
-    """主函数"""
-    parser = argparse.ArgumentParser(description="PTCGP 调试工具 - 精简版")
-    parser.add_argument(
-        "-a", "--address",
-        type=str,
-        default=None,
-        help="ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)"
-    )
-    parser.add_argument(
-        "--screenshot", action="store_true", help="截图并输出保存路径"
-    )
-    parser.add_argument(
-        "--ocr", action="store_true", help="截图并输出 OCR 结果"
-    )
-    parser.add_argument(
-        "--template",
-        type=str,
-        metavar="NAME",
-        help="查找指定模板并输出位置"
-    )
-    parser.add_argument(
-        "--all", action="store_true", help="配合 --template 使用：查找所有匹配位置"
-    )
-    parser.add_argument(
-        "--scale",
-        type=float,
-        default=None,
-        help="模板匹配缩放比例（如 0.22, 0.81, 1.0）"
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=None,
-        help="模板匹配置信度阈值（0-1，默认 0.8）"
-    )
-    parser.add_argument(
-        "--roi",
-        type=str,
-        default=None,
-        help="匹配区域 (x,y,w,h)，例如: '100,200,500,500'"
-    )
-    parser.add_argument(
-        "--crop", action="store_true", help="截图并打开区域选择器，框选区域保存为模板"
-    )
-    parser.add_argument(
-        "--test-pack",
-        type=str,
-        metavar="ACTION",
-        choices=["download", "compare", "match", "batch", "roi", "list", "clear"],
-        help="卡包测试模式: download=下载, compare=对比, match=匹配测试, batch=批量测试, list=列出, clear=清除"
-    )
-    parser.add_argument(
-        "--booster",
-        type=str,
-        metavar="NAME",
-        help="指定子包名称（多个用逗号分隔）"
-    )
-    parser.add_argument(
-        "--quick", action="store_true", help="快速测试模式：与 --test-pack roi 配合"
-    )
-
-    args = parser.parse_args()
-
-    # 解析地址
-    host = None
-    port = None
-    if args.address:
-        if ":" in args.address:
-            parts = args.address.split(":")
-            host = parts[0]
-            port = int(parts[1])
-        else:
-            port = int(args.address)
-
-    set_current_address(host, port)
-
-    # 处理卡包测试命令（不需要 ADB 的命令在上面处理）
-    if args.test_pack:
-        run_pack_test(args)
+        test_compare(booster)
         return
 
     # 需要 ADB 的命令
@@ -312,32 +360,177 @@ def main():
         print("ERROR: ADB 连接失败")
         return
 
+    if action == "match":
+        if not booster:
+            print("错误: match 需要指定 --booster 参数")
+            print("示例: python debug_tool.py -a PORT --test-pack match --booster Charizard")
+            return
+        test_match(adb, booster, scale=scale, threshold=threshold)
+
+    elif action == "batch":
+        boosters = [b.strip() for b in booster.split(",")] if booster else None
+        test_batch(adb, boosters=boosters, scale=scale, threshold=threshold)
+
+    elif action == "roi":
+        if args.quick:
+            test_quick_match(adb, threshold=threshold)
+        elif booster:
+            test_roi_interactive(adb, booster, threshold=threshold, scale=scale)
+        else:
+            print("错误: roi 需要指定 --booster 或使用 --quick")
+
+
+# =============================================================================
+# 参数解析
+# =============================================================================
+
+def create_parser() -> argparse.ArgumentParser:
+    """创建命令行参数解析器"""
+    parser = argparse.ArgumentParser(
+        prog="debug_tool.py",
+        description="PTCGP 调试工具 - 用于模板匹配、OCR识别、区域截取等调试功能",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  %(prog)s -a 5555 --ocr                    # OCR识别
+  %(prog)s -a 5555 --template icon_yes      # 模板匹配
+  %(prog)s -a 5555 --template icon_yes --all    # 查找所有匹配位置
+  %(prog)s -a 5555 --crop                   # 交互式截取模板
+  %(prog)s --test-pack list                 # 列出已下载卡包
+        """,
+    )
+
+    # 通用参数
+    general = parser.add_argument_group("通用参数")
+    general.add_argument(
+        "-a", "--address",
+        type=str,
+        default=None,
+        metavar="ADDR",
+        help="ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)"
+    )
+
+    # 基础功能（互斥）
+    basic = parser.add_argument_group("基础功能（互斥）")
+    basic.add_argument(
+        "--screenshot",
+        action="store_true",
+        help="截图并保存到调试目录"
+    )
+    basic.add_argument(
+        "--ocr",
+        action="store_true",
+        help="截图并输出 OCR 识别结果"
+    )
+    basic.add_argument(
+        "--crop",
+        action="store_true",
+        help="截图并打开区域选择器，框选区域保存为模板"
+    )
+
+    # 模板匹配参数
+    template = parser.add_argument_group("模板匹配参数（--template）")
+    template.add_argument(
+        "--template",
+        type=str,
+        metavar="NAME",
+        help="查找指定模板名称或路径（如 icon_yes 或 /path/to/template.png）"
+    )
+    template.add_argument(
+        "--all",
+        action="store_true",
+        dest="all_matches",
+        help="【--template专用】查找并输出所有匹配位置"
+    )
+    template.add_argument(
+        "--scale",
+        type=float,
+        default=None,
+        metavar="RATIO",
+        help="【--template专用】模板匹配缩放比例（如 0.22, 0.81, 1.0）"
+    )
+    template.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        metavar="VAL",
+        help="【--template专用】匹配置信度阈值（0-1，默认 0.8）"
+    )
+    template.add_argument(
+        "--roi",
+        type=str,
+        default=None,
+        metavar="X,Y,W,H",
+        help="【--template专用】限制匹配区域，格式: '100,200,500,500'"
+    )
+
+    # 卡包测试参数
+    pack = parser.add_argument_group("卡包测试参数（--test-pack）")
+    pack.add_argument(
+        "--test-pack",
+        type=str,
+        metavar="ACTION",
+        choices=PACK_TEST_ACTIONS,
+        help=f"卡包测试动作: {', '.join(PACK_TEST_ACTIONS)}"
+    )
+    pack.add_argument(
+        "--booster",
+        type=str,
+        metavar="NAME",
+        help="【--test-pack专用】指定子包名称（多个用逗号分隔，如 Charizard,Mewtwo）"
+    )
+    pack.add_argument(
+        "--quick",
+        action="store_true",
+        help="【--test-pack roi专用】快速测试模式，交互式选择卡包"
+    )
+
+    return parser
+
+
+# =============================================================================
+# 主函数
+# =============================================================================
+
+def main() -> None:
+    """主入口函数"""
+    parser = create_parser()
+    args = parser.parse_args()
+
+    # 解析并设置 ADB 地址
+    host, port = parse_address(args.address)
+    set_current_address(host, port)
+
+    # 处理卡包测试命令
+    if args.test_pack:
+        handle_pack_test(args)
+        return
+
+    # 需要 ADB 连接的基础功能
+    adb = get_adb()
+    if not adb.connect():
+        print("ERROR: ADB 连接失败")
+        return
+
+    # 分发到对应处理函数
     if args.screenshot:
-        run_screenshot(adb)
-        return
-
-    if args.ocr:
-        recognizer = get_recognizer()
-        run_ocr(adb, recognizer)
-        return
-
-    if args.template:
-        recognizer = get_recognizer()
-        run_template(
-            adb, recognizer, args.template,
+        handle_screenshot(adb)
+    elif args.ocr:
+        handle_ocr(adb, get_recognizer())
+    elif args.template:
+        handle_template(
+            adb,
+            get_recognizer(),
+            args.template,
             scale=args.scale,
             threshold=args.threshold,
-            all_matches=args.all,
-            roi=args.roi
+            all_matches=args.all_matches,
+            roi_str=args.roi,
         )
-        return
-
-    if args.crop:
-        run_crop(adb)
-        return
-
-    # 如果没有参数，显示帮助
-    parser.print_help()
+    elif args.crop:
+        handle_crop(adb)
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":

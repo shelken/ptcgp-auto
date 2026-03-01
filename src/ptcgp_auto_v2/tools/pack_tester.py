@@ -132,10 +132,7 @@ def test_match(
         return None
 
     # 3. 加载模板
-    from ptcgp_auto_v2.tools.non_interactive import (
-        _load_template_from_path,
-        _find_and_load_system_template,
-    )
+    from ptcgp_auto_v2.tools.template_loader import load_template_from_path
     from ptcgp_auto.recognizer import get_recognizer
 
     recognizer = get_recognizer()
@@ -143,7 +140,7 @@ def test_match(
     template_name = manager.get_template_name(booster_name)
 
     # 加载模板（使用绝对路径）
-    loaded_name = _load_template_from_path(recognizer, str(pack_path))
+    loaded_name = load_template_from_path(recognizer, str(pack_path))
     if not loaded_name:
         print(f"✗ 加载模板失败: {pack_path}")
         return None
@@ -427,12 +424,12 @@ def test_crop_adjust(
         processed.save(temp_path)
 
         # 加载并测试匹配
-        from ptcgp_auto_v2.tools.non_interactive import _load_template_from_path
+        from ptcgp_auto_v2.tools.template_loader import load_template_from_path
         from ptcgp_auto.recognizer import get_recognizer
         from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
 
         recognizer = get_recognizer()
-        template_name = _load_template_from_path(recognizer, temp_path)
+        template_name = load_template_from_path(recognizer, temp_path)
 
         if not template_name:
             os.remove(temp_path)
@@ -725,14 +722,14 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         return
 
     # 5. 加载模板并测试匹配
-    from ptcgp_auto_v2.tools.non_interactive import _load_template_from_path
+    from ptcgp_auto_v2.tools.template_loader import load_template_from_path
     from ptcgp_auto.recognizer import get_recognizer
     from ptcgp_auto_v2.tools.card_matcher import scan_best_scale
 
     recognizer = get_recognizer()
     pack_path = manager.get_pack_path(booster_name)
 
-    loaded_name = _load_template_from_path(recognizer, str(pack_path))
+    loaded_name = load_template_from_path(recognizer, str(pack_path))
     if not loaded_name:
         print(f"✗ 加载模板失败: {pack_path}")
         return
