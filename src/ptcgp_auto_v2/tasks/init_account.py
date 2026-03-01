@@ -770,11 +770,3 @@ class InitAccountTask(PackOpeningTaskBase):
         if self.account and self.account.id:
             return f"{self.NICKNAME_PREFIX}{self.account.id}"
         return self.NICKNAME_PREFIX
-
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return bool(self._action_cache.get(key, False))
-
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
