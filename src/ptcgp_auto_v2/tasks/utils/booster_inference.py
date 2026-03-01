@@ -10,16 +10,29 @@
 """
 
 import logging
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from ptcgp_auto_v2.db.models import Card
 
 logger = logging.getLogger(__name__)
 
-def infer_pack_by_cards(
-    *,
-    detected_rows: list[dict],
-    pack_names_by_set: dict[str, list[str]],
-    card_pack_mapping: dict[int, list[str]],
-) -> Optional[dict]:
+
+def _is_promo_pack(pack_name: str) -> bool:
+    """判断是否为 PROMO 子包"""
+    return pack_name.upper().startswith("PROMO")
+
+
+def _get_card_pack_names(card: "Card") -> list[str]:
+    """获取卡牌所属的非 PROMO 子包名称列表"""
+    return [
+        cp.pack_name
+        for cp in card.packs
+        if cp.pack_name and not _is_promo_pack(cp.pack_name)
+    ]
+
+
+def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
     """通过卡牌反推子包（第二阶段兜底）。
 
     判定规则（按优先级）：
@@ -32,38 +45,47 @@ def infer_pack_by_cards(
     4. 无法唯一确定时返回 pack_name=None，但 pack_code 可能确定
 
     Args:
-        detected_rows: 检测到的卡牌列表，每项包含 set_code, card_id
-        pack_names_by_set: {set_code: [pack_name, ...]} 系列子包映射
-        card_pack_mapping: {card_id: [pack_name, ...]} 卡牌子包映射
+        cards: Card 对象列表（需要已加载 packs 关系）
 
     Returns:
         推断结果 {"pack_code": str, "booster_name": str|None, "source": "cards"}
         或 None（无法确定系列）
     """
-    if not detected_rows:
+    if not cards:
         return None
 
-    # 1. 统计系列占比
-    set_counts = {}
-    valid_rows = []
+    # 1. 统计系列占比，同时收集该系列的所有子包
+    set_counts: dict[str, int] = {}
+    valid_cards: list["Card"] = []
+    # 按系列收集子包（排除 PROMO）
+    packs_by_set: dict[str, set[str]] = {}
+    # 每张卡牌对应的子包列表
+    card_packs_map: dict[int, list[str]] = {}
 
-    for row in detected_rows:
-        set_code = row.get("set_code")
-        card_id = row.get("card_id")
-
-        if not set_code or card_id is None:
+    for card in cards:
+        if not card.id or not card.set_code:
             continue
 
-        valid_rows.append(row)
-        set_counts[set_code] = set_counts.get(set_code, 0) + 1
+        pack_names = _get_card_pack_names(card)
+        if not pack_names:
+            continue
 
-    if not valid_rows:
+        valid_cards.append(card)
+        set_counts[card.set_code] = set_counts.get(card.set_code, 0) + 1
+        card_packs_map[card.id] = pack_names
+
+        # 收集该系列的所有子包
+        if card.set_code not in packs_by_set:
+            packs_by_set[card.set_code] = set()
+        packs_by_set[card.set_code].update(pack_names)
+
+    if not valid_cards:
         return None
 
-    total_cards = len(valid_rows)
+    total_cards = len(valid_cards)
 
     # 找出占比超过 50% 的系列
-    majority_set = None
+    majority_set: Optional[str] = None
     for set_code, count in set_counts.items():
         if count > total_cards / 2:
             majority_set = set_code
@@ -74,7 +96,7 @@ def infer_pack_by_cards(
         return None
 
     # 2. 检查该系列的子包情况
-    packs = pack_names_by_set.get(majority_set, [])
+    packs = sorted(packs_by_set.get(majority_set) or [])
 
     if not packs:
         logger.debug(f"[子包推断] 系列 {majority_set} 无子包信息")
@@ -89,15 +111,16 @@ def infer_pack_by_cards(
         }
 
     # 3. 多子包情况：使用唯一归属证据判定
-    pack_evidence = {pack: 0 for pack in packs}
+    pack_evidence: dict[str, int] = {pack: 0 for pack in packs}
 
-    for row in valid_rows:
-        if row.get("set_code") != majority_set:
+    for card in valid_cards:
+        if card.set_code != majority_set:
             continue
 
-        card_id = row.get("card_id")
-        card_packs = card_pack_mapping.get(card_id, [])
-
+        card_id = card.id
+        if card_id is None:
+            continue
+        card_packs = card_packs_map.get(card_id) or []
         if not card_packs:
             continue
 
@@ -110,7 +133,7 @@ def infer_pack_by_cards(
         # len(relevant_packs) > 1：在多个子包中出现，忽略（无法区分）
 
     # 找出证据最多的子包
-    best_pack = None
+    best_pack: Optional[str] = None
     best_evidence = 0
     tie = False
 
