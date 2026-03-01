@@ -359,8 +359,9 @@ class PackOpeningTaskBase(Task):
         except Exception as e:
             logger.error(f"保存开包记录失败: {e}")
         finally:
-            # 清理推断会话（只卸载 mark_as_pack=True 的模板）
-            self._clear_pack_inference_session()
+            # 只清理推断上下文，模板在任务结束时统一清理
+            self._inferred_pack_context = None
+            logger.debug("[子包推断] 会话上下文已清理")
 
     def _save_high_rarity_cards(self, rows: list[dict]) -> None:
         """记录高稀有度卡牌并通知"""
@@ -380,6 +381,7 @@ class PackOpeningTaskBase(Task):
         """清理子包推断会话资源。
 
         清理推断上下文，并通过资源管理器卸载已加载模板。
+        注意：此方法只在任务结束时调用，每包后只清理上下文不清模板。
         """
         try:
             recognizer = getattr(self, "recognizer", None)
