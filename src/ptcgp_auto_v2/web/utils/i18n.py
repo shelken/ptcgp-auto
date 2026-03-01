@@ -8,8 +8,6 @@ from fastapi import Request
 from ptcgp_auto_v2.config.lang import (
     WEB_LANG_TO_DB_LABEL_KEYS,
     DEFAULT_LANG_KEY,
-    WEB_LANG_EN,
-    WEB_ZH_FALLBACK_LANG_KEYS,
     resolve_localized_text,
 )
 
@@ -46,47 +44,38 @@ def load_translations() -> None:
                 _translations[lang] = json.load(file)
 
 
-def get_translations(lang: str = WEB_LANG_EN) -> Dict[str, Any]:
+def get_translations(lang: str = DEFAULT_LANG_KEY) -> Dict[str, Any]:
     """按语言获取翻译字典（开发模式下每次刷新）。"""
     load_translations()
-    return _translations.get(lang, _translations.get(WEB_LANG_EN, {}))
+    return _translations.get(lang, _translations.get(DEFAULT_LANG_KEY, {}))
 
 
-def normalize_lang(lang: str) -> str:
-    """校验语言参数并回退到默认值。"""
+def resolve_lang_key(lang: str) -> str:
+    """将任意语言输入解析为可用的翻译语言键。"""
     load_translations()
     if lang in _translations:
         return lang
-    normalized = lang.replace("-", "_").lower()
-    for key in _translations:
-        if key.lower() == normalized:
-            return key
-    if normalized.startswith("zh"):
-        for candidate in WEB_ZH_FALLBACK_LANG_KEYS:
-            if candidate in _translations:
-                return candidate
-    if normalized.startswith("en") and WEB_LANG_EN in _translations:
-        return WEB_LANG_EN
-    return next(iter(_translations.keys()), WEB_LANG_EN)
+    if DEFAULT_LANG_KEY in _translations:
+        return DEFAULT_LANG_KEY
+    return next(iter(_translations.keys()), DEFAULT_LANG_KEY)
 
 
 def detect_lang(request: Request, explicit_lang: str | None) -> str:
     """根据显式参数、Cookie 与请求头识别语言。"""
     load_translations()
     if explicit_lang:
-        return normalize_lang(explicit_lang)
+        return resolve_lang_key(explicit_lang)
 
     cookie_lang = request.cookies.get("ptcgp_lang")
     if cookie_lang:
-        return normalize_lang(cookie_lang)
+        return resolve_lang_key(cookie_lang)
 
     header = request.headers.get("accept-language", "")
     for candidate in _parse_accept_language(header):
-        normalized = normalize_lang(candidate)
-        if normalized in _translations:
-            return normalized
+        if candidate in _translations:
+            return candidate
 
-    return normalize_lang(WEB_LANG_EN)
+    return resolve_lang_key(DEFAULT_LANG_KEY)
 
 
 def _parse_accept_language(value: str) -> list[str]:
@@ -143,7 +132,7 @@ def get_current_lang() -> str:
 
 def get_current_i18n() -> tuple[str, Dict[str, Any]]:
     """获取当前请求语言与翻译字典（服务层统一入口）。"""
-    current_lang = normalize_lang(get_current_lang())
+    current_lang = resolve_lang_key(get_current_lang())
     return current_lang, get_translations(current_lang)
 
 

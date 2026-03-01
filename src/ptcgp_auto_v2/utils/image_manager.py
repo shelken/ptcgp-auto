@@ -17,7 +17,7 @@ from PIL import Image
 from sqlmodel import Session
 
 from ptcgp_auto_v2.config.assets import build_card_image_bases
-from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, locale_to_web_lang
+from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, TASK_LOCALE_TO_WEB_LANG
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.db.engine import get_engine
@@ -25,9 +25,9 @@ from ptcgp_auto_v2.db.engine import get_engine
 logger = logging.getLogger(__name__)
 
 # 使用 jsDelivr CDN 加速下载（跟随 DEFAULT_LOCALE 变化）
-ASSETS_BASE_URL = build_card_image_bases(locale_to_web_lang(DEFAULT_LOCALE))[
-    "cdn_base_url"
-]
+ASSETS_BASE_URL = build_card_image_bases(
+    TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
+)["cdn_base_url"]
 
 
 class ImageResourceManager:
