@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from ptcgp_auto_v2.db.engine import get_engine
+from .account_battle_progress_repository import AccountBattleProgressRepository
 from .account_pack_config_repository import AccountPackConfigRepository
 from .account_pack_point_repository import AccountPackPointRepository
 from .account_card_repository import AccountCardRepository
@@ -19,6 +20,7 @@ from .task_plan_repository import TaskPlanRepository
 
 __all__ = [
     "get_engine",
+    "AccountBattleProgressRepository",
     "AccountPackConfigRepository",
     "AccountPackPointRepository",
     "AccountCardRepository",
