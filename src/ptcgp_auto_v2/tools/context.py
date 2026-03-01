@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Optional
 
 from ptcgp_auto_v2.infra.adb import AdbController
-from ptcgp_auto_v2.config.settings import get_settings
 
 
 # 当前 ADB 地址（全局状态）
@@ -27,14 +26,15 @@ def set_current_address(host: Optional[str], port: Optional[int]) -> None:
     设置当前 ADB 地址
 
     Args:
-        host: ADB 主机地址，None 则使用默认
-        port: ADB 端口，None 则使用默认
+        host: ADB 主机地址，None 则使用默认 (127.0.0.1)
+        port: ADB 端口，None 则使用默认 (5555)
     """
     global _current_host, _current_port, _adb_instance
 
-    settings = get_settings()
-    _current_host = host or settings.adb_host
-    _current_port = port or settings.adb_port
+    from ptcgp_auto_v2.config.constants import DEFAULT_ADB_PORT
+
+    _current_host = host or "127.0.0.1"
+    _current_port = port or DEFAULT_ADB_PORT
 
     # 地址改变时重置实例
     _adb_instance = None
@@ -49,10 +49,11 @@ def get_current_address() -> tuple[str, int]:
     """
     global _current_host, _current_port
 
+    from ptcgp_auto_v2.config.constants import DEFAULT_ADB_PORT
+
     if _current_host is None or _current_port is None:
-        settings = get_settings()
-        _current_host = _current_host or settings.adb_host
-        _current_port = _current_port or settings.adb_port
+        _current_host = _current_host or "127.0.0.1"
+        _current_port = _current_port or DEFAULT_ADB_PORT
 
     return _current_host, _current_port
 
