@@ -46,6 +46,7 @@ class TestNotificationRepositoryCreate:
         assert notification.content == "账号 test 开包任务失败"
         assert notification.is_read is False
         assert notification.related_account_id is None
+        assert notification.related_card_id is None
         assert notification.related_task_instance_id is None
 
     def test_create_notification_with_all_fields(self, mock_get_engine):
@@ -142,6 +143,7 @@ class TestNotificationRepositoryMarkRead:
         repo.mark_as_read(notification.id)
 
         updated = repo.get_by_id(notification.id)
+        assert updated is not None
         assert updated.is_read is True
 
     def test_mark_all_as_read(self, mock_get_engine):

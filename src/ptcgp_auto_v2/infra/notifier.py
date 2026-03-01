@@ -15,6 +15,11 @@ import requests
 
 from ptcgp_auto_v2.config.assets import build_card_cdn_image_url
 from ptcgp_auto_v2.config.constants import NOTIFICATION_TASK_STATUS_DEFAULTS
+from ptcgp_auto_v2.config.lang import (
+    DEFAULT_LOCALE,
+    locale_to_web_lang,
+    resolve_localized_text,
+)
 from ptcgp_auto_v2.config.notification import (
     SCENE_RARE_CARD,
     SCENE_SYSTEM_WARNING,
@@ -31,7 +36,7 @@ from ptcgp_auto_v2.db.repositories import (
 )
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account, Card, TaskInstance
+    from ptcgp_auto_v2.db.models import Account, Card, Pack, TaskInstance
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +76,7 @@ class Notifier:
         title: str,
         content: str,
         account_id: Optional[int] = None,
+        card_id: Optional[int] = None,
         task_instance_id: Optional[int] = None,
         image_url: Optional[str] = None,
     ) -> bool:
@@ -97,6 +103,7 @@ class Notifier:
             title=title,
             content=content,
             account_id=account_id,
+            card_id=card_id,
             task_instance_id=task_instance_id,
         )
         logger.info(f"站内通知已创建: [{scene}] {title}")
@@ -128,21 +135,53 @@ class Notifier:
     @staticmethod
     def _build_rare_card_content(
         account_name: str,
+        set_code: str,
+        pack_name: str,
         card_name: str,
         rarity_display: str,
         event_message: str,
         image_url: Optional[str] = None,
     ) -> str:
         """构建稀有卡牌通知正文。"""
-        content = (
-            f"账号: {account_name}\n"
-            f"事件: {event_message}\n"
-            f"卡牌: {card_name}\n"
-            f"稀有度: {rarity_display}"
-        )
+        lines = [
+            f"账号: {account_name}",
+            f"事件: {event_message}",
+        ]
+        if set_code:
+            lines.append(f"系列: {set_code}")
+        if pack_name:
+            lines.append(f"子包: {pack_name}")
+        lines.append(f"卡牌: {card_name}")
+        lines.append(f"稀有度: {rarity_display}")
+        content = "\n".join(lines)
         if image_url:
             content += f"\n\n![{card_name}]({image_url})"
         return content
+
+    @staticmethod
+    def _resolve_card_display_name(card: "Card") -> str:
+        """解析卡牌显示名（与 Web 同一映射逻辑）。"""
+        fallback_name = str(getattr(card, "name", ""))
+        web_lang = locale_to_web_lang(DEFAULT_LOCALE)
+        return resolve_localized_text(
+            raw_data=getattr(card, "data", None),
+            web_lang=web_lang,
+            fallback=fallback_name,
+            localized_field="localized_name",
+        )
+
+    @staticmethod
+    def _resolve_pack_display_name(pack: Optional["Pack"]) -> str:
+        """解析子包显示名（由调用方传入 pack，不在此查库）。"""
+        if pack is None:
+            return ""
+        fallback_name = str(getattr(pack, "name", ""))
+        web_lang = locale_to_web_lang(DEFAULT_LOCALE)
+        return resolve_localized_text(
+            raw_data=getattr(pack, "label_data", None),
+            web_lang=web_lang,
+            fallback=fallback_name,
+        )
 
     @staticmethod
     def _build_task_status_content(
@@ -166,6 +205,7 @@ class Notifier:
         account: "Account",
         card: "Card",
         rarity: str,
+        pack: Optional["Pack"] = None,
         image_url: Optional[str] = None,
         message: Optional[str] = None,
     ) -> bool:
@@ -194,13 +234,19 @@ class Notifier:
             return False
 
         account_name = self._resolve_account_name(account)
-        rarity_display = get_rarity_display(rarity, "zh_CN")
+        web_lang = locale_to_web_lang(DEFAULT_LOCALE)
+        rarity_display = get_rarity_display(rarity, web_lang)
+        card_display_name = self._resolve_card_display_name(card)
+        pack_display_name = self._resolve_pack_display_name(pack)
+        set_code = str(getattr(card, "set_code", "") or "")
 
         title = "稀有卡牌通知"
         resolved_image_url = self._resolve_card_image_url(card, image_url)
         content = self._build_rare_card_content(
             account_name=account_name,
-            card_name=card.name,
+            set_code=set_code,
+            pack_name=pack_display_name,
+            card_name=card_display_name,
             rarity_display=rarity_display,
             event_message=message or "开出稀有卡牌",
             image_url=resolved_image_url,
@@ -211,6 +257,7 @@ class Notifier:
             title=title,
             content=content,
             account_id=account.id,
+            card_id=card.id,
             image_url=resolved_image_url,
         )
 
@@ -227,7 +274,7 @@ class Notifier:
             return build_card_cdn_image_url(
                 set_code=set_code,
                 card_number=card_number,
-                lang="zh_CN",
+                lang=locale_to_web_lang(DEFAULT_LOCALE),
                 ext="png",
             )
         return None

@@ -13,6 +13,7 @@ def save_high_rarity_cards(
     account=None,
     notifier=None,
     notify_message: str | None = None,
+    pack=None,
 ) -> None:
     """保存高稀有度卡牌，并统一在此触发通知。"""
     if not account_card_repo or not account_id:
@@ -46,6 +47,7 @@ def save_high_rarity_cards(
             account=account,
             card=card_obj,
             rarity=rarity,
+            pack=pack,
             image_url=None,
             message=notify_message,
         )

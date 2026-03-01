@@ -366,6 +366,13 @@ class PackOpeningTaskBase(Task):
     def _save_high_rarity_cards(self, rows: list[dict]) -> None:
         """记录高稀有度卡牌并通知"""
         try:
+            context = self.get_target_pack_context() or {}
+            pack_name = context.get("booster_name")
+            pack = (
+                self._card_repo.get_pack_by_name(pack_name)
+                if (self._card_repo is not None and pack_name)
+                else None
+            )
             save_high_rarity_cards(
                 account_card_repo=self._account_card_repo,
                 account_id=self.account.id,
@@ -373,6 +380,7 @@ class PackOpeningTaskBase(Task):
                 account=self.account,
                 notifier=get_notifier(),
                 notify_message=self.get_rare_card_notify_message(),
+                pack=pack,
             )
         except Exception as e:
             logger.warning(f"保存高稀有度卡牌并通知失败: {e}")

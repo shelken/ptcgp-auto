@@ -1,6 +1,7 @@
 from typing import Iterable
 
 from sqlmodel import Session, select, desc, col
+from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.db.models.pack_record import PackRecord
 from ptcgp_auto_v2.db.models.pack_card import PackCard
@@ -16,7 +17,15 @@ def fetch_records(
     card_type: list[str],
 ) -> tuple[list[PackRecord], bool]:
     """查询开包记录（支持筛选与分页）并返回是否还有下一页。"""
-    query = select(PackRecord).distinct().order_by(desc(PackRecord.opened_at))
+    query = (
+        select(PackRecord)
+        .options(
+            selectinload(PackRecord.cards).selectinload(PackCard.card),
+            selectinload(PackRecord.account),
+        )
+        .distinct()
+        .order_by(desc(PackRecord.opened_at))
+    )
 
     if rarity or card_type:
         query = query.join(PackRecord.cards).join(PackCard.card)

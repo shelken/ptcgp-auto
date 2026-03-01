@@ -23,6 +23,7 @@ class NotificationRepository:
         title: str,
         content: str,
         account_id: Optional[int] = None,
+        card_id: Optional[int] = None,
         task_instance_id: Optional[int] = None,
     ) -> Notification:
         """创建通知记录"""
@@ -31,6 +32,7 @@ class NotificationRepository:
             title=title,
             content=content,
             related_account_id=account_id,
+            related_card_id=card_id,
             related_task_instance_id=task_instance_id,
         )
         with Session(get_engine()) as session:
