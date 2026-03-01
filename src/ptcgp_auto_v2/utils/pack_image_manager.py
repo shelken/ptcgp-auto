@@ -93,7 +93,9 @@ class PackImageManager:
         Returns:
             True 表示资源就绪，False 表示失败
         """
+        pack_path = self.get_pack_path(booster_name)
         if self.is_pack_ready(booster_name):
+            logger.debug(f"卡包图片已就绪: {booster_name} ({pack_path})")
             return True
 
         logger.info(f"准备卡包图片资源: {booster_name}")
@@ -307,6 +309,7 @@ class PackImageManager:
             True 表示模板已可用（已存在或本次加载成功）
         """
         template_name = self.get_template_name(booster_name)
+        logger.debug(f"尝试加载模板: {template_name} (booster={booster_name})")
         if template_name in getattr(template_matcher, "templates", {}):
             logger.debug(f"模板已就绪，无需重复加载: {template_name}")
             return True

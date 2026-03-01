@@ -171,6 +171,7 @@ class TemplateMatcher:
 
             img = cv2.imread(str(file_path))
             if img is None:
+                logger.warning(f"cv2.imread 返回 None，文件可能损坏: {file_path}")
                 return False
 
             # 按屏幕比例缩放
