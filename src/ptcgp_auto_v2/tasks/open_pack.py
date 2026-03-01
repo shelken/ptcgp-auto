@@ -247,6 +247,9 @@ class OpenPackTask(PackOpeningTaskBase):
             self._target_pack.get("booster_name") if self._target_pack else None
         )
         if not pack_code or not booster_name:
+            logger.error(
+                f"准备卡包图片资源失败: pack_code={pack_code}, booster_name={booster_name}"
+            )
             return False
 
         try:
