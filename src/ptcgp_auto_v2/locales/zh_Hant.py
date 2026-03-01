@@ -115,6 +115,7 @@ TEXT_PATTERNS = {
     "rewards_tab_convenient_cards": ["便利卡牌"],
     "rewards_tab_reward_week": ["獎勵週"],
     "rewards_tab_medal": ["勳章"],
+    "rewards_page_exclude": ["收藏板"],
     "reward_claim_buttons": ["全部領取", "領取", "達成", "達成！"],
     # 需要颜色检查的"全部領取"按钮（用于避免点击置灰按钮）
     "reward_claim_all": ["全部領取"],
