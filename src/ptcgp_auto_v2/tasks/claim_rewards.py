@@ -86,7 +86,7 @@ def _build_claim_rewards_pages() -> list[dict]:
             "identifiers": _build_rewards_page_tabs_patterns(),
             "exact_match": True,
             "priority": 15,
-            "exclude_identifiers": get_text_patterns("card_page_own"),
+            "exclude_identifiers": get_text_patterns("rewards_page_exclude"),
         },
         # 報酬 / 達成！
         {
