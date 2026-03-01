@@ -5,7 +5,11 @@ from typing import Dict, Any, List, Optional
 
 from fastapi import Request
 
-from ptcgp_auto_v2.config.constants import WEB_LANG_TO_DB_LABEL_KEYS, DEFAULT_LANG_KEY
+from ptcgp_auto_v2.config.lang import (
+    WEB_LANG_TO_DB_LABEL_KEYS,
+    DEFAULT_LANG_KEY,
+    resolve_localized_text,
+)
 
 # 全局请求上下文变量
 _current_lang_ctx: ContextVar[Optional["LangContext"]] = ContextVar(
@@ -119,13 +123,7 @@ class LangContext:
 
     def resolve_label(self, label_dict: Dict[str, Any], fallback: str = "") -> str:
         """从标签字典中按优先级解析展示名"""
-        if not isinstance(label_dict, dict):
-            return fallback
-        for key in self.label_candidates:
-            value = label_dict.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return fallback
+        return resolve_localized_text(label_dict, self.web_lang, fallback=fallback)
 
 
 def set_lang_context(web_lang: str) -> None:
@@ -157,43 +155,16 @@ def resolve_label(label_dict: Dict[str, Any], fallback: str = "") -> str:
 
 def resolve_label_json(raw: str | Dict[str, Any] | None, fallback: str = "") -> str:
     """从 JSON 文本/字典中解析本地化标签。"""
-    if isinstance(raw, dict):
-        return resolve_label(raw, fallback)
-    if not isinstance(raw, str) or not raw.strip():
-        return fallback
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return fallback
-    if not isinstance(parsed, dict):
-        return fallback
-    return resolve_label(parsed, fallback)
+    return resolve_localized_text(raw, get_current_lang(), fallback=fallback)
 
 
 def resolve_card_name_from_data(
     raw_data: str | Dict[str, Any] | None, fallback: str = ""
 ) -> str:
     """从卡牌 data 字段中解析当前语言名称。"""
-    if isinstance(raw_data, str):
-        if not raw_data.strip():
-            return fallback
-        try:
-            payload = json.loads(raw_data)
-        except json.JSONDecodeError:
-            return fallback
-    elif isinstance(raw_data, dict):
-        payload = raw_data
-    else:
-        return fallback
-
-    if not isinstance(payload, dict):
-        return fallback
-
-    localized_name = payload.get("localized_name")
-    if isinstance(localized_name, dict):
-        return resolve_label(localized_name, fallback)
-
-    if isinstance(localized_name, str) and localized_name.strip():
-        return localized_name.strip()
-
-    return resolve_label(payload, fallback)
+    return resolve_localized_text(
+        raw_data,
+        get_current_lang(),
+        fallback=fallback,
+        localized_field="localized_name",
+    )

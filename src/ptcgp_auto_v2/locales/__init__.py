@@ -9,13 +9,23 @@ import importlib
 import logging
 from typing import List, Dict, Any
 
-from ptcgp_auto_v2.config.constants import DEFAULT_LOCALE
 from ptcgp_auto_v2.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 # 缓存已加载的语言包
 _loaded_locales: Dict[str, Any] = {}
+
+# 默认 locale（与 config/lang.py 保持一致，避免循环导入）
+_DEFAULT_LOCALE = "zh_Hant"
+
+
+def _get_default_locale() -> str:
+    """获取默认 locale（延迟导入避免循环依赖）"""
+    # 延迟导入，避免与 config.pages 的循环依赖
+    from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE
+
+    return DEFAULT_LOCALE
 
 
 def get_locale_module():
@@ -34,17 +44,18 @@ def get_locale_module():
         logger.debug(f"已加载语言包: {locale_name}")
         return module
     except ImportError:
-        logger.error(f"无法加载语言包: {locale_name}，回退到 {DEFAULT_LOCALE}")
+        default_locale = _get_default_locale()
+        logger.error(f"无法加载语言包: {locale_name}，回退到 {default_locale}")
         # 回退机制
-        if locale_name != DEFAULT_LOCALE:
+        if locale_name != default_locale:
             try:
                 fallback_module = importlib.import_module(
-                    f"ptcgp_auto_v2.locales.{DEFAULT_LOCALE}"
+                    f"ptcgp_auto_v2.locales.{default_locale}"
                 )
-                _loaded_locales[DEFAULT_LOCALE] = fallback_module
+                _loaded_locales[default_locale] = fallback_module
                 return fallback_module
             except ImportError:
-                logger.critical(f"无法加载默认语言包 {DEFAULT_LOCALE}")
+                logger.critical(f"无法加载默认语言包 {default_locale}")
                 raise
         raise
 

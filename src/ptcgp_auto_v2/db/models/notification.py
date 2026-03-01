@@ -27,6 +27,9 @@ class Notification(SQLModel, table=True):
     title: str = Field(description="通知标题")
     content: str = Field(description="Markdown 内容")
     related_account_id: Optional[int] = Field(default=None, description="关联账号 ID")
+    related_card_id: Optional[int] = Field(
+        default=None, description="关联卡牌 ID（稀有卡牌通知使用）", index=True
+    )
     related_task_instance_id: Optional[int] = Field(
         default=None, description="关联任务实例 ID"
     )

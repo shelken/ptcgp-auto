@@ -365,12 +365,21 @@ def build_notification_panel_context(
 
     # 转换为字典并添加相对时间文本和图片URL
     current_lang = get_current_lang()
+    image_payload_map = _build_notification_image_payloads(
+        notifications=notifications,
+        session=session,
+        lang=current_lang,
+    )
     notification_dicts = []
     for n in notifications:
-        image_payload = build_notification_image_payload(
-            notification=n,
-            session=session,
-            lang=current_lang,
+        image_payload = image_payload_map.get(
+            n.id,
+            {
+                "image_url": _extract_image_url(n.content),
+                "image_webp_url": _build_image_webp_fallback_url(
+                    _extract_image_url(n.content)
+                ),
+            },
         )
 
         notification_dicts.append(
@@ -419,6 +428,20 @@ def build_notification_image_payload(
     image_url = _extract_image_url(notification.content)
     image_webp_url = _build_image_webp_fallback_url(image_url)
 
+    if notification.scene == "rare_card_obtained" and notification.related_card_id:
+        card = session.get(Card, notification.related_card_id)
+        if card is not None and card.set_code and card.number is not None:
+            card_image_url, card_image_webp_url = build_card_image_urls(
+                set_code=card.set_code,
+                card_number=card.number,
+                lang=lang,
+                width=400,
+            )
+            return {
+                "image_url": card_image_url,
+                "image_webp_url": card_image_webp_url,
+            }
+
     card_image_url, card_image_webp_url = _build_notification_card_asset_urls(
         notification=notification,
         session=session,
@@ -432,6 +455,88 @@ def build_notification_image_payload(
         "image_url": image_url,
         "image_webp_url": image_webp_url,
     }
+
+
+def _build_notification_image_payloads(
+    notifications: list[Notification],
+    session: Session,
+    lang: str,
+) -> dict[int, dict[str, str | None]]:
+    """批量构建通知图片 URL，避免逐条查询导致 N+1。"""
+    payload_map: dict[int, dict[str, str | None]] = {}
+    parsed_map: dict[int, tuple[str, str]] = {}
+    card_id_map: dict[int, int] = {}
+
+    for notification in notifications:
+        image_url = _extract_image_url(notification.content)
+        payload_map[notification.id] = {
+            "image_url": image_url,
+            "image_webp_url": _build_image_webp_fallback_url(image_url),
+        }
+        if notification.scene != "rare_card_obtained":
+            continue
+        if notification.related_card_id:
+            card_id_map[notification.id] = int(notification.related_card_id)
+            continue
+        parsed = _extract_card_name_and_rarity(notification.content or "")
+        if parsed:
+            parsed_map[notification.id] = parsed
+
+    if card_id_map:
+        card_ids = sorted(set(card_id_map.values()))
+        cards = list(session.exec(select(Card).where(col(Card.id).in_(card_ids))).all())
+        card_by_id = {card.id: card for card in cards if card.id is not None}
+        for notification_id, card_id in card_id_map.items():
+            card = card_by_id.get(card_id)
+            if card is None or not card.set_code or card.number is None:
+                continue
+            image_url, image_webp_url = build_card_image_urls(
+                set_code=card.set_code,
+                card_number=card.number,
+                lang=lang,
+                width=400,
+            )
+            payload_map[notification_id] = {
+                "image_url": image_url,
+                "image_webp_url": image_webp_url,
+            }
+
+    if not parsed_map:
+        return payload_map
+
+    card_names = sorted({card_name for card_name, _ in parsed_map.values()})
+    if not card_names:
+        return payload_map
+
+    cards = list(session.exec(select(Card).where(col(Card.name).in_(card_names))).all())
+    cards_by_name: dict[str, list[Card]] = {}
+    for card in cards:
+        cards_by_name.setdefault(card.name, []).append(card)
+
+    for notification_id, (card_name, rarity_code) in parsed_map.items():
+        candidates = cards_by_name.get(card_name, [])
+        target_card = next(
+            (card for card in candidates if card.rarity == rarity_code),
+            candidates[0] if candidates else None,
+        )
+        if (
+            target_card is None
+            or not target_card.set_code
+            or target_card.number is None
+        ):
+            continue
+        image_url, image_webp_url = build_card_image_urls(
+            set_code=target_card.set_code,
+            card_number=target_card.number,
+            lang=lang,
+            width=400,
+        )
+        payload_map[notification_id] = {
+            "image_url": image_url,
+            "image_webp_url": image_webp_url,
+        }
+
+    return payload_map
 
 
 def _extract_card_name_and_rarity(content: str) -> tuple[str, str] | None:
@@ -472,11 +577,11 @@ def _build_notification_card_asset_urls(
         return None, None
 
     card_name, rarity_code = parsed
-    card = session.exec(
-        select(Card).where(Card.name == card_name, Card.rarity == rarity_code)
-    ).first()
-    if card is None:
-        card = session.exec(select(Card).where(Card.name == card_name)).first()
+    cards = list(session.exec(select(Card).where(Card.name == card_name)).all())
+    card = next(
+        (item for item in cards if item.rarity == rarity_code),
+        cards[0] if cards else None,
+    )
     if card is None or not card.set_code or card.number is None:
         return None, None
 
