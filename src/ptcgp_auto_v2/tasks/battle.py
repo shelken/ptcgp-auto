@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
@@ -20,8 +21,13 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.db.repositories import AccountBattleProgressRepository
+from ptcgp_auto_v2.db.repositories import (
+    AccountBattleProgressRepository,
+    BattleTaskConfigRepository,
+    CardRepository,
+)
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
 if TYPE_CHECKING:
     pass
@@ -303,44 +309,126 @@ class BattleTask(Task):
         super().__init__(adb, recognizer, page_detector)
         # 数据仓库
         self._progress_repo = AccountBattleProgressRepository()
+        self._config_repo = BattleTaskConfigRepository()
+        self._card_repo = CardRepository()
+        # PackImageManager 用于系列选择
+        self._pack_manager = PackImageManager()
         # 运行时状态
         self._account_id: int = 0
+        self._task_instance_id: int = 0
         self._stop_conditions: list[StopCondition] = []
         self._start_time: Optional[datetime] = None
         self._battle_count: int = 0
         self._hourglass_before: int = 0
         self._hourglass_gained: int = 0
-        # 目标配置
-        self._target_set_code: str = ""
-        self._target_level: str = ""
+        # 系列选择缓存：该系列的所有子包模板名
+        self._series_pack_names: list[str] = []
+        # 标记是否已预加载模板
+        self._templates_preloaded: bool = False
+
+    def _get_target_set_code(self, stop_conditions: list[dict]) -> str:
+        """从停止条件中获取目标系列代码"""
+        for condition in stop_conditions:
+            if condition.get("type") == "level_complete":
+                return condition.get("set_code", "")
+        return ""
+
+    def _get_target_level(self, stop_conditions: list[dict]) -> str:
+        """从停止条件中获取目标等级"""
+        for condition in stop_conditions:
+            if condition.get("type") == "level_complete":
+                return condition.get("level", "")
+        return ""
 
     def on_start(self):
         """加载停止条件和目标配置"""
         logger.info("[BattleTask] 任务开始")
 
-        # 从 task_context 获取配置
+        # 从 task_instance 获取账号和任务实例ID
         task_instance = getattr(self, 'task_instance', None)
         if task_instance:
             self._account_id = getattr(task_instance, 'account_id', 0)
-            config = getattr(task_instance, 'config', {}) or {}
+            self._task_instance_id = getattr(task_instance, 'id', 0)
 
-            # 解析停止条件
-            stop_conditions_config = config.get('stop_conditions', [])
-            self._stop_conditions = self._parse_stop_conditions(stop_conditions_config)
+        # 从 BattleTaskConfig 获取停止条件
+        stop_conditions_config = self._config_repo.get_stop_conditions(self._task_instance_id)
+        self._stop_conditions = self._parse_stop_conditions(stop_conditions_config)
 
-            # 获取目标系列和等级（从第一个 level_complete 条件或默认配置）
-            for condition in stop_conditions_config:
-                if condition.get('type') == 'level_complete':
-                    self._target_set_code = condition.get('set_code', '')
-                    self._target_level = condition.get('level', '')
-                    break
+        target_set_code = self._get_target_set_code(stop_conditions_config)
+        target_level = self._get_target_level(stop_conditions_config)
 
-            logger.info(
-                f"[BattleTask] 目标: {self._target_set_code} {self._target_level}, "
-                f"停止条件: {len(self._stop_conditions)}个"
-            )
+        logger.info(
+            f"[BattleTask] 目标: {target_set_code} {target_level}, "
+            f"停止条件: {len(self._stop_conditions)}个"
+        )
 
         self._start_time = datetime.now()
+
+        # 预加载目标系列的子包模板（如果有目标系列）
+        if target_set_code:
+            self._preload_series_templates(target_set_code)
+
+    def _preload_series_templates(self, target_set_code: str) -> None:
+        """预加载目标系列的所有子包模板"""
+        if not target_set_code or self._templates_preloaded:
+            return
+
+        try:
+            # 获取该系列下的所有子包
+            packs = self._card_repo.get_packs_by_set_code(target_set_code)
+            if not packs:
+                logger.warning(f"[BattleTask] 未找到系列 {target_set_code} 的子包")
+                return
+
+            # 过滤 PROMO 子包，缓存模板名
+            self._series_pack_names = [
+                p.name for p in packs
+                if not (p.set_code or "").upper().startswith("PROMO")
+            ]
+
+            # 预加载所有模板
+            _, template_matcher = self.recognizer
+            for pack_name in self._series_pack_names:
+                self._pack_manager.ensure_template_ready(template_matcher, pack_name)
+
+            self._templates_preloaded = True
+            logger.info(
+                f"[BattleTask] 预加载系列 {target_set_code} 的 {len(self._series_pack_names)} 个子包模板"
+            )
+
+        except Exception as e:
+            logger.error(f"[BattleTask] 预加载系列模板失败: {e}")
+
+    def _find_series_in_screenshot(self, screenshot, target_set_code: str) -> Optional[tuple[int, int, int, int]]:
+        """
+        在当前截图中查找目标系列位置
+
+        Args:
+            screenshot: 截图
+            target_set_code: 目标系列代码
+
+        Returns:
+            匹配到的模板位置 (x1, y1, x2, y2)，未找到返回 None
+        """
+        if not self._series_pack_names:
+            return None
+
+        _, template_matcher = self.recognizer
+        settings = get_settings()
+
+        for pack_name in self._series_pack_names:
+            template_name = self._pack_manager.get_template_name(pack_name)
+            match = template_matcher.find_with_scale(
+                screenshot,
+                template_name,
+                scale=settings.scale_battle_series_select,
+                threshold=settings.pack_template_threshold,
+            )
+            if match:
+                logger.info(f"[BattleTask] 找到系列 {target_set_code}，通过子包 {pack_name}")
+                return match.box
+
+        return None
 
     def _parse_stop_conditions(self, configs: list[dict]) -> list[StopCondition]:
         """解析停止条件配置"""
