@@ -14,6 +14,8 @@ import { bindAppEventHandlers } from './event_bindings.js';
 import { getNotificationDrawer } from './features/notification_panel.js';
 // Plan 编辑器模块 - 自执行模块，注册 htmx:configRequest 事件监听器
 import './features/plan_editor.js';
+// 好友关系模块 - 自执行模块，处理 friendship 列表交互
+import './features/friendship.js';
 
 // 导出通知面板管理器供其他模块使用
 export { getNotificationDrawer };
