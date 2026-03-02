@@ -7,7 +7,7 @@
     <form hx-post="/api/plans?lang={{ current_lang }}"
           hx-target="#management-content"
           data-close-modal-on-success="true"
-          data-action="sync-plan-intervals-submit"
+          hx-on::before-request="this.querySelectorAll('[data-interval-group]').forEach(g=>{const d=parseInt(g.querySelector('[data-interval-unit=days]')?.value||0,10);const h=parseInt(g.querySelector('[data-interval-unit=hours]')?.value||0,10);const m=parseInt(g.querySelector('[data-interval-unit=minutes]')?.value||0,10);const s=parseInt(g.querySelector('[data-interval-unit=seconds]')?.value||0,10);const t=g.querySelector('[data-interval-total]');if(t)t.value=String(d*86400+h*3600+m*60+s);})"
           class="space-y-6">
 
         {% if plan %}
