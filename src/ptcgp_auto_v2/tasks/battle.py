@@ -27,6 +27,7 @@ from ptcgp_auto_v2.db.repositories import (
     CardRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.utils.gesture import tap_box
 from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
 if TYPE_CHECKING:
@@ -485,6 +486,24 @@ class BattleTask(Task):
         return ActionResult.ok(wait=1.0)
 
     # ==================== 对战核心 (21-30) ====================
+
+    def _find_first_hourglass(self, screenshot) -> tuple[int, int, int, int] | None:
+        """
+        检测截图中第一个沙漏图标位置
+
+        Returns:
+            沙漏图标边界框 (x1, y1, x2, y2)，未找到返回 None
+        """
+        _, template_matcher = self.recognizer
+        settings = get_settings()
+
+        match = template_matcher.find_with_scale(
+            screenshot,
+            "icon_hourglass_pack",
+            scale=settings.scale_battle_hourglass,
+            threshold=settings.pack_template_threshold,
+        )
+        return match.box if match else None
 
     def _handle_battle_in_progress(self, page_info: dict) -> ActionResult:
         """处理对战中页面"""

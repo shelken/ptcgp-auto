@@ -170,6 +170,30 @@ def handle_ocr(adb: AdbController) -> None:
     print(f"OCR({len(results)}): {', '.join(items)}")
 
 
+def _normalize_scale_for_screen(scale: float, screen_width: int) -> float:
+    """
+    将 1080p 基准比例转换为当前分辨率的实际比例
+
+    用户指定的是 1080p 下的理想比例，需要根据当前分辨率自动调整：
+    - 720p 屏幕: scale * (720/1080)
+    - 1080p 屏幕: scale * (1080/1080) = scale (不变)
+
+    Args:
+        scale: 用户指定的 1080p 基准比例
+        screen_width: 当前屏幕宽度
+
+    Returns:
+        适用于当前分辨率的实际比例
+    """
+    from ptcgp_auto_v2.config.constants import TEMPLATE_BASE_WIDTH
+
+    if screen_width == TEMPLATE_BASE_WIDTH:
+        return scale
+
+    adjusted = scale * (screen_width / TEMPLATE_BASE_WIDTH)
+    return adjusted
+
+
 def handle_template(
     adb: AdbController,
     template_name: str,
@@ -187,6 +211,13 @@ def handle_template(
     matcher = TemplateMatcher()
     if img.width > 0:
         matcher.set_screen_width(img.width)
+
+    # 调整比例：用户输入的是 1080p 基准比例，需要转换为当前分辨率的实际比例
+    original_scale = scale
+    if scale is not None and img.width > 0:
+        scale = _normalize_scale_for_screen(scale, img.width)
+        if original_scale != scale:
+            print(f"SCALE_ADJUST: {original_scale} (1080p) -> {scale:.2f} ({img.width}p)")
 
     # 加载模板
     if template_name.startswith("/") or template_name.startswith("~"):
@@ -299,10 +330,24 @@ def _suggest_best_scale(
 ) -> None:
     """扫描并建议最佳缩放比例"""
     from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
+    from ptcgp_auto_v2.config.constants import TEMPLATE_BASE_WIDTH
 
     print("\nAUTO_SCALE: 扫描...")
     best_scale, best_conf = scan_best_scale_with_matcher(matcher, img, template_name)
     print(f"BEST_SCALE: {best_scale} confidence={best_conf:.4f}")
+
+    # 计算等效 1080p 比例
+    # 模板加载时已按 (screen_width/1080) 自动缩放
+    # find_with_scale 的 scale 是在自动缩放基础上的额外缩放
+    # 所以等效 1080p 比例 = best_scale * (screen_width/1080)
+    screen_width = img.width
+    if screen_width != TEMPLATE_BASE_WIDTH:
+        equivalent_1080p = best_scale * (screen_width / TEMPLATE_BASE_WIDTH)
+        print(f"  当前分辨率: {screen_width}p, 基准: {TEMPLATE_BASE_WIDTH}p")
+        print(f"  等效 1080p 比例: {equivalent_1080p:.2f}")
+        print(f"    (使用: SCALE_XXX = {equivalent_1080p:.2f})")
+    else:
+        print(f"    (使用: SCALE_XXX = {best_scale:.2f})")
 
     if best_conf >= threshold:
         print(
