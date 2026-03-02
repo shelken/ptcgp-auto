@@ -175,4 +175,17 @@ document.addEventListener('click', (event) => {
     closeAllPanels();
 });
 
-// form:submitted 监听器已移除，daily-gift 表单的状态同步改为在 hx-on::before-request 中处理
+// --- HTMX 配置请求事件：同步 daily-gift 日期到请求参数 ---
+document.body.addEventListener('htmx:configRequest', (event) => {
+    const elt = event.detail?.elt;
+    if (!(elt instanceof Element)) return;
+
+    const form = elt.closest('#daily-gift-filter-form');
+    if (!form) return;
+
+    const valueInput = form.querySelector('[data-role="value"]');
+    if (valueInput?.value) {
+        event.detail.parameters['biz_date_local'] = valueInput.value;
+    }
+});
+
