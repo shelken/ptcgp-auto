@@ -116,11 +116,12 @@ SCALE_PACK_OPENING_SELECT = 4.46
 # 「pack_opening_swipe」 比例
 SCALE_PACK_OPENING_SWIPE = 7.32
 # 「battle_series_select」 对战任务系列选择页面比例
-# 与 pack 系列选择页面比例类似，但可能需要微调
-SCALE_BATTLE_SERIES_SELECT = 1.15  # 初始值，待调试确定
+# 调试确定：1.6（720p 下 Deluxe/Dialga/Mewtwo 等子包模板均能成功匹配，置信度 0.75+）
+SCALE_BATTLE_SERIES_SELECT = 1.6
 # 「battle_deck_select」 对战任务卡组列表页面沙漏图标比例
-# 调试确定：1080p 基准比例 1.27（720p 下等效 0.85，置信度 0.9562）
-SCALE_BATTLE_HOURGLASS = 1.27
+# 调试确定：0.85（置信度 0.9562）
+# 注：此为 find_with_scale 的额外缩放比例，模板已由 TemplateMatcher 自动按屏幕分辨率缩放
+SCALE_BATTLE_HOURGLASS = 0.85
 
 
 # ========== YOLO + 感知哈希识别配置 ==========

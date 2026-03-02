@@ -170,30 +170,6 @@ def handle_ocr(adb: AdbController) -> None:
     print(f"OCR({len(results)}): {', '.join(items)}")
 
 
-def _normalize_scale_for_screen(scale: float, screen_width: int) -> float:
-    """
-    将 1080p 基准比例转换为当前分辨率的实际比例
-
-    用户指定的是 1080p 下的理想比例，需要根据当前分辨率自动调整：
-    - 720p 屏幕: scale * (720/1080)
-    - 1080p 屏幕: scale * (1080/1080) = scale (不变)
-
-    Args:
-        scale: 用户指定的 1080p 基准比例
-        screen_width: 当前屏幕宽度
-
-    Returns:
-        适用于当前分辨率的实际比例
-    """
-    from ptcgp_auto_v2.config.constants import TEMPLATE_BASE_WIDTH
-
-    if screen_width == TEMPLATE_BASE_WIDTH:
-        return scale
-
-    adjusted = scale * (screen_width / TEMPLATE_BASE_WIDTH)
-    return adjusted
-
-
 def handle_template(
     adb: AdbController,
     template_name: str,
@@ -211,13 +187,6 @@ def handle_template(
     matcher = TemplateMatcher()
     if img.width > 0:
         matcher.set_screen_width(img.width)
-
-    # 调整比例：用户输入的是 1080p 基准比例，需要转换为当前分辨率的实际比例
-    original_scale = scale
-    if scale is not None and img.width > 0:
-        scale = _normalize_scale_for_screen(scale, img.width)
-        if original_scale != scale:
-            print(f"SCALE_ADJUST: {original_scale} (1080p) -> {scale:.2f} ({img.width}p)")
 
     # 加载模板
     if template_name.startswith("/") or template_name.startswith("~"):
@@ -244,11 +213,15 @@ def handle_template(
         template_name = template_key
     else:
         # 系统模板 - 尝试加载
-        if not matcher._load_template_file(Path(matcher.templates_dir) / f"{template_name}.png"):
-            # 尝试递归搜索
-            candidates = list(matcher.templates_dir.rglob(f"{template_name}.png"))
-            if candidates:
-                matcher._load_template_file(candidates[0])
+        # 对于子目录模板(如 packs_auto/Charizard)，使用 load_template 方法
+        if "/" in template_name:
+            matcher.load_template(f"{template_name}.png", is_pack_template=True)
+        else:
+            if not matcher._load_template_file(Path(matcher.templates_dir) / f"{template_name}.png"):
+                # 尝试递归搜索
+                candidates = list(matcher.templates_dir.rglob(f"{template_name}.png"))
+                if candidates:
+                    matcher._load_template_file(candidates[0])
 
     threshold = threshold or DEFAULT_TEMPLATE_THRESHOLD
 
@@ -330,28 +303,26 @@ def _suggest_best_scale(
 ) -> None:
     """扫描并建议最佳缩放比例"""
     from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
-    from ptcgp_auto_v2.config.constants import TEMPLATE_BASE_WIDTH
 
     print("\nAUTO_SCALE: 扫描...")
     best_scale, best_conf = scan_best_scale_with_matcher(matcher, img, template_name)
     print(f"BEST_SCALE: {best_scale} confidence={best_conf:.4f}")
-
-    # 计算等效 1080p 比例
-    # 模板加载时已按 (screen_width/1080) 自动缩放
-    # find_with_scale 的 scale 是在自动缩放基础上的额外缩放
-    # 所以等效 1080p 比例 = best_scale * (screen_width/1080)
-    screen_width = img.width
-    if screen_width != TEMPLATE_BASE_WIDTH:
-        equivalent_1080p = best_scale * (screen_width / TEMPLATE_BASE_WIDTH)
-        print(f"  当前分辨率: {screen_width}p, 基准: {TEMPLATE_BASE_WIDTH}p")
-        print(f"  等效 1080p 比例: {equivalent_1080p:.2f}")
-        print(f"    (使用: SCALE_XXX = {equivalent_1080p:.2f})")
-    else:
-        print(f"    (使用: SCALE_XXX = {best_scale:.2f})")
+    print(f"  (使用: SCALE_XXX = {best_scale:.2f})")
 
     if best_conf >= threshold:
+        # 使用最佳比例实际匹配并输出位置
+        match = matcher.find_with_scale(img, template_name, best_scale, threshold=threshold)
+        if match:
+            print(f"\nCONFIDENCE: {match.confidence:.4f} threshold={threshold}")
+            x1, y1, x2, y2 = match.box
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
+            print(
+                f"TEMPLATE: {template_name} @ "
+                f"({x1},{y1})-({x2},{y2}) center=({cx},{cy})"
+            )
         print(
-            f"✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}"
+            f"\n✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}"
         )
 
 
