@@ -85,6 +85,7 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" inputmode="numeric" autocomplete="off"
                                                name="task_interval_days_{{ task_type }}" data-interval-unit="days"
+                                               hx-on::input="const g=this.closest('[data-interval-group]');const d=parseInt(g.querySelector('[data-interval-unit=days]').value||0,10);const h=parseInt(g.querySelector('[data-interval-unit=hours]').value||0,10);const m=parseInt(g.querySelector('[data-interval-unit=minutes]').value||0,10);const s=parseInt(g.querySelector('[data-interval-unit=seconds]').value||0,10);const t=g.querySelector('[data-interval-total]');if(t)t.value=String(d*86400+h*3600+m*60+s);"
                                                value="{{ interval_days }}"
                                                aria-label="{{ t.label_interval_days or 'Days' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
