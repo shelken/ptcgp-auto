@@ -44,46 +44,6 @@ export function updateTaskOrder() {
     }
 }
 
-// --- 更新间隔秒数 ---
-export function updateIntervalSeconds(inputEl) {
-    if (!inputEl) return;
-    const group = inputEl.closest('[data-interval-group]');
-    if (!group) return;
-
-    const parseUnit = (input, max) => {
-        if (!input) return 0;
-        const raw = input.value;
-        if (raw === '') return 0;
-        let value = parseInt(raw, 10);
-        if (Number.isNaN(value)) value = 0;
-        if (value < 0) {
-            value = 0;
-            input.value = '0';
-        }
-        if (typeof max === 'number' && value > max) {
-            value = max;
-            input.value = String(max);
-        }
-        return value;
-    };
-
-    const daysInput = group.querySelector("[data-interval-unit='days']");
-    const hoursInput = group.querySelector("[data-interval-unit='hours']");
-    const minutesInput = group.querySelector("[data-interval-unit='minutes']");
-    const secondsInput = group.querySelector("[data-interval-unit='seconds']");
-
-    const days = parseUnit(daysInput);
-    const hours = parseUnit(hoursInput, 23);
-    const minutes = parseUnit(minutesInput, 59);
-    const seconds = parseUnit(secondsInput, 59);
-
-    const total = (days * 86400) + (hours * 3600) + (minutes * 60) + seconds;
-    const hidden = group.querySelector('[data-interval-total]');
-    if (hidden) {
-        hidden.value = String(Math.max(0, total));
-    }
-}
-
 // --- 初始化拖拽排序 ---
 export function initSortable(context = document) {
     const taskList = context.querySelector('#tasks-list');

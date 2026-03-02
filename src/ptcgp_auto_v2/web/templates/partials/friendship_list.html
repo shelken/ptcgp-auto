@@ -34,8 +34,7 @@
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_from_account or 'From Account' }}</label>
                 <select
                     name="from_account_id"
-                    data-action="sync-friendship-state"
-                    data-state-name="from_account_id"
+                    hx-on::change="const s=document.querySelector('#friendship-state-form input[name=from_account_id]');if(s)s.value=this.value;"
                     class="brutal-input panel-control w-full js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
@@ -100,8 +99,7 @@
                 <label class="block text-xs uppercase tracking-widest text-muted mb-1">{{ t.label_from_account or 'From Account' }}</label>
                 <select
                     name="from_account_id"
-                    data-action="sync-friendship-state"
-                    data-state-name="from_account_id"
+                    hx-on::change="const s=document.querySelector('#friendship-state-form input[name=from_account_id]');if(s)s.value=this.value;"
                     class="brutal-input panel-control w-full js-custom-select"
                     {% if accounts|length > 10 %}
                     data-searchable="true"
