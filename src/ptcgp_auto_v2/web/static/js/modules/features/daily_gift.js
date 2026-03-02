@@ -175,15 +175,4 @@ document.addEventListener('click', (event) => {
     closeAllPanels();
 });
 
-// --- 监听表单提交事件 ---
-document.addEventListener('form:submitted', (event) => {
-    const { action, form } = event.detail;
-
-    if (action === 'sync-daily-gift-submit') {
-        const valueInput = form.querySelector('[data-role="value"]');
-        const stateInput = document.querySelector('#daily-gift-state-form input[name="biz_date_local"]');
-        if (valueInput && stateInput) {
-            stateInput.value = valueInput.value;
-        }
-    }
-});
+// form:submitted 监听器已移除，daily-gift 表单的状态同步改为在 hx-on::before-request 中处理
