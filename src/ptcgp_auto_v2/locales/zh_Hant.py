@@ -3,6 +3,9 @@
 繁体中文文本配置（仅开包相关）
 """
 
+# 对战任务等级列表（从难到易）
+BATTLE_LEVELS = ["精英", "高級", "中級", "初級"]
+
 TEXT_PATTERNS = {
     # 开包入口
     "series": {
@@ -111,10 +114,14 @@ TEXT_PATTERNS = {
     "battle_prepare": ["對戰！", "首次過關報酬"],
     # 卡组列表页面
     "battle_deck_list": ["擴充組"],
+    # 卡组列表页面的"擴充組"按钮（用于点击切换卡包）
+    "battle_expansion_button": ["擴充組"],
     # 系列选择页面（扩充组选择）
     "battle_expansion_select": ["選擇擴充組"],
     # 难度选择页面
     "battle_level_select": ["分級對戰"],
+    # 难度选择页面的等级完成标记（COMPLETE）
+    "battle_level_complete": ["COMPLETE"],
     # 教程完成提示
     "battle_tutorial_complete_hint": ["若想知道更詳細的規則"],
     # 教程列表页面

@@ -9,6 +9,10 @@
 去掉与 common.py 重复的页面（popup_ok、网络错误、手指图标等）。
 """
 
+# 基准像素值（基于 1080x1920 分辨率）
+# 等级选择页面：判断等级文字与进度/COMPLETE标记是否在同一行的Y轴容差
+BASE_BATTLE_LEVEL_ROW_THRESHOLD_Y = 100  # 等级行内元素判断阈值（基准像素）
+
 import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
@@ -27,7 +31,13 @@ from ptcgp_auto_v2.db.repositories import (
     CardRepository,
 )
 from ptcgp_auto_v2.locales import get_text_patterns
-from ptcgp_auto_v2.utils.gesture import tap_box
+from ptcgp_auto_v2.utils.gesture import (
+    press_back,
+    swipe_up,
+    tap_box,
+    tap_text,
+    tap_text_exact,
+)
 from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
 if TYPE_CHECKING:
@@ -355,19 +365,19 @@ class BattleTask(Task):
         stop_conditions_config = self._config_repo.get_stop_conditions(self._task_instance_id)
         self._stop_conditions = self._parse_stop_conditions(stop_conditions_config)
 
-        target_set_code = self._get_target_set_code(stop_conditions_config)
-        target_level = self._get_target_level(stop_conditions_config)
+        self._target_set_code = self._get_target_set_code(stop_conditions_config)
+        self._target_level = self._get_target_level(stop_conditions_config)
 
         logger.info(
-            f"[BattleTask] 目标: {target_set_code} {target_level}, "
+            f"[BattleTask] 目标: {self._target_set_code} {self._target_level}, "
             f"停止条件: {len(self._stop_conditions)}个"
         )
 
         self._start_time = datetime.now()
 
         # 预加载目标系列的子包模板（如果有目标系列）
-        if target_set_code:
-            self._preload_series_templates(target_set_code)
+        if self._target_set_code:
+            self._preload_series_templates(self._target_set_code)
 
     def _preload_series_templates(self, target_set_code: str) -> None:
         """预加载目标系列的所有子包模板"""
@@ -519,17 +529,179 @@ class BattleTask(Task):
 
     def _handle_battle_deck_select(self, page_info: dict) -> ActionResult:
         """处理卡组列表页面（选择卡包）"""
-        logger.info("[BattleTask] 页面: 卡组列表 -> 寻找带沙漏的卡包")
+        logger.info("[BattleTask] 页面: 卡组列表 -> 验证等级并寻找沙漏")
+
+        # 获取当前截图和OCR
+        screenshot = self.adb.screenshot()
+        if screenshot is None or not self.recognizer:
+            return ActionResult.retry(wait=1.0)
+
+        ocr_engine, _ = self.recognizer
+        ocr_results = ocr_engine.recognize(screenshot)
+
+        # 检测当前等级
+        detected_level = self._detect_level_from_ocr(ocr_results)
+        if detected_level:
+            logger.info(f"[BattleTask] 检测到当前等级: {detected_level}")
+            if detected_level != self._target_level:
+                logger.info(f"[BattleTask] 等级不匹配，目标: {self._target_level}，返回重选")
+                return press_back(self.adb, wait=1.0)
+        else:
+            logger.warning("[BattleTask] 无法识别当前等级，尝试继续")
+
+        # 等级匹配，查找沙漏图标
+        hourglass_box = self._find_first_hourglass(screenshot)
+        if hourglass_box:
+            logger.info("[BattleTask] 找到沙漏，点击进入对战")
+            return tap_box(self.adb, hourglass_box, wait=1.5)
+
+        # 未找到沙漏，循环滑动查找（最多10次）
+        max_attempts = 10
+        for attempt in range(1, max_attempts + 1):
+            logger.info(f"[BattleTask] 第{attempt}次滑动查找沙漏")
+            swipe_up(self.adb, wait=1.2)
+
+            screenshot = self.adb.screenshot()
+            if screenshot is None:
+                continue
+
+            hourglass_box = self._find_first_hourglass(screenshot)
+            if hourglass_box:
+                logger.info("[BattleTask] 滑动后找到沙漏，点击进入对战")
+                return tap_box(self.adb, hourglass_box, wait=1.5)
+
+        # 滑动到底仍未找到沙漏，标记当前系列+等级完成
+        logger.info(f"[BattleTask] {self._target_set_code} {self._target_level} 无可用对战，标记完成")
+        self._progress_repo.mark_completed(
+            self._account_id, self._target_set_code, self._target_level
+        )
+
+        # 尝试点击"擴充組"查看更多系列
+        screenshot = self.adb.screenshot()
+        if screenshot and self.recognizer:
+            ocr_engine, _ = self.recognizer
+            ocr_results = ocr_engine.recognize(screenshot)
+            result = tap_text_exact(
+                self.adb, ocr_results, get_text_patterns("battle_expansion_button"), wait=1.0
+            )
+            if result:
+                logger.info("[BattleTask] 点击擴充組查看更多系列")
+                return result
+
+        # 没找到擴充組，等待页面检测器重新识别当前页面
+        logger.info("[BattleTask] 当前系列等级已完成，等待重新识别页面")
         return ActionResult.ok(wait=1.0)
 
     def _handle_battle_series_select(self, page_info: dict) -> ActionResult:
-        """处理系列选择页面"""
-        logger.info("[BattleTask] 页面: 系列选择 -> 点击目标系列")
+        """处理系列选择页面 - 滑动查找并点击目标系列"""
+        logger.info(f"[BattleTask] 页面: 系列选择 -> 查找目标系列 {self._target_set_code}")
+
+        max_attempts = 10
+        last_texts = set()
+
+        for attempt in range(max_attempts):
+            screenshot = self.adb.screenshot()
+            if screenshot is None:
+                continue
+
+            # 通过子包模板查找目标系列位置
+            series_box = self._find_series_in_screenshot(screenshot, self._target_set_code)
+            if series_box:
+                logger.info(f"[BattleTask] 找到目标系列 {self._target_set_code}，点击进入")
+                return tap_box(self.adb, series_box, wait=1.5)
+
+            # 记录 OCR 用于检测是否滑动到底
+            if self.recognizer:
+                ocr_engine, _ = self.recognizer
+                ocr_results = ocr_engine.recognize(screenshot)
+                current_texts = set(item.text.strip() for item in ocr_results)
+
+                if attempt > 0 and current_texts == last_texts:
+                    logger.warning(f"[BattleTask] 已滑动到底，未找到目标系列 {self._target_set_code}")
+                    break
+                last_texts = current_texts
+
+            # 继续滑动
+            if attempt < max_attempts - 1:
+                logger.info(f"[BattleTask] 第{attempt + 1}次滑动查找系列")
+                swipe_up(self.adb, wait=1.2)
+
+        logger.error(f"[BattleTask] 未找到目标系列 {self._target_set_code}")
         return ActionResult.ok(wait=1.0)
 
+    def _detect_level_from_ocr(self, ocr_results: list) -> str | None:
+        """从 OCR 结果中检测当前等级"""
+        from ptcgp_auto_v2.locales.zh_Hant import BATTLE_LEVELS
+
+        for item in ocr_results:
+            text = item.text.strip()
+            for level in BATTLE_LEVELS:
+                if level in text:
+                    return level
+        return None
+
     def _handle_battle_level_select(self, page_info: dict) -> ActionResult:
-        """处理难度选择页面"""
-        logger.info("[BattleTask] 页面: 难度选择 -> 点击目标难度")
+        """处理难度选择页面 - 滑动查找并点击目标等级"""
+        logger.info(f"[BattleTask] 页面: 难度选择 -> 查找目标等级 {self._target_level}")
+
+        if not self.recognizer:
+            return ActionResult.retry(wait=1.0)
+
+        ocr_engine, _ = self.recognizer
+        max_attempts = 10
+        last_texts = set()
+
+        # 缩放后的行内判断阈值
+        threshold_y = self.adb.scaled_y(BASE_BATTLE_LEVEL_ROW_THRESHOLD_Y)
+
+        for attempt in range(max_attempts):
+            screenshot = self.adb.screenshot()
+            if screenshot is None:
+                continue
+
+            ocr_results = ocr_engine.recognize(screenshot)
+            current_texts = set(item.text.strip() for item in ocr_results)
+
+            # 遍历 OCR 结果查找目标等级
+            for item in ocr_results:
+                text = item.text.strip()
+                if self._target_level in text:
+                    level_y = (item.box[1] + item.box[3]) // 2
+
+                    # 检查同一行附近是否有完成标记或进度数字
+                    for other in ocr_results:
+                        other_y = (other.box[1] + other.box[3]) // 2
+                        if abs(other_y - level_y) < threshold_y:
+                            other_text = other.text.strip()
+
+                            # 如果已完成，标记并等待检测器结束任务
+                            complete_patterns = get_text_patterns("battle_level_complete")
+                            if any(p.upper() in other_text.upper() for p in complete_patterns):
+                                logger.info(f"[BattleTask] 等级 {self._target_level} 已完成")
+                                self._progress_repo.mark_completed(
+                                    self._account_id, self._target_set_code, self._target_level
+                                )
+                                return ActionResult.ok(wait=1.0)
+
+                            # 如果有进度数字如 "0/3"，说明未完成，点击
+                            import re
+                            if re.search(r"\d+\s*/\s*\d+", other_text):
+                                logger.info(f"[BattleTask] 选择等级: {self._target_level} ({other_text})")
+                                return tap_box(self.adb, item.box, wait=1.5)
+
+            # 检测是否滑动到底
+            if attempt > 0 and current_texts == last_texts:
+                logger.warning(f"[BattleTask] 已滑动到底，未找到目标等级 {self._target_level}")
+                break
+
+            last_texts = current_texts
+
+            # 继续滑动
+            if attempt < max_attempts - 1:
+                logger.info(f"[BattleTask] 第{attempt + 1}次滑动查找等级")
+                swipe_up(self.adb, wait=0.8)
+
+        logger.error(f"[BattleTask] 未找到目标等级 {self._target_level}")
         return ActionResult.ok(wait=1.0)
 
     # ==================== 教程相关 (34-40) ====================

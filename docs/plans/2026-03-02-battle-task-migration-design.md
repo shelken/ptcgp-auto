@@ -534,31 +534,35 @@ class BattleTask(Task):
 
 ## 实现计划
 
-### Phase 1: 数据模型
-- [ ] 创建 `account_battle_progress` 表
-- [ ] 创建 `battle_task_config` 表
-- [ ] 添加数据库迁移脚本
+### Phase 1: 数据模型 ✅ 已完成
+- [x] 创建 `account_battle_progress` 表（简化版：account_id, set_code, level, status）
+- [x] 创建 `battle_task_config` 表（存储停止条件 JSON）
+- [x] 创建对应的 Repository 类
 
-### Phase 2: 页面收集
-- [ ] 使用 debug_tool 收集所有对战相关页面的 OCR 特征
-- [ ] 确定页面识别规则
-- [ ] 调试系列选择页面的模板比例
+### Phase 2: 页面收集 ✅ 已完成
+- [x] 使用 debug_tool 收集对战相关页面的 OCR 特征
+- [x] 确定页面识别规则（17 个页面定义，优先级 11-800）
+- [x] 调试系列选择页面模板比例（SCALE_BATTLE_SERIES_SELECT = 1.6）
+- [x] 调试卡组列表页面沙漏比例（SCALE_BATTLE_HOURGLASS = 0.85）
 
-### Phase 3: 核心功能
-- [ ] 实现 `BattleTask` 基础架构
-- [ ] 实现系列选择（通过子包模板）
-- [ ] 实现卡包状态检测（沙漏/CLEAR）
-- [ ] 实现停止条件系统
+### Phase 3: 核心功能 🚧 进行中
+- [x] 实现 `BattleTask` 基础架构（Task 基类继承、页面规则、停止条件框架）
+- [x] 实现系列选择（`_handle_battle_series_select`：滑动查找 + 子包模板匹配）
+- [x] 实现等级选择（`_handle_battle_level_select`：滑动查找 + COMPLETE 判断 + 进度识别）
+- [x] 实现卡组列表处理（`_handle_battle_deck_select`：等级验证 + 沙漏查找 + 滑动）
+- [x] 实现停止条件系统（5 种条件类型：time/count/hourglass/level_complete/no_reward）
+- [ ] 实现对战流程处理（对战中/对战准备/经验结算等页面的实际点击逻辑）
+- [ ] 实现沙漏数量统计（用于 HourglassCondition）
 
-### Phase 4: 教程整合
+### Phase 4: 教程整合 ⏳ 待实现
 - [ ] 整合 v1 tutorial.py 逻辑
 - [ ] 实现教程检测和自动处理
 
-### Phase 5: 触发方式
+### Phase 5: 触发方式 ⏳ 待实现
 - [ ] Web UI 手动下发任务
 - [ ] Hook 触发机制
 
-### Phase 6: 测试
+### Phase 6: 测试 ⏳ 待实现
 - [ ] 单元测试
 - [ ] 集成测试
 - [ ] 长时间运行测试
@@ -567,10 +571,17 @@ class BattleTask(Task):
 
 ## 待讨论问题
 
-1. **页面识别细节**：需要通过 debug ocr 实际收集页面特征后才能确定
-2. **模板比例**：SCALE_BATTLE_SERIES_SELECT 需要通过实际测试确定
-3. **CLEAR 标记识别**：通过 OCR 文字还是模板匹配？
-4. **沙漏数量获取**：对战结果页如何准确识别获得的沙漏数量？
+### 已解决 ✅
+1. **页面识别细节**：已通过 debug ocr 收集，定义 17 个页面规则（优先级 11-800）
+2. **模板比例**：
+   - SCALE_BATTLE_SERIES_SELECT = 1.6（系列选择页面）
+   - SCALE_BATTLE_HOURGLASS = 0.85（卡组列表沙漏图标）
+3. **CLEAR 标记识别**：通过 OCR 识别 "COMPLETE" 文字（配置在 battle_level_complete）
+
+### 待解决 ⏳
+1. **沙漏数量获取**：对战结果页如何准确识别获得的沙漏数量？
+2. **教程解锁流程**：如何检测需要教程解锁并自动完成？
+3. **无奖励检测**：如何检测"无首次过关奖励"状态？
 
 ---
 
