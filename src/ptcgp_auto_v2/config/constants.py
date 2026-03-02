@@ -115,6 +115,9 @@ SCALE_PACK_HOME = 2.52
 SCALE_PACK_OPENING_SELECT = 4.46
 # 「pack_opening_swipe」 比例
 SCALE_PACK_OPENING_SWIPE = 7.32
+# 「battle_series_select」 对战任务系列选择页面比例
+# 与 pack 系列选择页面比例类似，但可能需要微调
+SCALE_BATTLE_SERIES_SELECT = 1.15  # 初始值，待调试确定
 
 
 # ========== YOLO + 感知哈希识别配置 ==========
