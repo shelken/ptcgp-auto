@@ -16,7 +16,7 @@
         hx-get="/management/daily-gift?lang={{ current_lang }}"
         hx-target="#management-content"
         hx-swap="innerHTML"
-        hx-on::before-request="const v=this.querySelector('[data-role=value]')?.value;const s=document.querySelector('#daily-gift-state-form input[name=biz_date_local]');if(v&&s)s.value=v;"
+        hx-on::config-request="const v=this.querySelector('[data-role=value]')?.value;if(v)evt.detail.parameters['biz_date_local']=v;"
         data-filter-cache-key="ptcgp_filter:daily-gift">
             <input type="hidden" name="sort_by" value="{{ sort_by or 'updated_at' }}">
             <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
