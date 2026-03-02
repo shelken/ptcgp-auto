@@ -303,18 +303,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
             intervalInput.classList.toggle('hidden', actionElement.value !== 'interval');
             return;
         }
-        if (action === 'sync-friendship-state') {
-            if (!(actionElement instanceof HTMLSelectElement)) return;
-            const stateName = actionElement.dataset.stateName;
-            if (!stateName) return;
-            const stateInput = document.querySelector(`#friendship-state-form input[name="${stateName}"]`);
-            if (stateInput) stateInput.value = actionElement.value;
-            const stateForm = document.getElementById('friendship-state-form');
-            if (stateForm instanceof HTMLFormElement && stateForm.dataset.filterCacheKey) {
-                handleFilterCacheOnForm(stateForm);
-            }
-        }
-
     });
 
     document.body.addEventListener('input', (event) => {
@@ -326,11 +314,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         const actionElement = target.closest('[data-action]');
         if (!actionElement) return;
         const action = actionElement.dataset.action;
-        if (action === 'update-interval-seconds') {
-            if (!(actionElement instanceof HTMLInputElement)) return;
-            updateIntervalSeconds(actionElement);
-            return;
-        }
         if (action === 'search-exchange-accounts') {
             searchExchangeAccounts(actionElement.value);
             return;
