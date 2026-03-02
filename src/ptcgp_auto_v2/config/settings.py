@@ -32,6 +32,7 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_WEB_HOST,
     DEFAULT_WEB_PORT,
     PACK_TEMPLATE_THRESHOLD,
+    SCALE_BATTLE_HOURGLASS,
     SCALE_BATTLE_SERIES_SELECT,
     SCALE_PACK_DETAIL,
     SCALE_PACK_LIST,
@@ -213,6 +214,7 @@ class Settings:
     # 模板缩放比例
     scale_pack_series_select: float = SCALE_PACK_SERIES_SELECT
     scale_battle_series_select: float = SCALE_BATTLE_SERIES_SELECT
+    scale_battle_hourglass: float = SCALE_BATTLE_HOURGLASS
     scale_pack_list: float = SCALE_PACK_LIST
     scale_pack_detail: float = SCALE_PACK_DETAIL
     scale_pack_opening_swipe: float = SCALE_PACK_OPENING_SWIPE

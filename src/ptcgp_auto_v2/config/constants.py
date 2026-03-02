@@ -118,6 +118,9 @@ SCALE_PACK_OPENING_SWIPE = 7.32
 # 「battle_series_select」 对战任务系列选择页面比例
 # 与 pack 系列选择页面比例类似，但可能需要微调
 SCALE_BATTLE_SERIES_SELECT = 1.15  # 初始值，待调试确定
+# 「battle_deck_select」 对战任务卡组列表页面沙漏图标比例
+# 调试确定：1080p 基准比例 1.27（720p 下等效 0.85，置信度 0.9562）
+SCALE_BATTLE_HOURGLASS = 1.27
 
 
 # ========== YOLO + 感知哈希识别配置 ==========
