@@ -119,15 +119,4 @@ export function initSortable(context = document) {
     }
 }
 
-// --- 监听表单提交事件 ---
-document.addEventListener('form:submitted', (event) => {
-    const { action, form } = event.detail;
-
-    if (action === 'sync-plan-intervals-submit') {
-        form.querySelectorAll('[data-interval-group] input[data-interval-unit]').forEach((input) => {
-            if (input instanceof HTMLInputElement) {
-                updateIntervalSeconds(input);
-            }
-        });
-    }
-});
+// form:submitted 监听器已移除，计划表单的 interval 计算改为在 hx-on::before-request 中处理
