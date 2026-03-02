@@ -85,7 +85,8 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" inputmode="numeric" autocomplete="off"
                                                name="task_interval_days_{{ task_type }}" data-interval-unit="days"
-                                               data-action="update-interval-seconds" value="{{ interval_days }}"
+                                               hx-on::input="const g=this.closest('[data-interval-group]');const d=parseInt(g.querySelector('[data-interval-unit=days]').value||0,10);const h=parseInt(g.querySelector('[data-interval-unit=hours]').value||0,10);const m=parseInt(g.querySelector('[data-interval-unit=minutes]').value||0,10);const s=parseInt(g.querySelector('[data-interval-unit=seconds]').value||0,10);const t=g.querySelector('[data-interval-total]');if(t)t.value=String(d*86400+h*3600+m*60+s);"
+                                               value="{{ interval_days }}"
                                                aria-label="{{ t.label_interval_days or 'Days' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_days or 'Days' }}</span>
@@ -93,7 +94,8 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" max="23" inputmode="numeric" autocomplete="off"
                                                name="task_interval_hours_{{ task_type }}" data-interval-unit="hours"
-                                               data-action="update-interval-seconds" value="{{ interval_hours }}"
+                                               hx-on::input="const g=this.closest('[data-interval-group]');const d=parseInt(g.querySelector('[data-interval-unit=days]').value||0,10);const h=parseInt(g.querySelector('[data-interval-unit=hours]').value||0,10);const m=parseInt(g.querySelector('[data-interval-unit=minutes]').value||0,10);const s=parseInt(g.querySelector('[data-interval-unit=seconds]').value||0,10);const t=g.querySelector('[data-interval-total]');if(t)t.value=String(d*86400+h*3600+m*60+s);"
+                                               value="{{ interval_hours }}"
                                                aria-label="{{ t.label_interval_hours or 'Hours' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_hours or 'Hours' }}</span>
@@ -101,7 +103,8 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" max="59" inputmode="numeric" autocomplete="off"
                                                name="task_interval_minutes_{{ task_type }}" data-interval-unit="minutes"
-                                               data-action="update-interval-seconds" value="{{ interval_minutes }}"
+                                               hx-on::input="const g=this.closest('[data-interval-group]');const d=parseInt(g.querySelector('[data-interval-unit=days]').value||0,10);const h=parseInt(g.querySelector('[data-interval-unit=hours]').value||0,10);const m=parseInt(g.querySelector('[data-interval-unit=minutes]').value||0,10);const s=parseInt(g.querySelector('[data-interval-unit=seconds]').value||0,10);const t=g.querySelector('[data-interval-total]');if(t)t.value=String(d*86400+h*3600+m*60+s);"
+                                               value="{{ interval_minutes }}"
                                                aria-label="{{ t.label_interval_minutes or 'Minutes' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_minutes or 'Minutes' }}</span>
@@ -109,7 +112,8 @@
                                     <div class="flex flex-col gap-1 min-w-0">
                                         <input type="number" min="0" max="59" inputmode="numeric" autocomplete="off"
                                                name="task_interval_seconds_{{ task_type }}" data-interval-unit="seconds"
-                                               data-action="update-interval-seconds" value="{{ interval_secs }}"
+                                               hx-on::input="const g=this.closest('[data-interval-group]');const d=parseInt(g.querySelector('[data-interval-unit=days]').value||0,10);const h=parseInt(g.querySelector('[data-interval-unit=hours]').value||0,10);const m=parseInt(g.querySelector('[data-interval-unit=minutes]').value||0,10);const s=parseInt(g.querySelector('[data-interval-unit=seconds]').value||0,10);const t=g.querySelector('[data-interval-total]');if(t)t.value=String(d*86400+h*3600+m*60+s);"
+                                               value="{{ interval_secs }}"
                                                aria-label="{{ t.label_interval_seconds or 'Seconds' }}"
                                                class="brutal-input w-full min-w-[5.5rem] p-2 text-sm">
                                         <span class="text-[10px] uppercase font-bold text-muted">{{ t.label_interval_seconds or 'Seconds' }}</span>
