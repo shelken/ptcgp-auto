@@ -156,6 +156,9 @@ def handle_ocr(adb: AdbController) -> None:
     if img is None:
         return
 
+    # 输出当前分辨率
+    print(f"SCREEN: {img.width}x{img.height}")
+
     ocr = OcrEngine()
     results = ocr.recognize(img)
 
