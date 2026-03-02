@@ -12,6 +12,8 @@ import { initCustomSelects } from './custom_select.js';
 import { initDailyGiftDatePickers } from './features/daily_gift.js';
 import { bindAppEventHandlers } from './event_bindings.js';
 import { getNotificationDrawer } from './features/notification_panel.js';
+// Plan 编辑器模块 - 自执行模块，注册 htmx:configRequest 事件监听器
+import './features/plan_editor.js';
 
 // 导出通知面板管理器供其他模块使用
 export { getNotificationDrawer };
