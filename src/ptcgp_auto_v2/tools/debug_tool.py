@@ -235,8 +235,8 @@ def handle_template(
                 if candidates:
                     matcher._load_template_file(candidates[0])
 
-    # 调试模式默认阈值为 0，优先输出真实置信度
-    threshold = 0.0 if threshold is None else threshold
+    # 默认仍使用正常阈值，避免影响自动扫描触发逻辑
+    threshold = DEFAULT_TEMPLATE_THRESHOLD if threshold is None else threshold
 
     # ROI 处理
     roi_offset = (0, 0)
@@ -296,13 +296,20 @@ def _print_single_match(
         print(f"TEMPLATE_NOT_LOADED: {template_name}")
         return
 
-    if scale:
-        match = matcher.find_with_scale(img, template_name, scale, threshold=threshold)
-    else:
-        match = matcher.find(img, template_name, threshold=threshold)
+    # 未传 scale：直接进入自动缩放扫描
+    if scale is None:
+        _suggest_best_scale(matcher, img, template_name, threshold)
+        return
 
+    # 已传 scale：输出该 scale 下的真实置信度，再按阈值判定
+    raw_match = matcher.find_with_scale(
+        img, template_name, scale, threshold=0.0, verbose=False
+    )
+    raw_confidence = raw_match.confidence if raw_match else 0.0
+
+    match = matcher.find_with_scale(img, template_name, scale, threshold=threshold)
     if match:
-        print(f"CONFIDENCE: {match.confidence:.4f} threshold={threshold}")
+        print(f"MATCH_OK: {template_name} confidence={raw_confidence:.4f} threshold={threshold}")
         offset_x, offset_y = roi_offset
         x1, y1, x2, y2 = match.box
         cx = (x1 + x2) // 2 + offset_x
@@ -313,17 +320,7 @@ def _print_single_match(
             f"center=({cx},{cy})"
         )
     else:
-        # 匹配失败，输出真实置信度（不受阈值裁决影响）
-        if scale:
-            raw_match = matcher.find_with_scale(
-                img, template_name, scale, threshold=0.0, verbose=False
-            )
-        else:
-            raw_match = matcher.find(img, template_name, threshold=0.0)
-        confidence = raw_match.confidence if raw_match else 0.0
-        print(f"MATCH_FAILED: {template_name} confidence={confidence:.4f} threshold={threshold}")
-        if scale is None:
-            _suggest_best_scale(matcher, img, template_name, threshold)
+        print(f"MATCH_FAILED: {template_name} confidence={raw_confidence:.4f} threshold={threshold}")
 
 
 def _suggest_best_scale(
