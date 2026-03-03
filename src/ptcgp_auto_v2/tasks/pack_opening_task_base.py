@@ -484,11 +484,13 @@ class PackOpeningTaskBase(Task):
                 PackCandidate(set_code=str(pack.set_code), booster_name=str(pack.name))
             )
 
-        best = matcher.score_best(
+        best = matcher.match_best(
             screenshot,
             candidates,
             scale=settings.scale_pack_opening_swipe,
+            threshold=settings.pack_template_threshold,
             exclude_promo=True,
+            return_best_when_below_threshold=True,
         )
         if not best:
             logger.debug(
