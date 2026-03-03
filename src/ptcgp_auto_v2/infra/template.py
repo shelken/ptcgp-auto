@@ -496,6 +496,107 @@ class TemplateMatcher:
             )
         return None
 
+    def score_best_with_scale(
+        self,
+        screenshot: Image.Image,
+        template_names: list[str],
+        *,
+        scale: float,
+        verbose: bool = False,
+        max_workers: int = 10,
+    ) -> Optional[TemplateMatch]:
+        """批量计算候选模板的最高置信度（不做阈值裁决）。
+
+        设计目标：
+        - 并行匹配时避免 PIL Image 在多线程中触发懒加载/解码异常
+        - screenshot 只做一次 PIL->cv2 转换
+        - 关闭逐模板 debug（verbose=False）避免日志刷屏
+
+        Returns:
+            TemplateMatch（包含 box/confidence/template_name）或 None（无可用模板/全部失败）
+        """
+        if not template_names:
+            return None
+
+        self._ensure_templates_loaded()
+
+        # 统一预处理模板名，并过滤不存在的模板
+        normalized: list[str] = []
+        for name in template_names:
+            n = self._normalize_name(name)
+            if n in self.templates:
+                normalized.append(n)
+            elif verbose:
+                logger.debug(f"模板不存在: {n}")
+
+        if not normalized:
+            return None
+
+        # 主线程强制解码 + 单次转换，避免多线程触碰 PIL 懒加载
+        try:
+            screenshot.load()
+        except Exception:
+            # load 失败不直接终止，后续转换仍可能成功
+            pass
+
+        try:
+            screen = self._pil_to_cv2(screenshot)
+        except Exception as e:
+            if verbose:
+                logger.debug(f"截图转换失败: {e}")
+            return None
+
+        def _score_one(idx: int, template_name: str):
+            template = self.templates[template_name]
+
+            # 缩放模板
+            if abs(scale - 1.0) > 0.01:
+                new_w = int(template.shape[1] * scale)
+                new_h = int(template.shape[0] * scale)
+                template = cv2.resize(
+                    template, (new_w, new_h), interpolation=cv2.INTER_AREA
+                )
+
+            # 检查模板不能大于截图
+            if (
+                template.shape[0] > screen.shape[0]
+                or template.shape[1] > screen.shape[1]
+            ):
+                return None
+
+            result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            h, w = template.shape[:2]
+            x1, y1 = max_loc
+            x2, y2 = x1 + w, y1 + h
+            return (idx, max_val, (x1, y1, x2, y2), template_name)
+
+        best: tuple[int, float, tuple[int, int, int, int], str] | None = None
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=max(1, int(max_workers))) as ex:
+            futures = [ex.submit(_score_one, i, n) for i, n in enumerate(normalized)]
+            for f in futures:
+                item = f.result()
+                if item is None:
+                    continue
+                idx, conf, box, name = item
+                if best is None:
+                    best = item
+                    continue
+                best_idx, best_conf, _, _ = best
+                if conf > best_conf:
+                    best = item
+                elif conf == best_conf and idx < best_idx:
+                    # 稳定性：置信度相同按输入顺序
+                    best = item
+
+        if best is None:
+            return None
+
+        _, conf, box, name = best
+        return TemplateMatch(template_name=name, box=box, confidence=float(conf))
+
     def unload_templates(self, template_names: list[str]) -> int:
         """批量卸载模板。
 
