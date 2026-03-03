@@ -8,10 +8,10 @@
 
 # 从 lang.py 重新导出语言配置（单一真相来源）
 from ptcgp_auto_v2.config.lang import (
+    DEFAULT_LANG_KEY,
     DEFAULT_LOCALE,
     DEFAULT_OCR_LANGUAGES,
     WEB_LANG_TO_DB_LABEL_KEYS,
-    DEFAULT_LANG_KEY,
 )
 
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
@@ -120,7 +120,6 @@ SCALE_PACK_OPENING_SWIPE = 7.32
 SCALE_BATTLE_SERIES_SELECT = 1.6
 # 「battle_deck_select」 对战任务卡组列表页面沙漏图标比例
 # 调试确定：0.85（置信度 0.9562）
-# 注：此为 find_with_scale 的额外缩放比例，模板已由 TemplateMatcher 自动按屏幕分辨率缩放
 SCALE_BATTLE_HOURGLASS = 0.85
 
 

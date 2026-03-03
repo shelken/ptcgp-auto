@@ -142,21 +142,11 @@ def test_match(
     pack_path = manager.get_pack_path(booster_name)
     template_name = manager.get_template_name(booster_name)
 
-    # 加载模板（使用绝对路径）
-    template_img = cv2.imread(str(pack_path))
-    if template_img is None:
-        print(f"✗ 加载模板失败: {pack_path}")
+    # 加载模板（使用标准 load_template，与正式代码一致，会进行预缩放）
+    if not matcher.load_template(f"{template_name}.png", is_pack_template=True):
+        print(f"✗ 加载模板失败: {template_name}")
         return None
-
-    # 缩放到屏幕比例
-    scale_ratio = screenshot.width / matcher.base_width
-    if abs(scale_ratio - 1.0) > 0.01:
-        new_w = int(template_img.shape[1] * scale_ratio)
-        new_h = int(template_img.shape[0] * scale_ratio)
-        template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-    matcher.templates[template_name] = template_img
-    print(f"LOADED: {template_name} <- {pack_path} ({template_img.shape[1]}x{template_img.shape[0]})")
+    print(f"LOADED: {template_name}")
 
     # 4. 执行匹配
     if scale:
@@ -450,7 +440,7 @@ def test_crop_adjust(
             os.rmdir(temp_dir)
             return None
 
-        # 缩放到屏幕比例
+        # 预缩放到屏幕比例（与正式代码一致）
         scale_ratio = screenshot.width / matcher.base_width
         if abs(scale_ratio - 1.0) > 0.01:
             new_w = int(template_img.shape[1] * scale_ratio)
@@ -755,20 +745,11 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
     pack_path = manager.get_pack_path(booster_name)
     template_name = manager.get_template_name(booster_name)
 
-    template_img = cv2.imread(str(pack_path))
-    if template_img is None:
-        print(f"✗ 加载模板失败: {pack_path}")
+    # 加载模板（使用标准 load_template，与正式代码一致，会进行预缩放）
+    if not matcher.load_template(f"{template_name}.png", is_pack_template=True):
+        print(f"✗ 加载模板失败: {template_name}")
         return
-
-    # 缩放到屏幕比例
-    scale_ratio = screenshot.width / matcher.base_width
-    if abs(scale_ratio - 1.0) > 0.01:
-        new_w = int(template_img.shape[1] * scale_ratio)
-        new_h = int(template_img.shape[0] * scale_ratio)
-        template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-    matcher.templates[template_name] = template_img
-    print(f"LOADED: {template_name} <- {pack_path} ({template_img.shape[1]}x{template_img.shape[0]})")
+    print(f"LOADED: {template_name}")
 
     # 6. 扫描最佳匹配
     print(f"\n正在测试匹配...")
