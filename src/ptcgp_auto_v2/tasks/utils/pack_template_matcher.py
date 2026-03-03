@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 
@@ -49,9 +48,6 @@ class PackTemplateMatcher:
     # TemplateMatcher.find_with_scale 内部用了 `threshold or self.threshold`，不能传 0.0
     _SCORE_THRESHOLD_EPS = 1e-6
 
-    # 匹配线程数（经验值，避免调用方重复设置）
-    _MAX_MATCH_WORKERS = 10
-
     def __init__(self, template_matcher: Any, pack_image_manager: Any):
         self._template_matcher = template_matcher
         self._pack_image_manager = pack_image_manager
@@ -81,25 +77,6 @@ class PackTemplateMatcher:
         exclude_promo: bool = True,
     ) -> PackTemplateMatch | None:
         """在候选子包中取最高置信度匹配。"""
-        best = self.score_best(
-            screenshot,
-            candidates,
-            scale=scale,
-            exclude_promo=exclude_promo,
-        )
-        if best is None:
-            return None
-        return best if best.confidence >= threshold else None
-
-    def score_best(
-        self,
-        screenshot: Any,
-        candidates: list[PackCandidate],
-        *,
-        scale: float,
-        exclude_promo: bool = True,
-    ) -> PackTemplateMatch | None:
-        """计算候选子包的最高置信度（不做阈值裁决）。"""
         filtered = self._filter_candidates(candidates, exclude_promo=exclude_promo)
         if not filtered:
             return None
@@ -107,35 +84,33 @@ class PackTemplateMatcher:
         # 先确保模板都可用（避免中途缺模板导致漏算）
         self.prepare(filtered)
 
-        def _work(idx: int, c: PackCandidate):
-            scored = self._score_one(
-                screenshot,
-                candidate=c,
-                scale=scale,
-            )
-            if scored is None:
-                return None
-            return (idx, scored)
+        template_names: list[str] = []
+        candidate_by_template: dict[str, PackCandidate] = {}
+        for c in filtered:
+            template_name = self._pack_image_manager.get_template_name(c.booster_name)
+            template_names.append(template_name)
+            candidate_by_template[template_name] = c
 
-        best: tuple[int, PackTemplateMatch] | None = None
-        with ThreadPoolExecutor(max_workers=self._MAX_MATCH_WORKERS) as ex:
-            futures = [ex.submit(_work, i, c) for i, c in enumerate(filtered)]
-            for f in futures:
-                item = f.result()
-                if item is None:
-                    continue
-                idx, scored = item
-                if best is None:
-                    best = (idx, scored)
-                    continue
-                best_idx, best_scored = best
-                if scored.confidence > best_scored.confidence:
-                    best = (idx, scored)
-                elif scored.confidence == best_scored.confidence and idx < best_idx:
-                    # 置信度一致时按候选顺序稳定选择
-                    best = (idx, scored)
+        best = self._template_matcher.score_best_with_scale(
+            screenshot,
+            template_names,
+            scale=scale,
+            verbose=False,
+            max_workers=10,
+        )
+        if not best:
+            return None
 
-        return best[1] if best else None
+        candidate = candidate_by_template.get(best.template_name)
+        if not candidate:
+            return None
+
+        result = PackTemplateMatch(
+            candidate=candidate,
+            confidence=float(best.confidence),
+            box=tuple(best.box),
+        )
+        return result if result.confidence >= threshold else None
 
     def end_session(self) -> None:
         """卸载本 session 新加载的 pack 模板。"""
@@ -187,31 +162,7 @@ class PackTemplateMatcher:
             self._session_loaded_templates.add(template_name)
         return loaded
 
-    def _score_one(
-        self,
-        screenshot: Any,
-        *,
-        candidate: PackCandidate,
-        scale: float,
-    ) -> PackTemplateMatch | None:
-        template_name = self._pack_image_manager.get_template_name(
-            candidate.booster_name
-        )
-        match = self._template_matcher.find_with_scale(
-            screenshot,
-            template_name,
-            scale=scale,
-            threshold=self._SCORE_THRESHOLD_EPS,
-            verbose=False,
-        )
-        if not match:
-            return None
-
-        return PackTemplateMatch(
-            candidate=candidate,
-            confidence=float(getattr(match, "confidence", 0.0)),
-            box=tuple(getattr(match, "box")),
-        )
+    # 注意：score_best_with_scale 的并行与线程安全由 TemplateMatcher 内部实现。
 
 
 def build_pack_template_matcher(recognizer: Any) -> PackTemplateMatcher | None:
