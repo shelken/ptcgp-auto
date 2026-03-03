@@ -216,8 +216,17 @@ def handle_template(
         template_name = template_key
     else:
         # 系统模板 - 尝试加载
-        # 对于子目录模板(如 packs_auto/Charizard)，使用 load_template 方法
-        if "/" in template_name:
+        # 对于 packs_auto/ 前缀的模板，先确保资源已下载
+        if template_name.startswith("packs_auto/"):
+            booster_name = template_name[11:]  # 去掉 "packs_auto/" 前缀
+            from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
+            manager = PackImageManager()
+            if not manager.ensure_pack_ready(booster_name):
+                print(f"ERROR: 下载卡包资源失败: {booster_name}")
+                return
+            # 资源就绪后，用标准方式加载（会进行预缩放）
+            matcher.load_template(f"{template_name}.png", is_pack_template=True)
+        elif "/" in template_name:
             matcher.load_template(f"{template_name}.png", is_pack_template=True)
         else:
             if not matcher._load_template_file(Path(matcher.templates_dir) / f"{template_name}.png"):
