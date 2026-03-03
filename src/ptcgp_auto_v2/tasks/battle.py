@@ -38,7 +38,11 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_text,
     tap_text_exact,
 )
-from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
+from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
+    PackCandidate,
+    PackTemplateMatcher,
+    build_pack_template_matcher,
+)
 
 if TYPE_CHECKING:
     pass
@@ -49,6 +53,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # 停止条件类
 # ============================================================
+
 
 class StopCondition:
     """停止条件基类"""
@@ -108,9 +113,7 @@ class LevelCompleteCondition(StopCondition):
         level = self.config.get("level")
         if not set_code or not level:
             return False
-        return task._progress_repo.is_level_completed(
-            task._account_id, set_code, level
-        )
+        return task._progress_repo.is_level_completed(task._account_id, set_code, level)
 
 
 class NoRewardCondition(StopCondition):
@@ -322,8 +325,8 @@ class BattleTask(Task):
         self._progress_repo = AccountBattleProgressRepository()
         self._config_repo = BattleTaskConfigRepository()
         self._card_repo = CardRepository()
-        # PackImageManager 用于系列选择
-        self._pack_manager = PackImageManager()
+        # packs_auto 模板匹配器（对战任务会话级复用）
+        self._pack_template_matcher: PackTemplateMatcher | None = None
         # 运行时状态
         self._account_id: int = 0
         self._task_instance_id: int = 0
@@ -332,8 +335,8 @@ class BattleTask(Task):
         self._battle_count: int = 0
         self._hourglass_before: int = 0
         self._hourglass_gained: int = 0
-        # 系列选择缓存：该系列的所有子包模板名
-        self._series_pack_names: list[str] = []
+        # 系列选择缓存：该系列的所有子包候选
+        self._series_pack_candidates: list[PackCandidate] = []
         # 标记是否已预加载模板
         self._templates_preloaded: bool = False
 
@@ -356,13 +359,15 @@ class BattleTask(Task):
         logger.info("[BattleTask] 任务开始")
 
         # 从 task_instance 获取账号和任务实例ID
-        task_instance = getattr(self, 'task_instance', None)
+        task_instance = getattr(self, "task_instance", None)
         if task_instance:
-            self._account_id = getattr(task_instance, 'account_id', 0)
-            self._task_instance_id = getattr(task_instance, 'id', 0)
+            self._account_id = getattr(task_instance, "account_id", 0)
+            self._task_instance_id = getattr(task_instance, "id", 0)
 
         # 从 BattleTaskConfig 获取停止条件
-        stop_conditions_config = self._config_repo.get_stop_conditions(self._task_instance_id)
+        stop_conditions_config = self._config_repo.get_stop_conditions(
+            self._task_instance_id
+        )
         self._stop_conditions = self._parse_stop_conditions(stop_conditions_config)
 
         self._target_set_code = self._get_target_set_code(stop_conditions_config)
@@ -392,25 +397,43 @@ class BattleTask(Task):
                 return
 
             # 过滤 PROMO 子包，缓存模板名
-            self._series_pack_names = [
-                p.name for p in packs
-                if not (p.set_code or "").upper().startswith("PROMO")
-            ]
+            self._series_pack_candidates = []
+            for p in packs:
+                if not getattr(p, "name", None) or not getattr(p, "set_code", None):
+                    continue
+                if (p.set_code or "").upper().startswith("PROMO"):
+                    continue
+                self._series_pack_candidates.append(
+                    PackCandidate(set_code=str(p.set_code), booster_name=str(p.name))
+                )
 
-            # 预加载所有模板
-            _, template_matcher = self.recognizer
-            for pack_name in self._series_pack_names:
-                self._pack_manager.ensure_template_ready(template_matcher, pack_name)
+            if not self._series_pack_candidates:
+                logger.warning(f"[BattleTask] 未找到系列 {target_set_code} 的子包")
+                return
+
+            if self._pack_template_matcher is None:
+                self._pack_template_matcher = build_pack_template_matcher(
+                    self.recognizer
+                )
+
+            matcher = self._pack_template_matcher
+            if matcher is None:
+                logger.warning("[BattleTask] pack 模板匹配器未初始化")
+                return
+
+            matcher.prepare(self._series_pack_candidates)
 
             self._templates_preloaded = True
             logger.info(
-                f"[BattleTask] 预加载系列 {target_set_code} 的 {len(self._series_pack_names)} 个子包模板"
+                f"[BattleTask] 预加载系列 {target_set_code} 的 {len(self._series_pack_candidates)} 个子包模板"
             )
 
         except Exception as e:
             logger.error(f"[BattleTask] 预加载系列模板失败: {e}")
 
-    def _find_series_in_screenshot(self, screenshot, target_set_code: str) -> Optional[tuple[int, int, int, int]]:
+    def _find_series_in_screenshot(
+        self, screenshot, target_set_code: str
+    ) -> Optional[tuple[int, int, int, int]]:
         """
         在当前截图中查找目标系列位置
 
@@ -421,23 +444,32 @@ class BattleTask(Task):
         Returns:
             匹配到的模板位置 (x1, y1, x2, y2)，未找到返回 None
         """
-        if not self._series_pack_names:
+        if not self._series_pack_candidates:
             return None
 
-        _, template_matcher = self.recognizer
         settings = get_settings()
 
-        for pack_name in self._series_pack_names:
-            template_name = self._pack_manager.get_template_name(pack_name)
-            match = template_matcher.find_with_scale(
-                screenshot,
-                template_name,
-                scale=settings.scale_battle_series_select,
-                threshold=settings.pack_template_threshold,
-            )
-            if match:
-                logger.info(f"[BattleTask] 找到系列 {target_set_code}，通过子包 {pack_name}")
-                return match.box
+        if self._pack_template_matcher is None:
+            self._pack_template_matcher = build_pack_template_matcher(self.recognizer)
+
+        matcher = self._pack_template_matcher
+        if matcher is None:
+            return None
+
+        best = matcher.match_best(
+            screenshot,
+            self._series_pack_candidates,
+            scale=settings.scale_battle_series_select,
+            threshold=settings.pack_template_threshold,
+            exclude_promo=True,
+        )
+        if not best:
+            return None
+
+        logger.info(
+            f"[BattleTask] 找到系列 {target_set_code}，通过子包 {best.candidate.booster_name}"
+        )
+        return best.box
 
         return None
 
@@ -445,7 +477,7 @@ class BattleTask(Task):
         """解析停止条件配置"""
         conditions = []
         for config in configs:
-            condition_type = config.get('type')
+            condition_type = config.get("type")
             factory = STOP_CONDITION_FACTORIES.get(condition_type)
             if factory:
                 conditions.append(factory(config))
@@ -544,7 +576,9 @@ class BattleTask(Task):
         if detected_level:
             logger.info(f"[BattleTask] 检测到当前等级: {detected_level}")
             if detected_level != self._target_level:
-                logger.info(f"[BattleTask] 等级不匹配，目标: {self._target_level}，返回重选")
+                logger.info(
+                    f"[BattleTask] 等级不匹配，目标: {self._target_level}，返回重选"
+                )
                 return press_back(self.adb, wait=1.0)
         else:
             logger.warning("[BattleTask] 无法识别当前等级，尝试继续")
@@ -571,7 +605,9 @@ class BattleTask(Task):
                 return tap_box(self.adb, hourglass_box, wait=1.5)
 
         # 滑动到底仍未找到沙漏，标记当前系列+等级完成
-        logger.info(f"[BattleTask] {self._target_set_code} {self._target_level} 无可用对战，标记完成")
+        logger.info(
+            f"[BattleTask] {self._target_set_code} {self._target_level} 无可用对战，标记完成"
+        )
         self._progress_repo.mark_completed(
             self._account_id, self._target_set_code, self._target_level
         )
@@ -582,7 +618,10 @@ class BattleTask(Task):
             ocr_engine, _ = self.recognizer
             ocr_results = ocr_engine.recognize(screenshot)
             result = tap_text_exact(
-                self.adb, ocr_results, get_text_patterns("battle_expansion_button"), wait=1.0
+                self.adb,
+                ocr_results,
+                get_text_patterns("battle_expansion_button"),
+                wait=1.0,
             )
             if result:
                 logger.info("[BattleTask] 点击擴充組查看更多系列")
@@ -594,7 +633,9 @@ class BattleTask(Task):
 
     def _handle_battle_series_select(self, page_info: dict) -> ActionResult:
         """处理系列选择页面 - 滑动查找并点击目标系列"""
-        logger.info(f"[BattleTask] 页面: 系列选择 -> 查找目标系列 {self._target_set_code}")
+        logger.info(
+            f"[BattleTask] 页面: 系列选择 -> 查找目标系列 {self._target_set_code}"
+        )
 
         max_attempts = 10
         last_texts = set()
@@ -605,9 +646,13 @@ class BattleTask(Task):
                 continue
 
             # 通过子包模板查找目标系列位置
-            series_box = self._find_series_in_screenshot(screenshot, self._target_set_code)
+            series_box = self._find_series_in_screenshot(
+                screenshot, self._target_set_code
+            )
             if series_box:
-                logger.info(f"[BattleTask] 找到目标系列 {self._target_set_code}，点击进入")
+                logger.info(
+                    f"[BattleTask] 找到目标系列 {self._target_set_code}，点击进入"
+                )
                 return tap_box(self.adb, series_box, wait=1.5)
 
             # 记录 OCR 用于检测是否滑动到底
@@ -617,7 +662,9 @@ class BattleTask(Task):
                 current_texts = set(item.text.strip() for item in ocr_results)
 
                 if attempt > 0 and current_texts == last_texts:
-                    logger.warning(f"[BattleTask] 已滑动到底，未找到目标系列 {self._target_set_code}")
+                    logger.warning(
+                        f"[BattleTask] 已滑动到底，未找到目标系列 {self._target_set_code}"
+                    )
                     break
                 last_texts = current_texts
 
@@ -675,23 +722,37 @@ class BattleTask(Task):
                             other_text = other.text.strip()
 
                             # 如果已完成，标记并等待检测器结束任务
-                            complete_patterns = get_text_patterns("battle_level_complete")
-                            if any(p.upper() in other_text.upper() for p in complete_patterns):
-                                logger.info(f"[BattleTask] 等级 {self._target_level} 已完成")
+                            complete_patterns = get_text_patterns(
+                                "battle_level_complete"
+                            )
+                            if any(
+                                p.upper() in other_text.upper()
+                                for p in complete_patterns
+                            ):
+                                logger.info(
+                                    f"[BattleTask] 等级 {self._target_level} 已完成"
+                                )
                                 self._progress_repo.mark_completed(
-                                    self._account_id, self._target_set_code, self._target_level
+                                    self._account_id,
+                                    self._target_set_code,
+                                    self._target_level,
                                 )
                                 return ActionResult.ok(wait=1.0)
 
                             # 如果有进度数字如 "0/3"，说明未完成，点击
                             import re
+
                             if re.search(r"\d+\s*/\s*\d+", other_text):
-                                logger.info(f"[BattleTask] 选择等级: {self._target_level} ({other_text})")
+                                logger.info(
+                                    f"[BattleTask] 选择等级: {self._target_level} ({other_text})"
+                                )
                                 return tap_box(self.adb, item.box, wait=1.5)
 
             # 检测是否滑动到底
             if attempt > 0 and current_texts == last_texts:
-                logger.warning(f"[BattleTask] 已滑动到底，未找到目标等级 {self._target_level}")
+                logger.warning(
+                    f"[BattleTask] 已滑动到底，未找到目标等级 {self._target_level}"
+                )
                 break
 
             last_texts = current_texts
