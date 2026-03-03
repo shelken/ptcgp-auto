@@ -13,8 +13,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,7 @@ class PackTemplateMatcher:
         """
         filtered = self._filter_candidates(candidates, exclude_promo=exclude_promo)
         if not filtered:
+            logger.debug("[子包推断-匹配] 过滤后无有效候选")
             return None
 
         # 先确保模板都可用（避免中途缺模板导致漏算）
@@ -119,7 +123,24 @@ class PackTemplateMatcher:
         )
 
         if result.confidence >= threshold:
+            logger.debug(
+                "[子包推断-匹配] 成功: %s/%s conf=%.2f scale=%.2f threshold=%.2f",
+                result.candidate.set_code,
+                result.candidate.booster_name,
+                result.confidence,
+                scale,
+                threshold,
+            )
             return result
+
+        logger.debug(
+            "[子包推断-匹配] 未达阈值: best=%s/%s conf=%.2f scale=%.2f threshold=%.2f",
+            result.candidate.set_code,
+            result.candidate.booster_name,
+            result.confidence,
+            scale,
+            threshold,
+        )
         return result if return_best_when_below_threshold else None
 
     def end_session(self) -> None:
