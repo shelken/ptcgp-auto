@@ -312,21 +312,18 @@ def test_crop_adjust(
 
     # 1. 下载原始 WebP 图片（不处理）
     print("\n[1/3] 下载原始 WebP 图片...")
-    from ptcgp_auto_v2.utils.pack_image_manager import PACK_IMAGE_BASE_URL
-    import requests
+    with PackImageManager() as manager:
+        image_data = manager.download_pack_image(booster_name)
+    if not image_data:
+        print("✗ 下载失败：所有源都不可用")
+        return None
 
-    url = f"{PACK_IMAGE_BASE_URL}/{booster_name}.webp"
     try:
-        resp = requests.get(url, timeout=15)
-        if resp.status_code == 200:
-            public_img = Image.open(BytesIO(resp.content))
-            pw, ph = public_img.size
-            print(f"✓ 原始 WebP: {pw}x{ph}")
-        else:
-            print(f"✗ 下载失败: HTTP {resp.status_code}")
-            return None
+        public_img = Image.open(BytesIO(image_data))
+        pw, ph = public_img.size
+        print(f"✓ 原始 WebP: {pw}x{ph}")
     except Exception as e:
-        print(f"✗ 下载异常: {e}")
+        print(f"✗ 图片解码异常: {e}")
         return None
 
     # 获取设备截图（如果有 ADB）
