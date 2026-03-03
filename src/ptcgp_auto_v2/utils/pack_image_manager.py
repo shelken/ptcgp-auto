@@ -8,9 +8,9 @@
 
 import logging
 import time
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
-from io import BytesIO
 from urllib.parse import quote
 
 import requests
@@ -37,7 +37,7 @@ PACK_IMAGE_DOWNLOAD_TIMEOUT = 15
 # Left: 18%, Top: 23%, Right: 82%, Bottom: 60%
 # 原始图片尺寸: 160x256 -> 裁剪后: 103x95 -> 缩放后: 513x473
 # 匹配缩放比例: 0.81, 置信度: 0.9057
-PACK_CROP_RATIO = (0.18, 0.23, 0.82, 0.60)
+PACK_CROP_RATIO = (0.18, 0.23, 0.82, 0.44)
 
 # 目标宽度（与旧手动模板一致 513px）
 TARGET_WIDTH = 513
