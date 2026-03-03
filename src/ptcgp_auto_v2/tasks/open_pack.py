@@ -136,6 +136,7 @@ class OpenPackTask(PackOpeningTaskBase):
         self._fail_reason: Optional[str] = None  # 失败原因
 
         # 目标卡包配置
+        # pack_code 字段实际为系列代码（set_code），此处保持历史字段名
         self._target_pack: dict[str, str] | None = None
 
         # 数据仓储（基类已初始化，此处仅用于类型提示）
@@ -242,29 +243,43 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def _prepare_image_resources(self) -> bool:
         """准备图片资源（失败将直接结束任务）"""
-        pack_code = self._target_pack.get("pack_code") if self._target_pack else None
+        set_code = self._target_pack.get("pack_code") if self._target_pack else None
         booster_name = (
             self._target_pack.get("booster_name") if self._target_pack else None
         )
-        if not pack_code or not booster_name:
+        if not set_code or not booster_name:
             logger.error(
-                f"准备卡包图片资源失败: pack_code={pack_code}, booster_name={booster_name}"
+                f"准备卡包图片资源失败: set_code={set_code}, booster_name={booster_name}"
             )
             return False
 
         try:
-            from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
-
-            manager = PackImageManager()
             if not self.recognizer:
                 logger.error("准备卡包图片资源失败: recognizer 未初始化")
                 return False
 
-            _, template_matcher = self.recognizer
-            if not manager.ensure_template_ready(template_matcher, booster_name):
+            from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
+                PackCandidate,
+                build_pack_template_matcher,
+            )
+
+            if self._pack_template_matcher is None:
+                self._pack_template_matcher = build_pack_template_matcher(
+                    self.recognizer
+                )
+
+            matcher = self._pack_template_matcher
+            if matcher is None:
+                logger.error("准备卡包图片资源失败: pack 模板匹配器未初始化")
+                return False
+
+            ready = matcher.prepare(
+                [PackCandidate(set_code=str(set_code), booster_name=str(booster_name))]
+            )
+            if not ready.get(str(booster_name), False):
                 logger.error(f"准备卡包图片资源失败: {booster_name}")
                 return False
-            logger.debug(f"已预加载目标卡包模板，卡牌系列: {pack_code}")
+            logger.debug(f"已预加载目标卡包模板，卡牌系列: {set_code}")
         except Exception as e:
             logger.error(f"准备卡包图片资源失败: {e}")
             return False
@@ -490,7 +505,7 @@ class OpenPackTask(PackOpeningTaskBase):
                 if match:
                     points_str = match.group(1).replace(",", "")
                     points = int(points_str)
-                    series = self._target_pack.get("pack_code", "Unknown")
+                    series = self._target_pack.get("set_code", "Unknown")
                     self._pack_point_repo.upsert_points(self.account.id, series, points)
                     logger.debug(f"  -> 更新开包点数: {series} = {points}pt")
                     break
@@ -574,11 +589,11 @@ class OpenPackTask(PackOpeningTaskBase):
     # ============================================================
 
     def _get_target_series(self) -> Optional[str]:
-        """根据 pack_code 获取目标系列（A/B）"""
+        """根据 set_code 获取目标系列（A/B）"""
         if not self._target_pack:
             return None
-        pack_code = self._target_pack["pack_code"]
-        return pack_code[0].upper() if pack_code else None
+        set_code = self._target_pack["pack_code"]
+        return set_code[0].upper() if set_code else None
 
     def _get_target_template_name(self) -> Optional[str]:
         """获取目标卡包的模板名称"""

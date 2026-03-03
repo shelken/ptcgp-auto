@@ -427,6 +427,7 @@ class TemplateMatcher:
         template_name: str,
         scale: float,
         threshold: Optional[float] = None,
+        verbose: bool = True,
     ) -> Optional[TemplateMatch]:
         """
         按指定缩放比例匹配模板
@@ -444,7 +445,8 @@ class TemplateMatcher:
 
         template_name = self._normalize_name(template_name)
         if template_name not in self.templates:
-            logger.debug(f"模板不存在: {template_name}")
+            if verbose:
+                logger.debug(f"模板不存在: {template_name}")
             return None
 
         threshold = threshold or self.threshold
@@ -462,7 +464,10 @@ class TemplateMatcher:
 
         # 检查模板不能大于截图
         if template.shape[0] > screen.shape[0] or template.shape[1] > screen.shape[1]:
-            logger.debug(f"模板尺寸 ({template.shape[1]}x{template.shape[0]}) 大于截图")
+            if verbose:
+                logger.debug(
+                    f"模板尺寸 ({template.shape[1]}x{template.shape[0]}) 大于截图"
+                )
             return None
 
         result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
@@ -473,10 +478,11 @@ class TemplateMatcher:
             x1, y1 = max_loc
             x2, y2 = x1 + w, y1 + h
 
-            logger.debug(
-                f"[模板@{scale:.2f}] 找到 {template_name}: "
-                f"({x1},{y1})-({x2},{y2}) 置信度={max_val:.2f}"
-            )
+            if verbose:
+                logger.debug(
+                    f"[模板@{scale:.2f}] 找到 {template_name}: "
+                    f"({x1},{y1})-({x2},{y2}) 置信度={max_val:.2f}"
+                )
 
             return TemplateMatch(
                 template_name=template_name,
@@ -484,9 +490,10 @@ class TemplateMatcher:
                 confidence=max_val,
             )
 
-        logger.debug(
-            f"[模板@{scale:.2f}] 未找到 {template_name}, 最高置信度={max_val:.2f}"
-        )
+        if verbose:
+            logger.debug(
+                f"[模板@{scale:.2f}] 未找到 {template_name}, 最高置信度={max_val:.2f}"
+            )
         return None
 
     def unload_templates(self, template_names: list[str]) -> int:

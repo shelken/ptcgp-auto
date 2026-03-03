@@ -46,6 +46,11 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_matched_element,
 )
 from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
+from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
+    PackCandidate,
+    PackTemplateMatcher,
+    build_pack_template_matcher,
+)
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (
@@ -145,6 +150,9 @@ class PackOpeningTaskBase(Task):
 
         # 子包推断会话状态（单次开包生命周期）
         self._inferred_pack_context: dict[str, str] | None = None
+
+        # packs_auto 模板匹配器（会话级复用，任务结束统一卸载）
+        self._pack_template_matcher: PackTemplateMatcher | None = None
 
     # ============================================================
     # 扩展点（子类覆写）
@@ -340,19 +348,19 @@ class PackOpeningTaskBase(Task):
 
         try:
             context = self.get_target_pack_context() or {}
-            pack_code = context.get("pack_code")
+            set_code = context.get("pack_code")
             pack_name = context.get("booster_name")
 
             self._pack_record_repo.create_for_account(
                 self.account.id,
                 pack_type=self.get_pack_record_type(),
-                pack_code=pack_code,
+                pack_code=set_code,
                 pack_name=pack_name,
                 cards=rows,
             )
             card_names = [f"{row['card_name']}({row['rarity']})" for row in rows]
             logger.info(
-                f"已保存开包记录: {pack_code}/{pack_name} "
+                f"已保存开包记录: {set_code}/{pack_name} "
                 f"({len(rows)} 张): {', '.join(card_names)}"
             )
 
@@ -392,14 +400,9 @@ class PackOpeningTaskBase(Task):
         注意：此方法只在任务结束时调用，每包后只清理上下文不清模板。
         """
         try:
-            recognizer = getattr(self, "recognizer", None)
-            if recognizer:
-                _, template_matcher = recognizer
-                removed = PackImageManager().unload_loaded_booster_templates(
-                    template_matcher
-                )
-                if removed:
-                    logger.debug(f"[子包推断] 已卸载 {removed} 个模板")
+            matcher = getattr(self, "_pack_template_matcher", None)
+            if matcher:
+                matcher.end_session()
         except Exception as e:
             logger.warning(f"[子包推断] 清理模板资源失败: {e}")
         finally:
@@ -460,8 +463,14 @@ class PackOpeningTaskBase(Task):
 
         settings = get_settings()
         target_set_code = self._resolve_scan_set_code()
-        manager = PackImageManager()
-        _, template_matcher = self.recognizer
+
+        if self._pack_template_matcher is None:
+            self._pack_template_matcher = build_pack_template_matcher(self.recognizer)
+        matcher = self._pack_template_matcher
+        if matcher is None:
+            return None
+
+        candidates: list[PackCandidate] = []
 
         for pack in self._card_repo.get_all_packs() if self._card_repo else []:
             if target_set_code and pack.set_code != target_set_code:
@@ -469,24 +478,42 @@ class PackOpeningTaskBase(Task):
             # 使用 set_code 过滤 PROMO，避免名称不是 "PROMO*"（如 "Vol. 1"）时误入候选
             if (pack.set_code or "").upper().startswith("PROMO"):
                 continue
-            if not manager.ensure_template_ready(template_matcher, pack.name):
+            if not pack.name or not pack.set_code:
                 continue
-
-            template_name = manager.get_template_name(pack.name)
-            match = template_matcher.find_with_scale(
-                screenshot,
-                template_name,
-                scale=settings.scale_pack_opening_swipe,
-                threshold=settings.pack_template_threshold,
+            candidates.append(
+                PackCandidate(set_code=str(pack.set_code), booster_name=str(pack.name))
             )
-            if match:
-                return {
-                    "pack_code": pack.set_code,
-                    "booster_name": pack.name,
-                    "source": "template",
-                }
 
-        return None
+        best = matcher.score_best(
+            screenshot,
+            candidates,
+            scale=settings.scale_pack_opening_swipe,
+            exclude_promo=True,
+        )
+        if not best:
+            logger.debug(
+                "[子包推断-滑动页] 未找到任何模板匹配: candidates=%s threshold=%.2f",
+                len(candidates),
+                settings.pack_template_threshold,
+            )
+            return None
+
+        if best.confidence < settings.pack_template_threshold:
+            logger.debug(
+                "[子包推断-滑动页] 未达阈值: best=%s/%s conf=%.2f threshold=%.2f candidates=%s",
+                best.candidate.set_code,
+                best.candidate.booster_name,
+                best.confidence,
+                settings.pack_template_threshold,
+                len(candidates),
+            )
+            return None
+
+        return {
+            "pack_code": best.candidate.set_code,
+            "booster_name": best.candidate.booster_name,
+            "source": "template",
+        }
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """长按跳过卡牌展示"""
