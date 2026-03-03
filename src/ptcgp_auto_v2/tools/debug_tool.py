@@ -288,6 +288,13 @@ def _print_single_match(
     roi_offset: Tuple[int, int],
 ) -> None:
     """打印单个匹配位置"""
+    # 先检查模板是否已加载
+    from ptcgp_auto_v2.infra.template import TemplateMatcher as TM
+    normalized_name = TM._normalize_name(matcher, template_name)
+    if normalized_name not in matcher.templates:
+        print(f"TEMPLATE_NOT_LOADED: {template_name}")
+        return
+
     if scale:
         match = matcher.find_with_scale(img, template_name, scale, threshold=threshold)
     else:
@@ -305,7 +312,9 @@ def _print_single_match(
             f"center=({cx},{cy})"
         )
     else:
-        print(f"TEMPLATE: {template_name} NOT_FOUND")
+        # 匹配失败，获取当前置信度
+        confidence = matcher.get_confidence(img, template_name)
+        print(f"MATCH_FAILED: {template_name} confidence={confidence:.4f} threshold={threshold}")
         if scale is None:
             _suggest_best_scale(matcher, img, template_name, threshold)
 
