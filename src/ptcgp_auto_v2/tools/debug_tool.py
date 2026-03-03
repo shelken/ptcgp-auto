@@ -235,7 +235,8 @@ def handle_template(
                 if candidates:
                     matcher._load_template_file(candidates[0])
 
-    threshold = threshold or DEFAULT_TEMPLATE_THRESHOLD
+    # 调试模式默认阈值为 0，优先输出真实置信度
+    threshold = 0.0 if threshold is None else threshold
 
     # ROI 处理
     roi_offset = (0, 0)
@@ -312,8 +313,14 @@ def _print_single_match(
             f"center=({cx},{cy})"
         )
     else:
-        # 匹配失败，获取当前置信度
-        confidence = matcher.get_confidence(img, template_name)
+        # 匹配失败，输出真实置信度（不受阈值裁决影响）
+        if scale:
+            raw_match = matcher.find_with_scale(
+                img, template_name, scale, threshold=0.0, verbose=False
+            )
+        else:
+            raw_match = matcher.find(img, template_name, threshold=0.0)
+        confidence = raw_match.confidence if raw_match else 0.0
         print(f"MATCH_FAILED: {template_name} confidence={confidence:.4f} threshold={threshold}")
         if scale is None:
             _suggest_best_scale(matcher, img, template_name, threshold)
