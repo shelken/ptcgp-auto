@@ -450,6 +450,23 @@ class TemplateMatcher:
             return None
 
         threshold = threshold or self.threshold
+        screen = self._pil_to_cv2(screenshot)
+        return self._match_template_cv2(
+            screen, template_name, scale, threshold, verbose
+        )
+
+    def _match_template_cv2(
+        self,
+        screen: np.ndarray,
+        template_name: str,
+        scale: float,
+        threshold: float,
+        verbose: bool,
+    ) -> Optional[TemplateMatch]:
+        """内部方法：对 cv2 格式的截图进行模板匹配（线程安全）。
+
+        被 find_with_scale 和 score_best_with_scale 复用。
+        """
         template = self.templates[template_name]
 
         # 缩放模板
@@ -459,8 +476,6 @@ class TemplateMatcher:
             template = cv2.resize(
                 template, (new_w, new_h), interpolation=cv2.INTER_AREA
             )
-
-        screen = self._pil_to_cv2(screenshot)
 
         # 检查模板不能大于截图
         if template.shape[0] > screen.shape[0] or template.shape[1] > screen.shape[1]:
@@ -536,40 +551,17 @@ class TemplateMatcher:
         try:
             screenshot.load()
         except Exception:
-            # load 失败不直接终止，后续转换仍可能成功
             pass
+        screen = self._pil_to_cv2(screenshot)
 
-        try:
-            screen = self._pil_to_cv2(screenshot)
-        except Exception as e:
-            if verbose:
-                logger.debug(f"截图转换失败: {e}")
-            return None
-
+        # 并行匹配：复用 _match_template_cv2，阈值设为 0 以获取所有分数
         def _score_one(idx: int, template_name: str):
-            template = self.templates[template_name]
-
-            # 缩放模板
-            if abs(scale - 1.0) > 0.01:
-                new_w = int(template.shape[1] * scale)
-                new_h = int(template.shape[0] * scale)
-                template = cv2.resize(
-                    template, (new_w, new_h), interpolation=cv2.INTER_AREA
-                )
-
-            # 检查模板不能大于截图
-            if (
-                template.shape[0] > screen.shape[0]
-                or template.shape[1] > screen.shape[1]
-            ):
+            match = self._match_template_cv2(
+                screen, template_name, scale, threshold=0.0, verbose=False
+            )
+            if match is None:
                 return None
-
-            result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(result)
-            h, w = template.shape[:2]
-            x1, y1 = max_loc
-            x2, y2 = x1 + w, y1 + h
-            return (idx, max_val, (x1, y1, x2, y2), template_name)
+            return (idx, match.confidence, match.box, match.template_name)
 
         best: tuple[int, float, tuple[int, int, int, int], str] | None = None
         from concurrent.futures import ThreadPoolExecutor
@@ -588,7 +580,6 @@ class TemplateMatcher:
                 if conf > best_conf:
                     best = item
                 elif conf == best_conf and idx < best_idx:
-                    # 稳定性：置信度相同按输入顺序
                     best = item
 
         if best is None:
