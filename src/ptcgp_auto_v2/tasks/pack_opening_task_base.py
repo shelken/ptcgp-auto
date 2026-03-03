@@ -490,25 +490,9 @@ class PackOpeningTaskBase(Task):
             scale=settings.scale_pack_opening_swipe,
             threshold=settings.pack_template_threshold,
             exclude_promo=True,
-            return_best_when_below_threshold=True,
+            return_best_when_below_threshold=False,
         )
         if not best:
-            logger.debug(
-                "[子包推断-滑动页] 未找到任何模板匹配: candidates=%s threshold=%.2f",
-                len(candidates),
-                settings.pack_template_threshold,
-            )
-            return None
-
-        if best.confidence < settings.pack_template_threshold:
-            logger.debug(
-                "[子包推断-滑动页] 未达阈值: best=%s/%s conf=%.2f threshold=%.2f candidates=%s",
-                best.candidate.set_code,
-                best.candidate.booster_name,
-                best.confidence,
-                settings.pack_template_threshold,
-                len(candidates),
-            )
             return None
 
         return {
