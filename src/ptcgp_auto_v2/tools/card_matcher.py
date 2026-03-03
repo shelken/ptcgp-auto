@@ -85,7 +85,7 @@ def scan_best_scale_with_matcher(
     import numpy as np
 
     best_scale = 1.0
-    best_confidence = 0.0
+    best_confidence = -1.0
 
     # 获取模板
     template = matcher.templates.get(template_name)
@@ -116,7 +116,13 @@ def scan_best_scale_with_matcher(
     scale = min_valid_scale
     while scale <= max_valid_scale + 0.001:  # 浮点数精度处理
         current_scale = round(scale, 2)
-        match = matcher.find_with_scale(img, template_name, current_scale)
+        match = matcher.find_with_scale(
+            img,
+            template_name,
+            current_scale,
+            threshold=0.0,
+            verbose=False,
+        )
         confidence = match.confidence if match else 0.0
         if confidence > best_confidence:
             best_confidence = confidence

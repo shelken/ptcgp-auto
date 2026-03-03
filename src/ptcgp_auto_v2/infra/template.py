@@ -219,7 +219,7 @@ class TemplateMatcher:
             logger.debug(f"模板不存在: {template_name}")
             return None
 
-        threshold = threshold or self.threshold
+        threshold = self.threshold if threshold is None else threshold
         template = self.templates[template_name]
         screen = self._pil_to_cv2(screenshot)
 
@@ -324,7 +324,7 @@ class TemplateMatcher:
             logger.warning(f"模板不存在: {template_name}")
             return []
 
-        threshold = threshold or self.threshold
+        threshold = self.threshold if threshold is None else threshold
         template = self.templates[template_name]
         screen = self._pil_to_cv2(screenshot)
 
@@ -449,7 +449,7 @@ class TemplateMatcher:
                 logger.debug(f"模板不存在: {template_name}")
             return None
 
-        threshold = threshold or self.threshold
+        threshold = self.threshold if threshold is None else threshold
         screen = self._pil_to_cv2(screenshot)
         return self._match_template_cv2(
             screen, template_name, scale, threshold, verbose
