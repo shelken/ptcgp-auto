@@ -75,8 +75,15 @@ class PackTemplateMatcher:
         scale: float,
         threshold: float,
         exclude_promo: bool = True,
+        return_best_when_below_threshold: bool = False,
     ) -> PackTemplateMatch | None:
-        """在候选子包中取最高置信度匹配。"""
+        """在候选子包中取最高置信度匹配。
+
+        Args:
+            return_best_when_below_threshold:
+                False（默认）：best.confidence < threshold 时返回 None
+                True：best.confidence < threshold 时也返回 best（调用方自行裁决阈值）
+        """
         filtered = self._filter_candidates(candidates, exclude_promo=exclude_promo)
         if not filtered:
             return None
@@ -110,54 +117,10 @@ class PackTemplateMatcher:
             confidence=float(best.confidence),
             box=tuple(best.box),
         )
-        return result if result.confidence >= threshold else None
 
-    def score_best(
-        self,
-        screenshot: Any,
-        candidates: list[PackCandidate],
-        *,
-        scale: float,
-        exclude_promo: bool = True,
-    ) -> PackTemplateMatch | None:
-        """计算候选子包的最高置信度（不做阈值裁决）。
-
-        说明：
-        - 用于调用方输出汇总日志（例如 best.confidence/候选数/阈值）。
-        - 线程安全与并行由 TemplateMatcher.score_best_with_scale 内部处理。
-        """
-        filtered = self._filter_candidates(candidates, exclude_promo=exclude_promo)
-        if not filtered:
-            return None
-
-        self.prepare(filtered)
-
-        template_names: list[str] = []
-        candidate_by_template: dict[str, PackCandidate] = {}
-        for c in filtered:
-            template_name = self._pack_image_manager.get_template_name(c.booster_name)
-            template_names.append(template_name)
-            candidate_by_template[template_name] = c
-
-        best = self._template_matcher.score_best_with_scale(
-            screenshot,
-            template_names,
-            scale=scale,
-            verbose=False,
-            max_workers=10,
-        )
-        if not best:
-            return None
-
-        candidate = candidate_by_template.get(best.template_name)
-        if not candidate:
-            return None
-
-        return PackTemplateMatch(
-            candidate=candidate,
-            confidence=float(best.confidence),
-            box=tuple(best.box),
-        )
+        if result.confidence >= threshold:
+            return result
+        return result if return_best_when_below_threshold else None
 
     def end_session(self) -> None:
         """卸载本 session 新加载的 pack 模板。"""
