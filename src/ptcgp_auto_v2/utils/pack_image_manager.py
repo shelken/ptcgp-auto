@@ -95,7 +95,6 @@ class PackImageManager:
         """
         pack_path = self.get_pack_path(booster_name)
         if self.is_pack_ready(booster_name):
-            logger.debug(f"卡包图片已就绪: {booster_name} ({pack_path})")
             return True
 
         logger.info(f"准备卡包图片资源: {booster_name}")
