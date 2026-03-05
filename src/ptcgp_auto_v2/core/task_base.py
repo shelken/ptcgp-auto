@@ -5,6 +5,7 @@
 定义可插拔任务的接口规范和注册机制。
 """
 
+import logging
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -25,6 +26,9 @@ if TYPE_CHECKING:
 
 Recognizer = tuple[OcrEngine, TemplateMatcher]
 """识别器类型（OCR + 模板匹配器）。"""
+
+
+logger = logging.getLogger(__name__)
 
 
 class ResetType(Enum):
@@ -308,6 +312,7 @@ class Task(ABC):
         if not skip_pre_hooks:
             pre_result = self._run_pre_hooks()
             if pre_result:
+                self._log_task_iterations(pre_result)
                 self.on_complete(pre_result)
                 return pre_result
 
@@ -395,8 +400,33 @@ class Task(ABC):
         post_data = self._run_post_hooks()
         if result.success and not result.skipped and post_data:
             result.data.update(post_data)
+        self._log_task_iterations(result)
         self.on_complete(result)
         return result
+
+    def _log_task_iterations(self, result: TaskResult):
+        """打印任务结束时的实际迭代次数。"""
+        iterations = result.data.get("iterations")
+        actual_iterations = 0
+        if isinstance(iterations, int) and iterations >= 0:
+            if iterations >= self.max_iterations:
+                actual_iterations = self.max_iterations
+            else:
+                actual_iterations = iterations + 1
+
+        if result.skipped:
+            status_text = "skipped"
+        elif result.success:
+            status_text = "success"
+        else:
+            status_text = "failed"
+
+        logger.info(
+            "任务结束: %s, status=%s, 实际迭代次数=%s",
+            self.task_type,
+            status_text,
+            actual_iterations,
+        )
 
 
 class TaskRegistry:

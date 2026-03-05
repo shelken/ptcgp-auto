@@ -7,7 +7,6 @@ import logging
 import random
 from typing import Optional
 
-
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -24,10 +23,10 @@ from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
+from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
     map_detected_cards,
 )
-from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
@@ -109,7 +108,7 @@ class WonderPickTask(Task):
 
     task_type = "wonder_pick"
     reset_type = ResetType.DAILY
-    max_iterations = 200
+    max_iterations = 100
     max_unknown_pages = 20
     pages = _build_challenge_pages()
 
