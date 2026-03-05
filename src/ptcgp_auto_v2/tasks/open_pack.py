@@ -122,7 +122,8 @@ class OpenPackTask(PackOpeningTaskBase):
 
     task_type = "open_pack"
     reset_type = ResetType.DAILY
-    max_iterations = 100
+    # 实测 66 左右
+    max_iterations = 120
     max_unknown_pages = 15
     pages = _build_open_pack_pages()
 
