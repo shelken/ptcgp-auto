@@ -217,7 +217,7 @@ class InitAccountTask(PackOpeningTaskBase):
 
     task_type = "init_account"
     reset_type = ResetType.ONCE
-    max_iterations = 300
+    max_iterations = 200
     max_unknown_pages = 30
     pages = _build_init_pages()
 

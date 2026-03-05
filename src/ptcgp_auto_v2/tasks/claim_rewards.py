@@ -128,7 +128,7 @@ class ClaimRewardsTask(Task):
 
     task_type = "claim_rewards"
     reset_type = ResetType.DAILY
-    max_iterations = 150
+    max_iterations = 100
     max_unknown_pages = 15
     pages = _build_claim_rewards_pages()
 

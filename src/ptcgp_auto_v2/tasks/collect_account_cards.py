@@ -101,7 +101,7 @@ class CollectAccountCardsTask(Task):
 
     task_type = "collect_account_cards"
     reset_type = ResetType.DAILY
-    max_iterations = 200
+    max_iterations = 100
     max_unknown_pages = 20
     pages = _build_collect_pages()
 
