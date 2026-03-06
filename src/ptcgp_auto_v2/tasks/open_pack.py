@@ -476,7 +476,7 @@ class OpenPackTask(PackOpeningTaskBase):
                     break
 
             if not match:
-                logger.warning("  -> 循环切换子包未找到目标，返回上一页")
+                logger.debug("  -> 循环切换子包未找到目标，返回上一页")
                 return navigate_back(
                     self.adb,
                     self.page_detector,
