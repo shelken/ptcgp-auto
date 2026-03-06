@@ -264,7 +264,6 @@ src/ptcgp_auto_v2/web/
 - **页面模块分层原则**：页面专属逻辑统一放在 `modules/features/`，根目录 `modules/` 仅保留编排、共享能力与跨页面路由/状态模块。
 - **筛选分层原则**：筛选逻辑按 `records/owned/tasks` 拆分到 `modules/features/filters/`，通用表单序列化能力放在 `shared_form.js`，禁止再次回退到单文件混写。
 - **显式依赖原则**：模块内禁止依赖 `window` 上的同名全局函数兜底（如 `isElementInActiveTab`），必须显式 `import` 保证可维护与可测试。
-- **Web 测试就近原则**：Web 功能改动必须优先在 `src/ptcgp_auto_v2/web/tests/` 编写/更新测试，且目录与源码一一对应，避免跨域测试文件散落。
 - **统一列表组件原则**：管理类表格页面优先复用 `macros/data_table.html`，排序/分页/刷新能力通过统一宏输出，禁止每页重复拼接按钮与分页逻辑。
 - **排序交互基线原则**：管理类列表的排序统一采用“表头点击排序 + `sort_by/sort_order` 隐藏字段透传”，禁止把排序降级为筛选区下拉框。
 - **工具栏编排原则**：管理类列表筛选工具栏统一采用“左区/右区”声明式编排（支持顺序、最小宽度、自动换行），禁止写死单行布局导致拥挤或按钮漂移。
@@ -273,7 +272,6 @@ src/ptcgp_auto_v2/web/
 - **测试数据库隔离（强制）**：`web/tests` 内凡涉及数据库的测试必须全部使用内存库（`sqlite:///:memory:`）；禁止触达 `data/ptcgp_v2.db` 或任何真实数据库连接。仓储层 `get_engine` 必须在测试中统一 monkeypatch 到内存引擎。
 - **测试外部 API 隔离（强制）**：测试中禁止发起真实外部请求（含 webhook/http）；统一使用 monkeypatch/stub/fake notifier 验证调用与参数。
 - **HTMX 替换边界原则**：`hx-target` 必须与返回片段边界一致；通知列表刷新统一替换外层 `#notification-panel`，避免重复嵌套。
-- **通知测试发送原则**：测试发送必须使用通知表真实记录（`notification_id` 或当前筛选首条），禁止发送固定默认文案。
 - **筛选栏布局一致性**：管理类列表统一采用“标题行 + 筛选行 + 表格 + 分页行”结构；筛选控件全部左对齐，禁止混入标题行导致左右布局漂移与卡片间 gap。
 - **space-y 与隐藏表单间距陷阱**：`auto_refresh_container` 使用 `space-y-*` 时，前置状态表单必须带原生 `hidden` 属性（不仅是 `.hidden` 类），否则会对后续卡片错误施加顶部间距。
 - **操作面板与记录面板分层**：如 friendship 的“添加/删除请求”属于操作面板，不得按记录表格筛选逻辑混入；搜索/排序/分页仅放在记录表格面板。
@@ -284,10 +282,8 @@ src/ptcgp_auto_v2/web/
 - **元数据层次驱动原则**：元数据管理左侧必须以“系列 -> 卡包 -> 卡牌”层次树为主，用户先选节点再执行动作；禁止回退为平铺参数筛选主导。
 - **节点动作协议原则**：元数据同步接口应接收 `node_type/node_id/action` 语义参数并在后端推导 source/scope/mode，避免前端手工拼装执行范围。
 - **元数据自动刷新状态原则**：metadata 页面自动刷新必须通过单一状态表单（`#metadata-state-form`）透传 `lang/ui_step/selected_node_type/selected_node_id/selected_set_code/selected_pack_name`，禁止依赖零散隐藏字段。
-- **元数据语言解析原则**：构建 metadata 视图时语言键应优先依据请求语言参数（如 `zh_CN`）判断，再做 normalize 回退；避免在测试或异常环境下误回退 `en` 导致中文界面显示英文。
 - **脚本服务统一原则（metadata）**：`scripts/sync_metadata.py` 仅做入口编排，必须完整复用 `FlibustierSyncService` 的抓取/计划/执行，不得再保留平行实现。
 - **metadata 动作状态透传原则**：自动刷新与局部请求必须同时透传 `current_action`，否则会出现“节点正确但动作回退”的隐性状态错位。
-- **执行节奏约束原则**：当用户明确要求“先实现后统一补测”时，开发阶段停止新增测试文件与测试分支，收尾阶段再集中测试。
 - **metadata 刷新模型原则**：metadata 属于强交互流程页，不应启用被动 `data-auto-refresh`；所有请求必须由用户显式动作触发（节点选择/检查/预览/执行）。
 - **metadata 收敛执行基线**：涉及 metadata 控制台与 Web 统一规范收敛时，统一以 `docs/plans/2026-02-27-metadata-sync-management-design.md` 中“待办回填（合并版，一字不漏）+ Phase1~Phase5 + 合并验收清单（待办）”作为唯一执行与验收基线，禁止并行维护第二套待办口径。
 - 调试（chrome-devtools）时没有特别说明时端口一般在8000
@@ -298,5 +294,3 @@ src/ptcgp_auto_v2/web/
 
 - **计划配置页面**：不喜欢滚动，希望直接展示出来，滚动不方便
 - **flex-grow 必须配 min-w-0**：使用 `flex-grow` 的容器必须同时设置 `min-w-0`，否则 flexbox 无法收缩子元素，导致内容撑开整个页面出现水平滚动条。
-- **通知列表参数归一化单入口**：通知管理相关接口（页面/列表/批量操作/测试发送）必须复用同一个过滤参数归一化函数，统一 scene/account_id/is_read/page/page_size 的容错规则，避免多处分支漂移。
-- **通知任务选项动态来源**：通知配置里的任务类型列表必须从 `TaskRegistry.all_types()` 动态读取，禁止在 `config/notification.py` 或 `web/service` 中硬编码任务类型。
