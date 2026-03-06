@@ -109,6 +109,13 @@ class OcrEngine:
         results = []
 
         try:
+            try:
+                create_image_source = Quartz.CGImageSourceCreateWithData
+                create_cg_image = Quartz.CGImageSourceCreateImageAtIndex
+            except (AttributeError, KeyError) as e:
+                logger.exception(f"OCR 缺少 Quartz 图片解码接口: {e}")
+                return []
+
             with objc.autorelease_pool():
                 # 创建 CGImage
                 ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
@@ -116,12 +123,12 @@ class OcrEngine:
                     logger.error("无法创建 NSData")
                     return []
 
-                image_source = Quartz.CGImageSourceCreateWithData(ns_data, None)
+                image_source = create_image_source(ns_data, None)
                 if image_source is None:
                     logger.error("无法创建 CGImageSource")
                     return []
 
-                cg_image = Quartz.CGImageSourceCreateImageAtIndex(image_source, 0, None)
+                cg_image = create_cg_image(image_source, 0, None)
 
                 if cg_image is None:
                     logger.error("无法创建 CGImage")
@@ -183,8 +190,10 @@ class OcrEngine:
                                 confidence=confidence,
                             ))
 
-        except (RuntimeError, ValueError) as e:
-            logger.error(f"OCR 引擎内部异常: {e}")
+        except Exception as e:
+            # PyObjC / Vision / Quartz 的桥接层可能抛出多种异常类型，
+            # OCR 失败应降级为空结果，避免中断整条任务链。
+            logger.exception(f"OCR 引擎内部异常: {e}")
             return []
 
         return results
