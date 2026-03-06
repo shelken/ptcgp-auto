@@ -662,7 +662,6 @@ class ExchangeCardsTask(Task):
 
         detected = self._card_recognizer.scan(
             set_code=self._ctx.card.set_code,
-            debug=False,
         )
         tap_result = self._tap_target_card_by_scan(detected)
         if tap_result:
@@ -737,7 +736,6 @@ class ExchangeCardsTask(Task):
         if self._ctx.card.set_code and self._ctx.card.number:
             detected = self._card_recognizer.scan(
                 set_code=self._ctx.card.set_code,
-                debug=False,
             )
             candidates = [
                 item

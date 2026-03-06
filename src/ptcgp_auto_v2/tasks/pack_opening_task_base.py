@@ -278,7 +278,6 @@ class PackOpeningTaskBase(Task):
                 cards = self.card_recognizer.scan(
                     set_code=set_code,
                     similarity_threshold=0.68,
-                    debug=True,
                     exclude_promo=True,
                 )
             except RuntimeError as e:
@@ -336,7 +335,6 @@ class PackOpeningTaskBase(Task):
 
         if self._account_card_repo and self.account.id:
             self._save_high_rarity_cards(rows)
-        logger.debug("==================================")
         self._result_recognized = True
 
     def _save_pack_record(self, rows: list[dict]) -> None:
