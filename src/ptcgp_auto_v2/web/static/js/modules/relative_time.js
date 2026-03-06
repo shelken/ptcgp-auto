@@ -12,6 +12,17 @@ function getRelativeLabels(container) {
     };
 }
 
+// --- 时长文案 ---
+function getDurationLabels(container) {
+    return {
+        locale: container.dataset.durationLocale || container.dataset.relativeLocale || 'en',
+        days: container.dataset.durationDays || 'Days',
+        hours: container.dataset.durationHours || 'Hours',
+        minutes: container.dataset.durationMinutes || 'Minutes',
+        seconds: container.dataset.durationSeconds || 'Seconds'
+    };
+}
+
 // --- 格式化相对时间 ---
 function formatRelativeTime(target, labels) {
     const diffMs = target.getTime() - Date.now();
@@ -42,6 +53,39 @@ function formatRelativeTime(target, labels) {
     return `${value}${unit}${future ? labels.in : labels.ago}`;
 }
 
+// --- 格式化精确时长 ---
+export function formatExactDuration(totalSeconds, labels) {
+    const normalizedSeconds = Number(totalSeconds);
+    if (!Number.isFinite(normalizedSeconds)) {
+        return '';
+    }
+
+    let remainingSeconds = Math.max(0, Math.trunc(normalizedSeconds));
+    const dayCount = Math.floor(remainingSeconds / 86400);
+    remainingSeconds %= 86400;
+    const hourCount = Math.floor(remainingSeconds / 3600);
+    remainingSeconds %= 3600;
+    const minuteCount = Math.floor(remainingSeconds / 60);
+    const secondCount = remainingSeconds % 60;
+
+    const parts = [];
+    if (dayCount > 0) {
+        parts.push([dayCount, labels.days]);
+    }
+    if (hourCount > 0) {
+        parts.push([hourCount, labels.hours]);
+    }
+    if (minuteCount > 0) {
+        parts.push([minuteCount, labels.minutes]);
+    }
+    parts.push([secondCount, labels.seconds]);
+
+    if (labels.locale === 'en') {
+        return parts.map(([value, label]) => `${value} ${label}`).join(' ');
+    }
+    return parts.map(([value, label]) => `${value}${label}`).join('');
+}
+
 // --- 更新相对时间 ---
 export function updateRelativeTimes(root = document) {
     const containers = [];
@@ -58,16 +102,24 @@ export function updateRelativeTimes(root = document) {
         containers.push(...root.querySelectorAll('[data-relative-locale]'));
     }
     containers.forEach((container) => {
-        const labels = getRelativeLabels(container);
+        const relativeLabels = getRelativeLabels(container);
+        const durationLabels = getDurationLabels(container);
         container.querySelectorAll('.relative-time').forEach((el) => {
             const iso = el.dataset.iso;
             if (!iso) return;
             const date = new Date(iso);
             if (Number.isNaN(date.getTime())) return;
-            el.textContent = formatRelativeTime(date, labels);
+            el.textContent = formatRelativeTime(date, relativeLabels);
             if (el.dataset.tooltip) {
                 el.setAttribute('data-tooltip', el.dataset.tooltip);
             }
+        });
+        container.querySelectorAll('.relative-duration').forEach((el) => {
+            const seconds = el.dataset.seconds;
+            if (!seconds) return;
+            const text = formatExactDuration(seconds, durationLabels);
+            if (!text) return;
+            el.textContent = text;
         });
     });
 }

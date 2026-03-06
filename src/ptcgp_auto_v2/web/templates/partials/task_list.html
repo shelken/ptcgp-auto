@@ -7,6 +7,7 @@
     t.col_status or 'Status',
     t.col_dispatch_priority or 'Dispatch Priority',
     t.col_last_completed or 'Last Completed',
+    t.col_last_duration or 'Last Duration',
     t.col_next_run or 'Next Run',
     t.col_reset_type or 'Reset Type',
     t.col_plan or 'Plan'
@@ -47,7 +48,17 @@
                     <span class="text-muted">-</span>
                 {% endif %}
             {% endset %}
-            {% set next_run_cell %}
+        {% set last_duration_cell %}
+            {% if item.last_duration_seconds is not none %}
+                <span class="font-mono text-sm relative-duration"
+                      data-seconds="{{ item.last_duration_seconds }}">
+                    {{ item.last_duration_seconds }}
+                </span>
+            {% else %}
+                <span class="text-muted">-</span>
+            {% endif %}
+        {% endset %}
+        {% set next_run_cell %}
             {% if item.status == 'running' %}
                 <span class="font-mono text-sm text-muted">{{ t.status_running or 'Running' }}</span>
             {% elif item.next_run_at %}
@@ -96,6 +107,7 @@
             status_cell,
             dispatch_cell,
             last_completed_cell,
+            last_duration_cell,
             next_run_cell,
             reset_cell,
             plan_cell
@@ -262,6 +274,15 @@
                         <th class="p-3 font-bold uppercase text-sm">
                             <button type="button"
                                     class="task-sort-btn flex items-center gap-1"
+                                    data-sort-by="last_duration_seconds"
+                                    data-default-order="desc">
+                                <span>{{ t.col_last_duration or 'Last Duration' }}</span>
+                                <span class="task-sort-arrow" aria-hidden="true"></span>
+                            </button>
+                        </th>
+                        <th class="p-3 font-bold uppercase text-sm">
+                            <button type="button"
+                                    class="task-sort-btn flex items-center gap-1"
                                     data-sort-by="next_run_at"
                                     data-default-order="asc">
                                 <span>{{ t.col_next_run or 'Next Run' }}</span>
@@ -282,7 +303,12 @@
                        data-relative-hours="{{ t.relative_hours or 'hr' }}"
                        data-relative-days="{{ t.relative_days or 'day' }}"
                        data-relative-ago="{{ t.relative_ago or 'ago' }}"
-                       data-relative-in="{{ t.relative_in or 'in' }}">
+                       data-relative-in="{{ t.relative_in or 'in' }}"
+                       data-duration-locale="{{ current_lang }}"
+                       data-duration-days="{{ t.label_interval_days or 'Days' }}"
+                       data-duration-hours="{{ t.label_interval_hours or 'Hours' }}"
+                       data-duration-minutes="{{ t.label_interval_minutes or 'Minutes' }}"
+                       data-duration-seconds="{{ t.label_interval_seconds or 'Seconds' }}">
                     {{ rows_content }}
                 </tbody>
             </table>
