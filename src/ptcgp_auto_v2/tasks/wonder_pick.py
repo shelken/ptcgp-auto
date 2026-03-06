@@ -450,7 +450,6 @@ class WonderPickTask(Task):
             return ActionResult.ok(wait=0.5)
 
         detected = self.card_recognizer.scan(
-            debug=True,
             resolve_name=lambda set_code, card_number: resolve_card_name(
                 self._card_repo, set_code, card_number
             ),
@@ -664,7 +663,6 @@ class WonderPickTask(Task):
 
     def _scan_cards(self):
         return self.card_recognizer.scan(
-            debug=True,
             resolve_name=lambda set_code, card_number: resolve_card_name(
                 self._card_repo, set_code, card_number
             ),

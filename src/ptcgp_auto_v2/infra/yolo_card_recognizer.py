@@ -54,6 +54,8 @@ class DetectedCard:
     similarity: float  # Hash匹配相似度
     bbox: Tuple[int, int, int, int]  # 边框坐标 (x1, y1, x2, y2)
     center: Tuple[float, float]  # 中心点坐标 (用于排序)
+    match_stage: str = ""  # 匹配阶段（仅用于日志）
+    match_note: str = ""  # 匹配附加信息（仅用于日志）
 
 
 @dataclass
@@ -105,14 +107,12 @@ class YoloCardRecognizer:
         set_code: str,
         obb_threshold: float = DEFAULT_OBB_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-        debug: bool = False,
     ) -> List[DetectedCard]:
         """扫描开包结果页，返回识别到的卡牌列表"""
         return self.scan(
             set_code=set_code,
             obb_threshold=obb_threshold,
             similarity_threshold=similarity_threshold,
-            debug=debug,
         )
 
     def scan(
@@ -120,7 +120,6 @@ class YoloCardRecognizer:
         set_code: Optional[str] = None,
         obb_threshold: float = DEFAULT_OBB_THRESHOLD,
         similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-        debug: bool = False,
         resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
         exclude_promo: bool = False,
     ) -> List[DetectedCard]:
@@ -130,40 +129,45 @@ class YoloCardRecognizer:
             set_code: 指定系列代码，None 表示全局模式
             obb_threshold: YOLO 检测置信度阈值
             similarity_threshold: Hash 匹配相似度阈值
-            debug: 是否输出调试信息
             resolve_name: 卡牌名称解析函数
             exclude_promo: 是否排除 PROMO 系列（开包场景使用）
         """
-        results, total, _ = self._scan_common(
+        results, total, unmatched = self._scan_common(
             set_code=set_code,
             obb_threshold=obb_threshold,
             similarity_threshold=similarity_threshold,
-            debug=debug,
             resolve_name=resolve_name,
             exclude_promo=exclude_promo,
         )
 
-        logger.info(f"识别完成: {len(results)}/{total} 张卡牌匹配成功")
+        if total > 0:
+            logger.info(f"识别完成: {len(results)}/{total} 张卡牌匹配成功")
+        else:
+            logger.debug("识别完成: 未检测到卡牌")
+        if logger.isEnabledFor(logging.DEBUG) and (results or unmatched):
+            self._log_scan_details(results, unmatched, resolve_name)
         return results
 
     @staticmethod
-    def _log_debug_details(
+    def _log_scan_details(
         detected: List[DetectedCard],
         unmatched: List[DetectedCard],
         resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
     ) -> None:
-        """输出详细的调试日志"""
+        """输出识别明细日志。"""
+        logger.debug("识别明细: 已匹配=%s, 未匹配=%s", len(detected), len(unmatched))
+
         if detected:
-            logger.info("====== 识别到 %s 张卡牌 ======", len(detected))
             for idx, item in enumerate(detected, start=1):
                 card_name = (
                     resolve_name(item.set_code, item.card_number)
                     if resolve_name
                     else None
                 )
-                name_suffix = f"{card_name}" if card_name else ""
-                logger.info(
-                    "  - #%s %s/%s-%s conf=%.2f sim=%.2f center=(%.1f, %.1f)",
+                name_suffix = f" {card_name}" if card_name else ""
+                note_suffix = f" {item.match_note}" if item.match_note else ""
+                logger.debug(
+                    "  [已匹配] #%s %s/%s%s conf=%.2f sim=%.2f center=(%.1f, %.1f) 阶段=%s%s",
                     idx,
                     item.set_code or "unknown",
                     item.card_number,
@@ -172,10 +176,11 @@ class YoloCardRecognizer:
                     item.similarity,
                     item.center[0],
                     item.center[1],
+                    item.match_stage or "unknown",
+                    note_suffix,
                 )
 
         if unmatched:
-            logger.info("====== 未匹配 %s 张卡牌 ======", len(unmatched))
             for idx, item in enumerate(unmatched, start=1):
                 card_number = item.card_number
                 card_name = (
@@ -183,9 +188,10 @@ class YoloCardRecognizer:
                     if resolve_name and card_number != UNKNOWN_CARD_NUMBER
                     else None
                 )
-                name_suffix = f"{card_name}" if card_name else ""
-                logger.info(
-                    "  - #%s %s/%s-%s conf=%.2f sim=%.2f center=(%.1f, %.1f)",
+                name_suffix = f" {card_name}" if card_name else ""
+                note_suffix = f" {item.match_note}" if item.match_note else ""
+                logger.debug(
+                    "  [未匹配] #%s %s/%s%s conf=%.2f sim=%.2f center=(%.1f, %.1f) 原因=%s%s",
                     idx,
                     item.set_code or "unknown",
                     card_number if card_number != UNKNOWN_CARD_NUMBER else "unknown",
@@ -194,6 +200,8 @@ class YoloCardRecognizer:
                     item.similarity,
                     item.center[0],
                     item.center[1],
+                    item.match_stage or "unknown",
+                    note_suffix,
                 )
 
     def _scan_common(
@@ -201,7 +209,6 @@ class YoloCardRecognizer:
         set_code: Optional[str],
         obb_threshold: float,
         similarity_threshold: float,
-        debug: bool,
         resolve_name: Optional[Callable[[Optional[str], int], Optional[str]]] = None,
         exclude_promo: bool = False,
     ) -> Tuple[List[DetectedCard], int, List[DetectedCard]]:
@@ -251,6 +258,17 @@ class YoloCardRecognizer:
             base_hash = self._compute_hash_from_bgr(cropped)
             if base_hash is None:
                 logger.debug(f"卡牌 #{card_info.index} 哈希计算失败")
+                unmatched.append(
+                    DetectedCard(
+                        set_code=set_code,
+                        card_number=UNKNOWN_CARD_NUMBER,
+                        confidence=card_info.confidence,
+                        similarity=0.0,
+                        bbox=card_info.bbox,
+                        center=card_info.center,
+                        match_stage="哈希计算失败",
+                    )
+                )
                 continue
 
             # 获取TopK候选（第一阶段）
@@ -271,6 +289,7 @@ class YoloCardRecognizer:
                         similarity=0.0,
                         bbox=card_info.bbox,
                         center=card_info.center,
+                        match_stage="无候选匹配",
                     )
                 )
                 continue
@@ -289,13 +308,10 @@ class YoloCardRecognizer:
                         similarity=stage1_best_score,
                         bbox=card_info.bbox,
                         center=card_info.center,
+                        match_stage="第一阶段通过",
+                        match_note=f"sim={stage1_best_score:.4f}",
                     )
                 )
-                if debug:
-                    card_id = f"{match_set_code}/{match_card_number:03d}"
-                    logger.info(
-                        f"卡牌 #{card_info.index}: ✅ 第一阶段通过 - {card_id} (sim={stage1_best_score:.4f})"
-                    )
             else:
                 # 第一阶段未通过，进入第二阶段：多视角哈希重排序
                 reranked = self._perform_second_stage(
@@ -317,13 +333,10 @@ class YoloCardRecognizer:
                                 similarity=best.final_score,
                                 bbox=card_info.bbox,
                                 center=card_info.center,
+                                match_stage="第二阶段通过",
+                                match_note=f"sim={best.final_score:.4f}, gap={gap:.4f}",
                             )
                         )
-                        if debug:
-                            card_id = f"{best.set_code}/{best.card_number:03d}"
-                            logger.info(
-                                f"卡牌 #{card_info.index}: ✅ 第二阶段通过 - {card_id} (sim={best.final_score:.4f}, gap={gap:.4f})"
-                            )
                     else:
                         # 差距不足，拒绝匹配
                         unmatched.append(
@@ -334,13 +347,10 @@ class YoloCardRecognizer:
                                 similarity=best.final_score,
                                 bbox=card_info.bbox,
                                 center=card_info.center,
+                                match_stage="差距不足",
+                                match_note=f"gap={gap:.4f} < {HASH_SIMILARITY_GAP_MIN}",
                             )
                         )
-                        if debug:
-                            card_id = f"{best.set_code}/{best.card_number:03d}"
-                            logger.info(
-                                f"卡牌 #{card_info.index}: ❌ 差距不足 - {card_id} (gap={gap:.4f} < {HASH_SIMILARITY_GAP_MIN})"
-                            )
                 else:
                     # 第二阶段也未通过
                     best_candidate = reranked[0] if reranked else None
@@ -358,14 +368,11 @@ class YoloCardRecognizer:
                             else 0.0,
                             bbox=card_info.bbox,
                             center=card_info.center,
+                            match_stage="未通过两阶段匹配",
                         )
                     )
-                    if debug:
-                        logger.info(f"卡牌 #{card_info.index}: ❌ 未通过两阶段匹配")
 
         results = self._sort_by_reading_order(results)
-        if debug:
-            self._log_debug_details(results, unmatched, resolve_name)
         return results, len(detected_cards), unmatched
 
     def _perform_second_stage(
@@ -562,7 +569,7 @@ class YoloCardRecognizer:
 
         filtered_count = len(detected) - len(unique_cards)
         if filtered_count > 0:
-            logger.info(f"已过滤 {filtered_count} 个重复检测")
+            logger.debug(f"已过滤 {filtered_count} 个重复检测")
 
         return unique_cards
 

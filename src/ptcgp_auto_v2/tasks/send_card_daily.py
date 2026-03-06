@@ -544,7 +544,6 @@ class SendCardDailyTask(Task):
 
         detected = self.card_recognizer.scan(
             set_code=FIXED_CARD_SET_CODE,
-            debug=False,
         )
         scan_tap_result = self._tap_target_card_by_scan(detected)
         if scan_tap_result:
