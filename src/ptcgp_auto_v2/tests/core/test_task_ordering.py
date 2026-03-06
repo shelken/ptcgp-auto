@@ -8,6 +8,7 @@ src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
 from ptcgp_auto_v2.core.task_ordering import (  # noqa: E402
+    TASK_SORT_BY_LAST_DURATION,
     build_task_instance_order_by,
     normalize_task_sort,
 )
@@ -33,6 +34,25 @@ class TestTaskOrdering(unittest.TestCase):
         self.assertIn("reset_type", sql_text)
         self.assertIn("next_run_at", sql_text)
         self.assertIn("last_completed_at", sql_text)
+
+    def test_normalize_task_sort_accepts_last_duration(self):
+        sort_by, sort_order = normalize_task_sort(
+            sort_by=TASK_SORT_BY_LAST_DURATION,
+            sort_order="desc",
+        )
+
+        self.assertEqual(TASK_SORT_BY_LAST_DURATION, sort_by)
+        self.assertEqual("desc", sort_order)
+
+    def test_build_last_duration_order_contains_duration_column(self):
+        order_by = build_task_instance_order_by(
+            sort_by=TASK_SORT_BY_LAST_DURATION,
+            sort_order="desc",
+        )
+        statement = select(TaskInstance).order_by(*order_by)
+        sql_text = str(statement)
+
+        self.assertIn("last_duration_seconds", sql_text)
 
 
 if __name__ == "__main__":

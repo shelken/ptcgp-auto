@@ -226,6 +226,7 @@ class TaskInstanceRepository:
             db_instance.status = instance.status
             db_instance.error_message = instance.error_message
             db_instance.last_completed_at = instance.last_completed_at
+            db_instance.last_duration_seconds = instance.last_duration_seconds
             db_instance.next_run_at = instance.next_run_at
             db_instance.updated_at = datetime.now()
             session.add(db_instance)

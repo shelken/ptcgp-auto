@@ -12,6 +12,7 @@ from ptcgp_auto_v2.db.models import TaskInstance
 
 TASK_SORT_BY_DISPATCH_PRIORITY = "dispatch_priority"
 TASK_SORT_BY_LAST_COMPLETED = "last_completed_at"
+TASK_SORT_BY_LAST_DURATION = "last_duration_seconds"
 TASK_SORT_BY_NEXT_RUN = "next_run_at"
 
 
@@ -20,6 +21,7 @@ def normalize_task_sort(sort_by: str | None, sort_order: str | None) -> tuple[st
     allowed_sort_by = {
         TASK_SORT_BY_DISPATCH_PRIORITY,
         TASK_SORT_BY_LAST_COMPLETED,
+        TASK_SORT_BY_LAST_DURATION,
         TASK_SORT_BY_NEXT_RUN,
     }
     normalized_sort_by = (
@@ -41,6 +43,7 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
 
     next_run_col = col(cast(Any, TaskInstance.next_run_at))
     last_completed_col = col(cast(Any, TaskInstance.last_completed_at))
+    last_duration_col = col(cast(Any, TaskInstance.last_duration_seconds))
 
     if normalized_sort_by == TASK_SORT_BY_DISPATCH_PRIORITY:
         reset_priority = case((TaskInstance.reset_type == "once", 0), else_=1)
@@ -61,6 +64,18 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
         return [
             once_priority.asc(),
             next_run_col.desc().nulls_first(),
+        ]
+
+    if normalized_sort_by == TASK_SORT_BY_LAST_DURATION:
+        once_priority = case((TaskInstance.reset_type == "once", 1), else_=0)
+        if normalized_sort_order == "asc":
+            return [
+                once_priority.asc(),
+                last_duration_col.asc().nulls_last(),
+            ]
+        return [
+            once_priority.asc(),
+            last_duration_col.desc().nulls_last(),
         ]
 
     # once 任务不参与 last_completed_at 排序，强制排最后

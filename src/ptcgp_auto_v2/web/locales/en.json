@@ -117,6 +117,7 @@
     "col_target_pack": "Target Pack",
     "col_actions": "Actions",
     "col_last_completed": "Last Completed",
+    "col_last_duration": "Last Duration",
     "col_next_run": "Next Run",
     "col_dispatch_priority": "Dispatch Priority",
     "col_reset_type": "Reset Type",

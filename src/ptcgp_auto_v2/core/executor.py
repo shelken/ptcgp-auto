@@ -272,6 +272,7 @@ class BaseExecutor(ABC):
         status: TaskStatus,
         error_message: Optional[str] = None,
         clear_error_on_success: bool = True,
+        duration_seconds: Optional[int] = None,
     ):
         """更新任务实例状态"""
         task_instance.status = status.value
@@ -288,6 +289,13 @@ class BaseExecutor(ABC):
             self._unblock_dependent_tasks(account)
             if clear_error_on_success:
                 task_instance.error_message = None
+        if status in (
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+            TaskStatus.SKIPPED,
+            TaskStatus.BLOCKED,
+        ) and duration_seconds is not None:
+            task_instance.last_duration_seconds = max(0, duration_seconds)
         if error_message:
             task_instance.error_message = error_message
         task_instance.updated_at = datetime.now()
@@ -297,6 +305,39 @@ class BaseExecutor(ABC):
         # 发送任务状态通知
         if status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
             self._notify_task_status(task_instance, status.value, error_message or "")
+
+    def _measure_elapsed_seconds(self, started_monotonic: float) -> int:
+        """将单调时钟差值转换为整数秒。"""
+        elapsed_seconds = time.monotonic() - started_monotonic
+        return max(0, int(elapsed_seconds + 0.5))
+
+    def _get_result_duration_seconds(self, result: TaskResult) -> int:
+        """从任务结果中读取耗时秒数。"""
+        duration_seconds = result.data.get("duration_seconds")
+        if isinstance(duration_seconds, int) and duration_seconds >= 0:
+            return duration_seconds
+        return 0
+
+    def _set_result_duration_seconds(
+        self,
+        result: TaskResult,
+        duration_seconds: int,
+    ) -> TaskResult:
+        """回填任务结果中的耗时秒数。"""
+        result.data["duration_seconds"] = max(0, duration_seconds)
+        return result
+
+    def _execute_task_once(
+        self,
+        task: Task,
+        *,
+        skip_pre_hooks: bool = False,
+    ) -> TaskResult:
+        """执行单次任务并记录当前任务自身耗时。"""
+        started_monotonic = time.monotonic()
+        result = task.execute(skip_pre_hooks=skip_pre_hooks)
+        duration_seconds = self._measure_elapsed_seconds(started_monotonic)
+        return self._set_result_duration_seconds(result, duration_seconds)
 
     def _notify_task_status(
         self,
@@ -338,7 +379,8 @@ class BaseExecutor(ABC):
         logger.debug("任务链: %s", " -> ".join(chain))
 
         task = self._build_task(task_instance, account)
-        result = task.execute()
+        result = self._execute_task_once(task)
+        current_duration_seconds = self._get_result_duration_seconds(result)
 
         pre_task_types = result.data.get("pre_task_types")
         if result.skipped and isinstance(pre_task_types, list) and pre_task_types:
@@ -357,7 +399,10 @@ class BaseExecutor(ABC):
                     stack.remove(current_task_type)
                     chain.pop()
                     set_context(task=current_task_type)
-                    return TaskResult.fail(f"前置任务创建失败: {pre_task_type}")
+                    return self._set_result_duration_seconds(
+                        TaskResult.fail(f"前置任务创建失败: {pre_task_type}"),
+                        current_duration_seconds,
+                    )
 
                 logger.info(f"执行前置任务: {pre_task_type} (账号: {account.nickname})")
                 pre_result = self._execute_task_with_prerequisites(
@@ -374,11 +419,15 @@ class BaseExecutor(ABC):
                         status=TaskStatus.FAILED,
                         error_message=pre_result.error,
                         clear_error_on_success=False,
+                        duration_seconds=self._get_result_duration_seconds(pre_result),
                     )
                     stack.remove(current_task_type)
                     chain.pop()
                     set_context(task=current_task_type)
-                    return TaskResult.fail(f"前置任务失败: {pre_result.error}")
+                    return self._set_result_duration_seconds(
+                        TaskResult.fail(f"前置任务失败: {pre_result.error}"),
+                        current_duration_seconds,
+                    )
 
                 self._apply_task_status(
                     task_instance=pre_task_instance,
@@ -394,16 +443,18 @@ class BaseExecutor(ABC):
                         else None
                     ),
                     clear_error_on_success=not pre_result.skipped,
+                    duration_seconds=self._get_result_duration_seconds(pre_result),
                 )
                 set_context(task=current_task_type)
 
             task = self._build_task(task_instance, account)
-            result = task.execute(skip_pre_hooks=True)
+            result = self._execute_task_once(task, skip_pre_hooks=True)
+            current_duration_seconds += self._get_result_duration_seconds(result)
 
         stack.remove(current_task_type)
         chain.pop()
         set_context(task=current_task_type)
-        return result
+        return self._set_result_duration_seconds(result, current_duration_seconds)
 
     def _reschedule_task(
         self,
@@ -488,7 +539,12 @@ class TaskExecutor(BaseExecutor):
         """创建任务实例"""
         return self._build_task(self.task_instance, self.account)
 
-    def _update_status(self, status: TaskStatus, error: Optional[str] = None):
+    def _update_status(
+        self,
+        status: TaskStatus,
+        error: Optional[str] = None,
+        duration_seconds: Optional[int] = None,
+    ):
         """更新任务实例状态"""
         self._apply_task_status(
             task_instance=self.task_instance,
@@ -496,6 +552,7 @@ class TaskExecutor(BaseExecutor):
             status=status,
             error_message=error,
             clear_error_on_success=True,
+            duration_seconds=duration_seconds,
         )
 
     def run(self):
@@ -533,11 +590,16 @@ class TaskExecutor(BaseExecutor):
             # 账号切换（如需要）
             if not self._is_current_account(self.account):
                 if not self._switch_account(self.account):
-                    self._update_status(TaskStatus.FAILED, "账号切换失败")
+                    self._update_status(
+                        TaskStatus.FAILED,
+                        "账号切换失败",
+                        duration_seconds=0,
+                    )
                     return
 
             # 重试循环
             last_error = None
+            last_duration_seconds = 0
             for attempt in range(self.config.max_retries):
                 # 每次重试前检查停止信号
                 if self._should_stop():
@@ -549,6 +611,7 @@ class TaskExecutor(BaseExecutor):
                         task_instance=self.task_instance,
                         account=self.account,
                     )
+                    last_duration_seconds = self._get_result_duration_seconds(result)
 
                     if result.success:
                         if result.skipped:
@@ -562,6 +625,7 @@ class TaskExecutor(BaseExecutor):
                                 status=TaskStatus.SKIPPED,
                                 error_message=f"跳过: {result.skip_reason}",
                                 clear_error_on_success=False,
+                                duration_seconds=last_duration_seconds,
                             )
                         else:
                             if self._handle_requeue_in_result(
@@ -579,10 +643,14 @@ class TaskExecutor(BaseExecutor):
                                     status=TaskStatus.COMPLETED,
                                     error_message=f"完成: {complete_reason}",
                                     clear_error_on_success=False,
+                                    duration_seconds=last_duration_seconds,
                                 )
                             else:
                                 logger.info(f"任务完成: {self.task_instance.task_type}")
-                                self._update_status(TaskStatus.COMPLETED)
+                                self._update_status(
+                                    TaskStatus.COMPLETED,
+                                    duration_seconds=last_duration_seconds,
+                                )
                         return
                     else:
                         last_error = result.error
@@ -607,11 +675,15 @@ class TaskExecutor(BaseExecutor):
 
             # 超过最大重试次数
             logger.error(f"任务最终失败: {self.task_instance.task_type}")
-            self._update_status(TaskStatus.FAILED, last_error)
+            self._update_status(
+                TaskStatus.FAILED,
+                last_error,
+                duration_seconds=last_duration_seconds,
+            )
 
         except Exception as e:
             logger.exception(f"执行器异常: {e}")
-            self._update_status(TaskStatus.FAILED, str(e))
+            self._update_status(TaskStatus.FAILED, str(e), duration_seconds=0)
 
         finally:
             self._cleanup()
@@ -703,6 +775,7 @@ class AccountBatchExecutor(BaseExecutor):
                         status=TaskStatus.SKIPPED,
                         error_message=f"跳过: {result.skip_reason}",
                         clear_error_on_success=False,
+                        duration_seconds=self._get_result_duration_seconds(result),
                     )
                 else:
                     if self._handle_requeue_in_result(result, task_instance):
@@ -718,6 +791,7 @@ class AccountBatchExecutor(BaseExecutor):
                             status=TaskStatus.COMPLETED,
                             error_message=f"完成: {complete_reason}",
                             clear_error_on_success=False,
+                            duration_seconds=self._get_result_duration_seconds(result),
                         )
                     else:
                         logger.info(f"任务完成: {task_instance.task_type}")
@@ -726,6 +800,7 @@ class AccountBatchExecutor(BaseExecutor):
                             account=self.account,
                             status=TaskStatus.COMPLETED,
                             clear_error_on_success=True,
+                            duration_seconds=self._get_result_duration_seconds(result),
                         )
             else:
                 logger.error(f"任务失败: {task_instance.task_type} - {result.error}")
@@ -735,6 +810,7 @@ class AccountBatchExecutor(BaseExecutor):
                     status=TaskStatus.FAILED,
                     error_message=result.error,
                     clear_error_on_success=False,
+                    duration_seconds=self._get_result_duration_seconds(result),
                 )
 
         except RuntimeError as e:
@@ -745,6 +821,7 @@ class AccountBatchExecutor(BaseExecutor):
                 status=TaskStatus.FAILED,
                 error_message=str(e),
                 clear_error_on_success=False,
+                duration_seconds=0,
             )
         return True
 
@@ -786,10 +863,14 @@ class AccountBatchExecutor(BaseExecutor):
                 if not self._switch_account(self.account):
                     # 账号切换失败，将所有任务标记为失败
                     for task_instance in self.task_instances:
-                        task_instance.status = TaskStatus.FAILED.value
-                        task_instance.error_message = "账号切换失败"
-                        task_instance.updated_at = datetime.now()
-                        task_instance.save()
+                        self._apply_task_status(
+                            task_instance=task_instance,
+                            account=self.account,
+                            status=TaskStatus.FAILED,
+                            error_message="账号切换失败",
+                            clear_error_on_success=False,
+                            duration_seconds=0,
+                        )
                     logger.error("账号切换失败，终止批量任务")
                     return
 
@@ -828,6 +909,7 @@ class AccountBatchExecutor(BaseExecutor):
                         status=TaskStatus.FAILED,
                         error_message=str(e),
                         clear_error_on_success=False,
+                        duration_seconds=0,
                     )
 
         finally:
