@@ -5,6 +5,7 @@ from typing import Dict, Optional
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
+
 from .utils import find_text_by_variants
 
 logger = get_logger(__name__)
@@ -193,7 +194,7 @@ class PackActions:
 
         # 3. 点击右侧切换子包
         for attempt in range(MAX_SWITCH_ATTEMPTS):
-            logger.info(f"  -> 第 {attempt + 1} 次切换子包")
+            logger.debug(f"  -> 第 {attempt + 1} 次切换子包")
             # 点击屏幕右侧区域切换
             tap_x = int(config.SCREEN_WIDTH * 0.75)
             tap_y = config.SCREEN_HEIGHT // 2

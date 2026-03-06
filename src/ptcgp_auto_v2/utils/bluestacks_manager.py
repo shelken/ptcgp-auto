@@ -199,7 +199,7 @@ def discover_bluestacks_devices() -> List[str]:
 
     devices = sorted(devices, key=lambda addr: int(addr.split(":")[1]))
     if devices:
-        logger.info("发现 %s 个 BlueStacks 设备", len(devices))
+        logger.debug("发现 %s 个 BlueStacks 设备", len(devices))
     return devices
 
 

@@ -13,18 +13,18 @@ import numpy as np
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import (
-    TOPK_CANDIDATES,
     HASH_SIMILARITY_TIE_THRESHOLD,
+    TOPK_CANDIDATES,
 )
 from ptcgp_auto_v2.db.repositories import CardRepository
-from ptcgp_auto_v2.utils.perceptual_hash import (
-    pil_to_color_pixels,
-    calculate_perceptual_hash,
-    encode_hash_to_base64,
-    decode_hash_from_base64,
-    calculate_similarity,
-)
 from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
+from ptcgp_auto_v2.utils.perceptual_hash import (
+    calculate_perceptual_hash,
+    calculate_similarity,
+    decode_hash_from_base64,
+    encode_hash_to_base64,
+    pil_to_color_pixels,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ class CardHashManager:
         }
         self._loaded_sets.add(set_code)
 
-        logger.info(f"系列 {set_code} Hash索引加载完成，共 {len(hash_data)} 张卡牌")
+        logger.debug(f"系列 {set_code} Hash索引加载完成，共 {len(hash_data)} 张卡牌")
 
     def load_all_hashes(self, exclude_promo: bool = False) -> bool:
         """加载所有系列Hash到内存（全局模式）
@@ -178,7 +178,7 @@ class CardHashManager:
 
         if not exclude_promo:
             self._all_loaded = True
-        logger.info(f"全局Hash索引加载完成，共 {len(self._global_cache)} 张卡牌")
+        logger.debug(f"全局Hash索引加载完成，共 {len(self._global_cache)} 张卡牌")
         return True
 
     def find_best_match(

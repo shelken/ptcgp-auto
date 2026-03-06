@@ -8,7 +8,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.infra.adb import AdbController
@@ -138,7 +138,9 @@ class AccountSwitcher:
 
             # 4. 复制 XML 到 shared_prefs
             logger.debug("复制 XML 到 shared_prefs...")
-            result = self.adb.run_as_root(f"cp {DEVICE_TEMP_PATH} {self._settings.device_xml_path}")
+            result = self.adb.run_as_root(
+                f"cp {DEVICE_TEMP_PATH} {self._settings.device_xml_path}"
+            )
             if result is None:
                 logger.error("复制 XML 到 shared_prefs 失败")
                 return False
@@ -157,7 +159,7 @@ class AccountSwitcher:
             if restart_app:
                 self.adb.restart_app(self._settings.app_package)
 
-            logger.info(f"账号 XML 已注入: {xml_path.name}")
+            logger.debug(f"账号 XML 已注入: {xml_path.name}")
             return True
 
         except Exception as e:
@@ -175,8 +177,6 @@ class AccountSwitcher:
         for pattern in self._settings.files_to_clean_on_switch:
             self.adb.run_as_root(f"rm -f {pattern}")
         logger.debug("账号绑定文件清理完成")
-
-
 
     def clean_device_xml(self) -> bool:
         """
@@ -196,5 +196,3 @@ class AccountSwitcher:
         except Exception as e:
             logger.error(f"清理账号 XML 失败: {e}")
             return False
-
-
