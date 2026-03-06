@@ -186,3 +186,37 @@ def test_account_batch_executor_account_switch_failure_records_zero_duration(
         TaskStatus.FAILED.value,
     ]
     assert [task.last_duration_seconds for task in task_instances] == [0, 0]
+
+
+def test_account_batch_executor_catches_non_runtime_error(monkeypatch):
+    """批量执行器应收口非 RuntimeError，避免 Future 冒泡未处理异常。"""
+    account = SimpleNamespace(
+        id=1,
+        nickname="batch",
+        display_name="batch",
+        task_plan_associations=[],
+    )
+    task_instances = [FakeTaskInstance("claim_rewards", account, task_id=1)]
+    executor = AccountBatchExecutor(
+        FakeDevice(),
+        account,
+        task_instances,
+        FakeDevicePool(),
+    )
+
+    monkeypatch.setattr(executor, "_prepare_batch_run", lambda: True)
+    monkeypatch.setattr(
+        executor,
+        "_execute_task_with_prerequisites",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            KeyError("CGImageSourceCreateWithData")
+        ),
+    )
+    monkeypatch.setattr(executor, "_cleanup", lambda: None)
+    monkeypatch.setattr(executor, "_notify_task_status", lambda *_args, **_kwargs: None)
+
+    executor.run()
+
+    assert task_instances[0].status == TaskStatus.FAILED.value
+    assert task_instances[0].error_message == "'CGImageSourceCreateWithData'"
+    assert task_instances[0].last_duration_seconds == 0

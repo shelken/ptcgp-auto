@@ -769,7 +769,7 @@ class TaskExecutor(BaseExecutor):
                     self.config.max_retries,
                     result.error,
                 )
-            except RuntimeError as e:
+            except Exception as e:
                 last_error = str(e)
                 logger.exception(
                     f"任务异常 (尝试 {attempt + 1}/{self.config.max_retries}): {e}"
@@ -925,7 +925,7 @@ class AccountBatchExecutor(BaseExecutor):
                 account=self.account,
             )
             self._apply_task_result(task_instance, self.account, result)
-        except RuntimeError as e:
+        except Exception as e:
             logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
             self._apply_task_failure(task_instance, self.account, str(e))
 
@@ -962,7 +962,7 @@ class AccountBatchExecutor(BaseExecutor):
                 return
             self._run_pending_tasks()
             logger.info(f"批量任务执行完成 (账号: {self.account.nickname})")
-        except RuntimeError as e:
+        except Exception as e:
             logger.exception(f"批量执行器异常: {e}")
             self._fail_running_batch_tasks(str(e))
         finally:
