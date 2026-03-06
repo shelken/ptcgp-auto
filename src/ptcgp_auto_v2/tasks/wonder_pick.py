@@ -217,7 +217,7 @@ class WonderPickTask(Task):
 
         result = tap_text_exact(self.adb, ocr_results, thanks_patterns, wait=1.5)
         if result:
-            logger.debug("  -> 点击「謝謝！」按钮")
+            logger.info("  -> 点击「謝謝！」按钮")
             return result
 
         logger.debug("  -> 未找到「謝謝！」按钮")

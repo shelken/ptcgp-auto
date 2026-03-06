@@ -743,7 +743,7 @@ class InitAccountTask(PackOpeningTaskBase):
         tap_result = self._quick_tap_home_like_fallback()
 
         if not self._is_action_done("after_favorite_card"):
-            logger.debug("  -> 已在主页，先点击推进提示；未到最终引导阶段，继续等待")
+            logger.info("  -> 已在主页，先点击推进提示；未到最终引导阶段，继续等待")
             return tap_result or ActionResult.ok(wait=1.0)
 
         home_count = int(self._action_cache.get("home_consecutive_count", 0)) + 1

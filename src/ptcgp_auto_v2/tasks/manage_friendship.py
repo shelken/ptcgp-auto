@@ -489,7 +489,7 @@ class ManageFriendshipTask(Task):
             )
             tap_y = (box[1] + box[3]) // 2
             self.adb.tap(tap_x, tap_y)
-            logger.debug("点击申请按钮: (%s, %s)", tap_x, tap_y)
+            logger.info("点击申请按钮")
             return ActionResult.ok(wait=0.9)
         return None
 
@@ -626,7 +626,7 @@ class ManageFriendshipTask(Task):
             return ActionResult.wait(0.6)
 
         if not self._is_action_done("search_submitted"):
-            logger.debug("请求 %s: 点击icon_search执行查询", request_id)
+            logger.info("请求 %s: 点击icon_search执行查询", request_id)
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=0.9)
             if result:
                 self._mark_action_done("search_submitted")
@@ -705,11 +705,11 @@ class ManageFriendshipTask(Task):
         if apply_visible:
             apply_result = self._tap_apply_button(ocr_results)
             if apply_result:
-                logger.debug("请求 %s 检测到申请按钮，执行申请点击", req.id)
+                logger.info("请求 %s 检测到申请按钮，执行申请点击", req.id)
                 self._mark_action_done("add_apply_clicked")
                 self._add_apply_wait_rounds = 0
                 return apply_result
-            logger.debug("请求 %s 检测到申请按钮，但点击未成功", req.id)
+            logger.info("请求 %s 检测到申请按钮，但点击未成功", req.id)
             return ActionResult.wait(0.6)
 
         if not self._is_action_done("add_apply_clicked"):
@@ -838,7 +838,7 @@ class ManageFriendshipTask(Task):
                 wait=0.8,
             )
             if cancel_result:
-                logger.debug("取消邀请流程: 检测到取消交友邀请，立即点击")
+                logger.info("取消邀请流程: 检测到取消交友邀请，立即点击")
                 self._cancel_wait_rounds += 1
                 return cancel_result
 

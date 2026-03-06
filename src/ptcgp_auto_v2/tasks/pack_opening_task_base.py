@@ -40,17 +40,17 @@ from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
     tap_opening_continue,
 )
 from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
+from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
+    PackCandidate,
+    PackTemplateMatcher,
+    build_pack_template_matcher,
+)
 from ptcgp_auto_v2.utils.gesture import (
     quick_tap,
     tap_center,
     tap_matched_element,
 )
 from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
-from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
-    PackCandidate,
-    PackTemplateMatcher,
-    build_pack_template_matcher,
-)
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (
@@ -510,7 +510,7 @@ class PackOpeningTaskBase(Task):
 
     def _handle_pack_opening_select(self, page_info: dict) -> ActionResult:
         """点击选择要开的扩充包"""
-        logger.debug("  -> 点击屏幕中心选择扩充包")
+        logger.info("  -> 点击屏幕中心选择扩充包")
         return tap_center(self.adb, wait=1.0)
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
