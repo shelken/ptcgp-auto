@@ -328,13 +328,13 @@ class ClaimRewardsTask(Task):
                         if screenshot and is_button_clickable(
                             screenshot, box, threshold=0.3
                         ):
-                            logger.debug(f"  -> 点击全部领取按钮: {pattern}")
+                            logger.info(f"  -> 点击全部领取按钮: {pattern}")
                             return tap_box(self.adb, box, wait=wait)
                         else:
                             logger.debug(f"  -> 全部领取按钮 {pattern} 已置灰，跳过")
                     else:
                         # 其他按钮（領取/達成）直接点击，不需要颜色检查
-                        logger.debug(f"  -> 点击领取按钮: {pattern}")
+                        logger.info(f"  -> 点击领取按钮: {pattern}")
                         return tap_box(self.adb, box, wait=wait)
 
         return None

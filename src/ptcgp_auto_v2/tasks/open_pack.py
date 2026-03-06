@@ -417,7 +417,7 @@ class OpenPackTask(PackOpeningTaskBase):
                 )
                 if result:
                     self._mark_action_done("series_clicked")
-                    logger.debug(f"  -> 点击切换到 {target_series} 系列")
+                    logger.info(f"  -> 点击切换到 {target_series} 系列")
                     return result
 
         # 3. 上滑查找
@@ -579,10 +579,10 @@ class OpenPackTask(PackOpeningTaskBase):
 
         result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
         if result:
-            logger.debug("  -> 点击关闭弹窗")
+            logger.info("  -> 点击关闭弹窗")
             return result
 
-        logger.debug("  -> 点击屏幕底部关闭弹窗")
+        logger.info("  -> 点击屏幕底部关闭弹窗")
         return tap_bottom_close(self.adb, BASE_POPUP_CLOSE_TAP_Y, wait=1.0)
 
     # ============================================================

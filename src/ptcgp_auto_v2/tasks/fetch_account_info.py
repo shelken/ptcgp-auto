@@ -309,7 +309,7 @@ class FetchAccountInfoTask(Task):
             self._mark_action_done("holdings_entered")
             self._holdings_scroll_rounds = 0
             self._holdings_scan_rounds = 0
-            logger.debug("  -> 点击持有物")
+            logger.info("  -> 点击持有物")
             return result
         return ActionResult.wait(0.8)
 
@@ -370,7 +370,7 @@ class FetchAccountInfoTask(Task):
         """点击头像进入个人资料"""
         lv_pos = self._find_lv_position(ocr)
         if lv_pos:
-            logger.debug("  -> 点击头像区域")
+            logger.info("  -> 点击头像区域")
             return tap_above_point(
                 self.adb, lv_pos, BASE_AVATAR_OFFSET_Y, MIN_TAP_Y, wait=5.0
             )

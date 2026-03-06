@@ -812,7 +812,7 @@ class ExchangeCardsTask(Task):
                     get_text_patterns("exchange_cancel_button"),
                     wait=0.8,
                 )
-                logger.debug("[waiting_page] 点击取消结果: %s", cancel_result)
+                logger.info("[waiting_page] 点击取消结果: %s", cancel_result)
                 if cancel_result:
                     self._mark_action_done("waiting_cancel_clicked")
                     return cancel_result
@@ -849,7 +849,7 @@ class ExchangeCardsTask(Task):
             self.adb, self.page_detector, "btn_close", wait=0.8
         )
         if refresh_result:
-            logger.debug("等待窗口轮询：返回交换主页后重新点击确认刷新状态")
+            logger.info("等待窗口轮询：返回交换主页后重新点击确认刷新状态")
             return refresh_result
         return ActionResult.wait(1.0)
 
@@ -952,7 +952,7 @@ class ExchangeCardsTask(Task):
                 self._mark_action_done("recover_cancel_done_clicked")
                 logger.info("旧提议已取消，等待页面退出后继续重发")
             else:
-                logger.debug("取消完成页仍停留，继续点击 OK 等待退出")
+                logger.info("取消完成页仍停留，继续点击 OK 等待退出")
             return ActionResult.ok(wait=1.0)
 
         reason = self._ctx.runtime.current_request.cancel_reason or "交换已取消"

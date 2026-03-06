@@ -83,7 +83,7 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
             # 优先使用页面检测阶段匹配到的具体模板信息
             matched_template = page_info.get("matched_template")
             if matched_template and matched_template.get("box"):
-                logger.debug(f"点击上下文匹配模板: {matched_template['template']}")
+                logger.info(f"点击上下文匹配模板: {matched_template['template']}")
                 return tap_box(adb, matched_template["box"], wait=DEFAULT_COMMON_WAIT)
 
             # 回退到配置的静态模板名
