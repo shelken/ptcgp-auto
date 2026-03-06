@@ -56,7 +56,7 @@ def tap_template(
     if not box:
         return None
     adb.tap_center(box)
-    logger.debug(f"点击模板: {template_name}")
+    logger.info(f"点击模板: {template_name}")
     return ActionResult.ok(wait=wait)
 
 
@@ -177,7 +177,7 @@ def tap_text(
                 matched = pattern_normalized in text
             if matched:
                 adb.tap_center(item["box"])
-                logger.debug(f"点击文字: {pattern}")
+                logger.info(f"点击文字: {pattern}")
                 return ActionResult.ok(wait=wait)
     return None
 
@@ -309,13 +309,13 @@ def tap_matched_element(
     # 1. 尝试点击匹配到的模板
     matched_template = page_info.get("matched_template")
     if matched_template and matched_template.get("box"):
-        logger.debug(f"点击匹配模板: {matched_template['template']}")
+        logger.info(f"点击匹配模板: {matched_template['template']}")
         return tap_box(adb, matched_template["box"], wait=wait)
 
     # 2. 尝试点击匹配到的文字
     matched_text = page_info.get("matched_text")
     if matched_text and matched_text.get("box"):
-        logger.debug(f"点击匹配文字: {matched_text['matched_text']}")
+        logger.info(f"点击匹配文字: {matched_text['matched_text']}")
         return tap_box(adb, matched_text["box"], wait=wait)
 
     return None

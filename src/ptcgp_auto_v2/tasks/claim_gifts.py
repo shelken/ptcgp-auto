@@ -215,7 +215,7 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         # 精确匹配「謝謝！」按钮
         result = tap_text(self.adb, ocr_results, thanks_patterns, wait=1.5, exact=True)
         if result:
-            logger.debug("  -> 点击「謝謝！」按钮")
+            logger.info("  -> 点击「謝謝！」按钮")
             return result
 
         logger.debug("  -> 未找到「謝謝！」按钮")

@@ -55,5 +55,5 @@ def tap_opening_continue(
     wait: float = 1.5,
 ) -> ActionResult:
     """在开包结果页点击继续（无文本时兜底点中心）。"""
-    logger.debug("  -> 点击继续")
+    logger.info("  -> 点击继续")
     return tap_continue(adb, ocr_results, wait=wait)
