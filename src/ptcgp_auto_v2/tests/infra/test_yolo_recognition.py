@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+import logging
+
 import numpy as np
 import pytest
 from PIL import Image
 
 from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
-from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
+from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.tests.fake_adb import FakeAdb
 from ptcgp_auto_v2.utils.perceptual_hash import (
     calculate_perceptual_hash,
@@ -129,11 +131,14 @@ def test_yolo_card_recognizer_scan_pack_result_sorts_by_row():
         def __init__(self):
             self._matches = [(101, 0.95), (102, 0.94)]
 
-        def ensure_series_ready(self, set_code):
+        def ensure_series_ready(self, set_code, exclude_promo=False):
             return True
 
-        def find_best_match(self, target_hash, set_code=None, threshold=0.8):
-            return self._matches.pop(0)
+        def find_topk_candidates(
+            self, target_hash, set_code=None, topk=10, exclude_promo=False
+        ):
+            card_number, score = self._matches.pop(0)
+            return [(set_code or "A1", card_number, score, np.zeros(8, dtype=np.float32))]
 
     screenshot = Image.fromarray(np.zeros((120, 120, 3), dtype=np.uint8))
     recognizer = YoloCardRecognizer(
@@ -146,102 +151,105 @@ def test_yolo_card_recognizer_scan_pack_result_sorts_by_row():
     assert [card.card_number for card in results] == [102, 101]
 
 
-def test_yolo_card_recognizer_scan_debug_flag_uses_unmatched_path():
-    """scan 在 debug=True 时应使用未匹配路径但返回识别列表"""
+def test_yolo_card_recognizer_scan_info_only_logs_summary(caplog):
+    """INFO 级别下只输出汇总日志，不输出逐卡明细。"""
 
     class FakeRecognizer(YoloCardRecognizer):
         def __init__(self):
-            self.called_common = False
-            self.called_debug = False
+            return None
 
-        def _scan_common(self, set_code, obb_threshold, similarity_threshold):
-            self.called_common = True
-            return (
-                [
-                    {
-                        "set_code": "A",
-                        "card_number": 1,
-                        "confidence": 0.9,
-                        "similarity": 0.9,
-                        "bbox": (0, 0, 10, 10),
-                        "center": (1.0, 2.0),
-                    }
-                ],
-                1,
-            )
-
-        def _scan_common_with_unmatched(
-            self, set_code, obb_threshold, similarity_threshold
-        ):
-            self.called_debug = True
-            return (
-                [
-                    {
-                        "set_code": "A",
-                        "card_number": 2,
-                        "confidence": 0.8,
-                        "similarity": 0.8,
-                        "bbox": (0, 0, 10, 10),
-                        "center": (3.0, 4.0),
-                    }
-                ],
-                1,
-                [{"best_set_code": "A", "best_card_number": 2}],
-            )
-
-        def _sort_by_reading_order(self, cards):
-            return cards
-
-    recognizer = FakeRecognizer()
-
-    results = recognizer.scan()
-    assert recognizer.called_common is True
-    assert recognizer.called_debug is False
-    assert [card.card_number for card in results] == [1]
-
-    recognizer = FakeRecognizer()
-    results = recognizer.scan(debug=True)
-    assert recognizer.called_common is False
-    assert recognizer.called_debug is True
-    assert [card.card_number for card in results] == [2]
-
-
-def test_yolo_card_recognizer_scan_debug_calls_name_resolver():
-    """scan debug 时应调用名称解析器"""
-
-    class FakeRecognizer(YoloCardRecognizer):
-        def __init__(self):
-            self.resolved = []
-
-        def _scan_common_with_unmatched(
-            self, set_code, obb_threshold, similarity_threshold
+        def _scan_common(
+            self,
+            set_code,
+            obb_threshold,
+            similarity_threshold,
+            resolve_name=None,
+            exclude_promo=False,
         ):
             return (
-                [
-                    {
-                        "set_code": "B2",
-                        "card_number": 28,
-                        "confidence": 0.9,
-                        "similarity": 0.9,
-                        "bbox": (0, 0, 10, 10),
-                        "center": (1.0, 2.0),
-                    }
-                ],
+                [DetectedCard("A1", 1, 0.9, 0.91, (0, 0, 10, 10), (1.0, 2.0))],
                 1,
                 [],
             )
 
-        def _sort_by_reading_order(self, cards):
-            return cards
-
-        def _log_debug_details(self, detected, unmatched, resolve_name=None):
-            if resolve_name:
-                for item in detected:
-                    self.resolved.append(resolve_name(item.set_code, item.card_number))
+    resolved = []
 
     def resolver(set_code, card_number):
+        resolved.append((set_code, card_number))
         return f"{set_code}-{card_number}-name"
 
     recognizer = FakeRecognizer()
-    recognizer.scan(debug=True, resolve_name=resolver)
-    assert recognizer.resolved == ["B2-28-name"]
+    with caplog.at_level(
+        logging.INFO, logger="ptcgp_auto_v2.infra.yolo_card_recognizer"
+    ):
+        results = recognizer.scan(resolve_name=resolver)
+
+    assert [card.card_number for card in results] == [1]
+    assert "识别完成: 1/1 张卡牌匹配成功" in caplog.text
+    assert "识别明细" not in caplog.text
+    assert "第一阶段通过" not in caplog.text
+    assert resolved == []
+
+
+def test_yolo_card_recognizer_scan_debug_logs_details_and_calls_name_resolver(caplog):
+    """DEBUG 级别下输出逐卡明细，并按需解析卡名。"""
+
+    class FakeRecognizer(YoloCardRecognizer):
+        def __init__(self):
+            return None
+
+        def _scan_common(
+            self,
+            set_code,
+            obb_threshold,
+            similarity_threshold,
+            resolve_name=None,
+            exclude_promo=False,
+        ):
+            return (
+                [
+                    DetectedCard(
+                        "B2",
+                        28,
+                        0.9,
+                        0.93,
+                        (0, 0, 10, 10),
+                        (1.0, 2.0),
+                        match_stage="第一阶段通过",
+                        match_note="sim=0.9300",
+                    )
+                ],
+                1,
+                [
+                    DetectedCard(
+                        "B2",
+                        99,
+                        0.8,
+                        0.62,
+                        (10, 10, 20, 20),
+                        (3.0, 4.0),
+                        match_stage="差距不足",
+                        match_note="gap=0.0100 < 0.03",
+                    )
+                ],
+            )
+
+    resolved = []
+
+    def resolver(set_code, card_number):
+        resolved.append((set_code, card_number))
+        return f"{set_code}-{card_number}-name"
+
+    recognizer = FakeRecognizer()
+    with caplog.at_level(
+        logging.DEBUG, logger="ptcgp_auto_v2.infra.yolo_card_recognizer"
+    ):
+        recognizer.scan(resolve_name=resolver)
+
+    assert "识别完成: 1/1 张卡牌匹配成功" in caplog.text
+    assert "识别明细: 已匹配=1, 未匹配=1" in caplog.text
+    assert "阶段=第一阶段通过 sim=0.9300" in caplog.text
+    assert "原因=差距不足 gap=0.0100 < 0.03" in caplog.text
+    assert "B2-28-name" in caplog.text
+    assert "B2-99-name" in caplog.text
+    assert resolved == [("B2", 28), ("B2", 99)]
