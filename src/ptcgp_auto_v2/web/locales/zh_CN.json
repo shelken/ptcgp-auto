@@ -117,6 +117,7 @@
   "col_target_pack": "目标卡包",
   "col_actions": "操作",
   "col_last_completed": "上次完成",
+  "col_last_duration": "上次耗时",
   "col_next_run": "下次开始",
   "col_dispatch_priority": "调度优先级",
   "col_reset_type": "重置规则",

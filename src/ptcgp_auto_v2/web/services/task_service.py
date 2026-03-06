@@ -161,6 +161,7 @@ def build_tasks_list_context(
             "last_completed_at_iso": format_datetime_iso(
                 instance.last_completed_at
             ),
+            "last_duration_seconds": instance.last_duration_seconds,
             "updated_at": instance.updated_at,
             "error_message": instance.error_message,
             "next_run_at": next_run_at,

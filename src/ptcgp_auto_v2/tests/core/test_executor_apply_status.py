@@ -12,8 +12,12 @@ from ptcgp_auto_v2.core.task_status import TaskStatus
 
 class FakeTaskInstance:
     def __init__(self):
+        self.task_type = "open_pack"
+        self.reset_type = "daily"
         self.status = None
         self.last_completed_at = None
+        self.last_duration_seconds = None
+        self.next_run_at = None
         self.error_message = "previous"
         self.updated_at = None
         self.saved = False
@@ -50,7 +54,7 @@ class DummyExecutor(BaseExecutor):
 class TestApplyTaskStatus(unittest.TestCase):
     def setUp(self):
         self.executor = DummyExecutor()
-        self.account = object()
+        self.account = type("FakeAccount", (), {"task_plan_associations": []})()
 
     def test_completed_status_sets_timestamp_and_unblocks(self):
         task = FakeTaskInstance()
@@ -59,10 +63,12 @@ class TestApplyTaskStatus(unittest.TestCase):
             account=self.account,
             status=TaskStatus.COMPLETED,
             clear_error_on_success=True,
+            duration_seconds=125,
         )
 
         self.assertEqual(TaskStatus.COMPLETED.value, task.status)
         self.assertIsInstance(task.last_completed_at, datetime)
+        self.assertEqual(125, task.last_duration_seconds)
         self.assertIsNone(task.error_message)
         self.assertIsInstance(task.updated_at, datetime)
         self.assertTrue(task.saved)
@@ -75,9 +81,11 @@ class TestApplyTaskStatus(unittest.TestCase):
             account=self.account,
             status=TaskStatus.COMPLETED,
             clear_error_on_success=False,
+            duration_seconds=8,
         )
 
         self.assertEqual("previous", task.error_message)
+        self.assertEqual(8, task.last_duration_seconds)
 
     def test_failed_status_sets_error(self):
         task = FakeTaskInstance()
@@ -86,12 +94,28 @@ class TestApplyTaskStatus(unittest.TestCase):
             account=self.account,
             status=TaskStatus.FAILED,
             error_message="failed",
+            duration_seconds=0,
         )
 
         self.assertEqual(TaskStatus.FAILED.value, task.status)
         self.assertEqual("failed", task.error_message)
+        self.assertEqual(0, task.last_duration_seconds)
         self.assertIsInstance(task.updated_at, datetime)
         self.assertTrue(task.saved)
+
+    def test_running_status_does_not_override_last_duration(self):
+        task = FakeTaskInstance()
+        task.last_duration_seconds = 33
+
+        self.executor._apply_task_status(
+            task_instance=task,
+            account=self.account,
+            status=TaskStatus.RUNNING,
+            duration_seconds=120,
+        )
+
+        self.assertEqual(TaskStatus.RUNNING.value, task.status)
+        self.assertEqual(33, task.last_duration_seconds)
 
 
 if __name__ == "__main__":
