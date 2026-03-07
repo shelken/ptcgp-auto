@@ -209,6 +209,20 @@ class SendCardDailyTask(Task):
         """检查动作缓存。"""
         return self._action_cache.get(key, False)
 
+    def _result_or_wait(
+        self,
+        result: Optional[ActionResult],
+        wait: float,
+    ) -> ActionResult:
+        """动作返回统一兜底为 wait。"""
+        return result if result else ActionResult.wait(wait)
+
+    def _reset_filter_input_state(self):
+        """重置筛选弹窗输入动作状态。"""
+        self._action_cache.pop("filter_clear_clicked", None)
+        self._action_cache.pop("filter_keyword_input", None)
+        self._filter_modal_stay_rounds = 0
+
     def _mark_action_done(self, key: str):
         """标记动作完成。"""
         self._action_cache[key] = True
@@ -456,17 +470,18 @@ class SendCardDailyTask(Task):
             get_text_patterns("gift_tab_send"),
             wait=1.0,
         )
-        return result or ActionResult.wait(0.8)
+        return self._result_or_wait(result, wait=0.8)
 
     def _handle_gift_page_main(self, page_info: dict) -> ActionResult:
         """分送主页面点击下方分送按钮。"""
         ocr_results = page_info.get("ocr_results", [])
+        send_pattern_set = {
+            "".join(text.lower().split()) for text in get_text_patterns("gift_tab_send")
+        }
         candidates: list[tuple[int, tuple[int, int, int, int]]] = []
         for item in ocr_results:
             text = "".join(str(item.get("text", "")).lower().split())
-            if text not in {
-                "".join(t.lower().split()) for t in get_text_patterns("gift_tab_send")
-            }:
+            if text not in send_pattern_set:
                 continue
             box = item.get("box")
             if not box:
@@ -538,6 +553,7 @@ class SendCardDailyTask(Task):
                 self._filter_opened = True
                 self._mark_action_done("open_filter_clicked")
                 return result
+            return self._result_or_wait(result, wait=0.6)
 
         if not self._filter_applied:
             return ActionResult.wait(0.6)
@@ -600,9 +616,7 @@ class SendCardDailyTask(Task):
             self._filter_modal_stay_rounds = 0
 
         if self._filter_modal_stay_rounds >= MAX_FILTER_MODAL_STAY_ROUNDS:
-            self._action_cache.pop("filter_clear_clicked", None)
-            self._action_cache.pop("filter_keyword_input", None)
-            self._filter_modal_stay_rounds = 0
+            self._reset_filter_input_state()
 
         if not self._is_action_done("filter_clear_clicked"):
             clear_button = tap_text_exact(
@@ -636,9 +650,7 @@ class SendCardDailyTask(Task):
         ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
         if ok_result:
             self._filter_applied = True
-            self._action_cache.pop("filter_clear_clicked", None)
-            self._action_cache.pop("filter_keyword_input", None)
-            self._filter_modal_stay_rounds = 0
+            self._reset_filter_input_state()
             return ok_result
         return ActionResult.wait(0.6)
 
@@ -693,7 +705,7 @@ class SendCardDailyTask(Task):
     def _handle_confirm_popup(self, page_info: dict) -> ActionResult:
         """确认弹窗点击 OK。"""
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        return result or ActionResult.wait(0.6)
+        return self._result_or_wait(result, wait=0.6)
 
     def _handle_swipe_page(self, page_info: dict) -> ActionResult:
         """送卡成功页：执行上滑并落库。"""

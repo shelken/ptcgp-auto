@@ -71,8 +71,6 @@ class ExchangeRuntimeState:
     current_request: Optional[ExchangeCardRequest] = None
     completed: bool = False
     complete_reason: Optional[str] = None
-    delay_seconds: Optional[float] = None
-    delay_reason: Optional[str] = None
     recover_before_send: bool = False
 
 
@@ -517,7 +515,7 @@ class ExchangeCardsTask(Task):
             get_text_patterns("community_exchange_btn"),
             wait=5,
         )
-        return result or ActionResult.wait(3)
+        return result if result else ActionResult.wait(3)
 
     def _handle_exchange_page_main(self, page_info: dict) -> ActionResult:
         """交换主页：sending 点击交换，sended 优先点确认，其次点交换进入详情。"""
@@ -542,7 +540,7 @@ class ExchangeCardsTask(Task):
                     get_text_patterns("exchange_confirm_button"),
                     wait=0.8,
                 )
-                return confirm_result or ActionResult.wait(0.6)
+                return confirm_result if confirm_result else ActionResult.wait(0.6)
             return ActionResult.wait(0.8)
 
         if request.status == "sending":
@@ -552,7 +550,7 @@ class ExchangeCardsTask(Task):
                 get_text_patterns("exchange_send_button"),
                 wait=0.8,
             )
-            return result or ActionResult.wait(0.6)
+            return result if result else ActionResult.wait(0.6)
 
         if request.status == "sended":
             if has_confirm:
@@ -562,7 +560,7 @@ class ExchangeCardsTask(Task):
                     get_text_patterns("exchange_confirm_button"),
                     wait=0.8,
                 )
-                return result or ActionResult.wait(0.6)
+                return result if result else ActionResult.wait(0.6)
 
             open_result = tap_text_exact(
                 self.adb,
@@ -647,15 +645,17 @@ class ExchangeCardsTask(Task):
                 exact=False,
             ):
                 return self._fail_and_complete("点击目标卡后检测到交换点数不足")
-            ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
             logger.info("点击卡牌后点击 OK")
-            return ok_result or ActionResult.wait(0.5)
+            ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
+            return ok_result if ok_result else ActionResult.wait(0.5)
 
         if not self._is_action_done("open_filter_clicked"):
-            result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
-            if result:
+            tap_result = tap_template(
+                self.adb, self.page_detector, "icon_search", wait=1.0
+            )
+            if tap_result:
                 self._mark_action_done("open_filter_clicked")
-                return result
+                return tap_result
 
         if not self._is_action_done("filter_applied"):
             return ActionResult.wait(0.6)
@@ -758,12 +758,12 @@ class ExchangeCardsTask(Task):
             )
 
         result = tap_ok(self.adb, ocr_results, wait=0.8)
-        return result or ActionResult.wait(0.6)
+        return result if result else ActionResult.wait(0.6)
 
     def _tap_ok_popup(self, page_info: dict) -> ActionResult:
         """通用弹窗：点击 OK。"""
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        return result or ActionResult.wait(0.6)
+        return result if result else ActionResult.wait(0.6)
 
     def _handle_proposed_done_popup(self, page_info: dict) -> ActionResult:
         """提议完成弹窗：确认后写入 sended，并在当前任务内进入等待窗口。"""
@@ -800,19 +800,13 @@ class ExchangeCardsTask(Task):
         )
         if cancel_mode:
             if not self._is_action_done("waiting_cancel_clicked"):
-                has_cancel = is_text_visible(
-                    page_info.get("ocr_results", []),
-                    get_text_patterns("exchange_cancel_button"),
-                    exact=True,
-                )
-                logger.debug("[waiting_page] 取消按钮可见: %s", has_cancel)
                 cancel_result = tap_text_exact(
                     self.adb,
                     page_info.get("ocr_results", []),
                     get_text_patterns("exchange_cancel_button"),
                     wait=0.8,
                 )
-                logger.info("[waiting_page] 点击取消结果: %s", cancel_result)
+                logger.info("[waiting_page] 点击取消结果: %s", bool(cancel_result))
                 if cancel_result:
                     self._mark_action_done("waiting_cancel_clicked")
                     return cancel_result
@@ -871,7 +865,7 @@ class ExchangeCardsTask(Task):
                 get_text_patterns("exchange_reject_button"),
                 wait=0.8,
             )
-            return reject_result or ActionResult.wait(0.6)
+            return reject_result if reject_result else ActionResult.wait(0.6)
 
         exchange_result = tap_text_exact(
             self.adb,
@@ -879,7 +873,7 @@ class ExchangeCardsTask(Task):
             get_text_patterns("exchange_send_button"),
             wait=0.8,
         )
-        return exchange_result or ActionResult.wait(0.6)
+        return exchange_result if exchange_result else ActionResult.wait(0.6)
 
     def _handle_receive_start_popup(self, page_info: dict) -> ActionResult:
         """开始交换确认弹窗：点击 OK 后进入滑卡完成页。"""
@@ -966,11 +960,6 @@ class ExchangeCardsTask(Task):
             self._ctx.runtime.complete_reason = "交换已取消"
         self._ctx.runtime.completed = True
         return result
-
-    def _set_delay(self, reason: str):
-        """设置后置 Hook 使用的延时信息。"""
-        self._ctx.runtime.delay_seconds = float(EXCHANGE_WINDOW_SECONDS)
-        self._ctx.runtime.delay_reason = reason
 
     def _mark_skipped(self, reason: str):
         """将当前任务标记为跳过并结束。"""

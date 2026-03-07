@@ -61,6 +61,10 @@ class FakeU2Device:
         if self._adb is not None:
             self._adb.inputs.append(text)
 
+    def clear_text(self) -> None:
+        """模拟清空输入框。"""
+        self.sent_keys.append("")
+
     def long_click(self, x: int, y: int, duration: float = 0.0) -> None:
         """记录长按动作。"""
         self.long_clicks.append((x, y, duration))
