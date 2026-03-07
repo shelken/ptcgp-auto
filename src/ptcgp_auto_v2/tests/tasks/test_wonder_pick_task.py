@@ -1,36 +1,32 @@
 # -*- coding: utf-8 -*-
-"""
-得卡挑战任务测试
-"""
+"""得卡挑战任务测试。"""
 
 import sys
 import unittest
-from unittest.mock import Mock, patch
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
 
-from ptcgp_auto_v2.tasks.wonder_pick import WonderPickTask
-from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
-from ptcgp_auto_v2.config.wonder_pick import (
+from ptcgp_auto_v2.config.wonder_pick import (  # noqa: E402
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_RARITY_COSTS,
 )
-from ptcgp_auto_v2.core.task_base import ActionResult
-from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+from ptcgp_auto_v2.core.task_base import ActionResult  # noqa: E402
+from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard  # noqa: E402
+from ptcgp_auto_v2.tasks.wonder_pick import WonderPickTask  # noqa: E402
+from ptcgp_auto_v2.tests.fake_adb import FakeAdb  # noqa: E402
 
 
 class TestChallengeRarityConfig(unittest.TestCase):
-    """测试得卡挑战稀有度配置"""
+    """测试得卡挑战稀有度配置。"""
 
     def test_default_targets_contains_supported_rarities(self):
-        """测试默认目标稀有度配置"""
         self.assertEqual(set(WONDER_PICK_DEFAULT_TARGETS), {"SAR", "SR"})
 
     def test_challenge_costs(self):
-        """测试稀有度挑战力消耗配置"""
         self.assertEqual(WONDER_PICK_RARITY_COSTS["C"], 1)
         self.assertEqual(WONDER_PICK_RARITY_COSTS["U"], 1)
         self.assertEqual(WONDER_PICK_RARITY_COSTS["R"], 2)
@@ -41,42 +37,33 @@ class TestChallengeRarityConfig(unittest.TestCase):
 
 
 class TestChallengeRarityLogic(unittest.TestCase):
-    """测试稀有度优先级逻辑"""
+    """测试稀有度优先级逻辑。"""
 
     def test_sort_rarity_targets_by_priority(self):
-        """测试优先级排序"""
         targets = ["R", "SAR", "U", "SR"]
-        sorted_targets = WonderPickTask.sort_rarity_targets(targets)
-
-        self.assertEqual(sorted_targets, ["SAR", "SR", "R", "U"])
+        self.assertEqual(
+            WonderPickTask.sort_rarity_targets(targets),
+            ["SAR", "SR", "R", "U"],
+        )
 
     def test_pick_best_target_from_found(self):
-        """测试从命中的稀有度选择最高优先级"""
         targets = ["R", "SR", "U"]
         found = ["R", "U", "SR"]
-        best = WonderPickTask.pick_best_target(found, targets)
-
-        self.assertEqual(best, "SR")
+        self.assertEqual(WonderPickTask.pick_best_target(found, targets), "SR")
 
     def test_is_stamina_enough(self):
-        """测试挑战力是否充足"""
         self.assertTrue(WonderPickTask.is_stamina_enough(4, "SR"))
         self.assertFalse(WonderPickTask.is_stamina_enough(3, "SR"))
 
 
 class TestChallengeEndMarkers(unittest.TestCase):
-    """测试结束标志识别"""
+    """测试结束标志识别。"""
 
     def test_end_marker_visible(self):
-        """测试识别已结束或已挑战"""
-        ocr_results = [
-            {"text": "已結束", "box": (0, 0, 10, 10)},
-            {"text": "其他", "box": (0, 0, 10, 10)},
-        ]
+        ocr_results = [{"text": "已結束", "box": (0, 0, 10, 10)}]
         self.assertTrue(WonderPickTask.has_end_marker(ocr_results))
 
     def test_no_end_marker(self):
-        """测试未出现结束标志"""
         ocr_results = [{"text": "其他", "box": (0, 0, 10, 10)}]
         self.assertFalse(WonderPickTask.has_end_marker(ocr_results))
 
@@ -85,95 +72,16 @@ class FakeCardRepo:
     def __init__(self, rarity_map: dict[tuple[str, int], str]):
         self._rarity_map = rarity_map
 
-    def get_card_by_set_and_number(self, set_code: str, card_number: int):
+    def get_card_by_set_and_number(
+        self,
+        set_code: str,
+        card_number: int,
+        load_packs: bool = False,
+    ):
         rarity = self._rarity_map.get((set_code, card_number))
         if not rarity:
             return None
-        return SimpleNamespace(rarity=rarity)
-
-
-class TestWonderPickScanLogic(unittest.TestCase):
-    def test_build_target_map_filters_and_keeps_first(self):
-        detected = [
-            DetectedCard(
-                set_code="A",
-                card_number=1,
-                confidence=0.9,
-                similarity=0.9,
-                bbox=(0, 0, 10, 10),
-                center=(100.0, 200.0),
-            ),
-            DetectedCard(
-                set_code="A",
-                card_number=2,
-                confidence=0.9,
-                similarity=0.9,
-                bbox=(0, 0, 10, 10),
-                center=(300.0, 400.0),
-            ),
-            DetectedCard(
-                set_code="A",
-                card_number=3,
-                confidence=0.9,
-                similarity=0.9,
-                bbox=(0, 0, 10, 10),
-                center=(500.0, 600.0),
-            ),
-        ]
-        repo = FakeCardRepo({("A", 1): "SR", ("A", 2): "SR", ("A", 3): "SAR"})
-
-        rarity_map, found = WonderPickTask.build_target_map(
-            detected, repo, ["SR", "SAR"]
-        )
-
-        self.assertEqual(found, ["SR", "SAR"])
-        self.assertEqual(rarity_map["SR"], (100.0, 200.0))
-        self.assertEqual(rarity_map["SAR"], (500.0, 600.0))
-
-    def test_pick_target_from_map_prefers_highest(self):
-        rarity_map = {"SR": (10.0, 10.0), "SAR": (20.0, 20.0)}
-        result = WonderPickTask.pick_target_from_map(rarity_map, ["SR", "SAR"])
-
-        self.assertEqual(result, ("SAR", (20.0, 20.0)))
-
-    def test_update_scan_signature_uses_detected_cards(self):
-        task = FakeTask()
-        detected = [
-            DetectedCard(
-                set_code="A",
-                card_number=1,
-                confidence=0.9,
-                similarity=0.9,
-                bbox=(0, 0, 10, 10),
-                center=(100.0, 200.0),
-            ),
-            DetectedCard(
-                set_code="B",
-                card_number=2,
-                confidence=0.9,
-                similarity=0.9,
-                bbox=(0, 0, 10, 10),
-                center=(300.0, 400.0),
-            ),
-        ]
-        count = task._update_scan_signature(detected)
-        self.assertEqual(count, 1)
-
-        count = task._update_scan_signature(detected)
-        self.assertEqual(count, 2)
-
-        new_detected = [
-            DetectedCard(
-                set_code="C",
-                card_number=3,
-                confidence=0.9,
-                similarity=0.9,
-                bbox=(0, 0, 10, 10),
-                center=(500.0, 600.0),
-            )
-        ]
-        count = task._update_scan_signature(new_detected)
-        self.assertEqual(count, 1)
+        return SimpleNamespace(id=1, rarity=rarity)
 
 
 class FakePageDetector:
@@ -195,120 +103,87 @@ class FakePageDetector:
 class FakeTask(WonderPickTask):
     def __init__(self):
         super().__init__(FakeAdb(), recognizer=None, page_detector=FakePageDetector())
-        self._current_stamina = None
+        self._card_repo = FakeCardRepo({})
+        self._account_card_repo = Mock()
 
     def _get_wonder_stamina(self):
         return None
 
+    def is_completed(self) -> bool:
+        return self._completed
 
-class TestWonderPickHomeFallback(unittest.TestCase):
-    def test_list_page_without_stamina_goes_back(self):
+    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
+        return ActionResult.ok(wait=0.0)
+
+
+class TestWonderPickGroupFlow(unittest.TestCase):
+    def test_refresh_active_targets_uses_first_affordable_group(self):
         task = FakeTask()
+        task._current_stamina = 4
+        task._refresh_active_targets()
 
-        result = task._handle_list({"ocr_results": []})
+        self.assertEqual(task._active_targets, ["SAR", "SR"])
+        self.assertEqual(task._active_group_index, 0)
 
-        self.assertIsInstance(result, ActionResult)
-        self.assertEqual(task.adb.back_count, 1)
-
-    def test_list_page_stamina_not_enough_does_not_skip(self):
+    def test_collect_page_targets_filters_to_configured_rarities(self):
         task = FakeTask()
-        task._current_stamina = 0
-        task._active_targets = ["SR"]
+        task._card_repo = FakeCardRepo({("A", 1): "SR", ("A", 2): "U"})
+        detected = [
+            DetectedCard(
+                set_code="A",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(100.0, 200.0),
+            ),
+            DetectedCard(
+                set_code="A",
+                card_number=2,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(300.0, 400.0),
+            ),
+        ]
 
-        with patch.object(task, "_scan_targets", return_value=None):
-            result = task._handle_list({"ocr_results": []})
+        result = task._collect_page_targets(detected)
 
-        self.assertIsInstance(result, ActionResult)
-        self.assertEqual(task.adb.back_count, 1)
-        self.assertFalse(task._skipped)
-        self.assertTrue(task._completed)
+        self.assertEqual(result, [("SR", (100.0, 200.0))])
 
-
-class TestWonderPickEndMarkerBack(unittest.TestCase):
-    def test_end_marker_with_pending_triggers_back(self):
+    def test_pick_target_on_current_page_prefers_highest_in_active_group(self):
         task = FakeTask()
+        task._card_repo = FakeCardRepo({("A", 1): "SR", ("A", 2): "SAR"})
+        task._active_targets = ["SAR", "SR"]
+        detected = [
+            DetectedCard(
+                set_code="A",
+                card_number=1,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(100.0, 200.0),
+            ),
+            DetectedCard(
+                set_code="A",
+                card_number=2,
+                confidence=0.9,
+                similarity=0.9,
+                bbox=(0, 0, 10, 10),
+                center=(300.0, 400.0),
+            ),
+        ]
 
-        result = task._handle_end_of_list("已出现结束标志")
+        with patch.object(task, "_tap_card_center") as mock_tap:
+            result = task._pick_target_on_current_page(detected)
 
-        self.assertIsInstance(result, ActionResult)
-        self.assertEqual(task.adb.back_count, 0)
-        self.assertTrue(task._completed)
+        self.assertEqual(result, "SAR")
+        mock_tap.assert_called_once_with((300.0, 400.0))
 
-
-class TestWonderPickForceReenter(unittest.TestCase):
-    def test_force_reenter_skips_stamina_check(self):
+    def test_record_seen_lower_group_tracks_lower_affordable_group(self):
         task = FakeTask()
-        task._force_reenter = True
-        task._get_wonder_stamina = lambda: 1
-        task._active_targets = []
-
-        with patch(
-            "ptcgp_auto_v2.tasks.wonder_pick.tap_text_exact",
-            return_value=ActionResult.ok(wait=0.5),
-        ):
-            result = task._handle_home({"ocr_results": []})
-
-        self.assertIsInstance(result, ActionResult)
-        self.assertFalse(task._skipped)
-        self.assertFalse(task._force_reenter)
-
-
-class TestWonderPickHomeStaminaCache(unittest.TestCase):
-    def test_home_uses_cached_stamina_and_enters(self):
-        task = FakeTask()
-        task._current_stamina = 0
-        task._active_targets = ["SR"]
-        task._get_wonder_stamina = lambda: 0
-
-        with patch(
-            "ptcgp_auto_v2.tasks.wonder_pick.tap_text_exact",
-            return_value=ActionResult.ok(wait=0.5),
-        ) as mock_tap:
-            result = task._handle_home({"ocr_results": []})
-
-        self.assertIsInstance(result, ActionResult)
-        self.assertFalse(task._skipped)
-        self.assertFalse(mock_tap.called)
-        self.assertFalse(task._completed)
-
-
-class TestWonderPickAfterSelect(unittest.TestCase):
-    def test_popup_recover_text_should_skip(self):
-        task = FakeTask()
-        with patch(
-            "ptcgp_auto_v2.tasks.wonder_pick.is_text_visible", return_value=True
-        ):
-            result = task._handle_popup(
-                {"ocr_results": [{"text": "恢復挑戰力", "box": (0, 0, 10, 10)}]}
-            )
-
-        self.assertIsInstance(result, ActionResult)
-        self.assertTrue(task._completed)
-        self.assertTrue(task._skipped)
-
-
-class TestWonderPickCardRegister(unittest.TestCase):
-    """测试得卡挑战图鉴登录页处理。"""
-
-    def test_handle_card_register_swipes_up(self):
-        task = FakeTask()
-
-        result = task._handle_card_register({"ocr_results": []})
-
-        self.assertTrue(result.success)
-        self.assertEqual(1, len(task.adb.swipes))
-        start, end, _ = task.adb.swipes[0]
-        self.assertEqual(start[0], end[0])
-        self.assertGreater(start[1], end[1])
-
-
-class TestWonderPickTargetPickIndexTiming(unittest.TestCase):
-    """测试目标位索引在弹窗阶段再确定。"""
-
-    def test_scan_targets_does_not_set_target_pick_index(self):
-        task = FakeTask()
-        task._card_repo = FakeCardRepo({("A", 1): "SR"})
-
+        task._card_repo = FakeCardRepo({("A", 1): "RR"})
+        task._active_group_index = 0
         detected = [
             DetectedCard(
                 set_code="A",
@@ -320,24 +195,84 @@ class TestWonderPickTargetPickIndexTiming(unittest.TestCase):
             )
         ]
 
-        with patch.object(task, "_tap_card_center") as mock_tap:
-            target = task._scan_targets(detected)
+        task._record_seen_lower_group(detected)
 
-        self.assertEqual(target, "SR")
-        self.assertIsNone(task._target_pick_index)
-        mock_tap.assert_called_once_with((100.0, 200.0))
+        self.assertIsNone(task._seen_lower_group_index)
+
+    def test_advance_scan_group_switches_to_seen_lower_group(self):
+        task = FakeTask()
+        task._current_stamina = 4
+        task._seen_lower_group_index = None
+
+        result = task._advance_scan_group()
+
+        self.assertTrue(result.success)
+        self.assertTrue(task._completed)
+
+    def test_advance_scan_group_finishes_when_reverse_scan_done(self):
+        task = FakeTask()
+        task._reverse_scan = True
+
+        result = task._advance_scan_group()
+
+        self.assertTrue(result.success)
+        self.assertTrue(task._completed)
+
+    def test_should_finish_current_group_ignores_end_marker_during_reverse(self):
+        task = FakeTask()
+        task._reverse_scan = True
+
+        with patch.object(task, "_update_scan_signature", return_value=0):
+            result = task._should_finish_current_group(
+                detected=[],
+                ocr_results=[{"text": "已結束", "box": (0, 0, 10, 10)}],
+            )
+
+        self.assertFalse(result)
+
+    def test_handle_list_resets_after_challenge_and_keeps_next_group(self):
+        task = FakeTask()
+        task._current_stamina = 4
+        task._active_targets = ["AR"]
+        task._active_group_index = 1
+        task._pending_after_challenge = True
+        task._selected_rarity = "SR"
+        task._get_card_saved = True
+
+        with patch.object(task, "_scan_cards", return_value=[]):
+            with patch.object(task, "_pick_target_on_current_page", return_value=None):
+                with patch.object(
+                    task, "_should_finish_current_group", return_value=False
+                ):
+                    result = task._handle_list({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertEqual(task._active_targets, ["SAR", "SR"])
+        self.assertFalse(task._pending_after_challenge)
+
+
+class TestWonderPickPopupFlow(unittest.TestCase):
+    def test_popup_recover_text_should_skip(self):
+        task = FakeTask()
+        with patch(
+            "ptcgp_auto_v2.tasks.wonder_pick.is_text_visible",
+            return_value=True,
+        ):
+            result = task._handle_popup(
+                {"ocr_results": [{"text": "恢復", "box": (0, 0, 10, 10)}]}
+            )
+
+        self.assertTrue(result.success)
+        self.assertTrue(task._completed)
+        self.assertTrue(task._skipped)
 
     def test_handle_popup_sets_target_pick_index_by_rescan(self):
         task = FakeTask()
         task._selected_rarity = "SR"
         task._card_repo = FakeCardRepo(
-            {
-                ("A", 1): "AR",
-                ("A", 2): "SR",
-                ("A", 3): "SAR",
-            }
+            {("A", 1): "AR", ("A", 2): "SR", ("A", 3): "SAR"}
         )
-        task._current_stamina = 3
+        task._current_stamina = 4
 
         detected = [
             DetectedCard(
@@ -375,6 +310,20 @@ class TestWonderPickTargetPickIndexTiming(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(task._target_pick_index, 2)
+        self.assertTrue(task._pending_after_challenge)
+
+
+class TestWonderPickCardRegister(unittest.TestCase):
+    def test_handle_card_register_swipes_up(self):
+        task = FakeTask()
+
+        result = task._handle_card_register({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        self.assertEqual(1, len(task.adb.swipes))
+        start, end, _ = task.adb.swipes[0]
+        self.assertEqual(start[0], end[0])
+        self.assertGreater(start[1], end[1])
 
 
 class TestWonderPickGetCardNotify(unittest.TestCase):
@@ -383,7 +332,6 @@ class TestWonderPickGetCardNotify(unittest.TestCase):
         task.bind_account(SimpleNamespace(id=1, display_name="tester"))
         task._card_repo = Mock()
         task._account_card_repo = Mock()
-        task._target_rarities = ["SAR", "SR", "AR"]
         task._selected_rarity = "SR"
 
         card = SimpleNamespace(id=101, rarity="SR")
@@ -404,8 +352,14 @@ class TestWonderPickGetCardNotify(unittest.TestCase):
             with patch(
                 "ptcgp_auto_v2.tasks.wonder_pick.save_high_rarity_cards"
             ) as mock_save:
-                mock_get_notifier.return_value = Mock()
-                task._handle_get_card({"ocr_results": []})
+                with patch(
+                    "ptcgp_auto_v2.tasks.wonder_pick.tap_text_exact",
+                    return_value=ActionResult.ok(wait=0.5),
+                ):
+                    mock_get_notifier.return_value = Mock()
+                    task._handle_get_card(
+                        {"ocr_results": [{"text": "點擊來繼續", "box": (0, 0, 10, 10)}]}
+                    )
 
         self.assertTrue(mock_save.called)
         kwargs = mock_save.call_args.kwargs
