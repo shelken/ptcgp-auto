@@ -15,10 +15,9 @@
 """
 
 import logging
-import time
 from datetime import datetime
 from enum import Enum, auto
-from typing import TYPE_CHECKING
+from typing import Callable
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
@@ -49,9 +48,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_text,
     tap_text_exact,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -292,13 +288,11 @@ class InitAccountTask(PackOpeningTaskBase):
             "init_nickname_input": self._handle_set_nickname,
             "init_confirm_settings": self._handle_confirm_settings,
             "init_select_pack": self._handle_select_pack,
-            "init_decide": lambda p: self._tap_text_exact(p, "init_decide", "決定"),
-            "init_next_step": lambda p: self._tap_text_exact(
-                p, "init_next_step", "下一步"
+            "init_decide": self._build_exact_text_handler("init_decide", "決定"),
+            "init_next_step": self._build_exact_text_handler(
+                "init_next_step", "下一步"
             ),
-            "init_open_pack": lambda p: self._tap_text_exact(
-                p, "init_open_pack", "開封"
-            ),
+            "init_open_pack": self._build_exact_text_handler("init_open_pack", "開封"),
             "init_tap_to_flip": self._handle_tap_to_flip,
             "init_select_favorite_card": self._handle_select_favorite_card,
             "init_enjoy": self._handle_enjoy,
@@ -316,9 +310,25 @@ class InitAccountTask(PackOpeningTaskBase):
 
     def _handle_speed_up(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
-        return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok(
-            wait=0.5
+        return self._result_or_ok(
+            tap_matched_element(self.adb, page_info, 0.5), wait=0.5
         )
+
+    def _result_or_ok(
+        self, result: ActionResult | None, wait: float = 1.0
+    ) -> ActionResult:
+        """动作返回统一兜底为 OK。"""
+        return result if result else ActionResult.ok(wait=wait)
+
+    def _build_exact_text_handler(
+        self, pattern_key: str, log_msg: str
+    ) -> Callable[[dict], ActionResult]:
+        """构建精确文本点击处理器。"""
+
+        def _handler(page_info: dict) -> ActionResult:
+            return self._tap_text_exact(page_info, pattern_key, log_msg)
+
+        return _handler
 
     def _tap_text_exact(
         self, page_info: dict, pattern_key: str, log_msg: str
@@ -330,7 +340,7 @@ class InitAccountTask(PackOpeningTaskBase):
         )
         if result:
             logger.info(f"  -> 点击「{log_msg}」")
-        return result or ActionResult.ok(wait=1.0)
+        return self._result_or_ok(result, wait=1.0)
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
@@ -423,7 +433,7 @@ class InitAccountTask(PackOpeningTaskBase):
             logger.info(f"  -> 国家列表弹层：点击允许国家 {matched_country}")
             tap_text_exact(self.adb, ocr_results, [matched_country], wait=0.2)
             ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
-            return ok_result or ActionResult.ok(wait=1.0)
+            return self._result_or_ok(ok_result, wait=1.0)
 
         logger.info("  -> 国家列表弹层：未找到允许国家，继续滑动查找")
         return self._swipe_country_list()
@@ -574,7 +584,7 @@ class InitAccountTask(PackOpeningTaskBase):
                 return result
 
         result = tap_ok(self.adb, ocr_results, wait=1.0)
-        return result or ActionResult.ok(wait=1.0)
+        return self._result_or_ok(result, wait=1.0)
 
     def _handle_data_use(self, page_info: dict) -> ActionResult:
         """处理数据使用页面"""
@@ -611,24 +621,17 @@ class InitAccountTask(PackOpeningTaskBase):
             self.adb, self.page_detector, template_name="btn_back", threshold=0.95
         )
 
-        # 步骤 1: 点击「使用條款」
-        if not self._is_action_done("terms_privacy_terms_clicked"):
-            result = tap_text_exact(
-                self.adb, ocr_results, get_text_patterns("init_terms_btn"), wait=3
+        for step in (
+            ("terms_privacy_terms_clicked", "init_terms_btn", "使用條款"),
+            ("terms_privacy_privacy_clicked", "init_privacy_btn", "隱私權政策"),
+        ):
+            result = self._tap_terms_step(
+                ocr_results,
+                action_key=step[0],
+                pattern_key=step[1],
+                label=step[2],
             )
             if result:
-                logger.info("  -> 点击「使用條款」")
-                self._mark_action_done("terms_privacy_terms_clicked")
-                return result
-
-        # 步骤 2: 点击「隱私權政策」
-        if not self._is_action_done("terms_privacy_privacy_clicked"):
-            result = tap_text_exact(
-                self.adb, ocr_results, get_text_patterns("init_privacy_btn"), wait=3
-            )
-            if result:
-                logger.info("  -> 点击「隱私權政策」")
-                self._mark_action_done("terms_privacy_privacy_clicked")
                 return result
 
         # 步骤 3: 点击所有灰色勾选图标直到消失
@@ -644,6 +647,25 @@ class InitAccountTask(PackOpeningTaskBase):
             return result
         return ActionResult.ok(wait=1.0)
 
+    def _tap_terms_step(
+        self,
+        ocr_results: list[dict],
+        action_key: str,
+        pattern_key: str,
+        label: str,
+    ) -> ActionResult | None:
+        """条款页面通用步骤点击。"""
+        if self._is_action_done(action_key):
+            return None
+        result = tap_text_exact(
+            self.adb, ocr_results, get_text_patterns(pattern_key), wait=3
+        )
+        if result:
+            logger.info(f"  -> 点击「{label}」")
+            self._mark_action_done(action_key)
+            return result
+        return None
+
     def _handle_create_save(self, page_info: dict) -> ActionResult:
         """处理创建存档页面"""
         ocr_results = page_info.get("ocr_results", [])
@@ -656,7 +678,7 @@ class InitAccountTask(PackOpeningTaskBase):
         )
         if result:
             logger.info("  -> 点击「從頭開始」")
-        return result or ActionResult.ok(wait=1.0)
+        return self._result_or_ok(result, wait=1.0)
 
     def _handle_account_link(self, page_info: dict) -> ActionResult:
         """处理账号链接页面"""
@@ -670,7 +692,7 @@ class InitAccountTask(PackOpeningTaskBase):
         )
         if result:
             logger.info("  -> 点击「現在不連結」跳过账号链接")
-        return result or ActionResult.ok(wait=1.0)
+        return self._result_or_ok(result, wait=1.0)
 
     def _handle_set_nickname(self, page_info: dict) -> ActionResult:
         """处理设置昵称页面"""
@@ -683,7 +705,7 @@ class InitAccountTask(PackOpeningTaskBase):
         if is_text_visible(ocr_results, [target_nickname], exact=True):
             logger.info(f"  -> 检测到昵称 {target_nickname} 已设置，点击 OK 完成")
             result = tap_ok(self.adb, ocr_results, wait=1.0)
-            return result or ActionResult.ok(wait=1.0)
+            return self._result_or_ok(result, wait=1.0)
 
         # 步骤 2: 点击铅笔图标进入编辑
         match = self.page_detector.find_template_with_scale(
@@ -704,7 +726,7 @@ class InitAccountTask(PackOpeningTaskBase):
 
         # 步骤 4: 点击 OK
         result = tap_ok(self.adb, ocr_results, wait=1.0)
-        return result or ActionResult.ok(wait=1.0)
+        return self._result_or_ok(result, wait=1.0)
 
     def _handle_confirm_settings(self, page_info: dict) -> ActionResult:
         """处理确认设置页面"""
@@ -712,7 +734,7 @@ class InitAccountTask(PackOpeningTaskBase):
         result = tap_ok(self.adb, ocr_results, wait=1.0)
         if result:
             logger.info("  -> 确认设置")
-        return result or ActionResult.ok(wait=1.0)
+        return self._result_or_ok(result, wait=1.0)
 
     def _handle_select_pack(self, page_info: dict) -> ActionResult:
         """处理选择初始卡包页面"""
@@ -744,7 +766,7 @@ class InitAccountTask(PackOpeningTaskBase):
 
         if not self._is_action_done("after_favorite_card"):
             logger.info("  -> 已在主页，先点击推进提示；未到最终引导阶段，继续等待")
-            return tap_result or ActionResult.ok(wait=1.0)
+            return self._result_or_ok(tap_result, wait=1.0)
 
         home_count = int(self._action_cache.get("home_consecutive_count", 0)) + 1
         self._action_cache["home_consecutive_count"] = home_count
@@ -754,12 +776,12 @@ class InitAccountTask(PackOpeningTaskBase):
                 "  -> 已完成选喜欢卡牌且连续主页达到阈值，触发初始化完成兜底"
             )
             self._phase = InitAccountPhase.COMPLETED
-            return tap_result or ActionResult.ok(wait=0.5)
+            return self._result_or_ok(tap_result, wait=0.5)
 
         logger.info(
             f"  -> 已完成选喜欢卡牌，主页兜底计数 {home_count}/{HOME_FALLBACK_THRESHOLD}"
         )
-        return tap_result or ActionResult.ok(wait=0.5)
+        return self._result_or_ok(tap_result, wait=0.5)
 
     # ============================================================
     # 辅助方法
