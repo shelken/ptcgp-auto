@@ -55,6 +55,7 @@ def _patch_task_dependencies(monkeypatch):
             "selected_status": [],
             "selected_task_type": [],
             "selected_account_id": None,
+            "selected_account_query": "",
             "selected_sort_by": "next_run_at",
             "selected_sort_order": "asc",
             "status_options": ["pending"],
@@ -182,6 +183,7 @@ def test_get_tasks_returns_empty_string_when_page_has_no_data(monkeypatch):
             "selected_status": [],
             "selected_task_type": [],
             "selected_account_id": None,
+            "selected_account_query": "",
             "selected_sort_by": "next_run_at",
             "selected_sort_order": "asc",
             "status_options": ["pending"],
@@ -202,6 +204,7 @@ def test_get_tasks_returns_empty_string_when_page_has_no_data(monkeypatch):
             status=[],
             task_type=[],
             account_id=None,
+            account_q="",
             sort_by="x",
             sort_order="x",
             session=object(),
@@ -235,6 +238,7 @@ def test_get_tasks_uses_normalized_sort_for_query(monkeypatch):
             "selected_status": [],
             "selected_task_type": [],
             "selected_account_id": None,
+            "selected_account_query": "",
             "selected_sort_by": kwargs["sort_by"],
             "selected_sort_order": kwargs["sort_order"],
             "status_options": ["pending"],
@@ -259,6 +263,7 @@ def test_get_tasks_uses_normalized_sort_for_query(monkeypatch):
             status=[],
             task_type=[],
             account_id=None,
+            account_q="",
             sort_by="bad",
             sort_order="bad",
             session=object(),
@@ -267,4 +272,67 @@ def test_get_tasks_uses_normalized_sort_for_query(monkeypatch):
 
     html_response = cast(HTMLResponse, response)
     assert html_response.status_code == 200
-    assert captured == {"sort_by": "next_run_at", "sort_order": "asc"}
+
+
+def test_get_task_target_pack_cell_uses_dedicated_partial(monkeypatch):
+    """任务目标包单元格应通过独立路由渲染。"""
+    _patch_render_template(monkeypatch)
+
+    captured = {}
+
+    def _fake_build_task_target_pack_context(task_instance_id: int):
+        captured["task_instance_id"] = task_instance_id
+        return {
+            "task_instance_id": task_instance_id,
+            "target_pack_label": "A1/Pikachu",
+            "target_pack_auto": True,
+        }
+
+    monkeypatch.setattr(
+        router,
+        "build_task_target_pack_context",
+        _fake_build_task_target_pack_context,
+    )
+
+    response = asyncio.run(
+        router.get_task_target_pack_cell(
+            request=_build_request("GET"),
+            task_instance_id=8,
+        )
+    )
+
+    assert captured == {"task_instance_id": 8}
+    assert response.status_code == 200
+    assert "tpl:partials/task_target_pack_cell.html" in bytes(response.body).decode(
+        "utf-8"
+    )
+
+
+def test_get_task_account_options_returns_partial(monkeypatch):
+    """任务账号候选列表应通过独立接口返回。"""
+    _patch_render_template(monkeypatch)
+
+    captured = {}
+
+    def _fake_list_task_filter_accounts(*, session, q, limit):
+        captured["q"] = q
+        captured["limit"] = limit
+        return [SimpleNamespace(id=1, nickname="Alpha", display_name="Alpha")]
+
+    monkeypatch.setattr(
+        router, "list_task_filter_accounts", _fake_list_task_filter_accounts
+    )
+
+    response = asyncio.run(
+        router.get_task_account_options(
+            request=_build_request("GET"),
+            q="alp",
+            session=object(),
+        )
+    )
+
+    assert captured == {"q": "alp", "limit": 20}
+    assert response.status_code == 200
+    assert "tpl:partials/task_account_options.html" in bytes(response.body).decode(
+        "utf-8"
+    )

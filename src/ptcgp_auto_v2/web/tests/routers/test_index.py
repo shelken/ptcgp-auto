@@ -56,3 +56,12 @@ def test_read_root_renders_index_template(monkeypatch):
 
     assert response.status_code == 200
     assert "tpl:index.html" in bytes(response.body).decode("utf-8")
+
+
+def test_index_module_uses_index_template_path() -> None:
+    """首页路由模块应继续使用 index 模板。"""
+    import inspect
+
+    source = inspect.getsource(router.read_root)
+
+    assert '"index.html"' in source or "'index.html'" in source

@@ -1,0 +1,30 @@
+{% from "partials/macros/data_table.html" import data_table_sort_button %}
+{% from "partials/macros/tables.html" import table_container, table_row %}
+
+{% set next_order_account = 'desc' if (sort_by or 'id') == 'id' and (sort_order or 'asc') == 'asc' else 'asc' %}
+{% set account_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=pack-points&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=id&sort_order=' ~ next_order_account %}
+{% set ns = namespace(headers=[{'label': data_table_sort_button(label=(t.col_account or 'Account'), url=account_sort_url, target='#management-content', active=((sort_by or 'id') == 'id'), order=(sort_order or 'asc'))|safe}]) %}
+{% for series in series_list %}
+    {% set next_order_series = 'asc' if sort_by == ('series:' ~ series) and (sort_order or 'asc') == 'desc' else 'desc' %}
+    {% set series_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=pack-points&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=' ~ ('series:' ~ series)|urlencode ~ '&sort_order=' ~ next_order_series %}
+    {% set ns.headers = ns.headers + [{'label': data_table_sort_button(label=series, url=series_sort_url, target='#management-content', active=(sort_by == ('series:' ~ series)), order=(sort_order or 'asc'))|safe}] %}
+{% endfor %}
+
+{% call table_container(ns.headers, t, (t.empty_resource_pack_points or 'No pack point data') if not items else '') %}
+    {% for item in items %}
+        {% set account_cell %}
+            <div class="space-y-1 account-identity-cell">
+                <div class="font-bold text-base leading-tight">{{ item.nickname or '-' }}</div>
+                <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.account_id }}</div>
+                {% if item.friend_id %}
+                <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.friend_id }}</div>
+                {% endif %}
+            </div>
+        {% endset %}
+        {% set ns = namespace(row_cells=[account_cell]) %}
+        {% for series in series_list %}
+            {% set ns.row_cells = ns.row_cells + [item.series_points.get(series) if item.series_points.get(series) is not none else '-'] %}
+        {% endfor %}
+        {{ table_row(ns.row_cells) }}
+    {% endfor %}
+{% endcall %}

@@ -1,6 +1,36 @@
 import { showToast, setButtonLoading } from '../utils.js';
 import { getModal } from '../modal.js';
 
+// --- 初始化计划模块事件 ---
+export function initPlans(context = document) {
+    const root = context instanceof Element ? context : document;
+
+    // 监听 add-plan change 事件
+    root.querySelectorAll('[data-action="add-plan"]').forEach((select) => {
+        if (select.dataset.plansBound === 'true') return;
+        select.addEventListener('change', () => {
+            if (select instanceof HTMLSelectElement) {
+                addPlan();
+            }
+        });
+        select.dataset.plansBound = 'true';
+    });
+
+    // 监听 toggle-interval-input change 事件
+    root.querySelectorAll('[data-action="toggle-interval-input"]').forEach((el) => {
+        if (el.dataset.intervalToggleBound === 'true') return;
+        el.addEventListener('change', () => {
+            if (!(el instanceof HTMLSelectElement)) return;
+            const targetId = el.dataset.intervalTarget;
+            if (!targetId) return;
+            const intervalInput = document.getElementById(targetId);
+            if (!intervalInput) return;
+            intervalInput.classList.toggle('hidden', el.value !== 'interval');
+        });
+        el.dataset.intervalToggleBound = 'true';
+    });
+}
+
 // --- 获取计划列表文本 ---
 export function getPlansMessages(list) {
     return {

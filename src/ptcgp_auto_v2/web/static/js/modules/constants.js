@@ -2,6 +2,7 @@
 export const MANAGEMENT_HASH_WHITELIST = [
     'accounts',
     'plans',
+    'resources',
     'tasks',
     'metadata',
     'friendships',
