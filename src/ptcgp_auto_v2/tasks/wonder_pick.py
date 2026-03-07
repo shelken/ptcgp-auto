@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-得卡挑战任务
-"""
+"""得卡挑战任务。"""
 
 import logging
 import random
@@ -24,9 +22,7 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
-from ptcgp_auto_v2.tasks.utils.pack_result_mapper import (
-    map_detected_cards,
-)
+from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
@@ -40,17 +36,18 @@ from ptcgp_auto_v2.utils.gesture import (
 
 logger = logging.getLogger(__name__)
 
+
 # ============================================================
 # 常量定义（基于 1080x1920 基准分辨率）
 # ============================================================
 
-BASE_SCAN_SCROLL_DISTANCE_Y = 400  # 得卡挑战列表滚动距离（基准像素）
+BASE_SCAN_SCROLL_DISTANCE_Y = 320  # 得卡挑战列表滚动距离（基准像素，小幅滑动）
 WONDER_PICK_SWIPE_STEPS = 8  # 得卡挑战滑动步数
-
-WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"
+WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"  # 挑战力图标模板
 
 
 def _build_challenge_pages() -> list[dict]:
+    """构建得卡挑战页面规则。"""
     return [
         # 剩餘遊玩次數
         {
@@ -72,43 +69,42 @@ def _build_challenge_pages() -> list[dict]:
             "identifiers": get_text_patterns("popup_send_thanks"),
             "priority": 9,
         },
-        # 商店 / 得卡挑戰
-        {
-            "name": "game_home_main",
-            "identifiers": get_text_patterns("game_home_main"),
-            "match_all": True,
-            "priority": 10,
-        },
         # 向上輕滑卡牌
         {
             "name": "pack_card_register",
             "identifiers": get_text_patterns("pack_card_register"),
             "priority": 12,
         },
+        # 點擊來繼續
+        {
+            "name": "card_challenge_get",
+            "identifiers": get_text_patterns("tap_to_continue"),
+            "priority": 40,
+        },
+        # 商店 / 得卡挑戰
+        {
+            "name": "game_home_main",
+            "identifiers": get_text_patterns("game_home_main"),
+            "match_all": True,
+            "priority": 90,
+        },
         # 得卡挑戰
         {
             "name": "card_challenge_list",
             "identifiers": get_text_patterns("card_challenge_title"),
             "exact_match": True,
-            "priority": 20,
-        },
-        # GET!
-        {
-            "name": "card_challenge_get",
-            "identifiers": get_text_patterns("card_challenge_get"),
-            "exact_match": True,
-            "priority": 40,
+            "priority": 91,
         },
     ]
 
 
 @TaskRegistry.register("wonder_pick")
 class WonderPickTask(Task):
-    """得卡挑战任务"""
+    """得卡挑战任务。"""
 
     task_type = "wonder_pick"
     reset_type = ResetType.DAILY
-    max_iterations = 100
+    max_iterations = 250
     max_unknown_pages = 20
     pages = _build_challenge_pages()
 
@@ -122,76 +118,60 @@ class WonderPickTask(Task):
             model_manager=get_model_manager(),
             hash_manager=get_card_hash_manager(),
         )
-        # 任务执行状态
-        self._action_cache: dict[str, bool] = {}
+
         self._completed = False
         self._skipped = False
-
-        # 挑战力状态
+        self._get_card_saved = False
         self._current_stamina: Optional[int] = None
         self._stamina_zero_count = 0
 
-        # 目标稀有度配置与选择
         self._target_rarities = self.sort_rarity_targets(WONDER_PICK_DEFAULT_TARGETS)
-        self._cost_groups, self._cost_group_map = self._build_cost_groups(
-            self._target_rarities
-        )
-        self._active_targets: list[str] = (
-            self._cost_groups[0] if self._cost_groups else []
-        )
-        self._next_targets: list[str] = []
+        self._cost_groups = self._build_cost_groups(self._target_rarities)
+        self._active_targets: list[str] = []
+        self._active_group_index: Optional[int] = None
+        self._seen_lower_group_index: Optional[int] = None
+        self._reverse_scan = False
 
-        # 列表扫描状态
         self._selected_rarity: Optional[str] = None
+        self._target_pick_index: Optional[int] = None
         self._last_signature: Optional[str] = None
         self._same_signature_count = 0
-        self._target_pick_index: Optional[int] = None
-        self._switching_targets = False
-        self._switching_scroll_up = True
+        self._pending_after_challenge = False
 
-        # 页面流转控制
-        self._force_reenter = False
-
-        # 数据访问
         self._card_repo = None
         self._account_card_repo = None
 
-    def _is_action_done(self, key: str) -> bool:
-        return self._action_cache.get(key, False)
-
-    def _mark_action_done(self, key: str):
-        self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        self._action_cache.clear()
-
     def on_start(self):
+        """初始化任务运行状态。"""
         from ptcgp_auto_v2.db.repositories import AccountCardRepository, CardRepository
 
         self._card_repo = CardRepository()
         self._account_card_repo = AccountCardRepository()
         self._completed = False
         self._skipped = False
+        self._get_card_saved = False
         self._current_stamina = None
         self._stamina_zero_count = 0
-        self._active_targets = self._cost_groups[0] if self._cost_groups else []
-        self._next_targets = []
+        self._active_targets = []
+        self._active_group_index = None
+        self._seen_lower_group_index = None
+        self._reverse_scan = False
         self._selected_rarity = None
+        self._target_pick_index = None
         self._last_signature = None
         self._same_signature_count = 0
-        self._target_pick_index = None
-        self._force_reenter = False
-        self._switching_targets = False
-        self._switching_scroll_up = True
-        self._reset_action_cache()
+        self._pending_after_challenge = False
 
     def is_completed(self) -> bool:
+        """任务是否结束。"""
         return self._completed or self._skipped
 
     def was_skipped(self) -> bool:
+        """任务是否跳过。"""
         return self._skipped
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
+        """页面分发。"""
         handlers = {
             "game_home_main": self._handle_home,
             "card_challenge_list": self._handle_list,
@@ -207,24 +187,13 @@ class WonderPickTask(Task):
         return ActionResult.ok(wait=1.0)
 
     def handle_unknown_page(self, page_info) -> ActionResult:
+        """未知页面等待。"""
         logger.debug("未知页面，等待后重试")
         return ActionResult.wait(0.5)
 
-    def _handle_send_thanks(self, page_info: dict) -> ActionResult:
-        """处理送出谢谢弹窗：点击"謝謝！"按钮"""
-        ocr_results = page_info.get("ocr_results", [])
-        thanks_patterns = get_text_patterns("thanks_button")
-
-        result = tap_text_exact(self.adb, ocr_results, thanks_patterns, wait=1.5)
-        if result:
-            logger.info("  -> 点击「謝謝！」按钮")
-            return result
-
-        logger.debug("  -> 未找到「謝謝！」按钮")
-        return ActionResult.ok(wait=1.0)
-
     @staticmethod
     def sort_rarity_targets(targets: list[str]) -> list[str]:
+        """按稀有度优先级排序。"""
         priority = {
             rarity: idx for idx, rarity in enumerate(WONDER_PICK_RARITY_PRIORITY)
         }
@@ -233,45 +202,20 @@ class WonderPickTask(Task):
 
     @staticmethod
     def pick_best_target(found: list[str], targets: list[str]) -> Optional[str]:
-        sorted_targets = WonderPickTask.sort_rarity_targets(targets)
+        """从命中的目标中选择最高优先级。"""
+        priority = {
+            rarity: idx for idx, rarity in enumerate(WONDER_PICK_RARITY_PRIORITY)
+        }
+        valid = [rarity for rarity in targets if rarity in priority]
+        sorted_targets = sorted(valid, key=lambda rarity: priority[rarity])
         for rarity in sorted_targets:
             if rarity in found:
                 return rarity
         return None
 
     @staticmethod
-    def build_target_map(detected_cards, card_repo, targets: list[str]):
-        target_set = set(targets)
-        rarity_to_center: dict[str, tuple[float, float]] = {}
-        found_rarities: list[str] = []
-        if not detected_cards:
-            return rarity_to_center, found_rarities
-        for item in detected_cards:
-            if not item.set_code:
-                continue
-            card = card_repo.get_card_by_set_and_number(item.set_code, item.card_number)
-            if not card or not card.rarity:
-                continue
-            rarity = card.rarity
-            if rarity not in target_set:
-                continue
-            if rarity in rarity_to_center:
-                continue
-            rarity_to_center[rarity] = item.center
-            found_rarities.append(rarity)
-        return rarity_to_center, found_rarities
-
-    @staticmethod
-    def pick_target_from_map(
-        rarity_to_center: dict[str, tuple[float, float]], targets: list[str]
-    ) -> Optional[tuple[str, tuple[float, float]]]:
-        best = WonderPickTask.pick_best_target(list(rarity_to_center.keys()), targets)
-        if not best:
-            return None
-        return best, rarity_to_center[best]
-
-    @staticmethod
     def is_stamina_enough(stamina: int, rarity: str) -> bool:
+        """判断当前挑战力是否足够。"""
         cost = WONDER_PICK_RARITY_COSTS.get(rarity)
         if cost is None:
             return False
@@ -279,6 +223,7 @@ class WonderPickTask(Task):
 
     @staticmethod
     def has_end_marker(ocr_results: list[dict]) -> bool:
+        """判断列表页是否出现结束标记。"""
         return is_text_visible(
             ocr_results,
             get_text_patterns("card_challenge_end_already")
@@ -286,8 +231,37 @@ class WonderPickTask(Task):
             exact=True,
         )
 
+    @staticmethod
+    def _build_cost_groups(targets: list[str]) -> list[list[str]]:
+        """按挑战力消耗将目标稀有度分组。"""
+        groups: list[list[str]] = []
+        cost_to_group: dict[int, list[str]] = {}
+        for rarity in targets:
+            cost = WONDER_PICK_RARITY_COSTS.get(rarity)
+            if cost is None:
+                continue
+            if cost not in cost_to_group:
+                cost_to_group[cost] = []
+                groups.append(cost_to_group[cost])
+            cost_to_group[cost].append(rarity)
+        return groups
+
+    def _refresh_active_targets(self):
+        """按当前挑战力刷新当前可挑战的目标组。"""
+        self._active_targets = []
+        self._active_group_index = None
+        self._seen_lower_group_index = None
+        self._reverse_scan = False
+        if self._current_stamina is None:
+            return
+        for index, group in enumerate(self._cost_groups):
+            if group and self.is_stamina_enough(self._current_stamina, group[0]):
+                self._active_targets = list(group)
+                self._active_group_index = index
+                return
+
     def _handle_home(self, page_info: dict) -> ActionResult:
-        ocr_results = page_info.get("ocr_results", [])
+        """主页读取挑战力并进入得卡挑战。"""
         if not self._target_rarities:
             self._skip("未配置目标稀有度")
             return ActionResult.ok(wait=1.0)
@@ -296,6 +270,7 @@ class WonderPickTask(Task):
         if stamina is None:
             logger.debug("未识别到挑战力图标，稍后重试")
             return ActionResult.ok(wait=1.0)
+
         if stamina == 0:
             self._stamina_zero_count += 1
             logger.debug("挑战力识别为0，等待重试(%s/3)", self._stamina_zero_count)
@@ -303,101 +278,148 @@ class WonderPickTask(Task):
                 return ActionResult.ok(wait=1.0)
         else:
             self._stamina_zero_count = 0
+
         self._current_stamina = stamina
-
-        if self._should_end_due_to_stamina():
+        self._refresh_active_targets()
+        if not self._active_targets:
             self._completed = True
-            return ActionResult.ok(wait=1.0)
-
-        if self._force_reenter:
-            result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("card_challenge_title"),
-                wait=1.0,
-            )
-            if result:
-                self._force_reenter = False
-                return result
             return ActionResult.ok(wait=1.0)
 
         result = tap_text_exact(
             self.adb,
-            ocr_results,
+            page_info.get("ocr_results", []),
             get_text_patterns("card_challenge_title"),
             wait=1.0,
         )
         return result or ActionResult.ok(wait=1.0)
 
     def _handle_list(self, page_info: dict) -> ActionResult:
-        ocr_results = page_info.get("ocr_results", [])
-
+        """列表页：只扫当前挑战力组。"""
         if self._current_stamina is None:
             return navigate_back(
                 self.adb,
                 self.page_detector,
-                ocr_results,
+                page_info.get("ocr_results", []),
                 get_text_patterns("back_button"),
             )
 
-        if self._active_targets:
-            logger.debug("当前寻找稀有度组: %s", "/".join(self._active_targets))
+        if self._pending_after_challenge:
+            self._selected_rarity = None
+            self._target_pick_index = None
+            self._get_card_saved = False
+            self._refresh_active_targets()
+            self._reset_scan_round()
+            self._pending_after_challenge = False
 
-        if self._should_end_due_to_stamina():
+        if not self._active_targets:
             self._completed = True
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                ocr_results,
-                get_text_patterns("back_button"),
-            )
+            return ActionResult.ok(wait=1.0)
 
         detected = self._scan_cards()
-        if self._update_scan_signature(detected) >= 3:
-            if self._switching_targets:
-                logger.info("切换目标中连续三次扫描一致，停止切换")
-                self._switching_targets = False
-            else:
-                return self._handle_end_of_list("连续三次扫描结果一致")
-
-        target = self._scan_targets(detected)
+        target = self._pick_target_on_current_page(detected)
         if target:
             logger.info("命中目标稀有度: %s", target)
             self._selected_rarity = target
-            if self._switching_targets:
-                self._switching_targets = False
             return ActionResult.ok(wait=1.0)
 
-        if self._switching_targets:
-            direction = "向上" if self._switching_scroll_up else "向下"
-            logger.info("切换目标中，继续%s滚动", direction)
-            if self._switching_scroll_up:
-                start, end = scroll_points(
-                    self.adb,
-                    base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
-                    direction="down",
-                )
-            else:
-                start, end = scroll_points(
-                    self.adb,
-                    base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
-                    direction="up",
-                )
-            swipe(self.adb, start, end, steps=WONDER_PICK_SWIPE_STEPS, wait=0.8)
-            return ActionResult.ok(wait=0.5)
+        if not self._reverse_scan:
+            self._record_seen_lower_group(detected)
 
-        if self.has_end_marker(ocr_results):
-            # 注意：当前逻辑不会在主页二次判断挑战力不足，
-            # 若后续改动导致“已结束”不再触发任务结束，可能引发循环。
-            return self._handle_end_of_list("已出现结束标志")
+        if self._should_finish_current_group(
+            detected,
+            page_info.get("ocr_results", []),
+        ):
+            return self._advance_scan_group()
 
-        start, end = scroll_points(
-            self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
-        )
-        swipe(self.adb, start, end, steps=WONDER_PICK_SWIPE_STEPS, wait=0.8)
-        return ActionResult.ok(wait=0.5)
+        return self._scroll_list(direction="down" if self._reverse_scan else "up")
+
+    def _pick_target_on_current_page(self, detected) -> Optional[str]:
+        """在当前页当前组内选择目标卡并点击。"""
+        page_targets = self._collect_page_targets(detected)
+        if not page_targets:
+            return None
+
+        active_found = [
+            rarity for rarity, _ in page_targets if rarity in self._active_targets
+        ]
+        if not active_found:
+            return None
+
+        best = self.pick_best_target(active_found, self._active_targets)
+        if not best:
+            return None
+
+        for rarity, center in page_targets:
+            if rarity == best:
+                self._tap_card_center(center)
+                return best
+        return None
+
+    def _collect_page_targets(self, detected) -> list[tuple[str, tuple[float, float]]]:
+        """收集当前页所有目标卡及其坐标。"""
+        if not self._card_repo or not detected:
+            return []
+
+        rows = map_detected_cards(cards=detected, card_repo=self._card_repo)
+        page_targets: list[tuple[str, tuple[float, float]]] = []
+        for item, row in zip(detected, rows):
+            rarity = row.get("rarity")
+            if not rarity or rarity not in self._target_rarities:
+                continue
+            page_targets.append((rarity, item.center))
+        return page_targets
+
+    def _should_finish_current_group(
+        self,
+        detected,
+        ocr_results: list[dict],
+    ) -> bool:
+        """判断当前组是否已经扫到结束。"""
+        if not self._reverse_scan and self.has_end_marker(ocr_results):
+            return True
+        return self._update_scan_signature(detected) >= 3
+
+    def _advance_scan_group(self) -> ActionResult:
+        """当前组结束后切换到已见的次优先级组；否则结束。"""
+        if self._reverse_scan:
+            self._completed = True
+            return ActionResult.ok(wait=1.0)
+
+        if self._seen_lower_group_index is None:
+            self._completed = True
+            return ActionResult.ok(wait=1.0)
+
+        group = self._cost_groups[self._seen_lower_group_index]
+        self._active_targets = list(group)
+        self._active_group_index = self._seen_lower_group_index
+        self._seen_lower_group_index = None
+        self._reverse_scan = True
+        self._reset_scan_round()
+        logger.info("切换到下一目标组: %s", "/".join(group))
+        return self._scroll_list(direction="down")
+
+    def _record_seen_lower_group(self, detected):
+        """记录本轮向下扫描中见过的最高优先级更低目标组。"""
+        if self._active_group_index is None:
+            return
+
+        page_targets = self._collect_page_targets(detected)
+        if not page_targets:
+            return
+
+        found_rarities = {rarity for rarity, _ in page_targets}
+        for index in range(self._active_group_index + 1, len(self._cost_groups)):
+            group = self._cost_groups[index]
+            if any(rarity in found_rarities for rarity in group):
+                if (
+                    self._seen_lower_group_index is None
+                    or index < self._seen_lower_group_index
+                ):
+                    self._seen_lower_group_index = index
+                return
 
     def _handle_popup(self, page_info: dict) -> ActionResult:
+        """挑战确认弹窗。"""
         ocr_results = page_info.get("ocr_results", [])
         if is_text_visible(
             ocr_results,
@@ -407,237 +429,101 @@ class WonderPickTask(Task):
             self._skip("挑战力不足")
             return ActionResult.ok(wait=1.0)
 
-        # 在弹窗中重扫一次，确保目标位索引基于稳定的 5 张卡布局计算
         self._refresh_target_pick_index_in_popup()
-
         result = tap_ok(self.adb, ocr_results, wait=1.0)
         if result:
+            self._get_card_saved = False
             self._consume_stamina()
+            self._pending_after_challenge = True
             return result
-
         return ActionResult.ok(wait=0.5)
 
     def _handle_select_favorite_card(self, page_info: dict) -> ActionResult:
-        """处理选择喜欢的卡牌页面"""
-        logger.info("  -> 选择喜欢的卡牌")
+        """随机选取卡牌。"""
         position = self._pick_random_card_position()
         if position:
-            candidates = WONDER_PICK_RULES.get(
-                self._target_pick_index or 0,
-                list(WONDER_PICK_POSITIONS.keys()),
-            )
-            logger.info(
-                "随机选卡: 目标位=%s, 候选位=%s, 最终点击坐标=(%s,%s)",
-                self._target_pick_index,
-                candidates,
-                position[0],
-                position[1],
-            )
             self._target_pick_index = None
             return tap(self.adb, position[0], position[1], wait=1.0)
         return tap_favorite_card(self.adb, wait=1.0)
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
-        """向上滑动卡牌登录图鉴（精英牌组奖励）"""
+        """处理图鉴登录页。"""
         return swipe_card_register(self.adb)
 
     def _handle_get_card(self, page_info: dict) -> ActionResult:
+        """GET/结果页保存高稀有度卡并继续推进。"""
         ocr_results = page_info.get("ocr_results", [])
-        if self._is_action_done("get_card_saved"):
-            return self._navigate_back_from_get_card(ocr_results)
+        if not self._get_card_saved:
+            if (
+                not self._card_repo
+                or not self._account_card_repo
+                or not self.account.id
+            ):
+                return ActionResult.ok(wait=0.5)
 
-        if not self._card_repo or not self._account_card_repo or not self.account.id:
-            return ActionResult.ok(wait=0.5)
+            detected = self.card_recognizer.scan(
+                resolve_name=lambda set_code, card_number: resolve_card_name(
+                    self._card_repo,
+                    set_code,
+                    card_number,
+                ),
+            )
+            if not detected:
+                return ActionResult.ok(wait=0.5)
 
-        detected = self.card_recognizer.scan(
-            resolve_name=lambda set_code, card_number: resolve_card_name(
-                self._card_repo, set_code, card_number
-            ),
-        )
-        if not detected:
-            return ActionResult.ok(wait=0.5)
+            rows = map_detected_cards(cards=detected, card_repo=self._card_repo)
+            if not any(row.get("card_id") for row in rows):
+                return ActionResult.ok(wait=0.5)
 
-        rows = map_detected_cards(
-            cards=detected,
-            card_repo=self._card_repo,
-        )
-        if not any(row.get("card_id") for row in rows):
-            return ActionResult.ok(wait=0.5)
+            save_high_rarity_cards(
+                account_card_repo=self._account_card_repo,
+                account_id=self.account.id,
+                rows=rows,
+                account=self.account,
+                notifier=get_notifier(),
+                notify_message="得卡挑战获得稀有卡牌",
+            )
+            self._get_card_saved = True
 
-        save_high_rarity_cards(
-            account_card_repo=self._account_card_repo,
-            account_id=self.account.id,
-            rows=rows,
-            account=self.account,
-            notifier=get_notifier(),
-            notify_message="得卡挑战获得稀有卡牌",
-        )
-        self._mark_action_done("get_card_saved")
-        return self._navigate_back_from_get_card(ocr_results)
-
-    def _navigate_back_from_get_card(self, ocr_results: list[dict]) -> ActionResult:
-        """从 GET 页返回列表页。"""
-        return navigate_back(
+        result = tap_text_exact(
             self.adb,
-            self.page_detector,
             ocr_results,
-            get_text_patterns("back_button"),
+            get_text_patterns("tap_to_continue"),
+            wait=1.0,
         )
+        if result:
+            return result
 
-    def _scan_targets(self, detected=None) -> Optional[str]:
-        if not self._card_repo:
-            return None
-
-        if detected is None:
-            detected = self._scan_cards()
-        if not detected:
-            return None
-
-        rarity_to_center, found_rarities = self.build_target_map(
-            detected, self._card_repo, self._target_rarities
+        result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("continue_button"),
+            wait=1.0,
         )
-        if not found_rarities:
-            return None
+        return result or ActionResult.ok(wait=0.5)
 
-        active_found = [r for r in self._active_targets if r in rarity_to_center]
-        if active_found:
-            best = self.pick_best_target(active_found, self._active_targets)
-            if not best:
-                return None
-            center = rarity_to_center[best]
-            self._tap_card_center(center)
-            return best
-
-        if not self._next_targets:
-            best = self.pick_best_target(found_rarities, self._target_rarities)
-            if best:
-                next_group = self._cost_group_map.get(best, [best])
-                self._next_targets = next_group
-                logger.info("记录下一轮目标稀有度组: %s", "/".join(next_group))
-        return None
-
-    def _handle_end_of_list(self, reason: str) -> ActionResult:
-        if self._next_targets:
-            next_priority = self._get_group_priority(self._next_targets)
-            current_priority = self._get_group_priority(self._active_targets)
-            self._switching_scroll_up = next_priority >= current_priority
-            direction = "向上" if self._switching_scroll_up else "向下"
-            logger.info("命中结束标志，切换下一轮目标并%s滚动", direction)
-            self._active_targets = self._next_targets
-            self._next_targets = []
-            self._last_signature = None
-            self._same_signature_count = 0
-            self._switching_targets = True
-            if self._switching_scroll_up:
-                start, end = scroll_points(
-                    self.adb,
-                    base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
-                    direction="down",
-                )
-                return swipe(
-                    self.adb,
-                    start,
-                    end,
-                    wait=0.8,
-                )
-            start, end = scroll_points(
-                self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
-            )
-            return swipe(
-                self.adb,
-                start,
-                end,
-                wait=0.8,
-            )
-
-        logger.info("结束得卡挑战扫描: %s", reason)
-        self._completed = True
-        return ActionResult.ok(wait=1.0)
-
-    def _should_end_due_to_stamina(self) -> bool:
-        if self._current_stamina is None:
-            return False
-        if not self._active_targets:
-            return False
-        active_cost = WONDER_PICK_RARITY_COSTS.get(self._active_targets[0])
-        if active_cost is None:
-            return False
-        min_cost = min(
-            WONDER_PICK_RARITY_COSTS.get(r, 99) for r in WONDER_PICK_DEFAULT_TARGETS
+    def _handle_send_thanks(self, page_info: dict) -> ActionResult:
+        """处理谢谢弹窗。"""
+        result = tap_text_exact(
+            self.adb,
+            page_info.get("ocr_results", []),
+            get_text_patterns("thanks_button"),
+            wait=1.5,
         )
-        if self._current_stamina < active_cost:
-            logger.info(
-                "挑战力不足，结束得卡挑战任务: 当前=%s, 目标=%s/%s, 最低=%s",
-                self._current_stamina,
-                "/".join(self._active_targets),
-                active_cost,
-                min_cost,
-            )
-            return True
-        return False
+        return result or ActionResult.ok(wait=0.5)
 
-    def _build_rarity_index_map(self, detected) -> dict[str, int]:
-        if not self._card_repo:
-            return {}
-        index_map: dict[str, int] = {}
-        for idx, item in enumerate(detected, start=1):
-            if not item.set_code:
-                continue
-            card = self._card_repo.get_card_by_set_and_number(
-                item.set_code, item.card_number
-            )
-            if not card or not card.rarity:
-                continue
-            if card.rarity not in self._target_rarities:
-                continue
-            if card.rarity in index_map:
-                continue
-            index_map[card.rarity] = idx
-        return index_map
-
-    @staticmethod
-    def _get_group_priority(group: list[str]) -> int:
-        if not group:
-            return 999
-        priority = {
-            rarity: idx for idx, rarity in enumerate(WONDER_PICK_RARITY_PRIORITY)
-        }
-        return min(priority.get(rarity, 999) for rarity in group)
-
-    def _pick_random_card_position(self) -> Optional[tuple[int, int]]:
-        if self._target_pick_index in WONDER_PICK_RULES:
-            candidates = WONDER_PICK_RULES[self._target_pick_index]
-        else:
-            candidates = list(WONDER_PICK_POSITIONS.keys())
-        if not candidates:
-            return None
-        chosen = random.choice(candidates)
-        position = WONDER_PICK_POSITIONS.get(chosen)
-        if not position:
-            return None
-        return self.adb.scaled_x(position[0]), self.adb.scaled_y(position[1])
-
-    @staticmethod
-    def _build_cost_groups(
-        targets: list[str],
-    ) -> tuple[list[list[str]], dict[str, list[str]]]:
-        groups: list[list[str]] = []
-        cost_to_group: dict[int, list[str]] = {}
-        rarity_to_group: dict[str, list[str]] = {}
-        for rarity in targets:
-            cost = WONDER_PICK_RARITY_COSTS.get(rarity)
-            if cost is None:
-                continue
-            if cost not in cost_to_group:
-                cost_to_group[cost] = []
-                groups.append(cost_to_group[cost])
-            cost_to_group[cost].append(rarity)
-        for group in groups:
-            for rarity in group:
-                rarity_to_group[rarity] = group
-        return groups, rarity_to_group
+    def _scroll_list(self, direction: str, wait: float = 0.6) -> ActionResult:
+        """滚动得卡挑战列表。"""
+        start, end = scroll_points(
+            self.adb,
+            base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
+            direction=direction,
+        )
+        swipe(self.adb, start, end, steps=WONDER_PICK_SWIPE_STEPS, wait=wait)
+        return ActionResult.ok(wait=0.4)
 
     def _update_scan_signature(self, detected) -> int:
+        """更新当前页识别签名，连续相同用于判定到底。"""
         signature = self._build_card_signature(detected)
         if not signature:
             return self._same_signature_count
@@ -650,6 +536,7 @@ class WonderPickTask(Task):
 
     @staticmethod
     def _build_card_signature(detected) -> Optional[str]:
+        """构建当前页识别卡牌签名。"""
         if not detected:
             return None
         signature_items = []
@@ -662,44 +549,61 @@ class WonderPickTask(Task):
         return "|".join(sorted(signature_items))
 
     def _scan_cards(self):
+        """扫描当前页卡牌。"""
         return self.card_recognizer.scan(
             resolve_name=lambda set_code, card_number: resolve_card_name(
-                self._card_repo, set_code, card_number
+                self._card_repo,
+                set_code,
+                card_number,
             ),
         )
 
     def _tap_card_center(self, center: tuple[float, float]):
+        """点击目标卡片中心。"""
         tap(self.adb, int(center[0]), int(center[1]), wait=0.5)
 
     def _consume_stamina(self):
-        if self._current_stamina is None:
-            return
-        if not self._selected_rarity:
+        """按本次命中的目标稀有度扣减挑战力，并刷新下一轮目标组。"""
+        if self._current_stamina is None or not self._selected_rarity:
             return
         cost = WONDER_PICK_RARITY_COSTS.get(self._selected_rarity)
         if cost is None:
             return
         self._current_stamina = max(self._current_stamina - cost, 0)
+        self._refresh_active_targets()
+        self._reset_scan_round()
+
+    def _pick_random_card_position(self) -> Optional[tuple[int, int]]:
+        """根据目标位索引生成随机点击位置。"""
+        if self._target_pick_index in WONDER_PICK_RULES:
+            candidates = WONDER_PICK_RULES[self._target_pick_index]
+        else:
+            candidates = list(WONDER_PICK_POSITIONS.keys())
+        if not candidates:
+            return None
+        chosen = random.choice(candidates)
+        position = WONDER_PICK_POSITIONS.get(chosen)
+        if not position:
+            return None
+        return self.adb.scaled_x(position[0]), self.adb.scaled_y(position[1])
 
     def _refresh_target_pick_index_in_popup(self):
-        """在挑战确认弹窗内重扫卡牌，刷新目标位索引。"""
+        """在确认弹窗内读取目标位索引。"""
         self._target_pick_index = None
         if not self._selected_rarity or not self._card_repo:
             return
-
         detected = self._scan_cards()
         if not detected:
             return
 
-        index_map = self._build_rarity_index_map(detected)
-        self._target_pick_index = index_map.get(self._selected_rarity)
-        logger.debug(
-            "弹窗重扫目标位: rarity=%s, pick_index=%s",
-            self._selected_rarity,
-            self._target_pick_index,
-        )
+        rows = map_detected_cards(cards=detected, card_repo=self._card_repo)
+        for idx, row in enumerate(rows, start=1):
+            if row.get("rarity") == self._selected_rarity:
+                self._target_pick_index = idx
+                return
 
     def _get_wonder_stamina(self) -> Optional[int]:
+        """统计主页挑战力图标数量。"""
         screenshot, _ = self.page_detector.get_last_page_context()
         if screenshot is None:
             screenshot, _ = self.page_detector.capture()
@@ -715,7 +619,13 @@ class WonderPickTask(Task):
         )
         return count_icons("icon_wonder_stamina", hits)
 
+    def _reset_scan_round(self):
+        """重置一轮列表扫描状态。"""
+        self._last_signature = None
+        self._same_signature_count = 0
+
     def _skip(self, reason: str):
+        """跳过并结束任务。"""
         logger.info("得卡挑战任务跳过: %s", reason)
         self._skipped = True
         self._completed = True
