@@ -1,0 +1,47 @@
+{% from "partials/macros/data_table.html" import data_table_sort_button %}
+{% from "partials/macros/tables.html" import table_container, table_row %}
+
+{% set next_order_account = 'desc' if (sort_by or 'id') == 'id' and (sort_order or 'asc') == 'asc' else 'asc' %}
+{% set next_order_exchange = 'asc' if sort_by == 'exchange_points' and (sort_order or 'asc') == 'desc' else 'desc' %}
+{% set next_order_hourglass = 'asc' if sort_by == 'pack_hourglass_count' and (sort_order or 'asc') == 'desc' else 'desc' %}
+{% set next_order_updated = 'asc' if sort_by == 'updated_at' and (sort_order or 'asc') == 'desc' else 'desc' %}
+{% set account_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=stats&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=id&sort_order=' ~ next_order_account %}
+{% set exchange_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=stats&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=exchange_points&sort_order=' ~ next_order_exchange %}
+{% set hourglass_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=stats&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=pack_hourglass_count&sort_order=' ~ next_order_hourglass %}
+{% set updated_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=stats&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=updated_at&sort_order=' ~ next_order_updated %}
+
+{% call table_container([
+    {'label': data_table_sort_button(label=(t.col_account or 'Account'), url=account_sort_url, target='#management-content', active=((sort_by or 'id') == 'id'), order=(sort_order or 'asc'))|safe},
+    {'label': data_table_sort_button(label=(t.col_exchange_points or 'Exchange Points'), url=exchange_sort_url, target='#management-content', active=(sort_by == 'exchange_points'), order=(sort_order or 'asc'))|safe},
+    {'label': data_table_sort_button(label=(t.col_pack_hourglass or 'Pack Hourglass'), url=hourglass_sort_url, target='#management-content', active=(sort_by == 'pack_hourglass_count'), order=(sort_order or 'asc'))|safe},
+    {'label': data_table_sort_button(label=(t.col_updated_at or 'Updated At'), url=updated_sort_url, target='#management-content', active=(sort_by == 'updated_at'), order=(sort_order or 'asc'))|safe}
+], t, (t.empty_resource_stats or 'No resource data') if not items else '') %}
+    {% for item in items %}
+        {% set account_cell %}
+            <div class="space-y-1 account-identity-cell">
+                <div class="font-bold text-base leading-tight">{{ item.nickname or '-' }}</div>
+                <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.account_id }}</div>
+                {% if item.friend_id %}
+                <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.friend_id }}</div>
+                {% endif %}
+            </div>
+        {% endset %}
+        {% set updated_at_cell %}
+            {% if item.updated_at %}
+                <span class="tooltip-text relative-time"
+                      data-iso="{{ item.updated_at.isoformat(timespec='seconds') }}"
+                      data-tooltip="{{ (t.col_updated_at or '更新时间') ~ '：' ~ (item.updated_at|datetime) }}">
+                    {{ item.updated_at|datetime }}
+                </span>
+            {% else %}
+                -
+            {% endif %}
+        {% endset %}
+        {{ table_row([
+            account_cell,
+            '{:,}'.format(item.exchange_points) if item.exchange_points is not none else '-',
+            '{:,}'.format(item.pack_hourglass_count) if item.pack_hourglass_count is not none else '-',
+            updated_at_cell|safe
+        ]) }}
+    {% endfor %}
+{% endcall %}

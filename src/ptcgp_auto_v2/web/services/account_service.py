@@ -10,6 +10,7 @@ from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
+    AccountPackConfigRepository,
     CardRepository,
     PackRecordRepository,
     TaskPlanRepository,
@@ -61,10 +62,7 @@ def build_accounts_list_context(
     normalized_page_size = normalize_page_size(page_size)
 
     if normalized_q:
-        accounts = [
-            item for item in accounts
-            if _match_account(item, normalized_q)
-        ]
+        accounts = [item for item in accounts if _match_account(item, normalized_q)]
 
     def _sort_value(item: Account):
         if normalized_sort_by == "nickname":
@@ -90,28 +88,10 @@ def build_accounts_list_context(
     all_configs = session.exec(config_stm).all()
     pack_configs_map = {item.account_id: item for item in all_configs}
 
-    auto_pack_map: dict[int, dict] = {}
-    if accounts_page:
-        settings = get_settings()
-        card_repo = CardRepository()
-        record_repo = PackRecordRepository()
-        for account in accounts_page:
-            if account.id is None or account.id in pack_configs_map:
-                continue
-            selected = select_pack_for_account(
-                account=account,
-                strategy=settings.pack_auto_strategy,
-                card_repo=card_repo,
-                record_repo=record_repo,
-                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-            )
-            if selected:
-                auto_pack_map[account.id] = selected
-
     return {
         "items": accounts_page,
         "pack_configs": pack_configs_map,
-        "auto_pack_map": auto_pack_map,
+        "auto_pack_map": {},
         "q": q,
         "sort_by": normalized_sort_by,
         "sort_order": normalized_sort_order,
@@ -120,6 +100,35 @@ def build_accounts_list_context(
         "has_prev": has_prev,
         "has_next": has_next,
         "total": total,
+    }
+
+
+def build_account_target_pack_context(account_id: int) -> dict | None:
+    """构建账号目标包单元格上下文。"""
+    repo = AccountRepository()
+    account = repo.get_by_id(account_id)
+    if not account or account.id is None:
+        return None
+
+    config_repo = AccountPackConfigRepository()
+    config = config_repo.get_by_account_and_type(account.id, "daily")
+    auto_pack = None
+    if not config:
+        settings = get_settings()
+        card_repo = CardRepository()
+        record_repo = PackRecordRepository()
+        auto_pack = select_pack_for_account(
+            account=account,
+            strategy=settings.pack_auto_strategy,
+            card_repo=card_repo,
+            record_repo=record_repo,
+            exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+        )
+
+    return {
+        "account_id": account.id,
+        "config": config,
+        "auto_pack": auto_pack,
     }
 
 
@@ -143,9 +152,7 @@ def update_account_details(account_id: int, nickname: str, remark: str) -> None:
     repo.update(account)
 
 
-def build_account_plans_context(
-    session: Session, account_id: int
-) -> dict | None:
+def build_account_plans_context(session: Session, account_id: int) -> dict | None:
     """构建账号计划编辑弹窗数据。"""
     statement = (
         select(Account)

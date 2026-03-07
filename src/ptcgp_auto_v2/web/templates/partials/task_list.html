@@ -25,6 +25,13 @@
                 <div class="text-xs text-muted whitespace-nowrap">
                     {{ item.target_pack_label }}{% if item.target_pack_auto %} ({{ t.label_auto or 'Auto' }}){% endif %}
                 </div>
+            {% elif item.task_type == 'open_pack' %}
+                <div id="task-target-pack-{{ item.id }}"
+                     hx-get="/management/tasks/{{ item.id }}/target-pack?lang={{ current_lang }}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <span class="text-xs text-muted whitespace-nowrap">{{ t.label_loading or '加载中' }}</span>
+                </div>
             {% endif %}
         {% endset %}
         {% set status_cell %}
@@ -127,7 +134,7 @@
 {% else %}
     {% call data_table_card('', 'brutal-card p-6') %}
         <form id="task-filter-form"
-              hx-get="/api/tasks?lang={{ current_lang }}"
+              hx-get="/api/tasks"
               hx-target="#task-table-body"
               hx-swap="innerHTML"
               hx-trigger="change"
@@ -138,10 +145,12 @@
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
             </div>
 
+            <input type="hidden" name="lang" value="{{ current_lang }}">
             <input type="hidden" name="sort_by" id="task-sort-by" value="{{ selected_sort_by or 'dispatch_priority' }}">
             <input type="hidden" name="sort_order" id="task-sort-order" value="{{ selected_sort_order or 'asc' }}">
             <input type="hidden" name="page" id="task-page" value="{{ page or 0 }}">
             <input type="hidden" name="page_size" id="task-page-size" value="{{ page_size or 10 }}">
+            <input type="hidden" name="account_id" id="task-account-id" value="{{ selected_account_id or '' }}">
 
             {% set toolbar_layout = {
                 'left_items': [
@@ -201,22 +210,21 @@
                     {% endfor %}
                 </select>
                 {% elif field.key == 'account_id' %}
-                <select
-                    id="task-filter-account"
-                    name="account_id"
-                    class="js-custom-select brutal-input table-control"
-                    {% if accounts|length > 10 %}
-                    data-searchable="true"
-                    data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
-                    {% endif %}>
-                    <option value="">{{ t.label_all or 'All' }}</option>
-                    {% for account in accounts %}
-                        {% set account_label = (account.nickname or account.display_name or ('#' ~ account.id)) ~ ' #' ~ account.id %}
-                        <option value="{{ account.id }}" data-search="{{ account_label }}" {% if account.id == selected_account_id %}selected{% endif %}>
-                            {{ account_label }}
-                        </option>
-                    {% endfor %}
-                </select>
+                <div class="relative">
+                    <input type="text"
+                           id="task-filter-account-query"
+                           name="account_q"
+                           value="{{ selected_account_query or '' }}"
+                           class="brutal-input table-control"
+                           placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
+                           autocomplete="off"
+                           data-action="search-task-accounts"
+                           data-options-url="/api/tasks/account-options?lang={{ current_lang }}"
+                           data-options-target="#task-filter-account-options"
+                           data-hidden-input="#task-account-id">
+                    <div id="task-filter-account-options"
+                         class="absolute z-20 mt-1 w-full bg-card border-2 border-theme rounded shadow-lg hidden max-h-64 overflow-y-auto"></div>
+                </div>
                 {% elif field.key == 'reset_completed' %}
                 <span id="task-reset-completed-wrapper"
                       class="tooltip-text"

@@ -10,7 +10,9 @@ from ptcgp_auto_v2.core.task_ordering import (
 )
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.task_service import (
+    build_task_target_pack_context,
     build_task_list_render_context,
+    list_task_filter_accounts,
     reset_completed_tasks_by_filters,
 )
 from ptcgp_auto_v2.web.utils.response_utils import render_template
@@ -28,6 +30,7 @@ async def get_management_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
+    account_q: str = Query(default=""),
     page: int = Query(default=0),
     page_size: int = Query(default=10),
     sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
@@ -53,6 +56,7 @@ async def get_management_tasks(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=parsed_account_id,
+        account_q=account_q,
         sort_by=sort_by,
         sort_order=sort_order,
         table_only=False,
@@ -123,6 +127,7 @@ async def reset_completed_tasks(
         status=status,
         task_type=task_type,
         account_id=parsed_account_id,
+        account_q="",
         sort_by=sort_by,
         sort_order=sort_order,
         table_only=True,
@@ -152,6 +157,7 @@ async def get_tasks(
     status: list[str] = Query(default=[]),
     task_type: list[str] = Query(default=[]),
     account_id: str | None = Query(default=None),
+    account_q: str = Query(default=""),
     sort_by: str = Query(default=TASK_SORT_BY_DISPATCH_PRIORITY),
     sort_order: str = Query(default="asc"),
     session: Session = Depends(get_fastapi_session),
@@ -175,6 +181,7 @@ async def get_tasks(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=parsed_account_id,
+        account_q=account_q,
         sort_by=sort_by,
         sort_order=sort_order,
         table_only=True,
@@ -184,4 +191,36 @@ async def get_tasks(
         request,
         "partials/task_list.html",
         context,
+    )
+
+
+@router.get(
+    "/management/tasks/{task_instance_id}/target-pack", response_class=HTMLResponse
+)
+async def get_task_target_pack_cell(
+    request: Request,
+    task_instance_id: int,
+):
+    """渲染任务目标包单元格。"""
+    context = build_task_target_pack_context(task_instance_id)
+    if not context:
+        return HTMLResponse("Task instance not found", status_code=404)
+    return render_template(request, "partials/task_target_pack_cell.html", context)
+
+
+@router.get("/api/tasks/account-options", response_class=HTMLResponse)
+async def get_task_account_options(
+    request: Request,
+    q: str = Query(default=""),
+    session: Session = Depends(get_fastapi_session),
+):
+    """返回任务筛选账号远程搜索候选。"""
+    accounts = list_task_filter_accounts(session=session, q=q, limit=20)
+    return render_template(
+        request,
+        "partials/task_account_options.html",
+        {
+            "accounts": accounts,
+            "query": q,
+        },
     )

@@ -1,5 +1,5 @@
 // --- 交换卡牌账号搜索 ---
-export function searchExchangeAccounts(query) {
+function searchExchangeAccounts(query) {
     const tbody = document.getElementById('exchange-accounts-tbody');
     if (!tbody) return;
     const rows = tbody.querySelectorAll('.exchange-account-row');
@@ -15,6 +15,20 @@ export function searchExchangeAccounts(query) {
             || nickname.includes(normalizedQuery);
         row.style.display = visible ? '' : 'none';
     });
+}
+
+// --- 初始化交换卡牌搜索 ---
+export function initExchangeCards(context = document) {
+    const root = context instanceof Element ? context : document;
+    const searchInput = root.querySelector('[data-action="search-exchange-accounts"]');
+    if (!(searchInput instanceof HTMLInputElement)) return;
+    if (searchInput.dataset.exchangeSearchBound === 'true') return;
+
+    searchInput.addEventListener('input', () => {
+        searchExchangeAccounts(searchInput.value);
+    });
+
+    searchInput.dataset.exchangeSearchBound = 'true';
 }
 
 // --- 展示交换表单 ---

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
-from sqlmodel import Session, select
+from sqlmodel import Session, col, or_, select
 
 from ptcgp_auto_v2.core.task_plan_utils import (
     build_account_plan_cache,
@@ -13,6 +13,7 @@ from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
+    AccountPackConfigRepository,
     CardRepository,
     PackRecordRepository,
     TaskInstanceRepository,
@@ -102,33 +103,10 @@ def build_tasks_list_context(
     if account_ids:
         config_stm = select(AccountPackConfig).where(
             AccountPackConfig.type == "daily",
-            AccountPackConfig.account_id.in_(account_ids),
+            col(AccountPackConfig.account_id).in_(account_ids),
         )
         configs = session.exec(config_stm).all()
         pack_configs_map = {item.account_id: item for item in configs}
-
-        settings = get_settings()
-        card_repo = CardRepository()
-        record_repo = PackRecordRepository()
-        for instance in instances:
-            if instance.account_id is None:
-                continue
-            if instance.account_id in pack_configs_map:
-                continue
-            account = instance.account
-            if not account:
-                continue
-            if instance.account_id in auto_pack_map:
-                continue
-            selected = select_pack_for_account(
-                account=account,
-                strategy=settings.pack_auto_strategy,
-                card_repo=card_repo,
-                record_repo=record_repo,
-                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-            )
-            if selected:
-                auto_pack_map[instance.account_id] = selected
     rows: list[dict[str, Any]] = []
     now = datetime.now()
     for instance in instances:
@@ -151,16 +129,12 @@ def build_tasks_list_context(
         row_data: dict[str, Any] = {
             "id": instance.id,
             "account_id": account.id,
-            "account_name": account.nickname
-            or account.display_name
-            or str(account.id),
+            "account_name": account.nickname or account.display_name or str(account.id),
             "task_type": instance.task_type,
             "status": instance.status,
             "reset_type": effective_reset_type.value,
             "last_completed_at": instance.last_completed_at,
-            "last_completed_at_iso": format_datetime_iso(
-                instance.last_completed_at
-            ),
+            "last_completed_at_iso": format_datetime_iso(instance.last_completed_at),
             "last_duration_seconds": instance.last_duration_seconds,
             "updated_at": instance.updated_at,
             "error_message": instance.error_message,
@@ -180,13 +154,6 @@ def build_tasks_list_context(
             config = pack_configs_map.get(account.id)
             if config:
                 target_pack_label = f"{config.pack_code}/{config.booster_name}"
-            else:
-                auto_pack = auto_pack_map.get(account.id)
-                if auto_pack:
-                    target_pack_label = (
-                        f"{auto_pack['pack_code']}/{auto_pack['booster_name']}"
-                    )
-                    target_pack_auto = True
 
             row_data["target_pack_label"] = target_pack_label
             row_data["target_pack_auto"] = target_pack_auto
@@ -242,10 +209,29 @@ def recompute_next_run_at_for_account(
     repo.update_next_run_at(instances)
 
 
-def list_task_filter_accounts() -> list[Account]:
-    """获取任务筛选可用账号列表。"""
-    repo = AccountRepository()
-    return repo.get_all()
+def list_task_filter_accounts(
+    *,
+    session: Session,
+    q: str = "",
+    limit: int = 20,
+) -> list[Account]:
+    """获取任务筛选账号候选（轻量查询）。"""
+    normalized_q = (q or "").strip()
+    normalized_limit = min(max(limit, 1), 50)
+
+    statement = select(Account).order_by(Account.id).limit(normalized_limit)
+    if normalized_q:
+        like_value = f"%{normalized_q}%"
+        filters = [
+            Account.nickname.ilike(like_value),
+            Account.friend_id.ilike(like_value),
+            Account.game_id.ilike(like_value),
+        ]
+        if normalized_q.isdigit():
+            filters.append(Account.id == int(normalized_q))
+        statement = statement.where(or_(*filters))
+
+    return list(session.exec(statement).all())
 
 
 def build_task_list_render_context(
@@ -256,6 +242,7 @@ def build_task_list_render_context(
     status: list[str],
     task_type: list[str],
     account_id: int | None,
+    account_q: str,
     sort_by: str,
     sort_order: str,
     table_only: bool,
@@ -277,14 +264,55 @@ def build_task_list_render_context(
 
     context["status_options"] = [status_item.value for status_item in TaskStatus]
     context["task_types"] = TaskRegistry.all_types()
-    context["accounts"] = list_task_filter_accounts()
+    context["accounts"] = list_task_filter_accounts(
+        session=session, q=account_q, limit=20
+    )
     context["selected_status"] = status
     context["selected_task_type"] = task_type
     context["selected_account_id"] = account_id
+    context["selected_account_query"] = account_q
     context["selected_sort_by"] = sort_by
     context["selected_sort_order"] = sort_order
     context["table_only"] = table_only
     return context
+
+
+def build_task_target_pack_context(task_instance_id: int) -> dict | None:
+    """构建任务目标包单元格上下文。"""
+    repo = TaskInstanceRepository()
+    instance = repo.get_by_id(task_instance_id)
+    if not instance or not instance.account or instance.account_id is None:
+        return None
+
+    target_pack_label = None
+    target_pack_auto = False
+    if instance.task_type == "open_pack":
+        config_repo = AccountPackConfigRepository()
+        config = config_repo.get_by_account_and_type(instance.account_id, "daily")
+        if config:
+            target_pack_label = f"{config.pack_code}/{config.booster_name}"
+        else:
+            settings = get_settings()
+            card_repo = CardRepository()
+            record_repo = PackRecordRepository()
+            auto_pack = select_pack_for_account(
+                account=instance.account,
+                strategy=settings.pack_auto_strategy,
+                card_repo=card_repo,
+                record_repo=record_repo,
+                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+            )
+            if auto_pack:
+                target_pack_label = (
+                    f"{auto_pack['pack_code']}/{auto_pack['booster_name']}"
+                )
+                target_pack_auto = True
+
+    return {
+        "task_instance_id": task_instance_id,
+        "target_pack_label": target_pack_label,
+        "target_pack_auto": target_pack_auto,
+    }
 
 
 def reset_completed_tasks_by_filters(

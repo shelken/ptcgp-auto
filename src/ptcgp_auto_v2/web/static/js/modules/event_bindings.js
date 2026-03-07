@@ -1,19 +1,20 @@
 import { getModal } from './modal.js';
 import { isElementInActiveTab, setButtonLoading, showToast } from './utils.js';
 import { initCustomSelects } from './custom_select.js';
+import { initTaskRemoteAccountSearch } from './features/filters/tasks_remote_account.js';
 import {
     saveFilterCache,
-    saveFilterCachesInContext,
     saveFilterCacheByElement,
+    restoreFilterCachesInContext,
     initTaskSortControls,
 } from './features/filters/index.js';
-import { updateTaskItemState, initSortable } from './features/tasks.js';
-import { addPlan } from './features/plans.js';
+import { initSortable, initTasks } from './features/tasks.js';
+import { initPlans } from './features/plans.js';
 import { initInlineCardDrag, cardPreviewState, closeCardPreview } from './features/card_preview.js';
 import { initDailyGiftDatePickers } from './features/daily_gift.js';
 import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { updateRelativeTimes } from './relative_time.js';
-import { searchExchangeAccounts } from './features/exchange_cards.js';
+import { initExchangeCards } from './features/exchange_cards.js';
 import { handleActionClick } from './action_handlers.js';
 import { syncManagementSidebarRequestUrls } from './tabs.js';
 
@@ -256,10 +257,16 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     });
 
     document.body.addEventListener('htmx:load', (evt) => {
+        // 先恢复缓存到表单字段，再初始化组件
+        restoreFilterCachesInContext(evt.detail.elt);
         initCustomSelects(evt.detail.elt);
         initDailyGiftDatePickers(evt.detail.elt);
         updateRelativeTimes(evt.detail.elt);
         initTaskSortControls(evt.detail.elt);
+        initTaskRemoteAccountSearch(evt.detail.elt);
+        initExchangeCards(evt.detail.elt);
+        initPlans(evt.detail.elt);
+        initTasks(evt.detail.elt);
         syncManagementSidebarRequestUrls();
     });
 
@@ -284,25 +291,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
             handleFilterCacheOnForm(actionElement);
             return;
         }
-        if (action === 'add-plan') {
-            if (!(actionElement instanceof HTMLSelectElement)) return;
-            addPlan();
-            return;
-        }
-        if (action === 'update-task-item-state') {
-            if (!(actionElement instanceof HTMLInputElement)) return;
-            updateTaskItemState(actionElement);
-            return;
-        }
-        if (action === 'toggle-interval-input') {
-            if (!(actionElement instanceof HTMLSelectElement)) return;
-            const targetId = actionElement.dataset.intervalTarget;
-            if (!targetId) return;
-            const intervalInput = document.getElementById(targetId);
-            if (!intervalInput) return;
-            intervalInput.classList.toggle('hidden', actionElement.value !== 'interval');
-            return;
-        }
     });
 
     document.body.addEventListener('input', (event) => {
@@ -310,14 +298,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         if (!(target instanceof Element)) return;
 
         saveFilterCacheForElement(target);
-
-        const actionElement = target.closest('[data-action]');
-        if (!actionElement) return;
-        const action = actionElement.dataset.action;
-        if (action === 'search-exchange-accounts') {
-            searchExchangeAccounts(actionElement.value);
-            return;
-        }
     });
 
     document.body.addEventListener('keydown', (event) => {
@@ -366,7 +346,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         const newContent = evt.detail.elt || evt.detail.target;
         if (newContent) {
             updateRelativeTimes(newContent);
-            saveFilterCachesInContext(newContent);
             syncManagementSidebarRequestUrls();
         }
     });
@@ -433,4 +412,8 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     bindMutationObserver();
 
     initTaskSortControls(document);
+    initTaskRemoteAccountSearch(document);
+    initExchangeCards(document);
+    initPlans(document);
+    initTasks(document);
 }

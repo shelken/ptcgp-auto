@@ -524,6 +524,21 @@
                                 <button
                                     type="button"
                                     class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
+                                    hx-get="/management/resources?lang={{ current_lang }}"
+                                    hx-target="#management-content"
+                                    data-base-url="/management/resources?lang={{ current_lang }}"
+                                    data-filter-cache-key="ptcgp_filter:resources"
+                                    data-filter-param-keys="view,q,sort_by,sort_order,page,page_size"
+                                    data-hash="resources"
+                                    data-action="update-sidebar-state"
+                                    aria-label="{{ t.menu_resources or 'RESOURCES' }}">
+                                    {{ t.menu_resources or 'RESOURCES' }}
+                                </button>
+                            </li>
+                            <li>
+                                <button
+                                    type="button"
+                                    class="w-full text-left px-4 py-2 font-bold transition-colors border-2 border-transparent hover-border-theme sidebar-btn"
                                     hx-get="/management/tasks?lang={{ current_lang }}"
                                     hx-target="#management-content"
                                     data-base-url="/management/tasks?lang={{ current_lang }}"
@@ -647,6 +662,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=5.04"></script>
+    <script type="module" src="/static/js/main.js?v=5.07"></script>
 </body>
 </html>
