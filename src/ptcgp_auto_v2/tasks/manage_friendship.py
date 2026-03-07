@@ -21,17 +21,17 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import FriendshipService
-from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
     input_text,
     is_text_visible,
-    tap_box,
     tap_community_icon,
     tap_ok,
     tap_template,
     tap_text_exact,
+    tap_template_or_fallback,
+    tap_template_with_scale,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,7 +123,6 @@ class ManageFriendshipTask(Task):
         self._submitted_request_id: Optional[int] = None
         self._completed = False
         self._wake_account_ids: set[int] = set()
-        self._accept_whitelist: dict[str, "AccountFriendRequest"] = {}
 
         self._add_apply_wait_rounds = 0
         self._cancel_wait_rounds = 0
@@ -153,7 +152,6 @@ class ManageFriendshipTask(Task):
         self._accept_wait_rounds = 0
         self._delete_wait_rounds = 0
         self._wake_account_ids = set()
-        self._accept_whitelist = self._collect_accept_whitelist()
 
         self.requests_to_process = self._get_pending_requests()
         if self._expire_stale_add_requests():
@@ -336,8 +334,13 @@ class ManageFriendshipTask(Task):
 
     def _close_modal(self, wait: float = 0.8) -> ActionResult:
         """点击关闭按钮。"""
-        result = tap_template(self.adb, self.page_detector, "btn_close", wait=wait)
-        return result or ActionResult.wait(wait)
+        return tap_template_or_fallback(
+            self.adb,
+            self.page_detector,
+            "btn_close",
+            fallback_action=lambda: ActionResult.wait(wait),
+            wait=wait,
+        )
 
     def _resolve_request_friend_id(self, req) -> Optional[str]:
         """解析请求目标 friend_id。"""
@@ -357,14 +360,6 @@ class ManageFriendshipTask(Task):
             target = AccountRepository().get_by_id(req.to_account_id)
             if target and target.friend_id:
                 return target.friend_id
-        return None
-
-    def _extract_friend_id_from_ocr(self, ocr_results: list[dict]) -> Optional[str]:
-        """从 OCR 结果中提取首个 friend_id。"""
-        for item in ocr_results:
-            friend_id = extract_friend_id_from_text(str(item.get("text", "")))
-            if friend_id:
-                return friend_id
         return None
 
     def _extract_nickname_from_ocr(
@@ -400,29 +395,6 @@ class ManageFriendshipTask(Task):
                 to_nickname=nickname,
             )
 
-    def _collect_accept_whitelist(self) -> dict[str, "AccountFriendRequest"]:
-        """构建可自动接受的 friend_id 白名单。"""
-        if self.account.id is None:
-            return {}
-
-        repo = FriendRequestRepository()
-        requests = repo.get_by_to_account_and_status(self.account.id, "sended")
-        whitelist: dict[str, "AccountFriendRequest"] = {}
-        account_repo = AccountRepository()
-
-        for req in requests:
-            sender = account_repo.get_by_id(req.from_account_id)
-            sender_friend_id = getattr(sender, "friend_id", None)
-            if sender_friend_id:
-                whitelist[sender_friend_id] = req
-        return whitelist
-
-    def _decide_reply_action(self, friend_id: Optional[str]) -> str:
-        """根据白名单决定回复动作（accept/reject）。"""
-        if friend_id and friend_id in self._accept_whitelist:
-            return "accept"
-        return "reject"
-
     def _get_search_icon_box(self) -> Optional[tuple[int, int, int, int]]:
         """获取搜索按钮模板框。"""
         box = self.page_detector.find_template("icon_search", threshold=0.8)
@@ -441,57 +413,6 @@ class ManageFriendshipTask(Task):
         if icon_box is None:
             return None
         return self.adb.center_x(), (icon_box[1] + icon_box[3]) // 2
-
-    def _extract_search_input_friend_id(self, ocr_results: list[dict]) -> Optional[str]:
-        """读取当前输入框 friend_id。"""
-        icon_box = self._get_search_icon_box()
-        if icon_box is None:
-            return None
-        icon_left = icon_box[0]
-        anchor_y = (icon_box[1] + icon_box[3]) // 2
-        y_threshold = self.adb.scaled_y(140)
-
-        candidates: list[tuple[int, str]] = []
-        for item in ocr_results:
-            friend_id = extract_friend_id_from_text(str(item.get("text", "")))
-            if not friend_id:
-                continue
-            box = item.get("box")
-            if not box:
-                continue
-            text_x = (box[0] + box[2]) // 2
-            text_y = (box[1] + box[3]) // 2
-            if text_x >= icon_left or abs(text_y - anchor_y) > y_threshold:
-                continue
-            distance = abs(text_y - anchor_y) + abs(icon_left - text_x)
-            candidates.append((distance, friend_id))
-
-        if not candidates:
-            return None
-        candidates.sort(key=lambda x: x[0])
-        return candidates[0][1]
-
-    def _tap_apply_button(self, ocr_results: list[dict]) -> Optional[ActionResult]:
-        """点击申请按钮。"""
-        patterns = {
-            "".join(t.lower().split()) for t in get_text_patterns("friend_apply_button")
-        }
-        for item in ocr_results:
-            text = "".join(str(item.get("text", "")).lower().split())
-            if text not in patterns:
-                continue
-            box = item.get("box")
-            if not box:
-                continue
-            tap_x = min(
-                self.adb.screen_width - 1,
-                (box[0] + box[2]) // 2 + self.adb.scaled_x(24),
-            )
-            tap_y = (box[1] + box[3]) // 2
-            self.adb.tap(tap_x, tap_y)
-            logger.info("点击申请按钮")
-            return ActionResult.ok(wait=0.9)
-        return None
 
     def _find_green_yes_match(self):
         """查找绿色勾模板。"""
@@ -556,6 +477,25 @@ class ManageFriendshipTask(Task):
                 logger.debug("同时检测到绿色勾和红叉，判定为待处理状态")
         return False
 
+    def _tap_green_yes(self, wait: float = 0.8) -> Optional[ActionResult]:
+        """点击绿色勾模板（优先 1.0，其次 0.8）。"""
+        result = tap_template_with_scale(
+            self.page_detector,
+            "icon_green_yes",
+            scale=1.0,
+            threshold=0.8,
+            wait=wait,
+        )
+        if result:
+            return result
+        return tap_template_with_scale(
+            self.page_detector,
+            "icon_green_yes",
+            scale=0.8,
+            threshold=0.8,
+            wait=wait,
+        )
+
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群。"""
         if self._completed:
@@ -580,10 +520,13 @@ class ManageFriendshipTask(Task):
         if req is None:
             self._completed = True
             return ActionResult.ok(wait=0.5)
-        result = tap_template(
-            self.adb, self.page_detector, "icon_add_friends", wait=0.9
+        return tap_template_or_fallback(
+            self.adb,
+            self.page_detector,
+            "icon_add_friends",
+            fallback_action=lambda: ActionResult.wait(0.8),
+            wait=0.9,
         )
-        return result or ActionResult.wait(0.8)
 
     def _handle_search_modal(self, page_info: dict) -> ActionResult:
         """搜索页：每个请求强制执行 清空->输入->搜索。"""
@@ -699,18 +642,17 @@ class ManageFriendshipTask(Task):
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        apply_visible = is_text_visible(
-            ocr_results, get_text_patterns("friend_apply_button"), exact=True
+        apply_result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("friend_apply_button"),
+            wait=0.9,
         )
-        if apply_visible:
-            apply_result = self._tap_apply_button(ocr_results)
-            if apply_result:
-                logger.info("请求 %s 检测到申请按钮，执行申请点击", req.id)
-                self._mark_action_done("add_apply_clicked")
-                self._add_apply_wait_rounds = 0
-                return apply_result
-            logger.info("请求 %s 检测到申请按钮，但点击未成功", req.id)
-            return ActionResult.wait(0.6)
+        if apply_result:
+            logger.info("请求 %s 检测到申请按钮，执行申请点击", req.id)
+            self._mark_action_done("add_apply_clicked")
+            self._add_apply_wait_rounds = 0
+            return apply_result
 
         if not self._is_action_done("add_apply_clicked"):
             # 尚未进入发送态，且当前未识别到申请按钮，继续等待刷新。
@@ -763,10 +705,10 @@ class ManageFriendshipTask(Task):
 
         # 系统内好友：接受对方发来的请求
         if not self._is_action_done("accept_green_clicked"):
-            green_match = self._find_green_yes_match()
-            if green_match:
+            green_click_result = self._tap_green_yes(wait=0.8)
+            if green_click_result:
                 self._mark_action_done("accept_green_clicked")
-                return tap_box(self.adb, green_match.box, wait=0.8)
+                return green_click_result
 
         if self._is_action_done("accept_green_clicked"):
             close_result = self._close_modal(wait=0.8)
@@ -829,19 +771,19 @@ class ManageFriendshipTask(Task):
             exact=True,
         )
 
-        if cancel_visible:
-            # 按用户要求：只要看到取消交友邀请就立刻点击
-            cancel_result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("friend_cancel_request"),
-                wait=0.8,
-            )
-            if cancel_result:
-                logger.info("取消邀请流程: 检测到取消交友邀请，立即点击")
-                self._cancel_wait_rounds += 1
-                return cancel_result
+        # 按用户要求：只要看到取消交友邀请就立刻点击
+        cancel_result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("friend_cancel_request"),
+            wait=0.8,
+        )
+        if cancel_result:
+            logger.info("取消邀请流程: 检测到取消交友邀请，立即点击")
+            self._cancel_wait_rounds += 1
+            return cancel_result
 
+        if cancel_visible:
             self._cancel_wait_rounds += 1
             if self._cancel_wait_rounds >= MAX_WAIT_ROUNDS_CANCEL_CLICK:
                 self._save_request(
@@ -872,10 +814,10 @@ class ManageFriendshipTask(Task):
             return self._close_modal(wait=0.8)
 
         if not self._is_action_done("delete_green_clicked"):
-            green_match = self._find_green_yes_match()
-            if green_match:
+            green_click_result = self._tap_green_yes(wait=0.8)
+            if green_click_result:
                 self._mark_action_done("delete_green_clicked")
-                return tap_box(self.adb, green_match.box, wait=0.8)
+                return green_click_result
 
         if self._is_action_done("delete_green_clicked"):
             return ActionResult.wait(0.6)
