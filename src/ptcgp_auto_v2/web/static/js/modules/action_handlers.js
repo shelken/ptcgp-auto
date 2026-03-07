@@ -14,9 +14,10 @@ import { openCardPreview } from './features/card_preview.js';
 import { switchTab, updateSidebarState } from './tabs.js';
 import { cycleThemeMode, setManualTheme } from './theme.js';
 import { showToast } from './utils.js';
-import { cancelExchangeForm, searchExchangeAccounts, showExchangeForm } from './features/exchange_cards.js';
+import { cancelExchangeForm, showExchangeForm } from './features/exchange_cards.js';
 import { setLang, setViewMode, toggleRecordFilterPanel } from './ui_preferences.js';
 import { getNotificationDrawer } from './features/notification_panel.js';
+import { selectTaskAccountOption } from './features/filters/tasks_remote_account.js';
 
 
 function toggleSection(sectionId, iconId = null) {
@@ -209,6 +210,11 @@ export function handleActionClick(event) {
         return;
     }
 
+    if (action === 'select-task-account-option') {
+        selectTaskAccountOption(actionButton);
+        return;
+    }
+
     if (action === 'set-daily-gift-date' && actionButton.dataset.date) {
         const dateValue = actionButton.dataset.date;
         const form = actionButton.closest('form');
@@ -220,11 +226,6 @@ export function handleActionClick(event) {
         }
         const stateInput = document.querySelector('#daily-gift-state-form input[name="biz_date_local"]');
         if (stateInput) stateInput.value = dateValue;
-        return;
-    }
-
-    if (action === 'search-exchange-accounts') {
-        searchExchangeAccounts(actionButton.value);
         return;
     }
 

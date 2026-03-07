@@ -20,6 +20,7 @@ from ptcgp_auto_v2.web.routers import (
     owned_cards,
     tasks,
     management,
+    resources,
     plans,
     metadata,
     pack_config,
@@ -50,6 +51,7 @@ templates = init_templates(templates_path)
 templates.env.filters["datetime"] = format_datetime
 templates.env.filters["rarity_display"] = get_rarity_display
 
+
 @app.middleware("http")
 async def set_request_lang_context(request, call_next):
     """统一在中间件设置语言上下文，路由层不再单独处理。"""
@@ -66,6 +68,7 @@ app.include_router(records.router)
 app.include_router(owned_cards.router)
 app.include_router(tasks.router)
 app.include_router(management.router)
+app.include_router(resources.router)
 app.include_router(plans.router)
 app.include_router(metadata.router)
 app.include_router(pack_config.router)

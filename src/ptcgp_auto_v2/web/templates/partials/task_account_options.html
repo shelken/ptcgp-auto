@@ -1,0 +1,14 @@
+{% if accounts %}
+    {% for account in accounts %}
+    {% set account_label = (account.nickname or account.display_name or ('#' ~ account.id)) ~ ' #' ~ account.id %}
+    <button type="button"
+            class="task-account-option w-full text-left px-3 py-2 hover-bg-subtle"
+            data-action="select-task-account-option"
+            data-account-id="{{ account.id }}"
+            data-account-label="{{ account_label }}">
+        {{ account_label }}
+    </button>
+    {% endfor %}
+{% elif query %}
+    <div class="px-3 py-2 text-xs text-muted">无匹配账号</div>
+{% endif %}

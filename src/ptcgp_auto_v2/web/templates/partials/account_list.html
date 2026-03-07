@@ -44,7 +44,6 @@
     {% set sort_account_url = '/management/accounts?lang=' ~ current_lang ~ '&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=id&sort_order=' ~ next_order_account %}
     {% call table_container([
         {'label': data_table_sort_button(label=(t.col_account or 'Account'), url=sort_account_url, target='#management-content', active=((sort_by or 'id') == 'id'), order=(sort_order or 'asc'))|safe},
-        t.col_resources or 'Resources',
         t.col_plans or 'Plans',
         t.col_target_pack or 'Target Pack',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
@@ -67,45 +66,6 @@
                 {% else %}
                 <span class="text-xs text-muted mt-1">-</span>
                 {% endif %}
-            {% endset %}
-            {% set points_cell %}
-                <div class="space-y-2 text-xs account-resources-cell">
-                    <div class="account-resource-item">
-                        <span class="text-muted account-resource-label">{{ t.col_exchange_points or 'Exchange Points' }}</span>
-                        {% if item.exchange_points is not none %}
-                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(item.exchange_points) }}</span>
-                        {% else %}
-                        <span class="text-muted account-resource-value">-</span>
-                        {% endif %}
-                    </div>
-                    <div class="account-resource-item">
-                        <span class="text-muted account-resource-label">{{ t.col_pack_hourglass or 'Pack Hourglass' }}</span>
-                        {% if item.pack_hourglass_count is not none %}
-                        <span class="font-mono font-bold text-lg leading-none account-resource-value">{{ "{:,}".format(item.pack_hourglass_count) }}</span>
-                        {% else %}
-                        <span class="text-muted account-resource-value">-</span>
-                        {% endif %}
-                    </div>
-                    {% if item.pack_points %}
-                    <div class="pack-points-section text-xs text-muted mt-2 pt-2 border-t border-subtle">
-                        {% set sorted_points = item.pack_points | sort(attribute='series') %}
-                        {% for i in range(0, sorted_points | length, 2) %}
-                        <div class="flex justify-between">
-                            {% for j in range(2) %}
-                                {% set idx = i + j %}
-                                {% if idx < sorted_points | length %}
-                                    {% set pp = sorted_points[idx] %}
-                                    <span>{{ pp.series }}: {{ "{:,}".format(pp.points) }}</span>
-                                    {% if j == 0 and idx + 1 < sorted_points | length %}
-                                    <span class="text-subtle mx-1">|</span>
-                                    {% endif %}
-                                {% endif %}
-                            {% endfor %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                </div>
             {% endset %}
             {% set plans_cell %}
                 <div class="flex flex-wrap gap-1">
@@ -137,7 +97,12 @@
                     <span class="text-xs text-muted">{{ auto_pack.booster_name }} ({{ t.label_auto or 'Auto' }})</span>
                 </div>
                 {% else %}
-                <span class="text-muted">-</span>
+                <div id="account-target-pack-{{ item.id }}"
+                     hx-get="/management/accounts/{{ item.id }}/target-pack?lang={{ current_lang }}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <span class="text-muted">{{ t.label_loading or '加载中' }}</span>
+                </div>
                 {% endif %}
             {% endset %}
             {% set actions_cell %}
@@ -170,7 +135,6 @@
             {% endset %}
             {{ table_row([
                 nickname_cell,
-                points_cell,
                 plans_cell,
                 target_pack_cell,
                 actions_cell

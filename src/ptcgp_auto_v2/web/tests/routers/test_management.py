@@ -94,3 +94,37 @@ def test_update_account_details_refresh_passes_plain_query_values(monkeypatch):
     )
     assert response.status_code == 200
     assert response.headers.get("HX-Trigger") == "closeModal"
+
+
+def test_get_account_target_pack_cell_uses_dedicated_partial(monkeypatch):
+    """账号目标包单元格应通过独立路由渲染。"""
+    _patch_render_template(monkeypatch)
+
+    captured = {}
+
+    def _fake_build_account_target_pack_context(account_id: int):
+        captured["account_id"] = account_id
+        return {
+            "account_id": account_id,
+            "config": None,
+            "auto_pack": {"pack_code": "A1", "booster_name": "Pikachu"},
+        }
+
+    monkeypatch.setattr(
+        router,
+        "build_account_target_pack_context",
+        _fake_build_account_target_pack_context,
+    )
+
+    response = asyncio.run(
+        router.get_account_target_pack_cell(
+            request=_build_request("GET"),
+            account_id=7,
+        )
+    )
+
+    assert captured == {"account_id": 7}
+    assert response.status_code == 200
+    assert "tpl:partials/account_target_pack_cell.html" in bytes(response.body).decode(
+        "utf-8"
+    )

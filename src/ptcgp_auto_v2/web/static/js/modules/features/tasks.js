@@ -1,5 +1,21 @@
 import { checkEmpty } from './plans.js';
 
+// --- 初始化任务模块事件 ---
+export function initTasks(context = document) {
+    const root = context instanceof Element ? context : document;
+
+    // 监听 update-task-item-state change 事件
+    root.querySelectorAll('[data-action="update-task-item-state"]').forEach((checkbox) => {
+        if (checkbox.dataset.tasksBound === 'true') return;
+        checkbox.addEventListener('change', () => {
+            if (checkbox instanceof HTMLInputElement) {
+                updateTaskItemState(checkbox);
+            }
+        });
+        checkbox.dataset.tasksBound = 'true';
+    });
+}
+
 // --- 更新任务项状态 ---
 export function updateTaskItemState(checkbox) {
     const taskItem = checkbox.closest('.task-item');

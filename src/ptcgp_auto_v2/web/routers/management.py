@@ -6,6 +6,7 @@ from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.account_service import (
     build_accounts_list_context,
     build_account_edit_context,
+    build_account_target_pack_context,
     update_account_details,
 )
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
@@ -56,6 +57,20 @@ async def get_management_accounts(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get(
+    "/management/accounts/{account_id}/target-pack", response_class=HTMLResponse
+)
+async def get_account_target_pack_cell(
+    request: Request,
+    account_id: int,
+):
+    """渲染账号目标包单元格。"""
+    context = build_account_target_pack_context(account_id)
+    if not context:
+        return HTMLResponse("Account not found", status_code=404)
+    return render_template(request, "partials/account_target_pack_cell.html", context)
 
 
 @router.get("/management/accounts/{account_id}/edit", response_class=HTMLResponse)
