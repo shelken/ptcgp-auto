@@ -63,6 +63,50 @@ def test_index_template_contains_resources_sidebar_entry() -> None:
     assert "资源" in html
 
 
+def test_index_template_owned_cards_account_search_uses_text_input() -> None:
+    """拥有卡牌账号搜索应允许输入四字段文本，而不是限制数字键盘。"""
+    template = _build_env().get_template("index.html")
+    html = template.render(
+        current_lang="zh_CN",
+        unread_count=0,
+        t={
+            "menu_resources": "资源",
+            "notification_center": "通知中心",
+            "btn_mark_all_read": "全部已读",
+            "label_close": "关闭",
+            "relative_just_now": "刚刚",
+            "relative_soon": "马上",
+            "relative_minutes": "分钟",
+            "relative_hours": "小时",
+            "relative_days": "天",
+            "relative_ago": "前",
+            "relative_in": "后",
+            "filter_account_id": "账号搜索",
+            "filter_account_id_placeholder": "输入账号 ID / 朋友ID / 昵称 / 游戏ID",
+            "themes": {
+                "brutalist": "野兽派",
+                "organic": "有机自然",
+                "luxury": "奢华精致",
+                "editorial": "杂志排版",
+                "pastel": "柔和粉彩",
+                "retro": "复古未来",
+                "art_deco": "艺术装饰",
+                "playful": "俏皮可爱",
+            },
+        },
+        rarities=[],
+        card_types=[],
+        card_sets=[],
+        packs=[],
+        elements=[],
+    )
+
+    owned_account_input = html.split('id="owned-account-id"', 1)[1].split(">", 1)[0]
+    assert 'type="text"' in owned_account_input
+    assert 'inputmode="numeric"' not in owned_account_input
+    assert "输入账号 ID / 朋友ID / 昵称 / 游戏ID" in owned_account_input
+
+
 def test_index_template_resources_sidebar_entry_has_cache_restore_attrs() -> None:
     """资源侧栏入口应声明缓存恢复所需属性。"""
     template = _build_env().get_template("index.html")

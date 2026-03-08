@@ -8,7 +8,6 @@ from ptcgp_auto_v2.db.repositories import (
     ExchangeCardRequestRepository,
 )
 from ptcgp_auto_v2.services import ExchangeCardService
-from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n, resolve_card_name_from_data
 
 
@@ -46,11 +45,10 @@ def build_owned_cards_list_context(
     normalized_page_size = normalize_page_size(page_size)
 
     repo = AccountCardRepository()
-    account_id_value = parse_optional_int(account_id)
     items = repo.list_owned_cards(
         page=normalized_page,
         page_size=normalized_page_size,
-        account_id=account_id_value,
+        account_query=account_id,
         rarities=rarity or [],
         card_types=card_type or [],
         set_codes=set_code or [],
