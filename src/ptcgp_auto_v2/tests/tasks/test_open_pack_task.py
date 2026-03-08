@@ -184,7 +184,7 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
 
         task.bind_account(SimpleNamespace(id=1, display_name="tester"))
-        task._target_pack = {"pack_code": "A1", "booster_name": "Test"}
+        task._target_pack = {"set_code": "A1", "booster_name": "Test"}
 
         high_card = SimpleNamespace(id=101, name="High", rarity="SR")
         low_card = SimpleNamespace(id=202, name="Low", rarity="C")
@@ -230,7 +230,7 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
 
         task.bind_account(SimpleNamespace(id=1, display_name="tester"))
-        task._target_pack = {"pack_code": "A1", "booster_name": "Test"}
+        task._target_pack = {"set_code": "A1", "booster_name": "Test"}
 
         high_card = SimpleNamespace(id=101, name="High", rarity="SR")
         task._card_repo = Mock()
@@ -267,6 +267,23 @@ class TestOpenPackRecognizeCards(unittest.TestCase):
         self.assertEqual("开包获得稀有卡牌", kwargs.get("notify_message"))
 
 
+class TestOpenPackExtractPackPoints(unittest.TestCase):
+    """测试开包点数提取与落库"""
+
+    def test_extract_pack_points_should_use_set_code(self):
+        adb = FakeAdb()
+        page_detector = FakePageDetector()
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+
+        task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+        task._target_pack = {"set_code": "A1", "booster_name": "Test"}
+        task._pack_point_repo = Mock()
+
+        task._extract_pack_points([{"text": "1,230 pt"}])
+
+        task._pack_point_repo.upsert_points.assert_called_once_with(1, "A1", 1230)
+
+
 class TestOpenPackPrepareResourcesFailure(unittest.TestCase):
     """测试资源准备失败状态传播"""
 
@@ -283,7 +300,7 @@ class TestOpenPackPrepareResourcesFailure(unittest.TestCase):
         # Mock 配置仓库返回有配置
         mock_config_repo = Mock()
         mock_config = Mock()
-        mock_config.pack_code = "A1"
+        mock_config.set_code = "A1"
         mock_config.booster_name = "Test Pack"
         mock_config_repo.get_by_account_and_type.return_value = mock_config
         mock_repo_cls.return_value = mock_config_repo
@@ -311,7 +328,7 @@ class TestOpenPackPrepareResourcesFailure(unittest.TestCase):
         # Mock 配置仓库返回有配置
         mock_config_repo = Mock()
         mock_config = Mock()
-        mock_config.pack_code = "A1"
+        mock_config.set_code = "A1"
         mock_config.booster_name = "Test Pack"
         mock_config_repo.get_by_account_and_type.return_value = mock_config
         mock_repo_cls.return_value = mock_config_repo

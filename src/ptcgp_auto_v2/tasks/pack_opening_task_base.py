@@ -162,7 +162,7 @@ class PackOpeningTaskBase(Task):
         """获取目标卡包上下文
 
         Returns:
-            {"pack_code": str, "booster_name": str} 或 None
+            {"set_code": str, "booster_name": str} 或 None
         """
         # 优先返回推断的上下文（如果没有显式目标）
         if self._inferred_pack_context:
@@ -170,7 +170,7 @@ class PackOpeningTaskBase(Task):
         return None
 
     def get_fixed_set_code(self) -> str | None:
-        """获取固定的 set_code（优先于 context 中的 pack_code）
+        """获取固定的 set_code（优先于 context 中的 set_code）
 
         Returns:
             固定的系列代码（如 "A1"）或 None
@@ -239,7 +239,7 @@ class PackOpeningTaskBase(Task):
     def _resolve_scan_set_code(self) -> str | None:
         """解析要使用的 set_code
 
-        优先级：fixed_set_code > explicit_target.pack_code > inferred_context.pack_code > None
+        优先级：fixed_set_code > explicit_target.set_code > inferred_context.set_code > None
         注意：open_pack 的显式目标优先于推断上下文
 
         Returns:
@@ -251,14 +251,14 @@ class PackOpeningTaskBase(Task):
 
         # 2. 显式目标上下文（如 open_pack 的 _target_pack）
         explicit_context = self.get_target_pack_context()
-        if explicit_context and explicit_context.get("pack_code"):
+        if explicit_context and explicit_context.get("set_code"):
             # 只有当显式上下文不是来自推断时才使用
             # 通过比较确认这不是推断上下文
             if explicit_context != self._inferred_pack_context:
-                return explicit_context.get("pack_code")
+                return explicit_context.get("set_code")
 
         # 3. 推断上下文兜底
-        return (self._inferred_pack_context or {}).get("pack_code")
+        return (self._inferred_pack_context or {}).get("set_code")
 
     def _scan_cards_with_retry(
         self, set_code: str | None, max_retries: int
@@ -328,7 +328,7 @@ class PackOpeningTaskBase(Task):
             if inferred:
                 self._inferred_pack_context = inferred
                 logger.info(
-                    f"[子包推断-结果页] 反推识别: {inferred.get('pack_code')}/{inferred.get('booster_name') or '未确定'}"
+                    f"[子包推断-结果页] 反推识别: {inferred.get('set_code')}/{inferred.get('booster_name') or '未确定'}"
                 )
 
         self._save_pack_record(rows)
@@ -346,13 +346,13 @@ class PackOpeningTaskBase(Task):
 
         try:
             context = self.get_target_pack_context() or {}
-            set_code = context.get("pack_code")
+            set_code = context.get("set_code")
             pack_name = context.get("booster_name")
 
             self._pack_record_repo.create_for_account(
                 self.account.id,
                 pack_type=self.get_pack_record_type(),
-                pack_code=set_code,
+                set_code=set_code,
                 pack_name=pack_name,
                 cards=rows,
             )
@@ -442,7 +442,7 @@ class PackOpeningTaskBase(Task):
             if inferred:
                 self._inferred_pack_context = inferred
                 logger.info(
-                    f"[子包推断-滑动页] 识别到: {inferred.get('pack_code')}/{inferred.get('booster_name')}"
+                    f"[子包推断-滑动页] 识别到: {inferred.get('set_code')}/{inferred.get('booster_name')}"
                 )
 
         return swipe_open_pack(self.adb, wait=2.5)
@@ -494,7 +494,7 @@ class PackOpeningTaskBase(Task):
             return None
 
         return {
-            "pack_code": best.candidate.set_code,
+            "set_code": best.candidate.set_code,
             "booster_name": best.candidate.booster_name,
             "source": "template",
         }

@@ -69,7 +69,7 @@ def select_pack_for_account(
         return None
 
     return {
-        "pack_code": pack.set_code,
+        "set_code": pack.set_code,
         "booster_name": pack.name,
         "strategy": strategy,
         "candidate_count": candidate_count,

@@ -80,9 +80,9 @@ def build_records_list_context(
 
         current_points = None
         series_code = ""
-        if record.pack_code:
-            current_points = points_map.get((record.account_id, record.pack_code))
-            series_code = record.pack_code
+        if record.set_code:
+            current_points = points_map.get((record.account_id, record.set_code))
+            series_code = record.set_code
         elif record.pack_type and "/" in record.pack_type:
             series = record.pack_type.split("/")[0]
             current_points = points_map.get((record.account_id, series))

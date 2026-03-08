@@ -28,7 +28,7 @@ class PackRecord(SQLModel, table=True):
     account_id: int = Field(index=True)
     pack_type: str = Field(default="")
 
-    # 新增字段：将原 pack_type 拆分为 code 和 name
+    # 数据库存储字段：系列代码，如 A1
     pack_code: Optional[str] = Field(default=None, description="系列代码，如 A1")
     pack_name: Optional[str] = Field(default=None, description="卡包名称，如 Charizard")
 
@@ -51,13 +51,23 @@ class PackRecord(SQLModel, table=True):
         },
     )
 
+    @property
+    def set_code(self) -> Optional[str]:
+        """业务语义中的系列代码。"""
+        return self.pack_code
+
+    @set_code.setter
+    def set_code(self, value: Optional[str]) -> None:
+        """将业务语义 set_code 映射回数据库字段。"""
+        self.pack_code = value
+
     def to_dict(self) -> dict:
         """转换为字典"""
         return {
             "id": self.id,
             "account_id": self.account_id,
             "pack_type": self.pack_type,
-            "pack_code": self.pack_code,
+            "set_code": self.set_code,
             "pack_name": self.pack_name,
             "opened_at": self.opened_at.isoformat() if self.opened_at else None,
         }

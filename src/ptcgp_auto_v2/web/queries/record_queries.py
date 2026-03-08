@@ -49,8 +49,8 @@ def fetch_pack_points_map(
     """批量查询账号包点数并构建映射。"""
     target_combinations: set[tuple[int, str]] = set()
     for record in records:
-        if record.account_id and record.pack_code:
-            target_combinations.add((record.account_id, record.pack_code))
+        if record.account_id and record.set_code:
+            target_combinations.add((record.account_id, record.set_code))
 
     if not target_combinations:
         return {}
