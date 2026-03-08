@@ -1,47 +1,25 @@
 {% from "partials/macros/data_table.html" import data_table_sort_button, data_table_pager %}
 
 {% set next_order_account = 'desc' if sort_by == 'account_id' and sort_order == 'asc' else 'asc' %}
-{% set next_order_friend = 'desc' if sort_by == 'friend_id' and sort_order == 'asc' else 'asc' %}
-{% set next_order_nickname = 'desc' if sort_by == 'nickname' and sort_order == 'asc' else 'asc' %}
 {% set next_order_count = 'desc' if sort_by == 'count' and sort_order == 'asc' else 'asc' %}
+{% set next_order_points = 'desc' if sort_by == 'exchange_points' and sort_order == 'asc' else 'asc' %}
 
 <div class="border border-subtle rounded overflow-hidden">
     <table class="w-full text-sm">
         <colgroup>
-            <col style="width: 14%;">
-            <col style="width: 30%;">
-            <col style="width: 28%;">
-            <col style="width: 8%;">
-            <col style="width: 20%;">
+            <col style="width: 48%;">
+            <col style="width: 12%;">
+            <col style="width: 18%;">
+            <col style="width: 22%;">
         </colgroup>
         <thead class="bg-surface">
             <tr class="text-left border-b border-subtle">
                 <th class="py-2 px-2">
                     {{ data_table_sort_button(
-                        label=t.col_account_id,
+                        label=t.col_account or '账号',
                         url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=account_id&sort_order=' ~ next_order_account,
                         target='#owned-card-exchange-table',
                         active=(sort_by == 'account_id'),
-                        order=sort_order,
-                        class_name='font-bold inline-flex items-center gap-1'
-                    ) }}
-                </th>
-                <th class="py-2 px-2">
-                    {{ data_table_sort_button(
-                        label=t.col_friend_id,
-                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=friend_id&sort_order=' ~ next_order_friend,
-                        target='#owned-card-exchange-table',
-                        active=(sort_by == 'friend_id'),
-                        order=sort_order,
-                        class_name='font-bold inline-flex items-center gap-1'
-                    ) }}
-                </th>
-                <th class="py-2 px-2">
-                    {{ data_table_sort_button(
-                        label=t.col_nickname,
-                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=nickname&sort_order=' ~ next_order_nickname,
-                        target='#owned-card-exchange-table',
-                        active=(sort_by == 'nickname'),
                         order=sort_order,
                         class_name='font-bold inline-flex items-center gap-1'
                     ) }}
@@ -56,6 +34,16 @@
                         class_name='font-bold inline-flex items-center gap-1'
                     ) }}
                 </th>
+                <th class="py-2 px-2 text-right">
+                    {{ data_table_sort_button(
+                        label=t.col_exchange_points,
+                        url='/api/owned-cards/modal/exchange-accounts?card_id=' ~ card.id ~ '&lang=' ~ current_lang ~ '&page=0&page_size=' ~ page_size ~ '&q=' ~ (q|urlencode) ~ '&sort_by=exchange_points&sort_order=' ~ next_order_points,
+                        target='#owned-card-exchange-table',
+                        active=(sort_by == 'exchange_points'),
+                        order=sort_order,
+                        class_name='font-bold inline-flex items-center gap-1'
+                    ) }}
+                </th>
                 <th class="py-2 px-2 text-right w-32">{{ t.col_actions or 'Actions' }}</th>
             </tr>
         </thead>
@@ -63,31 +51,57 @@
             {% if accounts %}
                 {% for item in accounts %}
                 <tr class="border-b border-subtle-light">
-                    <td class="py-2 px-2 font-mono"><span class="owned-exchange-cell-text">#{{ item.account_id }}</span></td>
-                    <td class="py-2 px-2 font-mono"><span class="owned-exchange-cell-text">{{ item.friend_id or '-' }}</span></td>
-                    <td class="py-2 px-2"><span class="owned-exchange-cell-text">{{ item.nickname or '-' }}</span></td>
-                    <td class="py-2 px-2 text-right font-mono">{{ item.count }}</td>
+                    <td class="py-2 px-2 align-top">
+                        <div class="space-y-2 account-identity-cell">
+                            <div class="font-bold text-base leading-tight">{{ item.nickname or '-' }}</div>
+                            <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.account_id }}</div>
+                        </div>
+                        {% if item.friend_id %}
+                        <div class="group relative text-xs mt-1 inline-block cursor-pointer"
+                             data-action="copy-text"
+                             data-copy-text="{{ item.friend_id }}"
+                             data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
+                            <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">
+                                {{ item.friend_id[:4] }}-{{ item.friend_id[4:8] }}-{{ item.friend_id[8:12] }}-{{ item.friend_id[12:] }}
+                            </span>
+                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
+                                <div class="bg-card text-theme border-2 border-theme text-xs p-2 rounded shadow-lg">
+                                    {{ t.col_game_id or 'Game ID' }}: {{ item.game_id }}
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-xs text-muted mt-1">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-2 px-2 text-right font-mono align-top">{{ item.count }}</td>
+                    <td class="py-2 px-2 text-right font-mono align-top">{{ item.exchange_points if item.exchange_points is not none else '-' }}</td>
                     <td class="py-2 px-2 text-right">
-                        {% if exchange_blocked %}
-                        <span class="text-xs text-muted">{{ t.exchange_entry_blocked_rarity }}</span>
-                        {% elif item.count > 0 %}
+                        {% if item.exchange_action.enabled %}
                         <button type="button"
                                 class="brutal-btn text-xs px-2 py-1"
                                 data-action="show-exchange-form"
                                 data-account-id="{{ item.account_id }}"
-                                data-nickname="{{ item.nickname or '' }}"
-                                data-has-active="{{ item.has_active_request | default(false) }}">
-                            {{ t.exchange_entry_action or '交换卡牌' }}
+                                data-nickname="{{ item.nickname or '' }}">
+                            {{ item.exchange_action.button_text }}
                         </button>
                         {% else %}
-                        <span class="text-xs text-muted">-</span>
+                        <span class="inline-block"
+                              title="{{ item.exchange_action.tooltip or '' }}">
+                            <button type="button"
+                                    class="brutal-btn text-xs px-2 py-1"
+                                    disabled
+                                    aria-disabled="true">
+                                {{ item.exchange_action.button_text }}
+                            </button>
+                        </span>
                         {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             {% else %}
             <tr>
-                <td colspan="5" class="py-8 text-center text-muted">{{ t.empty_owned_accounts or '暂无可交换账号' }}</td>
+                <td colspan="4" class="py-8 text-center text-muted">{{ t.empty_owned_accounts or '暂无可交换账号' }}</td>
             </tr>
             {% endif %}
         </tbody>

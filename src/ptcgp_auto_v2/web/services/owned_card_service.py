@@ -9,7 +9,7 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.services import ExchangeCardService
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
-from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n, resolve_card_name_from_data
 
 
 def _resolve_card_display_name(card: Card) -> str:
@@ -104,7 +104,6 @@ def build_owned_card_modal_context(
     return {
         "card": card,
         "card_display_name": _resolve_card_display_name(card),
-        "accounts": table_context["accounts"],
         "exchange_blocked": exchange_blocked,
         "total_accounts": table_context["total_items"],
         "total_count": table_context["total_count"],
@@ -114,7 +113,7 @@ def build_owned_card_modal_context(
 
 def _normalize_exchange_sort(sort_by: str, sort_order: str) -> tuple[str, str]:
     """标准化交换账号排序参数（白名单）。"""
-    allowed_sort = {"account_id", "friend_id", "nickname", "count"}
+    allowed_sort = {"account_id", "friend_id", "nickname", "count", "exchange_points"}
     normalized_sort_by = sort_by if sort_by in allowed_sort else "account_id"
     normalized_sort_order = "desc" if sort_order == "desc" else "asc"
     return normalized_sort_by, normalized_sort_order
@@ -129,6 +128,39 @@ def _match_exchange_query(item: dict[str, Any], query: str) -> bool:
     friend_id = str(item.get("friend_id") or "").lower()
     nickname = str(item.get("nickname") or "").lower()
     return keyword in account_id or keyword in friend_id or keyword in nickname
+
+
+def _build_exchange_action(card: Card, item: dict[str, Any]) -> dict[str, Any]:
+    """统一计算交换按钮状态，避免模板散落业务判断。"""
+    _, t = get_current_i18n()
+
+    disabled_reason_text: str | None = None
+    disabled_reason_key: str | None = None
+    if card.rarity in ExchangeCardService.NON_EXCHANGEABLE_RARITIES:
+        disabled_reason_key = "blocked_rarity"
+        disabled_reason_text = (
+            t.get("exchange_entry_blocked_rarity") or "该稀有度不可交换"
+        )
+    elif int(item.get("count") or 0) <= 0:
+        disabled_reason_key = "missing_owned_card"
+        disabled_reason_text = (
+            t.get("exchange_entry_missing_owned_card") or "该账号没有可交换的此卡"
+        )
+    elif bool(item.get("has_active_request")):
+        disabled_reason_key = "has_active_request"
+        disabled_reason_text = (
+            t.get("exchange_has_active_request")
+            or "该账号有进行中的交换请求，无法创建新请求"
+        )
+
+    return {
+        # 统一由服务层产出按钮状态，模板只消费渲染结果。
+        "enabled": disabled_reason_text is None,
+        "reason_key": disabled_reason_key,
+        "reason_text": disabled_reason_text,
+        "button_text": t.get("exchange_entry_action") or "交换卡牌",
+        "tooltip": disabled_reason_text,
+    }
 
 
 def build_owned_card_exchange_accounts_context(
@@ -171,11 +203,13 @@ def build_owned_card_exchange_accounts_context(
     for item in data["accounts"]:
         if not _match_exchange_query(item, q):
             continue
-        account_id = item.get("account_id")
-        item["has_active_request"] = bool(
+        row = dict(item)
+        account_id = row.get("account_id")
+        row["has_active_request"] = bool(
             account_id and exchange_repo.has_active_request(account_id)
         )
-        filtered.append(item)
+        row["exchange_action"] = _build_exchange_action(card, row)
+        filtered.append(row)
 
     reverse = normalized_sort_order == "desc"
     if normalized_sort_by == "friend_id":
@@ -184,6 +218,11 @@ def build_owned_card_exchange_accounts_context(
         filtered.sort(key=lambda x: str(x.get("nickname") or ""), reverse=reverse)
     elif normalized_sort_by == "count":
         filtered.sort(key=lambda x: int(x.get("count") or 0), reverse=reverse)
+    elif normalized_sort_by == "exchange_points":
+        filtered.sort(
+            key=lambda x: int(x.get("exchange_points") or -1),
+            reverse=reverse,
+        )
     else:
         filtered.sort(key=lambda x: int(x.get("account_id") or 0), reverse=reverse)
 

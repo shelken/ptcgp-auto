@@ -5,7 +5,7 @@ from sqlalchemy import case, distinct, func
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import Account, AccountCard, Card, CardPack
+from ptcgp_auto_v2.db.models import Account, AccountCard, AccountStat, Card, CardPack
 
 
 class AccountCardRepository:
@@ -172,8 +172,9 @@ class AccountCardRepository:
     def get_owned_card_accounts(self, card_id: int) -> Dict[str, Any]:
         with Session(get_engine()) as session:
             statement = (
-                select(AccountCard, Account)
+                select(AccountCard, Account, AccountStat)
                 .join(Account, col(Account.id) == col(AccountCard.account_id))
+                .outerjoin(AccountStat, col(AccountStat.account_id) == col(Account.id))
                 .where(AccountCard.card_id == card_id)
                 .order_by(col(Account.id))
             )
@@ -181,14 +182,18 @@ class AccountCardRepository:
 
             accounts = []
             total_count = 0
-            for account_card, account in rows:
+            for account_card, account, account_stat in rows:
                 total_count += account_card.count
                 accounts.append(
                     {
                         "account_id": account.id,
                         "friend_id": account.friend_id,
+                        "game_id": account.game_id,
                         "nickname": account.nickname,
                         "count": account_card.count,
+                        "exchange_points": (
+                            account_stat.exchange_points if account_stat else None
+                        ),
                     }
                 )
 
