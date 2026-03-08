@@ -50,7 +50,7 @@ def build_pack_config_context(account_id: int) -> dict:
 
     current_boosters = []
     target_set = (
-        config.pack_code if config else (card_sets[0]["code"] if card_sets else None)
+        config.set_code if config else (card_sets[0]["code"] if card_sets else None)
     )
     if target_set:
         current_boosters = card_repo.get_pack_names_by_set(target_set)
@@ -66,26 +66,23 @@ def build_pack_config_context(account_id: int) -> dict:
     return {
         "account_id": account_id,
         "config": config,
+        "selected_set_code": config.set_code if config else "",
+        "selected_booster_name": config.booster_name if config else "",
         "card_sets": card_sets,
         "current_boosters": current_booster_options,
     }
 
 
 def build_save_account_pack_config(
-    account_id: int, pack_code: str, booster_name: str
+    account_id: int, set_code: str, booster_name: str
 ) -> None:
     """保存账号补充包配置。
 
-    当 pack_code 为空时，删除该账号的配置（清空设置）。
+    当 set_code 为空时，删除该账号的配置（清空设置）。
     """
     repo = AccountPackConfigRepository()
-    if not pack_code:
+    if not set_code:
         repo.delete_by_account_and_type(account_id, "daily")
         return
-    config = AccountPackConfig(
-        account_id=account_id,
-        type="daily",
-        pack_code=pack_code,
-        booster_name=booster_name,
-    )
+    config = AccountPackConfig.create_daily(account_id, set_code, booster_name)
     repo.upsert(config)

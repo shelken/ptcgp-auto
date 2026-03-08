@@ -22,7 +22,7 @@ class TestRealResolveScanSetCode:
     """测试真实基类的 _resolve_scan_set_code 方法"""
 
     def test_only_inferred_returns_inferred_code(self, pack_opening_base):
-        """只有推断上下文时返回推断的 pack_code"""
+        """只有推断上下文时返回推断的 set_code"""
 
         class TestTask(pack_opening_base):
             def get_pack_record_type(self):
@@ -38,7 +38,7 @@ class TestRealResolveScanSetCode:
                 return None
 
         task = object.__new__(TestTask)
-        task._inferred_pack_context = {"pack_code": "A1", "booster_name": "Mewtwo"}
+        task._inferred_pack_context = {"set_code": "A1", "booster_name": "Mewtwo"}
         task._target_pack = None
 
         result = task._resolve_scan_set_code()
@@ -61,10 +61,10 @@ class TestRealResolveScanSetCode:
                 return None
 
             def get_target_pack_context(self):
-                return {"pack_code": "A2", "booster_name": "Charizard"}
+                return {"set_code": "A2", "booster_name": "Charizard"}
 
         task = object.__new__(TestTask)
-        task._inferred_pack_context = {"pack_code": "A1", "booster_name": "Mewtwo"}
+        task._inferred_pack_context = {"set_code": "A1", "booster_name": "Mewtwo"}
 
         result = task._resolve_scan_set_code()
         assert result == "A2"
@@ -89,10 +89,10 @@ class TestRealResolveScanSetCode:
                 return "A3"
 
             def get_target_pack_context(self):
-                return {"pack_code": "A2", "booster_name": "Charizard"}
+                return {"set_code": "A2", "booster_name": "Charizard"}
 
         task = object.__new__(TestTask)
-        task._inferred_pack_context = {"pack_code": "A1", "booster_name": "Mewtwo"}
+        task._inferred_pack_context = {"set_code": "A1", "booster_name": "Mewtwo"}
 
         result = task._resolve_scan_set_code()
         assert result == "A3"
@@ -118,7 +118,7 @@ class TestRealClearPackInferenceSession:
                 return None
 
         task = object.__new__(TestTask)
-        task._inferred_pack_context = {"pack_code": "A2", "booster_name": "Mewtwo"}
+        task._inferred_pack_context = {"set_code": "A2", "booster_name": "Mewtwo"}
 
         task._clear_pack_inference_session()
 

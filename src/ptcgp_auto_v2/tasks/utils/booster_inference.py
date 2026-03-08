@@ -42,13 +42,13 @@ def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
        - 忽略在多个子包中都出现的卡牌
        - 只考虑仅出现在单个子包中的卡牌作为证据
        - 统计各子包的证据数，最高且唯一则判定
-    4. 无法唯一确定时返回 pack_name=None，但 pack_code 可能确定
+    4. 无法唯一确定时返回 pack_name=None，但 set_code 可能确定
 
     Args:
         cards: Card 对象列表（需要已加载 packs 关系）
 
     Returns:
-        推断结果 {"pack_code": str, "booster_name": str|None, "source": "cards"}
+        推断结果 {"set_code": str, "booster_name": str|None, "source": "cards"}
         或 None（无法确定系列）
     """
     if not cards:
@@ -105,7 +105,7 @@ def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
     # 只有一个子包，直接判定
     if len(packs) == 1:
         return {
-            "pack_code": majority_set,
+            "set_code": majority_set,
             "booster_name": packs[0],
             "source": "cards",
         }
@@ -148,14 +148,14 @@ def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
     # 有唯一证据则判定，否则 pack_name=None
     if best_pack and not tie and best_evidence > 0:
         return {
-            "pack_code": majority_set,
+            "set_code": majority_set,
             "booster_name": best_pack,
             "source": "cards",
         }
     else:
         # 系列确定但子包不唯一
         return {
-            "pack_code": majority_set,
+            "set_code": majority_set,
             "booster_name": None,
             "source": "cards",
         }

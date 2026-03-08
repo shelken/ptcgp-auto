@@ -88,12 +88,12 @@
                 {% set auto_pack = auto_pack_map.get(item.id) %}
                 {% if config %}
                 <div class="flex flex-col">
-                    <span class="font-bold text-xs">{{ config.pack_code }}</span>
+                    <span class="font-bold text-xs">{{ config.set_code }}</span>
                     <span class="text-xs text-muted">{{ config.booster_name }}</span>
                 </div>
                 {% elif auto_pack %}
                 <div class="flex flex-col">
-                    <span class="font-bold text-xs">{{ auto_pack.pack_code }}</span>
+                    <span class="font-bold text-xs">{{ auto_pack.set_code }}</span>
                     <span class="text-xs text-muted">{{ auto_pack.booster_name }} ({{ t.label_auto or 'Auto' }})</span>
                 </div>
                 {% else %}

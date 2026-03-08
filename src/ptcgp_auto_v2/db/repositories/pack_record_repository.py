@@ -75,7 +75,7 @@ class PackRecordRepository:
         account_id: int,
         pack_type: str = "",
         cards: list[dict[str, Any]] | None = None,
-        pack_code: Optional[str] = None,
+        set_code: Optional[str] = None,
         pack_name: Optional[str] = None,
     ) -> PackRecord:
         """
@@ -85,7 +85,7 @@ class PackRecordRepository:
             account_id: 账号ID
             pack_type: 卡包类型（来源，如 daily_free）
             cards: 包含卡牌信息的字典列表
-            pack_code: 系列代码 (A1)
+            set_code: 系列代码 (A1)
             pack_name: 卡包名称 (Charizard)
         """
         with Session(get_engine()) as session:
@@ -93,7 +93,7 @@ class PackRecordRepository:
             record = PackRecord(
                 account_id=account_id,
                 pack_type=pack_type,
-                pack_code=pack_code,
+                pack_code=set_code,
                 pack_name=pack_name,
             )
             session.add(record)
