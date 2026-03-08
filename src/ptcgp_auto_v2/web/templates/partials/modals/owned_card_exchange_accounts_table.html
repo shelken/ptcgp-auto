@@ -4,7 +4,7 @@
 {% set next_order_count = 'desc' if sort_by == 'count' and sort_order == 'asc' else 'asc' %}
 {% set next_order_points = 'desc' if sort_by == 'exchange_points' and sort_order == 'asc' else 'asc' %}
 
-<div class="border border-subtle rounded">
+<div class="border border-subtle rounded owned-card-exchange-table-frame">
     <table class="w-full text-sm">
         <colgroup>
             <col style="width: 48%;">
@@ -86,7 +86,7 @@
                             {{ item.exchange_action.button_text }}
                         </button>
                         {% else %}
-                        <span class="inline-block tooltip-text"
+                        <span class="inline-block tooltip-text tooltip-text--left"
                               data-tooltip="{{ item.exchange_action.tooltip or '' }}">
                             <button type="button"
                                     class="brutal-btn text-xs px-2 py-1"

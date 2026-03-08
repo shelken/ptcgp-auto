@@ -68,6 +68,8 @@ def test_owned_card_exchange_accounts_table_renders_account_identity_and_disable
     assert "交换点数" in html
     assert ">5000<" in html
     assert 'data-tooltip="该账号有进行中的交换请求"' in html
+    assert "tooltip-text--left" in html
+    assert "owned-card-exchange-table-frame" in html
     assert "disabled" in html
     assert 'data-action="show-exchange-form"' not in html
 
