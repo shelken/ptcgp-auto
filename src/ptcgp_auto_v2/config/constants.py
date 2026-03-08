@@ -26,13 +26,15 @@ PACK_AUTO_STRATEGIES = [
 PACK_AUTO_EXCLUDE_SET_CODES = ["A4b"]  # 排除的限时系列
 PACK_AUTO_HASH_VIRTUAL_NODES = 32  # 一致性哈希虚拟节点数
 
-# 自动选包（hrw_progress_balance）权重参数
+# 自动选包（hrw_progress_balance）可调参数
+PACK_AUTO_HRW_AGGRESSIVENESS = 0.5  # HRW 激进度（0.0=接近平均分配，1.0=极激进补缺口）
+
+# 自动选包（hrw_progress_balance）内部固定参数
+# 说明：以下常量由公开激进度参数派生使用，不作为日常调参入口。
 PACK_AUTO_HRW_TARGET_RARITIES = ["SR", "SAR"]  # 进度统计使用的目标稀有度
-PACK_AUTO_HRW_PROGRESS_BETA = 4.0  # 进度缺口权重强度
-PACK_AUTO_HRW_WEIGHT_MIN = 0.5  # 权重下限
-PACK_AUTO_HRW_WEIGHT_MAX = 3.0  # 权重上限
+PACK_AUTO_HRW_EFFECTIVE_SCALE_MAX = 6.0  # 激进度=1.0 时的指数权重强度上限
+PACK_AUTO_HRW_EFFECTIVE_EPSILON_MAX = 4.0  # 激进度=1.0 时的容量松弛上限
 PACK_AUTO_HRW_SEED = "rarity-gap-auto-39"  # HRW 稳定种子
-PACK_AUTO_HRW_LOAD_EPSILON = 0.45  # 分配模拟容量松弛系数
 PACK_AUTO_HRW_SEED_SCAN_COUNT = 300  # 分配模拟 seed 扫描次数
 
 # ADB 配置

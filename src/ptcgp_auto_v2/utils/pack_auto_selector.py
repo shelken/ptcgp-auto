@@ -15,13 +15,12 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING, cast
 
 from ptcgp_auto_v2.config.constants import (
-    PACK_AUTO_HRW_PROGRESS_BETA,
+    PACK_AUTO_HRW_AGGRESSIVENESS,
+    PACK_AUTO_HRW_EFFECTIVE_EPSILON_MAX,
+    PACK_AUTO_HRW_EFFECTIVE_SCALE_MAX,
     PACK_AUTO_HRW_SEED,
     PACK_AUTO_HRW_SEED_SCAN_COUNT,
     PACK_AUTO_HRW_TARGET_RARITIES,
-    PACK_AUTO_HRW_LOAD_EPSILON,
-    PACK_AUTO_HRW_WEIGHT_MAX,
-    PACK_AUTO_HRW_WEIGHT_MIN,
     PACK_AUTO_HASH_VIRTUAL_NODES,
     PACK_AUTO_STRATEGIES,
     PACK_SERIES_CODES,
@@ -224,10 +223,11 @@ def _build_weekly_cache_key(exclude_set_codes: list[str]) -> str:
     biz_date = get_game_biz_date_str()
     week_key = _build_week_seed_suffix(biz_date)
     excludes = ",".join(sorted(code for code in exclude_set_codes if code))
+    effective_scale, effective_weight_max, effective_epsilon = _build_hrw_effective_params()
     return (
-        f"{biz_date}|{week_key}|{excludes}|{PACK_AUTO_HRW_PROGRESS_BETA}|"
-        f"{PACK_AUTO_HRW_WEIGHT_MIN}|{PACK_AUTO_HRW_WEIGHT_MAX}|"
-        f"{PACK_AUTO_HRW_LOAD_EPSILON}|{PACK_AUTO_HRW_SEED_SCAN_COUNT}|{PACK_AUTO_HRW_SEED}"
+        f"{biz_date}|{week_key}|{excludes}|{PACK_AUTO_HRW_AGGRESSIVENESS}|"
+        f"{effective_scale}|{effective_weight_max}|{effective_epsilon}|"
+        f"{PACK_AUTO_HRW_SEED_SCAN_COUNT}|{PACK_AUTO_HRW_SEED}"
     )
 
 
@@ -275,8 +275,11 @@ def _build_weekly_snapshot(
     if not candidates:
         return None
 
+    effective_scale, effective_weight_max, effective_epsilon = _build_hrw_effective_params()
     pack_weights, progress_stats, progress_map = _build_pack_weights(
-        candidates, card_repo
+        candidates,
+        card_repo,
+        effective_scale=effective_scale,
     )
     if not pack_weights:
         return None
@@ -291,7 +294,7 @@ def _build_weekly_snapshot(
         account_keys=account_keys,
         pack_keys=pack_keys,
         pack_weights=pack_weights,
-        epsilon=PACK_AUTO_HRW_LOAD_EPSILON,
+        epsilon=effective_epsilon,
         seed_candidates=_build_seed_candidates(),
     )
     return {
@@ -304,12 +307,17 @@ def _build_weekly_snapshot(
         "progress_ratio_map": progress_map,
         "account_count": len(account_keys),
         "candidate_count": len(candidates),
+        "aggressiveness": PACK_AUTO_HRW_AGGRESSIVENESS,
+        "effective_scale": effective_scale,
+        "effective_weight_max": effective_weight_max,
+        "effective_epsilon": effective_epsilon,
     }
 
 
 def _build_pack_weights(
     candidates: list["Pack"],
     card_repo: "CardRepository",
+    effective_scale: float,
 ) -> tuple[dict[str, float], dict[str, dict[str, int]], dict[str, float]]:
     """构建候选子包权重映射。"""
     pack_names = [pack.name for pack in candidates]
@@ -327,13 +335,25 @@ def _build_pack_weights(
         owned_target = int(stat.get("owned_target", 0) or 0)
         progress_ratio = 1.0 if total_target <= 0 else owned_target / total_target
         gap = 1.0 - progress_ratio
-        raw_weight = 1.0 + PACK_AUTO_HRW_PROGRESS_BETA * gap
-        pack_weights[pack_key] = max(
-            PACK_AUTO_HRW_WEIGHT_MIN,
-            min(PACK_AUTO_HRW_WEIGHT_MAX, raw_weight),
-        )
+        # 使用指数权重放大高缺口包差距，使 1.0 激进度具备明显集中效果。
+        pack_weights[pack_key] = math.exp(effective_scale * gap)
         progress_map[pack_key] = progress_ratio
     return pack_weights, progress_stats, progress_map
+
+
+def _build_hrw_effective_params() -> tuple[float, float, float]:
+    """根据公开激进度参数派生 HRW 内部参数。"""
+    aggressiveness = PACK_AUTO_HRW_AGGRESSIVENESS
+    if aggressiveness < 0.0 or aggressiveness > 1.0:
+        raise ValueError(
+            "PACK_AUTO_HRW_AGGRESSIVENESS 必须位于 0.0 到 1.0 之间"
+        )
+
+    squared = aggressiveness * aggressiveness
+    effective_scale = PACK_AUTO_HRW_EFFECTIVE_SCALE_MAX * squared
+    effective_weight_max = math.exp(effective_scale)
+    effective_epsilon = PACK_AUTO_HRW_EFFECTIVE_EPSILON_MAX * squared
+    return effective_scale, effective_weight_max, effective_epsilon
 
 
 def _build_hrw_seed() -> str:

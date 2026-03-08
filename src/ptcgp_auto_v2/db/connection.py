@@ -152,18 +152,31 @@ class Database:
             conn.execute(text(sql))
 
             # 迁移历史账号资源字段：accounts.exchange_points -> account_stats.exchange_points
-            # 说明：accounts 旧列暂不删除，仅读一次并回填到新表。
-            migrate_sql = """
-            INSERT INTO account_stats (account_id, exchange_points, created_at, updated_at)
-            SELECT a.id, a.exchange_points, datetime('now', 'localtime'), datetime('now', 'localtime')
-            FROM accounts a
-            WHERE a.exchange_points IS NOT NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM account_stats s WHERE s.account_id = a.id
-              )
-            """
-            conn.execute(text(migrate_sql))
+            # 说明：部分历史库已删除旧列；只有旧列仍存在时才执行回填。
+            if self._table_has_column(conn, "accounts", "exchange_points"):
+                migrate_sql = """
+                INSERT INTO account_stats (account_id, exchange_points, created_at, updated_at)
+                SELECT a.id, a.exchange_points, datetime('now', 'localtime'), datetime('now', 'localtime')
+                FROM accounts a
+                WHERE a.exchange_points IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM account_stats s WHERE s.account_id = a.id
+                  )
+                """
+                conn.execute(text(migrate_sql))
+            else:
+                logger.info(
+                    "跳过账号资源旧字段迁移：accounts.exchange_points 列不存在"
+                )
             conn.commit()
+
+    def _table_has_column(self, conn, table_name: str, column_name: str) -> bool:
+        """检查指定表是否仍包含目标列。"""
+        from sqlmodel import text
+
+        pragma_sql = f'PRAGMA table_info("{table_name}")'
+        rows = conn.execute(text(pragma_sql)).fetchall()
+        return any(row[1] == column_name for row in rows)
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         """执行 SQL 语句"""

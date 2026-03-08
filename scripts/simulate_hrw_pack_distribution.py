@@ -15,13 +15,10 @@ if str(SRC_DIR) not in sys.path:
 
 from ptcgp_auto_v2.config.constants import (  # noqa: E402
     PACK_AUTO_EXCLUDE_SET_CODES,
-    PACK_AUTO_HRW_LOAD_EPSILON,
-    PACK_AUTO_HRW_PROGRESS_BETA,
+    PACK_AUTO_HRW_AGGRESSIVENESS,
     PACK_AUTO_HRW_SEED,
     PACK_AUTO_HRW_SEED_SCAN_COUNT,
     PACK_AUTO_HRW_TARGET_RARITIES,
-    PACK_AUTO_HRW_WEIGHT_MAX,
-    PACK_AUTO_HRW_WEIGHT_MIN,
     PACK_SERIES_CODES,
 )
 from ptcgp_auto_v2.db.repositories import CardRepository  # noqa: E402
@@ -50,6 +47,9 @@ def run_simulation() -> None:
     candidate_count = int(snapshot["candidate_count"])
     selected_seed = str(snapshot["selected_seed"])
     best_metrics = snapshot["best_metrics"]
+    effective_scale = float(snapshot["effective_scale"])
+    effective_weight_max = float(snapshot["effective_weight_max"])
+    effective_epsilon = float(snapshot["effective_epsilon"])
 
     assigned_counts: dict[str, int] = {pack_key: 0 for pack_key in pack_map}
     for pack_key in assignment_map.values():
@@ -85,8 +85,9 @@ def run_simulation() -> None:
         f"候选系列前缀: {PACK_SERIES_CODES}\n"
         f"排除系列: {PACK_AUTO_EXCLUDE_SET_CODES}\n"
         f"目标稀有度: {PACK_AUTO_HRW_TARGET_RARITIES}\n"
-        f"参数: beta={PACK_AUTO_HRW_PROGRESS_BETA}, epsilon={PACK_AUTO_HRW_LOAD_EPSILON}, "
-        f"weight=[{PACK_AUTO_HRW_WEIGHT_MIN}, {PACK_AUTO_HRW_WEIGHT_MAX}], "
+        f"参数: aggressiveness={PACK_AUTO_HRW_AGGRESSIVENESS}, "
+        f"scale={effective_scale:.3f}, epsilon={effective_epsilon:.3f}, "
+        f"weight_max={effective_weight_max:.3f}, "
         f"seed_base={PACK_AUTO_HRW_SEED}, seed_scan_count={PACK_AUTO_HRW_SEED_SCAN_COUNT}"
     )
     print(

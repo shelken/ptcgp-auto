@@ -26,9 +26,9 @@ def _load_script_module():
 def test_script_reuses_formal_constants():
     """脚本应直接复用正式常量，避免参数漂移。"""
     module = _load_script_module()
-    from ptcgp_auto_v2.config.constants import PACK_AUTO_HRW_PROGRESS_BETA
+    from ptcgp_auto_v2.config.constants import PACK_AUTO_HRW_AGGRESSIVENESS
 
-    assert module.PACK_AUTO_HRW_PROGRESS_BETA == PACK_AUTO_HRW_PROGRESS_BETA
+    assert module.PACK_AUTO_HRW_AGGRESSIVENESS == PACK_AUTO_HRW_AGGRESSIVENESS
 
 
 def test_run_simulation_prints_single_seed_from_formal_snapshot():
@@ -62,6 +62,9 @@ def test_run_simulation_prints_single_seed_from_formal_snapshot():
             "progress_ratio_map": {"A1/Pikachu": 0.5, "A2/Charizard": 0.0},
             "account_count": 3,
             "candidate_count": 2,
+            "effective_scale": 1.5,
+            "effective_weight_max": 4.4816890703380645,
+            "effective_epsilon": 1.0,
         },
     )
 
@@ -72,5 +75,7 @@ def test_run_simulation_prints_single_seed_from_formal_snapshot():
     text = output.getvalue()
     assert "最终使用seed（单一）" in text
     assert "seed=seed-weekly-001" in text
+    assert "aggressiveness=" in text
+    assert "scale=1.500" in text
     assert "A1" in text and "Pikachu" in text
     assert "A2" in text and "Charizard" in text
