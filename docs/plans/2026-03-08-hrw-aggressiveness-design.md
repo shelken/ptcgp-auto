@@ -44,41 +44,40 @@
 
 ## 内部派生规则
 
-为了保留当前 `0.5` 附近的使用手感，同时给 `1.0` 预留明显更强的偏置空间，使用以下二次映射：
+为了让 `1.0` 真正代表“极激进”而不是略高于当前线性方案，改用指数权重模型，并通过二次映射派生内部参数：
 
 ```python
-effective_beta = 16.0 * aggressiveness * aggressiveness
-effective_weight_max = 1.0 + 8.0 * aggressiveness * aggressiveness
-effective_epsilon = 1.8 * aggressiveness * aggressiveness
+effective_scale = 6.0 * aggressiveness * aggressiveness
+effective_weight_max = math.exp(effective_scale)
+effective_epsilon = 4.0 * aggressiveness * aggressiveness
 ```
 
 关键点：
 
 - `aggressiveness = 0.0`
-  - `beta = 0.0`
+  - `scale = 0.0`
   - `weight_max = 1.0`
   - `epsilon = 0.0`
   - 表现接近平均分配
 - `aggressiveness = 0.5`
-  - `beta = 4.0`
-  - `weight_max = 3.0`
-  - `epsilon = 0.45`
-  - 约等于当前默认行为
+  - `scale = 1.5`
+  - `weight_max ≈ 4.482`
+  - `epsilon = 1.0`
+  - 比旧版 `0.5` 更偏向缺口包，但仍明显低于极激进档
 - `aggressiveness = 1.0`
-  - `beta = 16.0`
-  - `weight_max = 9.0`
-  - `epsilon = 1.8`
-  - 明显更偏向低进度包
+  - `scale = 6.0`
+  - `weight_max ≈ 403.429`
+  - `epsilon = 4.0`
+  - 会显著集中到最低进度包，满足极激进档目标
 
 ## 逻辑调整
 
 ### 权重计算
 
-保留现有线性缺口权重模型，但参数全部改为内部派生值：
+使用指数缺口权重模型放大高缺口包之间的差距：
 
 ```python
-raw_weight = 1.0 + effective_beta * gap
-weight = min(effective_weight_max, raw_weight)
+weight = math.exp(effective_scale * gap)
 ```
 
 ### 删除无效调参面
@@ -87,8 +86,8 @@ weight = min(effective_weight_max, raw_weight)
 
 原因：
 
-- 当前权重公式中 `gap` 范围为 `0.0 ~ 1.0`
-- `raw_weight = 1.0 + beta * gap`，因此最小值始终不低于 `1.0`
+- 当前指数权重公式中 `gap` 范围为 `0.0 ~ 1.0`
+- `weight = math.exp(effective_scale * gap)` 的最小值始终为 `1.0`
 - 现有 `weight_min` 实际不会生效，属于无意义公开参数
 
 ### 缓存键
@@ -96,7 +95,7 @@ weight = min(effective_weight_max, raw_weight)
 HRW 快照缓存键不再直接拼接旧参数，而是改为：
 
 - `PACK_AUTO_HRW_AGGRESSIVENESS`
-- 派生后的 `effective_beta`
+- 派生后的 `effective_scale`
 - 派生后的 `effective_weight_max`
 - 派生后的 `effective_epsilon`
 - 其他仍影响结果的固定常量
@@ -119,7 +118,7 @@ HRW 快照缓存键不再直接拼接旧参数，而是改为：
 `scripts/simulate_hrw_pack_distribution.py` 需要同步调整：
 
 - 输出公开参数 `PACK_AUTO_HRW_AGGRESSIVENESS`
-- 输出派生后的 `beta / weight_max / epsilon`
+- 输出派生后的 `scale / weight_max / epsilon`
 - 不再输出已移除的 `weight_min`
 
 ### 测试
