@@ -57,9 +57,17 @@ def test_one_account_only_one_active_exchange_request(engine, mock_get_engine):
 
 def test_create_request_rejects_im_and_ur_rarity():
     """IM/UR 稀有度在服务层必须被拒绝。"""
-    with patch(
-        "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
-    ) as repo_cls:
+    with (
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+        ) as repo_cls,
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.AccountRepository"
+        ) as account_repo_cls,
+    ):
+        account_repo_cls.return_value.get_by_id.return_value = SimpleNamespace(
+            exchange_points=999999
+        )
         created = ExchangeCardService.create_request(
             from_account_id=101,
             to_account_id=202,
@@ -130,11 +138,19 @@ def test_list_due_sended_requests_only_returns_due_rows(engine, mock_get_engine)
 
 def test_create_request_rejects_active_account_request():
     """服务层应拒绝已存在活跃请求的账号再次创建请求。"""
-    with patch(
-        "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
-    ) as repo_cls:
+    with (
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+        ) as repo_cls,
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.AccountRepository"
+        ) as account_repo_cls,
+    ):
         repo = repo_cls.return_value
         repo.has_active_request.return_value = True
+        account_repo_cls.return_value.get_by_id.return_value = SimpleNamespace(
+            exchange_points=999999
+        )
 
         created = ExchangeCardService.create_request(
             from_account_id=601,
@@ -148,13 +164,73 @@ def test_create_request_rejects_active_account_request():
         repo.create.assert_not_called()
 
 
-def test_create_request_sets_expire_at_when_created():
-    """创建请求后应写入过期时间窗口。"""
-    with patch(
-        "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
-    ) as repo_cls:
+def test_create_request_rejects_when_exchange_points_insufficient():
+    """交换点数不足时必须拒绝创建请求。"""
+    with (
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+        ) as repo_cls,
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.AccountRepository"
+        ) as account_repo_cls,
+    ):
         repo = repo_cls.return_value
         repo.has_active_request.return_value = False
+        account_repo_cls.return_value.get_by_id.return_value = SimpleNamespace(
+            exchange_points=1000
+        )
+
+        created = ExchangeCardService.create_request(
+            from_account_id=701,
+            to_account_id=702,
+            to_friend_id="1234567890123456",
+            target_card_id=9001,
+            target_card_rarity="RR",
+        )
+
+        assert created is None
+        repo.create.assert_not_called()
+
+
+def test_create_request_rejects_when_account_not_found():
+    """账号不存在时必须拒绝创建请求。"""
+    with (
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+        ) as repo_cls,
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.AccountRepository"
+        ) as account_repo_cls,
+    ):
+        account_repo_cls.return_value.get_by_id.return_value = None
+
+        created = ExchangeCardService.create_request(
+            from_account_id=801,
+            to_account_id=802,
+            to_friend_id="1234567890123456",
+            target_card_id=9101,
+            target_card_rarity="R",
+        )
+
+        assert created is None
+        repo_cls.return_value.create.assert_not_called()
+
+
+def test_create_request_sets_expire_at_when_created():
+    """创建请求后应写入过期时间窗口。"""
+    with (
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.ExchangeCardRequestRepository"
+        ) as repo_cls,
+        patch(
+            "ptcgp_auto_v2.services.exchange_card_service.AccountRepository"
+        ) as account_repo_cls,
+    ):
+        repo = repo_cls.return_value
+        repo.has_active_request.return_value = False
+        account_repo_cls.return_value.get_by_id.return_value = SimpleNamespace(
+            exchange_points=999999
+        )
 
         row = SimpleNamespace(expire_at=None)
         repo.create.return_value = row

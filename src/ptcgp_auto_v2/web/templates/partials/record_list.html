@@ -127,11 +127,5 @@
      <!-- Invisible trigger area -->
 </div>
 {% else %}
-<script>
-    document.getElementById('end-of-records').classList.remove('hidden');
-    // Hide global loader if exists
-    var loader = document.querySelector('.htmx-indicator');
-    if(loader) loader.classList.remove('flex');
-    if(loader) loader.classList.add('hidden');
-</script>
+<div class="hidden" data-records-end="true"></div>
 {% endif %}

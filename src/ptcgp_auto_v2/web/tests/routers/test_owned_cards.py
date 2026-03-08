@@ -84,6 +84,41 @@ def test_get_owned_card_modal_returns_404_when_not_found(monkeypatch):
     assert response.status_code == 404
 
 
+def test_get_owned_card_modal_passes_page_size_to_service(monkeypatch):
+    """弹窗路由应透传前端预估的 page_size。"""
+    captured = {}
+
+    def _fake_build_owned_card_modal_context(session, card_id, page_size=10):
+        captured["session"] = session
+        captured["card_id"] = card_id
+        captured["page_size"] = page_size
+        return {"card": object()}
+
+    monkeypatch.setattr(
+        router,
+        "build_owned_card_modal_context",
+        _fake_build_owned_card_modal_context,
+    )
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda request, name, context: HTMLResponse(f"tpl:{name}"),
+    )
+
+    response = asyncio.run(
+        router.get_owned_card_modal(
+            request=_build_request("GET"),
+            card_id=153,
+            page_size=5,
+            session=object(),
+        )
+    )
+
+    assert response.status_code == 200
+    assert captured["card_id"] == 153
+    assert captured["page_size"] == 5
+
+
 def test_create_exchange_request_success_sets_close_modal_and_enqueue_task(monkeypatch):
     """创建交换请求成功时应触发 closeModal 并确保任务入队。"""
     request = _build_request("POST")

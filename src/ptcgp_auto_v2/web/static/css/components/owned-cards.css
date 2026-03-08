@@ -202,7 +202,7 @@
 
 /* Owned Card Modal */
 .owned-card-modal-layout {
-    align-items: flex-start;
+    align-items: stretch;
     height: min(82vh, 760px);
 }
 
@@ -214,19 +214,28 @@
 .owned-card-modal-table-shell {
     min-height: 0;
     flex: 1;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+}
+
+.owned-card-exchange-table-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .owned-card-modal-root {
-    position: relative;
     height: 100%;
 }
 
 .owned-card-modal-close {
-    position: absolute;
-    top: 0.25rem;
-    right: 0.25rem;
-    z-index: 20;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 2rem;
     height: 2rem;
     border: var(--border-width) solid var(--border-color);

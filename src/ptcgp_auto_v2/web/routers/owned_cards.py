@@ -55,11 +55,12 @@ async def get_owned_cards(
 async def get_owned_card_modal(
     request: Request,
     card_id: int,
+    page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌详情弹窗。"""
     current_lang = get_current_lang()
-    context = build_owned_card_modal_context(session, card_id)
+    context = build_owned_card_modal_context(session, card_id, page_size=page_size)
     if not context:
         t = get_translations(current_lang)
         return HTMLResponse(
