@@ -9,9 +9,11 @@
     <button
         type="button"
         class="owned-card brutal-card"
-        hx-get="/api/owned-cards/modal?card_id={{ item.card.id }}&lang={{ current_lang }}"
+        hx-get="/api/owned-cards/modal"
         hx-target="#modal-content"
         hx-swap="innerHTML"
+        data-card-id="{{ item.card.id }}"
+        data-lang="{{ current_lang }}"
         title="{{ item.card_display_name or item.card.name }}">
         <div class="owned-card-media">
             <img
@@ -33,14 +35,9 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="text-center py-16 text-muted font-mono">
+<div class="text-center py-16 text-muted font-mono" data-owned-cards-empty="true">
     {{ t.owned_cards_empty }}
 </div>
-<script>
-    var loader = document.querySelector('.htmx-indicator');
-    if (loader) loader.classList.remove('flex');
-    if (loader) loader.classList.add('hidden');
-</script>
 {% endif %}
 
 {% if has_next %}
