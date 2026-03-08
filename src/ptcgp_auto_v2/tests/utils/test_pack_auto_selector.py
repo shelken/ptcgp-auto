@@ -119,7 +119,7 @@ class TestPackAutoSelector(unittest.TestCase):
         )
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["pack_code"], "A2")
+        self.assertEqual(result["set_code"], "A2")
         self.assertEqual(result["booster_name"], "Charizard")
 
     def test_hrw_progress_balance_is_stable(self):
@@ -184,7 +184,7 @@ class TestPackAutoSelector(unittest.TestCase):
             )
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["pack_code"], "A2")
+        self.assertEqual(result["set_code"], "A2")
         self.assertEqual(result["booster_name"], "Charizard")
 
     def test_hrw_progress_balance_seed_uses_game_biz_date(self):
@@ -245,7 +245,7 @@ class TestPackAutoSelector(unittest.TestCase):
         )
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["pack_code"], "A2")
+        self.assertEqual(result["set_code"], "A2")
         self.assertEqual(result["booster_name"], "Charizard")
 
 

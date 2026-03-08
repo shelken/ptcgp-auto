@@ -59,7 +59,7 @@
 - **子包推断规则**：
   - **两阶段策略**：第一阶段（滑动页）模板匹配优先；第二阶段（结果页）卡牌反推兜底
   - **PROMO 排除**：`exclude_promo=True` 时排除 PROMO 系列干扰，但普通系列缺失 Hash 仍可下载
-  - **上下文优先级**：`fixed_set_code > explicit_target.pack_code > inferred_context.pack_code > None`
+  - **上下文优先级**：`fixed_set_code > explicit_target.set_code > inferred_context.set_code > None`
   - **模板名规范化**：使用 `normalize_name_str()` 处理 pack.name 后再拼模板路径
   - **会话清理**：落库成功后（包括异常路径）必须调用 `_clear_pack_inference_session()` 卸载动态模板
 - **禁止反模式**：

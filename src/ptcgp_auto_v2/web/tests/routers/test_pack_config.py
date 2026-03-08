@@ -54,7 +54,7 @@ def test_get_boosters_options_renders_partial(monkeypatch):
     response = asyncio.run(
         router.get_boosters_options(
             request=_build_request("GET"),
-            pack_code="A1",
+            set_code="A1",
         )
     )
     assert response.status_code == 200
@@ -68,7 +68,7 @@ def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypat
     async def _fake_form():
         return SimpleNamespace(
             get=lambda key, default=None: {
-                "pack_code": "A1",
+                "set_code": "A1",
                 "booster_name": "Pikachu",
             }.get(key, default)
         )
@@ -78,9 +78,9 @@ def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypat
 
     called = {}
 
-    def _fake_save_account_pack_config(account_id, pack_code, booster_name):
+    def _fake_save_account_pack_config(account_id, set_code, booster_name):
         called["account_id"] = account_id
-        called["pack_code"] = pack_code
+        called["set_code"] = set_code
         called["booster_name"] = booster_name
 
     monkeypatch.setattr(
@@ -113,5 +113,5 @@ def test_save_account_pack_config_returns_account_list_and_close_modal(monkeypat
     )
 
     assert response.status_code == 200
-    assert called == {"account_id": 3, "pack_code": "A1", "booster_name": "Pikachu"}
+    assert called == {"account_id": 3, "set_code": "A1", "booster_name": "Pikachu"}
     assert response.headers.get("HX-Trigger") == "closeModal"

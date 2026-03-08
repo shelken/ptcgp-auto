@@ -40,8 +40,8 @@
 
         <div class="mt-8">
             <div class="brutal-tag text-xl mb-2">
-                {% if item.record.pack_code %}
-                    {{ item.record.pack_code }} / {{ item.pack_name_display }}
+                {% if item.record.set_code %}
+                    {{ item.record.set_code }} / {{ item.pack_name_display }}
                     <span class="text-sm font-normal">({{ item.record.pack_type }})</span>
                 {% else %}
                     {{ item.record.pack_type }}
@@ -50,7 +50,7 @@
 
             {% if item.current_points is not none %}
             <div class="mt-2 text-sm font-bold p-2 brutal-border" style="background-color: var(--accent-color); color: var(--bg-color);">
-                PT: {{ item.current_points }} ({{ item.record.pack_code or item.series }})
+                PT: {{ item.current_points }} ({{ item.record.set_code or item.series }})
             </div>
             {% endif %}
 

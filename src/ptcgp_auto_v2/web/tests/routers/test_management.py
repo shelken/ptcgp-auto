@@ -107,7 +107,7 @@ def test_get_account_target_pack_cell_uses_dedicated_partial(monkeypatch):
         return {
             "account_id": account_id,
             "config": None,
-            "auto_pack": {"pack_code": "A1", "booster_name": "Pikachu"},
+            "auto_pack": {"set_code": "A1", "booster_name": "Pikachu"},
         }
 
     monkeypatch.setattr(

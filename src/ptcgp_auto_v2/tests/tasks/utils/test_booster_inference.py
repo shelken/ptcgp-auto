@@ -39,7 +39,7 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A1"
+        assert result["set_code"] == "A1"
         assert result["booster_name"] == "Mewtwo"
         assert result["source"] == "cards"
 
@@ -55,7 +55,7 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A2"
+        assert result["set_code"] == "A2"
         assert result["booster_name"] == "Mewtwo"
         assert result["source"] == "cards"
 
@@ -72,7 +72,7 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A2"  # 系列可以确定
+        assert result["set_code"] == "A2"  # 系列可以确定
         assert result["booster_name"] is None  # 子包无法确定
         assert result["source"] == "cards"
 
@@ -104,7 +104,7 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A1"
+        assert result["set_code"] == "A1"
         assert result["booster_name"] == "Mewtwo"
 
     def test_card_fallback_excludes_promo_packs(self):
@@ -118,7 +118,7 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A1"
+        assert result["set_code"] == "A1"
         assert result["booster_name"] == "Mewtwo"  # 不是 PROMO-A1
 
     def test_card_fallback_all_promo_packs_ignored(self):
@@ -144,7 +144,7 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A2"
+        assert result["set_code"] == "A2"
         assert result["booster_name"] is None  # 平局，无法确定
         assert result["source"] == "cards"
 
@@ -159,5 +159,5 @@ class TestCardFallbackInference:
         result = infer_pack_by_cards(cards)
 
         assert result is not None
-        assert result["pack_code"] == "A1"
+        assert result["set_code"] == "A1"
         assert result["booster_name"] == "Mewtwo"
