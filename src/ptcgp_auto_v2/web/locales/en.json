@@ -221,6 +221,7 @@
     "exchange_entry_no_available_accounts": "No eligible accounts (count must be greater than 0)",
     "exchange_entry_blocked_rarity": "This rarity cannot be exchanged",
     "exchange_entry_missing_owned_card": "This account does not have an exchangeable copy of this card",
+    "exchange_entry_insufficient_points": "This account does not have enough exchange points",
     "msg_exchange_request_created": "Exchange request created",
     "msg_exchange_request_skipped": "Exchange request skipped or invalid",
     "label_set_code": "Set",

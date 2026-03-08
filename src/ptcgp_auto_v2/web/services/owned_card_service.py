@@ -133,6 +133,8 @@ def _match_exchange_query(item: dict[str, Any], query: str) -> bool:
 def _build_exchange_action(card: Card, item: dict[str, Any]) -> dict[str, Any]:
     """统一计算交换按钮状态，避免模板散落业务判断。"""
     _, t = get_current_i18n()
+    required_points = ExchangeCardService.get_required_exchange_points(card.rarity) or 0
+    current_points = int(item.get("exchange_points") or 0)
 
     disabled_reason_text: str | None = None
     disabled_reason_key: str | None = None
@@ -151,6 +153,11 @@ def _build_exchange_action(card: Card, item: dict[str, Any]) -> dict[str, Any]:
         disabled_reason_text = (
             t.get("exchange_has_active_request")
             or "该账号有进行中的交换请求，无法创建新请求"
+        )
+    elif current_points < required_points:
+        disabled_reason_key = "insufficient_exchange_points"
+        disabled_reason_text = (
+            t.get("exchange_entry_insufficient_points") or "该账号交换点数不足"
         )
 
     return {

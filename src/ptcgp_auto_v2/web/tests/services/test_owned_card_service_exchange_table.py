@@ -198,6 +198,48 @@ def test_exchange_accounts_context_blocks_active_request(monkeypatch, session: S
     assert blocked_row["exchange_action"]["reason_key"] == "has_active_request"
 
 
+def test_exchange_accounts_context_blocks_insufficient_exchange_points(
+    monkeypatch, session: Session, card_id: int, fake_accounts_data
+):
+    """交换点数不足时应返回禁用按钮和原因。"""
+    payload = {
+        "accounts": [
+            {
+                "account_id": 5,
+                "game_id": "game-low-points",
+                "friend_id": "5000000000000005",
+                "nickname": "Echo",
+                "count": 3,
+                "exchange_points": 1000,
+            }
+        ],
+        "total_accounts": 1,
+        "total_count": 3,
+    }
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.web.services.owned_card_service.AccountCardRepository.get_owned_card_accounts",
+        lambda _self, _card_id: payload,
+    )
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.web.services.owned_card_service.ExchangeCardRequestRepository.has_active_request",
+        lambda _self, _account_id: False,
+    )
+
+    context = build_owned_card_exchange_accounts_context(
+        session=session,
+        card_id=card_id,
+        page=0,
+        page_size=20,
+        q="",
+        sort_by="account_id",
+        sort_order="asc",
+    )
+
+    action = context["accounts"][0]["exchange_action"]
+    assert action["enabled"] is False
+    assert action["reason_key"] == "insufficient_exchange_points"
+
+
 def test_exchange_accounts_context_blocks_missing_owned_card_first(monkeypatch, session: Session, card_id: int, fake_accounts_data):
     """持有数量不足时应优先返回数量不足原因。"""
     payload = {
