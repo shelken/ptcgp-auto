@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import case, distinct, func
+from sqlalchemy import String, case, cast, distinct, func, or_
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.engine import get_engine
@@ -24,6 +24,16 @@ class AccountCardRepository:
         "S": 10,
         "SSR": 11,
     }
+
+    def _build_account_search_filters(self, account_query: str) -> list[Any]:
+        """构建账号搜索条件，统一支持四字段查询。"""
+        like_value = f"%{account_query}%"
+        return [
+            cast(Account.id, String).ilike(like_value),
+            Account.nickname.ilike(like_value),
+            Account.friend_id.ilike(like_value),
+            Account.game_id.ilike(like_value),
+        ]
 
     def get(self, account_id: int, card_id: int) -> Optional[AccountCard]:
         with Session(get_engine()) as session:
@@ -73,7 +83,7 @@ class AccountCardRepository:
         self,
         page: int,
         page_size: int,
-        account_id: Optional[int] = None,
+        account_query: Optional[str] = None,
         rarities: Optional[List[str]] = None,
         card_types: Optional[List[str]] = None,
         set_codes: Optional[List[str]] = None,
@@ -86,6 +96,7 @@ class AccountCardRepository:
         set_codes = set_codes or []
         pack_names = pack_names or []
         elements = [str(e).lower() for e in (elements or []) if e]
+        normalized_account_query = (account_query or "").strip()
 
         rarity_case = case(
             *[
@@ -110,8 +121,10 @@ class AccountCardRepository:
                 .group_by(col(Card.id))  # type: ignore[arg-type]
             )
 
-            if account_id:
-                statement = statement.where(col(AccountCard.account_id) == account_id)
+            if normalized_account_query:
+                statement = statement.join(
+                    Account, col(Account.id) == col(AccountCard.account_id)
+                ).where(or_(*self._build_account_search_filters(normalized_account_query)))
 
             if rarities:
                 statement = statement.where(col(Card.rarity).in_(rarities))
