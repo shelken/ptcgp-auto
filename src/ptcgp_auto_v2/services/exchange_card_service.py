@@ -9,7 +9,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from ptcgp_auto_v2.db.models import ExchangeCardRequest
-from ptcgp_auto_v2.db.repositories import ExchangeCardRequestRepository
+from ptcgp_auto_v2.db.repositories import (
+    AccountRepository,
+    ExchangeCardRequestRepository,
+)
 
 
 class ExchangeCardService:
@@ -30,6 +33,12 @@ class ExchangeCardService:
     DEFAULT_EXPIRE_MINUTES = 5
 
     @classmethod
+    def get_required_exchange_points(cls, rarity_code: str) -> Optional[int]:
+        """根据稀有度返回所需交换点数。"""
+        normalized_rarity = (rarity_code or "").upper()
+        return cls.EXCHANGE_POINT_COSTS.get(normalized_rarity)
+
+    @classmethod
     def create_request(
         cls,
         from_account_id: int,
@@ -42,6 +51,17 @@ class ExchangeCardService:
         """创建交换请求；不允许 IM/UR 稀有度。"""
         normalized_rarity = (target_card_rarity or "").upper()
         if normalized_rarity in cls.NON_EXCHANGEABLE_RARITIES:
+            return None
+
+        required_points = cls.get_required_exchange_points(normalized_rarity)
+        if required_points is None:
+            return None
+
+        account = AccountRepository().get_by_id(from_account_id)
+        if account is None:
+            return None
+        current_points = int(account.exchange_points or 0)
+        if current_points < required_points:
             return None
 
         repo = ExchangeCardRequestRepository()

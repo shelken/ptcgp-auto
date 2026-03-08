@@ -226,6 +226,8 @@
   "exchange_entry_action": "交换卡牌",
   "exchange_entry_no_available_accounts": "暂无可发起交换的账号（数量需大于0）",
   "exchange_entry_blocked_rarity": "该稀有度不可交换",
+  "exchange_entry_missing_owned_card": "该账号没有可交换的此卡",
+  "exchange_entry_insufficient_points": "该账号交换点数不足",
   "msg_exchange_request_created": "交换请求已创建",
   "msg_exchange_request_skipped": "交换请求创建失败或不符合规则",
   "label_set_code": "系列",
