@@ -141,6 +141,7 @@ class PackOpeningTaskBase(Task):
         # 开包状态
         self._packs_opened_count = 0  # 本次任务已开包数量
         self._result_recognized = False  # 本次开包是否已识别结果
+        self._base_pack_points: int | None = None  # 从OCR提取的基础开包点数
 
         # 数据仓储（延迟初始化）
         self._pack_record_repo: "PackRecordRepository | None" = None
@@ -338,7 +339,7 @@ class PackOpeningTaskBase(Task):
         self._result_recognized = True
 
     def _save_pack_record(self, rows: list[dict]) -> None:
-        """保存本次开包记录到数据库"""
+        """保存本次开包记录到数据库，并根据开包数量累加开包点数"""
         self._init_repositories()
 
         if not (self._pack_record_repo and self.account.id):
@@ -361,6 +362,14 @@ class PackOpeningTaskBase(Task):
                 f"已保存开包记录: {set_code}/{pack_name} "
                 f"({len(rows)} 张): {', '.join(card_names)}"
             )
+
+            # 根据开包数量累加开包点数（仅 open_pack 任务：基础点数 + 开包数 × 5）
+            if set_code and self._pack_point_repo and self._base_pack_points is not None:
+                final_points = self._base_pack_points + self._packs_opened_count * 5
+                self._pack_point_repo.upsert_points(
+                    self.account.id, set_code, final_points
+                )
+                logger.info(f"  -> 更新开包点数: {set_code} = {final_points}pt (基础 {self._base_pack_points}pt + 开包 {self._packs_opened_count} 包 × 5pt)")
 
         except Exception as e:
             logger.error(f"保存开包记录失败: {e}")

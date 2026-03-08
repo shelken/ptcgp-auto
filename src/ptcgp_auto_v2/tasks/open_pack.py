@@ -180,6 +180,7 @@ class OpenPackTask(PackOpeningTaskBase):
         self._skipped = False
         self._failed = False  # 任务失败标志
         self._result_recognized = False
+        self._base_pack_points = None  # 重置基础开包点数
 
         # 检查账号 ID
         if self.account.id is None:
@@ -483,7 +484,7 @@ class OpenPackTask(PackOpeningTaskBase):
                     get_text_patterns("back_button"),
                 )
 
-        # 匹配成功，提取点数
+        # 匹配成功，提取基础点数（延迟更新，等保存记录时再累加）
         self._extract_pack_points(ocr_results)
 
         # 点击进入详情
@@ -492,8 +493,8 @@ class OpenPackTask(PackOpeningTaskBase):
         return tap_box(self.adb, match.box, wait=1.0)
 
     def _extract_pack_points(self, ocr_results: list[dict]) -> None:
-        """从 OCR 结果中提取并保存开包点数"""
-        if not (self.account.id and self._target_pack and self._pack_point_repo):
+        """从 OCR 结果中提取开包点数并保存到基类变量（延迟到保存记录时更新数据库）"""
+        if not (self.account.id and self._target_pack):
             return
 
         try:
@@ -511,10 +512,9 @@ class OpenPackTask(PackOpeningTaskBase):
                 if match:
                     points_str = match.group(1).replace(",", "")
                     points = int(points_str)
-                    self._pack_point_repo.upsert_points(
-                        self.account.id, set_code, points
-                    )
-                    logger.debug(f"  -> 更新开包点数: {set_code} = {points}pt")
+                    # 保存到基类变量，延迟到保存记录时更新
+                    self._base_pack_points = points
+                    logger.info(f"  -> 提取到基础开包点数: {set_code} = {points}pt（将在保存记录时累加）")
                     break
         except Exception as e:
             logger.warning(f"  -> 提取开包点数失败: {e}")
