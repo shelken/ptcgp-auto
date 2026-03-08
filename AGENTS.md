@@ -5,6 +5,7 @@
 ### 运行
 
 - 如果在工作目录出错后，使用direnv exec运行
+- 如果没有数据测试，尝试`cp -r ~/Code/MyRepo/ptcgp-auto/data ./`, 启动`PYTHONPATH=src uvicorn ptcgp_auto_v2.web.app:app --host 127.0.0.1 --port 8000 --reload`，然后使用`devtools`自己测试web变更。
 
 ### 对话规则
 
