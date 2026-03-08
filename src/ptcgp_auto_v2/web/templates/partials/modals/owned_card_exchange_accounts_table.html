@@ -86,8 +86,8 @@
                             {{ item.exchange_action.button_text }}
                         </button>
                         {% else %}
-                        <span class="inline-block"
-                              title="{{ item.exchange_action.tooltip or '' }}">
+                        <span class="inline-block tooltip-text"
+                              data-tooltip="{{ item.exchange_action.tooltip or '' }}">
                             <button type="button"
                                     class="brutal-btn text-xs px-2 py-1"
                                     disabled
