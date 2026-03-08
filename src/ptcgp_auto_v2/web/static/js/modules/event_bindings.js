@@ -17,8 +17,37 @@ import { updateRelativeTimes } from './relative_time.js';
 import { initExchangeCards } from './features/exchange_cards.js';
 import { handleActionClick } from './action_handlers.js';
 import { syncManagementSidebarRequestUrls } from './tabs.js';
+import {
+    initOwnedCardModalPageSizeWarmup,
+    syncOwnedCardListState,
+    updateOwnedCardModalRequest,
+} from './features/owned_cards.js';
 
 const htmxLoadingButtons = new WeakMap();
+
+function hideGlobalLoader() {
+    const loader = document.querySelector('.htmx-indicator');
+    if (!(loader instanceof HTMLElement)) return;
+    loader.classList.remove('flex');
+    loader.classList.add('hidden');
+}
+
+function syncPartialState(root = document) {
+    if (!(root instanceof Element) && root !== document) return;
+
+    const scope = root === document ? document : root;
+    syncOwnedCardListState(scope);
+
+    const hasRecordsEndMarker = scope instanceof Element
+        && scope.matches('[data-records-end="true"]');
+    if (hasRecordsEndMarker || scope.querySelector('[data-records-end="true"]')) {
+        const endMarker = document.getElementById('end-of-records');
+        if (endMarker instanceof HTMLElement) {
+            endMarker.classList.remove('hidden');
+        }
+        hideGlobalLoader();
+    }
+}
 
 function shouldBlockSearchSubmit(form) {
     if (!(form instanceof HTMLFormElement)) return false;
@@ -172,6 +201,10 @@ function bindMutationObserver() {
 }
 
 function bindHtmxRequestEvents() {
+    document.body.addEventListener('htmx:configRequest', (event) => {
+        updateOwnedCardModalRequest(event);
+    });
+
     document.body.addEventListener('htmx:beforeRequest', (event) => {
         const elt = event.detail && event.detail.elt;
         const target = event.detail && event.detail.target;
@@ -268,6 +301,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         initPlans(evt.detail.elt);
         initTasks(evt.detail.elt);
         syncManagementSidebarRequestUrls();
+        syncPartialState(evt.detail.elt);
     });
 
     document.body.addEventListener('change', (event) => {
@@ -347,6 +381,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         if (newContent) {
             updateRelativeTimes(newContent);
             syncManagementSidebarRequestUrls();
+            syncPartialState(newContent);
         }
     });
 
@@ -416,4 +451,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     initExchangeCards(document);
     initPlans(document);
     initTasks(document);
+    initOwnedCardModalPageSizeWarmup();
+    syncPartialState(document);
 }

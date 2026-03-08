@@ -202,7 +202,7 @@
 
 /* Owned Card Modal */
 .owned-card-modal-layout {
-    align-items: flex-start;
+    align-items: stretch;
     height: min(82vh, 760px);
 }
 
@@ -222,6 +222,7 @@
 .owned-card-exchange-table-frame {
     flex: 1 1 auto;
     min-height: 0;
+    max-height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
 }

@@ -84,7 +84,7 @@ def build_owned_cards_list_context(
 
 
 def build_owned_card_modal_context(
-    session: Session, card_id: int
+    session: Session, card_id: int, page_size: int = 10
 ) -> dict[str, Any] | None:
     """构建已拥有卡牌详情弹窗所需数据。"""
     card = session.get(Card, card_id)
@@ -95,7 +95,7 @@ def build_owned_card_modal_context(
         session=session,
         card_id=card_id,
         page=0,
-        page_size=10,
+        page_size=page_size,
         q="",
         sort_by="account_id",
         sort_order="asc",
