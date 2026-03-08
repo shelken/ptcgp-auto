@@ -67,6 +67,36 @@ class TestPackAutoSelector(unittest.TestCase):
     def setUp(self):
         pack_auto_selector._HRW_WEEKLY_CACHE.clear()
 
+    def test_hrw_effective_params_follow_aggressiveness_curve(self):
+        with patch.object(pack_auto_selector, "PACK_AUTO_HRW_AGGRESSIVENESS", 0.0):
+            effective_scale, effective_weight_max, effective_epsilon = (
+                pack_auto_selector._build_hrw_effective_params()
+            )
+            self.assertEqual(effective_scale, 0.0)
+            self.assertEqual(effective_weight_max, 1.0)
+            self.assertEqual(effective_epsilon, 0.0)
+
+        with patch.object(pack_auto_selector, "PACK_AUTO_HRW_AGGRESSIVENESS", 0.5):
+            effective_scale, effective_weight_max, effective_epsilon = (
+                pack_auto_selector._build_hrw_effective_params()
+            )
+            self.assertEqual(effective_scale, 1.5)
+            self.assertAlmostEqual(effective_weight_max, 4.4816890703380645)
+            self.assertEqual(effective_epsilon, 1.0)
+
+        with patch.object(pack_auto_selector, "PACK_AUTO_HRW_AGGRESSIVENESS", 1.0):
+            effective_scale, effective_weight_max, effective_epsilon = (
+                pack_auto_selector._build_hrw_effective_params()
+            )
+            self.assertEqual(effective_scale, 6.0)
+            self.assertAlmostEqual(effective_weight_max, 403.4287934927351)
+            self.assertEqual(effective_epsilon, 4.0)
+
+    def test_hrw_effective_params_reject_invalid_aggressiveness(self):
+        with patch.object(pack_auto_selector, "PACK_AUTO_HRW_AGGRESSIVENESS", 1.1):
+            with self.assertRaisesRegex(ValueError, "PACK_AUTO_HRW_AGGRESSIVENESS"):
+                pack_auto_selector._build_hrw_effective_params()
+
     def test_latest_strategy_picks_newest_set(self):
         packs = [
             SimpleNamespace(set_code="A1", name="Pikachu"),
