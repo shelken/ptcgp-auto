@@ -41,7 +41,7 @@ def test_build_records_list_context_should_not_mutate_pack_card_model(
         cards=[strict_pack_card],
         account=SimpleNamespace(nickname="测试账号"),
         account_id=1,
-        pack_code="A1",
+        set_code="A1",
         pack_type="daily_free",
         pack_name="Mewtwo",
         opened_at=SimpleNamespace(
@@ -83,7 +83,7 @@ def test_build_records_list_context_should_not_mutate_pack_card_model(
 def test_build_records_list_context_handles_nullable_pack_name(
     session: Session, monkeypatch
 ):
-    """records 视图应兼容仅有 pack_code 无 pack_name 的推断记录。"""
+    """records 视图应兼容仅有 set_code 无 pack_name 的推断记录。"""
     strict_pack_card = _StrictPackCard(
         position=1,
         card_name="Card1",
@@ -96,7 +96,7 @@ def test_build_records_list_context_handles_nullable_pack_name(
         cards=[strict_pack_card],
         account=SimpleNamespace(nickname="测试账号"),
         account_id=1,
-        pack_code="A2",  # 有系列
+        set_code="A2",  # 有系列
         pack_type="gift_box",
         pack_name=None,  # 无子包
         opened_at=SimpleNamespace(
@@ -128,7 +128,7 @@ def test_build_records_list_context_handles_nullable_pack_name(
     context = build_records_list_context(session=session)
 
     item = context["items"][0]
-    assert item["record"].pack_code == "A2"
+    assert item["record"].set_code == "A2"
     assert item["pack_name_display"] == ""  # pack_name 为 None 时应显示为空
     # 验证能正常渲染，set_name_display 可能是代码或本地化名称
     assert item["set_name_display"] in ["A2", "A2系列"]

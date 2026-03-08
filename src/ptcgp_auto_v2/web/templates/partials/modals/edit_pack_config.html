@@ -8,7 +8,7 @@
           data-close-modal-on-success="true"
           class="space-y-6">
           
-        <!-- Target Series (Pack Code) -->
+        <!-- 目标系列代码 -->
         {% set series_options = [{'value': '', 'label': t.label_no_pack_auto or '无（自动选择）'}] %}
         {% for set in card_sets %}
         {% set _ = series_options.append({'value': set.code, 'label': (set.display_name or set.name) ~ ' (' ~ set.code ~ ')'}) %}
@@ -18,14 +18,14 @@
             'hx-target': '#booster-select',
             'hx-trigger': 'change'
         } %}
-        {{ select_field('pack_code', t.label_target_series or 'Target Series', series_options, config.pack_code if config else '', element_id='pack-code-select', attrs=series_attrs, t=t) }}
+        {{ select_field('set_code', t.label_target_series or 'Target Series', series_options, selected_set_code, element_id='set-code-select', attrs=series_attrs, t=t) }}
 
         <!-- Target Booster (Booster Name) -->
         {% set booster_options = [{'value': '', 'label': t.label_select_booster or '-- Select Booster --'}] %}
         {% for booster in current_boosters %}
         {% set _ = booster_options.append({'value': booster.name, 'label': booster.display_name or booster.name}) %}
         {% endfor %}
-        {{ select_field('booster_name', t.label_target_booster or 'Target Booster', booster_options, config.booster_name if config else '', element_id='booster-select', t=t) }}
+        {{ select_field('booster_name', t.label_target_booster or 'Target Booster', booster_options, selected_booster_name, element_id='booster-select', t=t) }}
 
         <div class="text-xs text-muted">
             {{ t.desc_pack_config or '选择该账号优先开启的目标卡牌系列和具体子包。' }}<br>

@@ -136,8 +136,7 @@ class OpenPackTask(PackOpeningTaskBase):
         self._skipped = False  # 任务跳过标志
         self._fail_reason: Optional[str] = None  # 失败原因
 
-        # 目标卡包配置
-        # pack_code 字段实际为系列代码（set_code），此处保持历史字段名
+        # 目标卡包配置：set_code 表示系列代码，booster_name 表示子包名
         self._target_pack: dict[str, str] | None = None
 
         # 数据仓储（基类已初始化，此处仅用于类型提示）
@@ -214,22 +213,22 @@ class OpenPackTask(PackOpeningTaskBase):
                 return
 
             self._target_pack = {
-                "pack_code": selected["pack_code"],
+                "set_code": selected["set_code"],
                 "booster_name": selected["booster_name"],
             }
             logger.info(
                 "自动选择卡包: %s/%s (策略=%s, 候选=%s)",
-                selected["pack_code"],
+                selected["set_code"],
                 selected["booster_name"],
                 selected.get("strategy"),
                 selected.get("candidate_count"),
             )
         else:
             self._target_pack = {
-                "pack_code": config.pack_code,
+                "set_code": config.set_code,
                 "booster_name": config.booster_name,
             }
-            logger.info(f"目标卡包: {config.pack_code}/{config.booster_name}")
+            logger.info(f"目标卡包: {config.set_code}/{config.booster_name}")
 
         # 准备图片资源
         if self.should_prepare_pack_resources():
@@ -244,7 +243,7 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def _prepare_image_resources(self) -> bool:
         """准备图片资源（失败将直接结束任务）"""
-        set_code = self._target_pack.get("pack_code") if self._target_pack else None
+        set_code = self._target_pack.get("set_code") if self._target_pack else None
         booster_name = (
             self._target_pack.get("booster_name") if self._target_pack else None
         )
@@ -500,15 +499,22 @@ class OpenPackTask(PackOpeningTaskBase):
         try:
             import re
 
+            # set_code 表示系列代码，缺失时不允许写入 Unknown
+            set_code = self._target_pack.get("set_code")
+            if not set_code:
+                logger.warning("  -> 提取开包点数失败: 目标卡包缺少 set_code")
+                return
+
             for item in ocr_results:
                 text = item.get("text", "")
                 match = re.search(r"([\d,]+)\s*pt", text, re.IGNORECASE)
                 if match:
                     points_str = match.group(1).replace(",", "")
                     points = int(points_str)
-                    series = self._target_pack.get("set_code", "Unknown")
-                    self._pack_point_repo.upsert_points(self.account.id, series, points)
-                    logger.debug(f"  -> 更新开包点数: {series} = {points}pt")
+                    self._pack_point_repo.upsert_points(
+                        self.account.id, set_code, points
+                    )
+                    logger.debug(f"  -> 更新开包点数: {set_code} = {points}pt")
                     break
         except Exception as e:
             logger.warning(f"  -> 提取开包点数失败: {e}")
@@ -593,7 +599,7 @@ class OpenPackTask(PackOpeningTaskBase):
         """根据 set_code 获取目标系列（A/B）"""
         if not self._target_pack:
             return None
-        set_code = self._target_pack["pack_code"]
+        set_code = self._target_pack["set_code"]
         return set_code[0].upper() if set_code else None
 
     def _get_target_template_name(self) -> Optional[str]:

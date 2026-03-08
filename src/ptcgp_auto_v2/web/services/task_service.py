@@ -153,7 +153,7 @@ def build_tasks_list_context(
             target_pack_auto = False
             config = pack_configs_map.get(account.id)
             if config:
-                target_pack_label = f"{config.pack_code}/{config.booster_name}"
+                target_pack_label = f"{config.set_code}/{config.booster_name}"
 
             row_data["target_pack_label"] = target_pack_label
             row_data["target_pack_auto"] = target_pack_auto
@@ -290,7 +290,7 @@ def build_task_target_pack_context(task_instance_id: int) -> dict | None:
         config_repo = AccountPackConfigRepository()
         config = config_repo.get_by_account_and_type(instance.account_id, "daily")
         if config:
-            target_pack_label = f"{config.pack_code}/{config.booster_name}"
+            target_pack_label = f"{config.set_code}/{config.booster_name}"
         else:
             settings = get_settings()
             card_repo = CardRepository()
@@ -304,7 +304,7 @@ def build_task_target_pack_context(task_instance_id: int) -> dict | None:
             )
             if auto_pack:
                 target_pack_label = (
-                    f"{auto_pack['pack_code']}/{auto_pack['booster_name']}"
+                    f"{auto_pack['set_code']}/{auto_pack['booster_name']}"
                 )
                 target_pack_auto = True
 

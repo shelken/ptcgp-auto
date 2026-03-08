@@ -45,10 +45,10 @@ async def get_account_pack_config_modal(
 @router.get("/partials/boosters-options", response_class=HTMLResponse)
 async def get_boosters_options(
     request: Request,
-    pack_code: str = Query(...),
+    set_code: str = Query(...),
 ):
     """获取补充包选项 HTML。"""
-    boosters = build_set_boosters_options(pack_code)
+    boosters = build_set_boosters_options(set_code)
     return render_template(
         request, "partials/options_boosters.html", {"boosters": boosters}
     )
@@ -62,10 +62,10 @@ async def save_account_pack_config_api(
 ):
     """保存账号补充包配置。"""
     form = await request.form()
-    pack_code = safe_get_string(form, "pack_code") or ""
+    set_code = safe_get_string(form, "set_code") or ""
     booster_name = safe_get_string(form, "booster_name") or ""
 
-    build_save_account_pack_config(account_id, pack_code, booster_name)
+    build_save_account_pack_config(account_id, set_code, booster_name)
 
     context = build_accounts_list_context(session=session)
     response = render_template(request, "partials/account_list.html", context)
