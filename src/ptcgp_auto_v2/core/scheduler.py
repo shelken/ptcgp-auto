@@ -8,38 +8,38 @@
 import logging
 import threading
 import time
-from math import ceil
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Callable, Optional, TYPE_CHECKING
+from math import ceil
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
     ExecutorConfig,
-    run_executor,
     run_account_batch_executor,
+    run_executor,
 )
-from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
-from ptcgp_auto_v2.core.task_status import TaskStatus
+from ptcgp_auto_v2.core.task_base import ResetType, TaskRegistry
 from ptcgp_auto_v2.core.task_schedule import (
     get_effective_reset_type,
     should_reset_task,
 )
-from ptcgp_auto_v2.utils.device_discovery import discover_devices
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.utils.bluestacks_manager import (
+    find_bluestacks_instance_by_port,
     list_manageable_instances,
     start_bluestacks_instance,
     stop_bluestacks_instance,
-    find_bluestacks_instance_by_port,
 )
+from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import TaskInstance, Account
+    from ptcgp_auto_v2.db.models import Account, TaskInstance
     from ptcgp_auto_v2.db.repositories import (
-        TaskInstanceRepository,
         AccountRepository,
+        TaskInstanceRepository,
     )
 
 from ptcgp_auto_v2.core.account_creation import check_and_trigger_account_creation
@@ -120,8 +120,8 @@ class Scheduler:
     def _init_repositories(self):
         """初始化数据仓库"""
         from ptcgp_auto_v2.db.repositories import (
-            TaskInstanceRepository,
             AccountRepository,
+            TaskInstanceRepository,
         )
 
         self._task_instance_repo = TaskInstanceRepository()
@@ -163,10 +163,10 @@ class Scheduler:
             return False
 
         # 查找所有 init_account 类型的任务实例
-        from ptcgp_auto_v2.db.models import TaskInstance
-        from sqlmodel import select
+        from sqlmodel import Session, select
+
         from ptcgp_auto_v2.db.engine import get_engine
-        from sqlmodel import Session
+        from ptcgp_auto_v2.db.models import TaskInstance
 
         with Session(get_engine()) as session:
             statement = select(TaskInstance).where(
@@ -243,7 +243,7 @@ class Scheduler:
         pending_count = self._task_instance_repo.count_by_status(
             TaskStatus.PENDING.value
         )
-        logger.debug("当前 pending 任务数量: %s", pending_count)
+        logger.info("当前 pending 任务数量: %s", pending_count)
         return pending_count
 
     def _refresh_device_pool(self, addresses: Optional[list[str]] = None):
