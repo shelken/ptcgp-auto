@@ -28,8 +28,16 @@ def mock_get_engine_fixture(engine):
 
 def seed_account_cards(engine):
     with Session(engine) as session:
-        account1 = Account(game_id="g1", nickname="u1")
-        account2 = Account(game_id="g2", nickname="u2")
+        account1 = Account(
+            game_id="game-search-alpha",
+            friend_id="1000000000000001",
+            nickname="Alpha",
+        )
+        account2 = Account(
+            game_id="game-search-bravo",
+            friend_id="1000000000000002",
+            nickname="Bravo",
+        )
         session.add(account1)
         session.add(account2)
 
@@ -78,13 +86,13 @@ def seed_account_cards(engine):
 
 
 def test_list_owned_cards_with_account_filter(engine, mock_get_engine):
-    account1_id, _ = seed_account_cards(engine)
+    seed_account_cards(engine)
     repo = AccountCardRepository()
 
     items = repo.list_owned_cards(
         page=0,
         page_size=20,
-        account_id=account1_id,
+        account_query="game-search-alpha",
     )
 
     assert len(items) == 2
@@ -94,3 +102,28 @@ def test_list_owned_cards_with_account_filter(engine, mock_get_engine):
     }
     assert total_counts == {1: 2, 2: 1}
     assert account_counts == {1: 1, 2: 1}
+
+
+@pytest.mark.parametrize(
+    ("account_query", "expected_numbers"),
+    [
+        ("1", {1, 2}),
+        ("Alpha", {1, 2}),
+        ("1000000000000001", {1, 2}),
+        ("game-search-alpha", {1, 2}),
+    ],
+)
+def test_list_owned_cards_supports_account_search_fields(
+    engine, mock_get_engine, account_query, expected_numbers
+):
+    """拥有卡牌查询应支持账号 ID 之外的四字段搜索。"""
+    seed_account_cards(engine)
+    repo = AccountCardRepository()
+
+    items = repo.list_owned_cards(
+        page=0,
+        page_size=20,
+        account_query=account_query,
+    )
+
+    assert {item["card"].number for item in items} == expected_numbers
