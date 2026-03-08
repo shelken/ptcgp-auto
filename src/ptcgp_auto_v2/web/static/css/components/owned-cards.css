@@ -214,7 +214,7 @@
 .owned-card-modal-table-shell {
     min-height: 0;
     flex: 1;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .owned-card-modal-root {
