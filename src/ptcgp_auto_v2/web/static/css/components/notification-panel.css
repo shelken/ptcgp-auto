@@ -42,7 +42,7 @@
     min-width: 320px;
     background-color: var(--card-bg);
     border-left: var(--border-width) solid var(--border-color);
-    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--notification-drawer-shadow);
     transform: translateX(100%);
     transition: transform 250ms ease-out;
     display: flex;
@@ -150,7 +150,7 @@
 
 .notification-item:hover {
     background-color: var(--bg-subtle);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--notification-item-hover-shadow);
 }
 
 /* Enter 键激活时的视觉反馈 */
@@ -300,10 +300,6 @@
 [data-theme="retro"] .notification-drawer {
     background-color: var(--card-bg);
     border-left: var(--border-width) solid var(--border-color);
-}
-
-[data-theme="luxury"] .notification-drawer {
-    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.15);
 }
 
 [data-theme="organic"] .notification-drawer {

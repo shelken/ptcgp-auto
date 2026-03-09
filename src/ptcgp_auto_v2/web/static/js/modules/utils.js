@@ -19,7 +19,14 @@ export function showToast(message, duration = 2000) {
     }
 
     const toast = document.createElement('div');
-    toast.className = 'bg-black text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300';
+    toast.className = 'px-4 py-2 transition-opacity duration-300';
+    toast.style.backgroundColor = 'var(--toast-bg)';
+    toast.style.color = 'var(--toast-text)';
+    toast.style.border = 'var(--border-width) solid var(--toast-border)';
+    toast.style.borderRadius = 'var(--radius)';
+    toast.style.boxShadow = 'var(--toast-shadow)';
+    toast.style.fontFamily = 'var(--font-family)';
+    toast.style.fontWeight = '700';
     toast.textContent = message;
     toast.setAttribute('role', 'alert');
 

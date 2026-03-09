@@ -19,9 +19,11 @@
 /* Text Colors */
 .text-theme { color: var(--text-color) !important; }
 .text-muted {
-    color: var(--text-color) !important;
-    opacity: 0.6 !important;
+    color: var(--text-muted) !important;
+    opacity: 1 !important;
 }
+.text-accent { color: var(--accent-color) !important; }
+.text-danger { color: var(--danger-color) !important; }
 
 /* Status Colors */
 .status-success {
@@ -55,29 +57,13 @@
 
 /* Row Hover */
 .hover-row:hover {
-    background-color: rgba(0,0,0,0.05);
-}
-
-[data-theme="retro"] .hover-row:hover {
-    background-color: rgba(255,255,255,0.1);
-}
-
-[data-theme="luxury"] .hover-row:hover {
-    background-color: rgba(212, 175, 55, 0.1);
+    background-color: var(--row-hover-bg);
 }
 
 /* Sidebar Button Hover */
 .sidebar-btn:hover {
-    background-color: rgba(0,0,0,0.05);
-}
-
-[data-theme="retro"] .sidebar-btn:hover {
-    background-color: rgba(255,255,255,0.1);
-}
-
-[data-theme="luxury"] .sidebar-btn:hover {
-    background-color: rgba(212, 175, 55, 0.1);
-    color: var(--active-color);
+    background-color: var(--sidebar-hover-bg);
+    color: var(--sidebar-hover-text);
 }
 
 /* Language Link */

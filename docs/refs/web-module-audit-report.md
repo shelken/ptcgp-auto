@@ -286,6 +286,10 @@
 6. `M-10` 已处理：`resize` 事件补齐 throttle（全局绑定与 owned card modal 预热）。
 7. `L-04` 已处理：记录与拥有卡牌图片补充 `width/height`，降低 CLS。
 8. `L-05` 已处理：`MutationObserver` 从 `document.body subtree` 收敛到关键容器监听。
+9. `H-10` 已处理：为 `art_deco` 补齐 `row/sidebar/focus` 交互 token；并让 `buttons/inputs/custom-select/colors` 统一消费 token，移除暗色主题不可见的硬编码 `rgba(0,0,0,...)`。
+10. `H-11` 已处理：`card-preview.css` 去除 retro/luxury 选择器硬编码色，改为 `--card-preview-*` token（主题文件覆盖）。
+11. `M-12` 已处理：`edit_account_plans.html` 与 `plans.js` 的 `text-red-500` 改为 `text-danger`（映射 `--danger-color`）。
+12. `L-09` 已处理：Toast 由 `bg-black text-white` 改为 token 驱动（`--toast-*`）。
 
 实现约束备注：
 - 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。

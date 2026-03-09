@@ -73,9 +73,7 @@
     height: 100%;
     border-radius: 16px;
     overflow: hidden;
-    box-shadow:
-        0 25px 50px -12px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    box-shadow: var(--card-preview-front-shadow);
     transform: translateZ(0);
     background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
 }
@@ -119,7 +117,7 @@
     left: 10%;
     width: 80%;
     height: 40px;
-    background: radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, transparent 70%);
+    background: var(--card-preview-floor-gradient);
     transform: rotateX(90deg) translateZ(-280px);
     filter: blur(20px);
     pointer-events: none;
@@ -129,10 +127,10 @@
 .card-preview-info {
     text-align: center;
     color: var(--text-color);
-    background-color: var(--bg-surface);
+    background-color: var(--card-preview-info-bg);
     padding: 1rem 2rem;
     border-radius: var(--radius);
-    border: var(--border-width) solid var(--border-color);
+    border: var(--border-width) solid var(--card-preview-info-border);
     box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--shadow-color);
     max-width: 400px;
 }
@@ -169,19 +167,4 @@
     color: var(--text-color);
     text-align: center;
     margin-top: 0.5rem;
-}
-
-/* Theme Variants */
-[data-theme="retro"] .card-preview-info {
-    background-color: #000;
-    border-color: var(--text-color);
-}
-
-[data-theme="luxury"] .card-preview-info {
-    background-color: #1a1a1a;
-    border-color: var(--border-color);
-}
-
-[data-theme="luxury"] .card-preview-front {
-    box-shadow: 0 20px 60px rgba(212, 175, 55, 0.3);
 }

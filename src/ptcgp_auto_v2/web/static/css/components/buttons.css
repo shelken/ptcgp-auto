@@ -139,19 +139,11 @@
 }
 
 .sidebar-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--sidebar-hover-bg);
+  color: var(--sidebar-hover-text);
   border-color: transparent;
   box-shadow: none;
   filter: none;
-}
-
-[data-theme="retro"] .sidebar-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-[data-theme="luxury"] .sidebar-btn:hover {
-  background-color: rgba(212, 175, 55, 0.1);
-  color: var(--active-color);
 }
 
 /* Tab Button Specifics */

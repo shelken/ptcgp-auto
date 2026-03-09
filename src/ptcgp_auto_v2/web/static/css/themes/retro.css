@@ -38,4 +38,22 @@
   --btn-active-text: var(--bg-color);
   --btn-active-border: var(--active-color);
   --btn-focus-ring: var(--active-color);
+
+  --row-hover-bg: rgba(255, 255, 255, 0.1);
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.1);
+  --sidebar-hover-text: var(--active-color);
+  --focus-shadow: 0 0 8px var(--border-color);
+
+  --card-preview-info-bg: var(--btn-bg);
+  --card-preview-info-border: var(--text-color);
+  --card-preview-front-shadow: 0 25px 50px -12px rgba(0, 204, 255, 0.45), 0 0 0 1px rgba(255, 0, 255, 0.2) inset;
+  --card-preview-floor-gradient: radial-gradient(ellipse at center, rgba(0, 204, 255, 0.35) 0%, transparent 70%);
+
+  --notification-drawer-shadow: -4px 0 20px rgba(0, 204, 255, 0.25);
+  --notification-item-hover-shadow: 0 0 0 1px rgba(255, 0, 255, 0.25) inset;
+
+  --toast-bg: var(--btn-bg);
+  --toast-text: var(--text-color);
+  --toast-border: var(--border-color);
+  --toast-shadow: 3px 3px 0px var(--shadow-color);
 }

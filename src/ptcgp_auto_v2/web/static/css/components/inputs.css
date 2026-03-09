@@ -13,19 +13,11 @@
 }
 
 .brutal-input:focus {
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+  border-color: var(--btn-focus-ring);
+  box-shadow: var(--focus-shadow);
 }
 
 .brutal-input:focus-visible {
-  outline: 2px solid var(--border-color);
+  outline: 2px solid var(--btn-focus-ring);
   outline-offset: 2px;
-}
-
-[data-theme="retro"] .brutal-input:focus {
-  box-shadow: 0 0 8px var(--border-color);
-}
-
-[data-theme="luxury"] .brutal-input:focus {
-  border-color: var(--active-color);
-  box-shadow: 0 0 10px var(--shadow-color);
 }

@@ -31,6 +31,7 @@
   
   /* Text Variants */
   --text-muted: rgba(0, 0, 0, 0.6);
+  --danger-color: var(--accent-color);
   
   /* Tag Colors */
   --tag-bg: var(--border-color);
@@ -59,4 +60,26 @@
   --btn-active-border: var(--active-color);
   
   --btn-focus-ring: var(--active-color);
+
+  /* 交互态扩展 */
+  --row-hover-bg: var(--bg-subtle);
+  --sidebar-hover-bg: var(--btn-hover-bg);
+  --sidebar-hover-text: var(--text-color);
+  --focus-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+
+  /* 卡牌预览 */
+  --card-preview-info-bg: var(--bg-surface);
+  --card-preview-info-border: var(--border-color);
+  --card-preview-front-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  --card-preview-floor-gradient: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.4) 0%, transparent 70%);
+
+  /* 通知抽屉 */
+  --notification-drawer-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+  --notification-item-hover-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+  /* Toast */
+  --toast-bg: var(--bg-surface);
+  --toast-text: var(--text-color);
+  --toast-border: var(--border-color);
+  --toast-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--shadow-color);
 }

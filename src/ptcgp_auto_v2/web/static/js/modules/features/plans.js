@@ -123,7 +123,7 @@ export function addPlan() {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.dataset.action = 'remove-plan';
-    removeBtn.className = 'text-red-500 font-bold px-2 hover:bg-subtle rounded transition-colors';
+    removeBtn.className = 'text-danger font-bold px-2 hover:bg-subtle rounded transition-colors';
     removeBtn.textContent = '✕';
 
     item.appendChild(handle);
