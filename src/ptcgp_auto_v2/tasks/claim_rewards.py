@@ -309,7 +309,7 @@ class ClaimRewardsTask(Task):
         # 需要颜色检查的模式（全部領取的多语言版本）
         color_check_patterns = get_text_patterns("reward_claim_all")
 
-        wait = 0.8
+        wait = 1.2
         for pattern in claim_patterns:
             for item in ocr_results:
                 text = "".join(item["text"].lower().split())
