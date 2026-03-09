@@ -290,6 +290,8 @@
 10. `H-11` 已处理：`card-preview.css` 去除 retro/luxury 选择器硬编码色，改为 `--card-preview-*` token（主题文件覆盖）。
 11. `M-12` 已处理：`edit_account_plans.html` 与 `plans.js` 的 `text-red-500` 改为 `text-danger`（映射 `--danger-color`）。
 12. `L-09` 已处理：Toast 由 `bg-black text-white` 改为 token 驱动（`--toast-*`）。
+13. `H-12` 已处理：`friendship-table-wrap` 去掉固定 `980px` 最小宽；移动端允许单元格换行，桌面端保留关键列 `nowrap`。
+14. `M-13` 已处理：通知铃铛、通知关闭、筛选清除按钮、modal 关闭按钮、owned card 关闭按钮统一提升到 `>=44px` 触控尺寸。
 
 实现约束备注：
 - 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。
