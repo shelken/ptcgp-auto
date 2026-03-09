@@ -1,6 +1,7 @@
 {% from "partials/macros/modal.html" import modal_header, modal_footer %}
+{% from "partials/macros/account.html" import account_primary_text %}
 <div class="space-y-6">
-    {% set title = (t.title_manage_plans ~ ': ' ~ (account.nickname or account.game_id)) %}
+    {% set title = (t.title_manage_plans ~ ': ' ~ account_primary_text(account.id, account.nickname or account.game_id, account.game_id)) %}
     {{ modal_header(title, t) }}
 
     <div class="grid grid-cols-1 gap-6">

@@ -1,5 +1,6 @@
 {% from "partials/macros/data_table.html" import data_table_sort_button %}
 {% from "partials/macros/tables.html" import table_container, table_row %}
+{% from "partials/macros/account.html" import account_identity_block %}
 
 {% set next_order_account = 'desc' if (sort_by or 'id') == 'id' and (sort_order or 'asc') == 'asc' else 'asc' %}
 {% set account_sort_url = '/management/resources?lang=' ~ current_lang ~ '&view=pack-points&page=0&page_size=' ~ (page_size or 10) ~ '&q=' ~ ((q or '')|urlencode) ~ '&sort_by=id&sort_order=' ~ next_order_account %}
@@ -13,13 +14,10 @@
 {% call table_container(ns.headers, t, (t.empty_resource_pack_points or 'No pack point data') if not items else '') %}
     {% for item in items %}
         {% set account_cell %}
-            <div class="space-y-1 account-identity-cell">
-                <div class="font-bold text-base leading-tight">{{ item.nickname or '-' }}</div>
-                <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.account_id }}</div>
-                {% if item.friend_id %}
-                <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.friend_id }}</div>
-                {% endif %}
-            </div>
+            {{ account_identity_block(item.account_id, item.nickname) }}
+            {% if item.friend_id %}
+            <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.friend_id }}</div>
+            {% endif %}
         {% endset %}
         {% set ns = namespace(row_cells=[account_cell]) %}
         {% for series in series_list %}

@@ -1,5 +1,6 @@
 {% from "partials/macros/tables.html" import table_container, table_row, auto_refresh_container %}
 {% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager, data_table_sort_button %}
+{% from "partials/macros/account.html" import account_identity_block %}
 
 {% call auto_refresh_container("/management/accounts?lang=" ~ current_lang, '#account-table-filter-form', 'outerHTML', 'space-y-6') %}
 {% call data_table_card(t.title_accounts or 'ACCOUNTS', 'brutal-card p-6 table-page-card', 'regular') %}
@@ -50,10 +51,7 @@
     ], t) %}
         {% for item in items %}
             {% set nickname_cell %}
-                <div class="space-y-2 account-identity-cell">
-                    <div class="font-bold text-base leading-tight">{{ item.nickname or (item.display_name or '-') }}</div>
-                    <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.id }}</div>
-                </div>
+                {{ account_identity_block(item.id, item.nickname or item.display_name) }}
                 {% if item.friend_id %}
                 <div class="group relative text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ item.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
                     <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ item.friend_id[:4] }}-{{ item.friend_id[4:8] }}-{{ item.friend_id[8:12] }}-{{ item.friend_id[12:] }}</span>

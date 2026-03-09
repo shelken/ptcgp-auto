@@ -62,3 +62,5 @@ def test_account_list_renders_lazy_target_pack_placeholder_when_no_config() -> N
     assert "/management/accounts/1/target-pack?lang=zh_CN" in html
     assert 'hx-trigger="load"' in html
     assert "加载中" in html
+    assert "#1 Alpha" in html
+    assert "账号 ID: #1" not in html
