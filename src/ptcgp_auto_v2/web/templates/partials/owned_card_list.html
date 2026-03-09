@@ -13,8 +13,7 @@
         hx-target="#modal-content"
         hx-swap="innerHTML"
         data-card-id="{{ item.card.id }}"
-        data-lang="{{ current_lang }}"
-        title="{{ item.card_display_name or item.card.name }}">
+        data-lang="{{ current_lang }}">
         <div class="owned-card-media">
             <img
                 src="{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.png&w=400&output=png"
@@ -30,7 +29,7 @@
             </div>
         </div>
 
-        <div class="owned-card-count" title="{{ item.owned_accounts_count }} {{ t.owned_accounts_label }}">
+        <div class="owned-card-count tooltip-text" data-tooltip="{{ item.owned_accounts_count }} {{ t.owned_accounts_label }}">
             {{ item.owned_accounts_count }}
         </div>
 
