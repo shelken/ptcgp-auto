@@ -498,14 +498,14 @@
                             <button type="button" data-action="refresh-owned-cards" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
                                 {{ t.refresh }} ↻
                             </button>
-                            <button type="button" data-action="toggle-owned-counts" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_toggle }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
-                                {{ t.owned_counts_toggle }}
+                            <button type="button" data-action="toggle-owned-counts" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_hide }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
+                                {{ t.owned_counts_hide }}
                             </button>
                         </div>
                     </div>
 
                     <div id="owned-cards-container"
-                         class="space-y-6"
+                         class="space-y-6 show-counts"
                          aria-live="polite"
                          data-loaded="false"
                          data-url="/api/owned-cards?page=0&lang={{ current_lang }}"
