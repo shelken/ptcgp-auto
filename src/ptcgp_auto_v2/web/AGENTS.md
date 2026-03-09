@@ -138,6 +138,9 @@ src/ptcgp_auto_v2/web/
 - 页面任何文本显示必须做本地化处理
 - 在 `locales/` 目录下添加翻译键值对
 - 变更界面时需要同步更新 `locales/*.json` 的内容
+- 修改 `locales/*.json` 前，必须先检查重复 key 与重复 value；重复 value 语义完全一致且调用可统一时，必须合并并删除冗余 key。
+- 每次修改 `locales/*.json` 后，必须将 key 按字母排序（包含嵌套对象，如 `themes`）。
+- 禁止手工随意插入新 key 到任意位置；统一在排序后提交，确保 diff 稳定可审阅。
 
 ### 静态文件缓存
 
