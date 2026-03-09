@@ -295,6 +295,10 @@
 15. `L-08` 已处理：`utils.js` 移除无用 `window.*` 全局导出，统一通过 ES Module 显式导入调用。
 16. `L-10` 已处理：`metadata_list.html` 的 Step/Snapshot/Mode/Action/summary/result 等英文标签改为 i18n key，`en/zh_CN` 同步补齐。
 17. `L-11` 已处理：`index.html` 的 owned-card probe 模板去除中英硬编码，统一使用 i18n key。
+18. `M-03` 已处理：主 Tab 导航容器从 `div` 调整为 `nav`（保留 `role="tablist"`）。
+19. `M-04` 已处理：补充页面主标题 `<h1 class="sr-only">`，修复无主标题问题。
+20. `M-06` 已处理：表单宏必填星号增加屏幕阅读器文本（`label_required`）。
+21. `M-07` 已处理：`account_list` 与 `task_list` 搜索输入补充 `aria-label`。
 
 实现约束备注：
 - 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。

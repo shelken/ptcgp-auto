@@ -59,6 +59,7 @@
       data-msg-search-min-length="{{ t.msg_search_min_length or 'Search keyword must be at least 2 characters' }}">
 
     <header class="max-w-7xl mx-auto mb-8">
+        <h1 class="sr-only">{{ t.app_title }}</h1>
         <!-- Top Bar: Language & Theme -->
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div class="flex items-center gap-6 text-sm font-bold tracking-widest">
@@ -152,7 +153,7 @@
 
         <div class="flex flex-col lg:flex-row justify-end items-end brutal-separator pb-6 gap-8">
             <!-- Tab Navigation (Right Aligned) -->
-            <div class="flex gap-4 overflow-x-auto p-2" role="tablist" aria-label="{{ t.tab_navigation or 'Main navigation' }}">
+            <nav class="flex gap-4 overflow-x-auto p-2" role="tablist" aria-label="{{ t.tab_navigation or 'Main navigation' }}">
                 <button
                     type="button"
                     role="tab"
@@ -192,7 +193,7 @@
                     aria-controls="tab-content-management">
                     {{ t.tab_management or 'MANAGEMENT' }}
                 </button>
-            </div>
+            </nav>
         </div>
 
         <!-- Filters Section (Only visible in Records tab) -->

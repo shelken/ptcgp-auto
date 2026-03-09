@@ -143,6 +143,7 @@
   "label_dispatch_once_first": "一次性优先",
   "label_dispatch_time_order": "按时间",
   "label_cancel": "取消",
+  "label_required": "必填",
   "label_save": "保存",
   "label_save_changes": "保存更改",
   "btn_add": "添加",

@@ -143,6 +143,7 @@
     "label_dispatch_once_first": "Once First",
     "label_dispatch_time_order": "By Time",
     "label_cancel": "Cancel",
+    "label_required": "Required",
     "label_save": "Save",
     "label_save_changes": "Save Changes",
     "btn_add": "Add",

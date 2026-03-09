@@ -33,7 +33,7 @@
         } %}
         {% call(field, zone) data_table_toolbar_layout(toolbar_layout, 'normal') %}
             {% if field.key == 'q' %}
-                <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.search_accounts_placeholder or 'ID / Nickname / 朋友id / Game ID' }}">
+                <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.search_accounts_placeholder or 'ID / Nickname / 朋友id / Game ID' }}" aria-label="{{ t.label_search or 'Search' }}">
             {% elif field.key == 'refresh' %}
                 <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
             {% endif %}
