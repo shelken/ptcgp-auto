@@ -127,14 +127,3 @@ export function isElementInActiveTab(element) {
     if (!tabContent) return true;
     return !tabContent.classList.contains('hidden');
 }
-
-// 导出到全局（供内联 onclick 使用）
-if (typeof window !== 'undefined') {
-    window.showToast = showToast;
-    window.setButtonLoading = setButtonLoading;
-    window.saveFocus = saveFocus;
-    window.restoreFocus = restoreFocus;
-    window.throttle = throttle;
-    window.debounce = debounce;
-    window.isElementInActiveTab = isElementInActiveTab;
-}

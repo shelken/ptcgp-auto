@@ -292,6 +292,7 @@
 12. `L-09` 已处理：Toast 由 `bg-black text-white` 改为 token 驱动（`--toast-*`）。
 13. `H-12` 已处理：`friendship-table-wrap` 去掉固定 `980px` 最小宽；移动端允许单元格换行，桌面端保留关键列 `nowrap`。
 14. `M-13` 已处理：通知铃铛、通知关闭、筛选清除按钮、modal 关闭按钮、owned card 关闭按钮统一提升到 `>=44px` 触控尺寸。
+15. `L-08` 已处理：`utils.js` 移除无用 `window.*` 全局导出，统一通过 ES Module 显式导入调用。
 
 实现约束备注：
 - 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。
