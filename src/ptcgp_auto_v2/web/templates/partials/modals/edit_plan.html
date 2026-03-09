@@ -38,8 +38,8 @@
                      data-task-type="{{ task_type }}"
                      data-enabled="{{ 'true' if is_enabled else 'false' }}">
                     <!-- Drag Handle -->
-                    <div class="cursor-move text-muted hover:text-theme pt-1"
-                         title="{{ t.desc_drag_reorder or 'Drag to reorder' }}"
+                    <div class="cursor-move text-muted hover:text-theme pt-1 tooltip-text"
+                         data-tooltip="{{ t.desc_drag_reorder or 'Drag to reorder' }}"
                          aria-hidden="true">
                         ☰
                     </div>
