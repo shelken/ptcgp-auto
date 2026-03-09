@@ -263,6 +263,8 @@ def test_resource_stats_table_uses_relative_time_markup() -> None:
     assert "relative-time" in html
     assert 'data-iso="2026-03-07T12:34:56"' in html
     assert 'data-tooltip="更新时间：2026-03-07 12:34:56"' in html
+    assert "#1 Alpha" in html
+    assert "账号 ID: #1" not in html
     assert "创建时间" not in html
     assert "&lt;span" not in html
 
@@ -331,6 +333,7 @@ def test_resource_pack_points_table_renders_series_values_cells() -> None:
     assert ">120<" in html
     assert ">45<" in html
     assert ">-<" in html
+    assert "#1 Alpha" in html
 
 
 def test_resource_pack_points_table_defaults_first_series_click_to_desc() -> None:

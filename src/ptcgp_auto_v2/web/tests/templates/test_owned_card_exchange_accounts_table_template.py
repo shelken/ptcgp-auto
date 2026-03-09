@@ -60,8 +60,8 @@ def test_owned_card_exchange_accounts_table_renders_account_identity_and_disable
         sort_order="asc",
     )
 
-    assert "Alpha" in html
-    assert "账号 ID: #1" in html
+    assert "#1 Alpha" in html
+    assert "账号 ID: #1" not in html
     assert "1234-5678-9012-3456" in html
     assert 'data-action="copy-text"' in html
     assert "游戏 ID: game-alpha" in html
@@ -118,3 +118,4 @@ def test_owned_card_exchange_accounts_table_renders_enabled_button() -> None:
     assert 'data-action="show-exchange-form"' in html
     assert 'data-account-id="2"' in html
     assert ">-<" in html
+    assert "#2 Bravo" in html

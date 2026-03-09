@@ -2,6 +2,7 @@
 {% set image_sources = build_card_image_bases(current_lang) %}
 {% set image_base_url = image_sources.proxy_base_url %}
 {% set image_cdn_url = image_sources.cdn_base_url %}
+{% from "partials/macros/account.html" import account_primary_text %}
 
 {% for item in items %}
 <div class="brutal-card p-8 flex flex-col md:flex-row gap-8">
@@ -11,12 +12,10 @@
         <div>
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-4 h-4 rounded-full" style="background-color: var(--active-color); border: 2px solid var(--border-color); box-shadow: 2px 2px 0px var(--shadow-color);"></div>
-                <span class="font-bold text-xs tracking-[0.2em] uppercase">{{ t.account_id }} #{{ item.record.account_id }}</span>
+                <h2 class="text-3xl font-bold break-words leading-tight" title="{{ item.account_name }}">
+                    {{ account_primary_text(item.record.account_id, item.account_name) }}
+                </h2>
             </div>
-
-            <h2 class="text-3xl font-bold break-words leading-tight" title="{{ item.account_name }}">
-                {{ item.account_name }}
-            </h2>
 
             <div class="mt-6 font-mono text-sm brutal-border p-3 shadow-[4px_4px_0px_0px_var(--shadow-color)]" style="background-color: var(--bg-color); box-shadow: 4px 4px 0px var(--shadow-color);">
                 <div class="flex justify-between border-b pb-1 mb-1" style="border-color: var(--border-color);">

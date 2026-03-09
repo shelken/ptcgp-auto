@@ -1,0 +1,13 @@
+{% macro account_primary_text(account_id, account_name, fallback='-') -%}
+{{ '#' ~ account_id ~ ' ' ~ (account_name or fallback) }}
+{%- endmacro %}
+
+{% macro account_identity_block(account_id, account_name, fallback='-', wrapper_class='space-y-1 account-identity-cell', name_class='font-bold text-base leading-tight') -%}
+<div class="{{ wrapper_class }}">
+    <div class="{{ name_class }}">{{ account_primary_text(account_id, account_name, fallback) }}</div>
+</div>
+{%- endmacro %}
+
+{% macro account_option_label(account_id, account_name, fallback='-') -%}
+{{ account_primary_text(account_id, account_name, fallback) }}
+{%- endmacro %}

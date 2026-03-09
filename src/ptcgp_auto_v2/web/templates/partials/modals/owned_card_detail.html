@@ -7,15 +7,13 @@
     {# 左侧卡牌区域 #}
     <div class="w-full md:w-1/3 flex-shrink-0">
         <div class="brutal-card p-3">
-            <div class="text-xs text-muted font-mono mb-1">
-                {{ t.label_set_code }}: {{ card.set_code }}
-            </div>
             <div class="text-lg font-bold mb-2 break-words">
                 {{ card_display_name or card.name }}
             </div>
             <div class="flex flex-wrap gap-1 mb-3">
-                <span class="brutal-tag text-xs">{{ t.label_card_number }} #{{ card.number }}</span>
-                <span class="brutal-tag text-xs">{{ t.label_rarity }} {{ card.rarity|rarity_display(current_lang) }}</span>
+                <span class="brutal-tag text-xs">{{ card.set_code }}</span>
+                <span class="brutal-tag text-xs">#{{ card.number }}</span>
+                <span class="brutal-tag text-xs">{{ card.rarity|rarity_display(current_lang) }}</span>
                 {% if card.type %}
                 <span class="brutal-tag text-xs">{{ t['type_' + card.type] or card.type }}</span>
                 {% endif %}

@@ -1,5 +1,6 @@
 {% from "partials/macros/tables.html" import auto_refresh_container, table_container %}
 {% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
+{% from "partials/macros/account.html" import account_option_label, account_primary_text %}
 
 {% macro render_selected_cards(selected_ids, selected_rows, t) %}
 <div class="space-y-2">
@@ -107,7 +108,7 @@
         {% if field.key == 'scene' %}
         <select name="scene" class="brutal-input table-control js-custom-select"><option value="">{{ t.label_all_scenes or 'All Scenes' }}</option>{% for item in scene_options %}<option value="{{ item.value }}" {% if selected_scene == item.value %}selected{% endif %}>{{ item.label }}</option>{% endfor %}</select>
         {% elif field.key == 'account_id' %}
-        <select name="account_id" class="brutal-input table-control js-custom-select" data-searchable="true" data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"><option value="">{{ t.label_all_accounts or 'All Accounts' }}</option>{% for account in accounts %}{% set name = account_name_map.get(account.id, account.game_id) %}<option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %} data-search="{{ name }} #{{ account.id }}">#{{ account.id }} · {{ name }}</option>{% endfor %}</select>
+        <select name="account_id" class="brutal-input table-control js-custom-select" data-searchable="true" data-search-placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"><option value="">{{ t.label_all_accounts or 'All Accounts' }}</option>{% for account in accounts %}{% set name = account_name_map.get(account.id, account.game_id) %}{% set account_label = account_option_label(account.id, name, account.game_id) %}<option value="{{ account.id }}" {% if selected_account_id == account.id %}selected{% endif %} data-search="{{ account_label }}">{{ account_label }}</option>{% endfor %}</select>
         {% elif field.key == 'is_read' %}
         <select name="is_read" class="brutal-input table-control js-custom-select"><option value="">{{ t.label_all_status or 'All Status' }}</option><option value="false" {% if selected_is_read is sameas false %}selected{% endif %}>{{ t.label_unread or 'Unread' }}</option><option value="true" {% if selected_is_read is sameas true %}selected{% endif %}>{{ t.label_read or 'Read' }}</option></select>
         {% elif field.key == 'q' %}
@@ -134,7 +135,7 @@
             <td class="p-3">{% if n.is_read %}<span class="text-muted text-xs">{{ t.label_read or 'Read' }}</span>{% else %}<span class="brutal-tag status-badge status-chip status-tone-waiting">{{ t.label_unread or 'Unread' }}</span>{% endif %}</td>
             <td class="p-3 whitespace-nowrap"><span class="brutal-tag text-xs whitespace-nowrap">{% if n.scene == 'rare_card_obtained' %}{{ t.notification_scene_rare_card or '稀有卡牌' }}{% elif n.scene == 'task_status' %}{{ t.notification_scene_task_status or '任务状态' }}{% elif n.scene == 'system_warning' %}{{ t.notification_scene_system_warning or '系统警告' }}{% else %}{{ n.scene }}{% endif %}</span></td>
             <td class="p-3"><div class="font-bold">{{ n.title }}</div><div class="text-xs text-muted whitespace-pre-wrap mt-1">{{ n.content[:160] }}{% if n.content|length > 160 %}...{% endif %}</div></td>
-            <td class="p-3 whitespace-nowrap">{% if n.related_account_id %}<div>{{ account_name_map.get(n.related_account_id, t.unknown_account or 'Unknown') }}</div><div class="text-xs text-muted">#{{ n.related_account_id }}</div>{% else %}<span class="text-muted">-</span>{% endif %}</td>
+            <td class="p-3 whitespace-nowrap">{% if n.related_account_id %}<div>{{ account_primary_text(n.related_account_id, account_name_map.get(n.related_account_id, t.unknown_account or 'Unknown'), t.unknown_account or 'Unknown') }}</div>{% else %}<span class="text-muted">-</span>{% endif %}</td>
             <td class="p-3 whitespace-nowrap"><span class="tooltip-text relative-time" data-iso="{{ n.created_at.isoformat(timespec='seconds') }}" data-tooltip="{{ n.created_at|datetime }}">{{ n.created_at|datetime }}</span></td>
             <td class="p-3 text-right whitespace-nowrap">
                 <div class="inline-flex items-center gap-2">
