@@ -10,5 +10,5 @@
     </button>
     {% endfor %}
 {% elif query %}
-    <div class="px-3 py-2 text-xs text-muted">无匹配账号</div>
+    <div class="px-3 py-2 text-xs text-muted">{{ t.task_account_no_match or 'No matching accounts' }}</div>
 {% endif %}

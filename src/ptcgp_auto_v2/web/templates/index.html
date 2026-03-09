@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ current_lang }}">
+<html lang="{{ current_lang | replace('_', '-') }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,9 +24,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
 
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=6.15">
+    <link rel="stylesheet" href="/static/css/main.css?v=6.16">
 </head>
-<body class="min-h-screen p-4 md:p-8">
+<body class="min-h-screen p-4 md:p-8"
+      data-msg-search-min-length="{{ t.msg_search_min_length or 'Search keyword must be at least 2 characters' }}">
 
     <header class="max-w-7xl mx-auto mb-8">
         <!-- Top Bar: Language & Theme -->
@@ -46,8 +47,10 @@
                     type="button"
                     class="notification-bell-btn"
                     data-action="toggle-notification-panel"
-                    aria-label="{{ t.notification_center or '通知中心' }}">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    aria-label="{{ t.notification_center or '通知中心' }}"
+                    aria-expanded="false"
+                    aria-controls="notification-panel">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                     </svg>
@@ -120,38 +123,44 @@
 
         <div class="flex flex-col lg:flex-row justify-end items-end brutal-separator pb-6 gap-8">
             <!-- Tab Navigation (Right Aligned) -->
-            <div class="flex gap-4 overflow-x-auto p-2">
+            <div class="flex gap-4 overflow-x-auto p-2" role="tablist" aria-label="{{ t.tab_navigation or 'Main navigation' }}">
                 <button
                     type="button"
+                    role="tab"
                     data-action="switch-tab"
                     data-tab="records"
                     class="brutal-btn active text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-records"
                     data-hash="records"
                     data-title="{{ t.header_title }}"
-                    aria-label="{{ t.tab_records or 'RECORDS' }}">
+                    aria-selected="true"
+                    aria-controls="tab-content-records">
                     {{ t.tab_records or 'RECORDS' }}
                 </button>
                 <button
                     type="button"
+                    role="tab"
                     data-action="switch-tab"
                     data-tab="owned-cards"
                     class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-owned-cards"
                     data-hash="owned-cards"
                     data-title="{{ t.header_owned_cards or 'OWNED CARDS' }}"
-                    aria-label="{{ t.tab_owned_cards or 'OWNED CARDS' }}">
+                    aria-selected="false"
+                    aria-controls="tab-content-owned-cards">
                     {{ t.tab_owned_cards or 'OWNED CARDS' }}
                 </button>
                 <button
                     type="button"
+                    role="tab"
                     data-action="switch-tab"
                     data-tab="management"
                     class="brutal-btn text-lg px-4 md:px-6 py-2 tab-btn whitespace-nowrap"
                     id="tab-btn-management"
                     data-hash="management"
                     data-title="{{ t.tab_management or 'MANAGEMENT' }}"
-                    aria-label="{{ t.tab_management or 'MANAGEMENT' }}">
+                    aria-selected="false"
+                    aria-controls="tab-content-management">
                     {{ t.tab_management or 'MANAGEMENT' }}
                 </button>
             </div>
@@ -211,7 +220,7 @@
                         <div class="flex flex-wrap gap-2 lg:justify-end">
                             {% for r in rarities %}
                             <div>
-                                <input type="checkbox" id="rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden filter-checkbox"
+                                <input type="checkbox" id="rarity-{{ r }}" name="rarity" value="{{ r }}" class="sr-only filter-checkbox"
                                        hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
                                 <label for="rarity-{{ r }}" class="filter-label brutal-btn">{{ t['rarity_' + r] or r }}</label>
                             </div>
@@ -225,7 +234,7 @@
                         <div class="flex flex-wrap gap-2 lg:justify-end">
                             {% for type in card_types %}
                             <div>
-                                <input type="checkbox" id="type-{{ type }}" name="card_type" value="{{ type }}" class="hidden filter-checkbox"
+                                <input type="checkbox" id="type-{{ type }}" name="card_type" value="{{ type }}" class="sr-only filter-checkbox"
                                        hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
                                 <label for="type-{{ type }}" class="filter-label brutal-btn uppercase">{{ t['type_' + type] or type }}</label>
                             </div>
@@ -239,10 +248,11 @@
 
     <main class="max-w-7xl mx-auto relative">
         <!-- Records Tab Content -->
-        <div id="tab-content-records" class="tab-content block">
+        <div id="tab-content-records" class="tab-content block" role="tabpanel" aria-labelledby="tab-btn-records">
             <!-- Records Container -->
             <div id="records-container"
                  class="space-y-12"
+                 aria-live="polite"
                  data-loaded="false"
                  data-url="/api/records?page=0&lang={{ current_lang }}"
                  data-base-url="/api/records?page=0&lang={{ current_lang }}"
@@ -260,8 +270,8 @@
             </div>
 
             <!-- Loading Spinner -->
-            <div class="htmx-indicator w-full justify-center items-center py-12">
-                <div class="animate-spin w-12 h-12 border-4 border-theme border-t-transparent rounded-full"></div>
+            <div class="htmx-indicator w-full justify-center items-center py-12" role="status" aria-label="{{ t.loading_text }}">
+                <div class="animate-spin w-12 h-12 border-4 border-theme border-t-transparent rounded-full" aria-hidden="true"></div>
                 <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
             </div>
 
@@ -274,7 +284,7 @@
         </div>
 
         <!-- Owned Cards Tab Content -->
-        <div id="tab-content-owned-cards" class="tab-content hidden">
+        <div id="tab-content-owned-cards" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-owned-cards">
             <div class="flex flex-col lg:flex-row gap-8">
                 <aside class="w-full lg:w-64 flex-shrink-0">
                     <div class="brutal-card p-4">
@@ -323,7 +333,7 @@
                                     <div class="flex flex-wrap gap-2">
                                         {% for r in rarities %}
                                         <div>
-                                            <input type="checkbox" id="owned-rarity-{{ r }}" name="rarity" value="{{ r }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                            <input type="checkbox" id="owned-rarity-{{ r }}" name="rarity" value="{{ r }}" class="sr-only owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-rarity-{{ r }}" class="filter-label brutal-btn">{{ t['rarity_' + r] or r }}</label>
                                         </div>
@@ -345,7 +355,7 @@
                                     <div class="flex flex-wrap gap-2">
                                         {% for type in card_types %}
                                         <div>
-                                            <input type="checkbox" id="owned-type-{{ type }}" name="card_type" value="{{ type }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                            <input type="checkbox" id="owned-type-{{ type }}" name="card_type" value="{{ type }}" class="sr-only owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-type-{{ type }}" class="filter-label brutal-btn uppercase">{{ t['type_' + type] or type }}</label>
                                         </div>
@@ -367,7 +377,7 @@
                                     <div class="flex flex-wrap gap-2">
                                         {% for item in card_sets %}
                                         <div>
-                                            <input type="checkbox" id="owned-set-{{ item.code }}" name="set_code" value="{{ item.code }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                            <input type="checkbox" id="owned-set-{{ item.code }}" name="set_code" value="{{ item.code }}" class="sr-only owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-set-{{ item.code }}" class="filter-label brutal-btn">
                                                 {{ item.display_name or item.code }}
@@ -391,7 +401,7 @@
                                     <div class="flex flex-wrap gap-2">
                                         {% for item in packs %}
                                         <div>
-                                            <input type="checkbox" id="owned-pack-{{ item.name }}" name="pack_name" value="{{ item.name }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                            <input type="checkbox" id="owned-pack-{{ item.name }}" name="pack_name" value="{{ item.name }}" class="sr-only owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-pack-{{ item.name }}" class="filter-label brutal-btn">
                                                 {{ item.display_name or item.name }}
@@ -415,7 +425,7 @@
                                     <div class="flex flex-wrap gap-2">
                                         {% for el in elements %}
                                         <div>
-                                            <input type="checkbox" id="owned-element-{{ el }}" name="element" value="{{ el }}" class="hidden owned-filter-checkbox filter-checkbox"
+                                            <input type="checkbox" id="owned-element-{{ el }}" name="element" value="{{ el }}" class="sr-only owned-filter-checkbox filter-checkbox"
                                                    hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
                                             <label for="owned-element-{{ el }}" class="filter-label brutal-btn uppercase">{{ t['element_' + el] or el }}</label>
                                         </div>
@@ -466,6 +476,7 @@
 
                     <div id="owned-cards-container"
                          class="space-y-6"
+                         aria-live="polite"
                          data-loaded="false"
                          data-url="/api/owned-cards?page=0&lang={{ current_lang }}"
                          data-base-url="/api/owned-cards?page=0&lang={{ current_lang }}"
@@ -474,8 +485,8 @@
                          hx-swap="innerHTML">
                     </div>
 
-                    <div class="htmx-indicator w-full justify-center items-center py-12">
-                        <div class="animate-spin w-12 h-12 border-4 border-theme border-t-transparent rounded-full"></div>
+                    <div class="htmx-indicator w-full justify-center items-center py-12" role="status" aria-label="{{ t.loading_text }}">
+                        <div class="animate-spin w-12 h-12 border-4 border-theme border-t-transparent rounded-full" aria-hidden="true"></div>
                         <span class="ml-4 font-bold text-xl">{{ t.loading_text }}</span>
                     </div>
 
@@ -489,7 +500,7 @@
         </div>
 
         <!-- Management Tab Content -->
-        <div id="tab-content-management" class="tab-content hidden">
+        <div id="tab-content-management" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-management">
             <div class="flex flex-col md:flex-row gap-8">
                 <!-- Sidebar -->
                 <aside class="w-full md:w-64 flex-shrink-0">
@@ -619,6 +630,7 @@
                 <!-- Content Area -->
                 <div id="management-content"
                      class="flex-grow min-w-0"
+                     aria-live="polite"
                      data-relative-locale="{{ current_lang }}"
                      data-relative-just-now="{{ t.relative_just_now or 'Just now' }}"
                      data-relative-soon="{{ t.relative_soon or 'Soon' }}"
@@ -636,7 +648,7 @@
     </main>
 
     <!-- Modal Container -->
-    <div id="modal-container" class="fixed inset-0 bg-overlay z-50 hidden flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div id="modal-container" class="fixed inset-0 bg-overlay z-50 hidden flex items-center justify-center p-4" aria-hidden="true">
         <div id="modal-content" class="bg-surface p-6 brutal-border w-full max-w-4xl max-h-[90vh] overflow-y-auto relative"></div>
     </div>
 
@@ -735,6 +747,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=5.10"></script>
+    <script type="module" src="/static/js/main.js?v=5.11"></script>
 </body>
 </html>

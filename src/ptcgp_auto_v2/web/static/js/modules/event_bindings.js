@@ -214,7 +214,7 @@ function bindHtmxRequestEvents() {
             : (elt instanceof Element ? elt.closest('form') : null);
         if (shouldBlockSearchSubmit(requestForm)) {
             event.preventDefault();
-            showToast('搜索关键字至少 2 个字符');
+            showToast(document.body.dataset.msgSearchMinLength || 'Search keyword must be at least 2 characters');
             return;
         }
 
@@ -356,7 +356,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
 
         if (shouldBlockSearchSubmit(form)) {
             event.preventDefault();
-            showToast('搜索关键字至少 2 个字符');
+            showToast(document.body.dataset.msgSearchMinLength || 'Search keyword must be at least 2 characters');
             return;
         }
 

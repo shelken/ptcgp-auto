@@ -442,5 +442,22 @@
     "notification_center": "Notifications",
     "notification_panel_description": "Notification list, press Escape to close",
     "notification_close": "Close",
-    "notification_all_loaded": "All notifications loaded"
+    "notification_all_loaded": "All notifications loaded",
+    "filter_sort": "Sort",
+    "sort_last_completed": "Last Completed",
+    "sort_next_run": "Next Run",
+    "sort_order_newest": "Newest First",
+    "sort_order_oldest": "Oldest First",
+    "notification_set_search_placeholder": "Search sets",
+    "notification_pack_search_placeholder": "Search packs",
+    "filter_title": "Filters",
+    "tab_navigation": "Main navigation",
+    "search_accounts_placeholder": "ID / Nickname / Friend ID / Game ID",
+    "msg_copied": "Copied!",
+    "label_loading": "Loading",
+    "metadata_preview_detail": "Preview Detail JSON",
+    "metadata_execute_confirm_desc": "Changes will be applied based on the preview snapshot.",
+    "metadata_execute_confirm_btn": "Confirm Execute",
+    "msg_search_min_length": "Search keyword must be at least 2 characters",
+    "task_account_no_match": "No matching accounts"
 }

@@ -445,5 +445,15 @@
   "notification_center": "通知中心",
   "notification_panel_description": "通知列表，按 Escape 关闭",
   "notification_close": "关闭",
-  "notification_all_loaded": "已显示全部通知"
+  "notification_all_loaded": "已显示全部通知",
+  "filter_title": "筛选",
+  "tab_navigation": "主导航",
+  "search_accounts_placeholder": "ID / 昵称 / 朋友id / 游戏ID",
+  "msg_copied": "已复制！",
+  "label_loading": "加载中",
+  "metadata_preview_detail": "预览明细 JSON",
+  "metadata_execute_confirm_desc": "确认后将按预览快照执行同步。",
+  "metadata_execute_confirm_btn": "确认执行",
+  "msg_search_min_length": "搜索关键字至少 2 个字符",
+  "task_account_no_match": "无匹配账号"
 }

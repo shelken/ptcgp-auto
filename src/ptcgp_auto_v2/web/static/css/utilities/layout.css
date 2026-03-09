@@ -46,6 +46,19 @@
 .inline-flex { display: inline-flex; }
 .hidden { display: none; }
 
+/* 视觉隐藏但保留在无障碍树中 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
 /* Visibility */
 .visible { visibility: visible; }
 .invisible { visibility: hidden; }
