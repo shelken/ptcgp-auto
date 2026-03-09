@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$ROOT_DIR/src/ptcgp_auto_v2/web"
 WEB_PID=""
+STOPPING="0"
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "错误: 未找到 npm，请先安装 Node.js/npm。" >&2
@@ -21,8 +22,16 @@ npm --prefix "$WEB_DIR" run build:css
 TAILWIND_BIN="./node_modules/.bin/tailwindcss"
 
 cleanup() {
+  if [ "$STOPPING" = "1" ]; then
+    return
+  fi
+  STOPPING="1"
+  trap - EXIT INT TERM
+
   if [ -n "$WEB_PID" ]; then
-    kill "$WEB_PID" >/dev/null 2>&1 || true
+    pkill -TERM -P "$WEB_PID" >/dev/null 2>&1 || true
+    kill -TERM "$WEB_PID" >/dev/null 2>&1 || true
+    wait "$WEB_PID" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT INT TERM
