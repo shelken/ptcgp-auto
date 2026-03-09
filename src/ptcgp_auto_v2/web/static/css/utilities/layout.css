@@ -46,6 +46,19 @@
 .inline-flex { display: inline-flex; }
 .hidden { display: none; }
 
+/* 视觉隐藏但保留在无障碍树中 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
 /* Visibility */
 .visible { visibility: visible; }
 .invisible { visibility: hidden; }
@@ -72,7 +85,8 @@
 
 /* Friendship Table Wrap */
 .friendship-table-wrap table {
-    min-width: 980px;
+    width: 100%;
+    min-width: 100%;
 }
 
 .friendship-table-wrap th,
@@ -80,18 +94,52 @@
     vertical-align: middle;
 }
 
-.friendship-table-wrap th:last-child,
-.friendship-table-wrap td:last-child {
-    text-align: right;
-    white-space: nowrap;
+@media (max-width: 1023px) {
+    .friendship-table-wrap table {
+        table-layout: fixed;
+    }
+
+    .friendship-table-wrap th,
+    .friendship-table-wrap td {
+        padding: 0.5rem !important;
+        font-size: 0.75rem;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .friendship-table-wrap .whitespace-nowrap {
+        white-space: normal !important;
+    }
+
+    .friendship-table-wrap td:last-child {
+        text-align: left;
+    }
+
+    .friendship-table-wrap td:last-child .brutal-btn {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+    }
+
+    .friendship-table-wrap .status-chip {
+        white-space: normal;
+    }
 }
 
-.friendship-table-wrap td:nth-child(1),
-.friendship-table-wrap td:nth-child(4),
-.friendship-table-wrap td:nth-child(5),
-.friendship-table-wrap td:nth-child(6),
-.friendship-table-wrap td:nth-child(7) {
-    white-space: nowrap;
+@media (min-width: 1024px) {
+    .friendship-table-wrap th:last-child,
+    .friendship-table-wrap td:last-child {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .friendship-table-wrap td:nth-child(1),
+    .friendship-table-wrap td:nth-child(4),
+    .friendship-table-wrap td:nth-child(5),
+    .friendship-table-wrap td:nth-child(6),
+    .friendship-table-wrap td:nth-child(7) {
+        white-space: nowrap;
+    }
 }
 
 /* Account Resources */

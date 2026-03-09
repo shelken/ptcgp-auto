@@ -21,10 +21,12 @@
  * 初始化 DOMPurify hook
  * 为所有链接添加 target="_blank" 和 rel="noopener noreferrer"
  */
+let domPurifyHooksInitialized = false;
+
 function initDOMPurifyHooks() {
+    if (domPurifyHooksInitialized) return true;
     if (typeof DOMPurify === 'undefined') {
-        console.warn('DOMPurify not loaded');
-        return;
+        return false;
     }
     
     DOMPurify.addHook('afterSanitizeAttributes', (node) => {
@@ -34,6 +36,9 @@ function initDOMPurifyHooks() {
             node.setAttribute('rel', 'noopener noreferrer');
         }
     });
+
+    domPurifyHooksInitialized = true;
+    return true;
 }
 
 // 初始化 hooks（模块加载时立即执行）
@@ -71,6 +76,8 @@ const PURIFY_CONFIG = {
 function renderMarkdownSafely(markdown) {
     if (!markdown) return '';
     
+    initDOMPurifyHooks();
+
     // 检查依赖是否加载
     if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
         console.warn('marked or DOMPurify not loaded, returning plain text');

@@ -9,12 +9,23 @@ const STORAGE_KEY_THEME_MODE = 'ptcgp_theme_mode';
 const STORAGE_KEY_LAST_LIGHT = 'ptcgp_last_light_theme';
 const STORAGE_KEY_LAST_DARK = 'ptcgp_last_dark_theme';
 
-const LIGHT_THEMES = ['brutalist', 'organic', 'luxury', 'editorial', 'pastel'];
-const DARK_THEMES = ['retro', 'art_deco', 'playful'];
+const LIGHT_THEMES = ['brutalist', 'organic', 'playful', 'editorial', 'pastel'];
+const DARK_THEMES = ['retro', 'art_deco', 'luxury'];
 const DEFAULT_LIGHT_THEME = 'brutalist';
 const DEFAULT_DARK_THEME = 'retro';
 
 const MODE_CYCLE = ['auto', 'light', 'dark'];
+const THEME_FONT_LINK_PREFIX = 'theme-font-';
+
+// 主题字体按需加载映射：基础字体 Space Grotesk / Space Mono 已在 index.html 固定加载
+const THEME_FONT_STYLESHEET = {
+    organic: 'https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&display=swap',
+    luxury: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap',
+    playful: 'https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&display=swap',
+    editorial: 'https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;700&display=swap',
+    art_deco: 'https://fonts.googleapis.com/css2?family=Limelight&display=swap',
+    pastel: 'https://fonts.googleapis.com/css2?family=Quicksand:wght@400;700&display=swap',
+};
 
 // SVG 图标定义
 const SVG_ICONS = {
@@ -80,11 +91,33 @@ function resolveThemeByMode(mode) {
 }
 
 /**
+ * 按主题惰性注入字体样式，避免一次性加载全部主题字体。
+ */
+function ensureThemeFontStylesheet(theme) {
+    const href = THEME_FONT_STYLESHEET[theme];
+    if (!href) {
+        return;
+    }
+
+    const linkId = `${THEME_FONT_LINK_PREFIX}${theme}`;
+    if (document.getElementById(linkId)) {
+        return;
+    }
+
+    const link = document.createElement('link');
+    link.id = linkId;
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+}
+
+/**
  * 应用主题到DOM
  */
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem(STORAGE_KEY_THEME, theme);
+    ensureThemeFontStylesheet(theme);
     
     // 记忆该分组最后使用的主题
     const group = getThemeGroup(theme);

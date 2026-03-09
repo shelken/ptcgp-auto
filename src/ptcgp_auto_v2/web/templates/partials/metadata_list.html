@@ -46,15 +46,15 @@
 
         <div class="grid grid-cols-3 gap-3">
             <div class="border-2 p-3 {% if step == 1 %}border-theme bg-surface{% else %}border-subtle{% endif %}">
-                <div class="text-xs text-muted uppercase">Step 1</div>
+                <div class="text-xs text-muted uppercase">{{ t.metadata_step_badge_1 or 'Step 1' }}</div>
                 <div class="font-bold">{{ t.metadata_step_select_object or '选择对象' }}</div>
             </div>
             <div class="border-2 p-3 {% if step == 2 %}border-theme bg-surface{% else %}border-subtle{% endif %}">
-                <div class="text-xs text-muted uppercase">Step 2</div>
+                <div class="text-xs text-muted uppercase">{{ t.metadata_step_badge_2 or 'Step 2' }}</div>
                 <div class="font-bold">{{ t.metadata_step_preview_diff or '预览变更' }}</div>
             </div>
             <div class="border-2 p-3 {% if step == 3 %}border-theme bg-surface{% else %}border-subtle{% endif %}">
-                <div class="text-xs text-muted uppercase">Step 3</div>
+                <div class="text-xs text-muted uppercase">{{ t.metadata_step_badge_3 or 'Step 3' }}</div>
                 <div class="font-bold">{{ t.metadata_step_execute or '确认执行' }}</div>
             </div>
         </div>
@@ -209,15 +209,15 @@
         {% if preview_snapshot_id %}
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
             <div class="border-2 border-subtle p-3 bg-surface">
-                <div class="text-xs text-muted uppercase">Snapshot</div>
+                <div class="text-xs text-muted uppercase">{{ t.metadata_label_snapshot or 'Snapshot' }}</div>
                 <div class="font-mono text-sm break-all">{{ preview_snapshot_id }}</div>
             </div>
             <div class="border-2 border-subtle p-3 bg-surface">
-                <div class="text-xs text-muted uppercase">Mode</div>
+                <div class="text-xs text-muted uppercase">{{ t.metadata_label_mode or 'Mode' }}</div>
                 <div class="font-bold">{{ preview_payload.get('mode', '-') }}{% if preview_payload.get('mode') == 'force' %}（强制覆盖）{% elif preview_payload.get('mode') == 'supplement' %}（仅补充空缺）{% endif %}</div>
             </div>
             <div class="border-2 border-subtle p-3 bg-surface">
-                <div class="text-xs text-muted uppercase">Action</div>
+                <div class="text-xs text-muted uppercase">{{ t.metadata_label_action or 'Action' }}</div>
                 <div class="font-bold">
                     {% if preview_sync_kind == 'update_new_series' %}
                         {{ t.metadata_action_update_new_series or '更新新系列' }}
@@ -233,25 +233,25 @@
         {% if preview_sync_kind == 'update_chinese' %}
         <div class="font-bold text-sm mb-2">{{ t.metadata_chinese_update_summary_title or '中文更新摘要（仅中文字段）' }}</div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">sets zh</div><div class="font-bold">{{ preview_summary.get('localization_sets', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">packs zh</div><div class="font-bold">{{ preview_summary.get('localization_packs', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">cards zh</div><div class="font-bold">{{ preview_summary.get('localization_cards', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_metric_sets_zh or 'Sets ZH' }}</div><div class="font-bold">{{ preview_summary.get('localization_sets', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_metric_packs_zh or 'Packs ZH' }}</div><div class="font-bold">{{ preview_summary.get('localization_packs', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_metric_cards_zh or 'Cards ZH' }}</div><div class="font-bold">{{ preview_summary.get('localization_cards', 0) }}</div></div>
         </div>
         {% elif preview_sync_kind == 'update_new_series' %}
         <div class="font-bold text-sm mb-2">{{ t.metadata_data_update_summary_title or '数据更新摘要（不含中文字段）' }}</div>
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">new sets</div><div class="font-bold">{{ preview_summary.get('upsert_sets', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">source</div><div class="font-bold">{{ preview_payload.get('source', '-') }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_metric_new_sets or 'New Sets' }}</div><div class="font-bold">{{ preview_summary.get('upsert_sets', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_label_source or 'Source' }}</div><div class="font-bold">{{ preview_payload.get('source', '-') }}</div></div>
         </div>
         {% else %}
         <div class="font-bold text-sm mb-2">{{ t.metadata_data_update_summary_title or '数据更新摘要（不含中文字段）' }}</div>
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">sets</div><div class="font-bold">{{ preview_summary.get('upsert_sets', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">packs</div><div class="font-bold">{{ preview_summary.get('upsert_packs', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">cards</div><div class="font-bold">{{ preview_summary.get('card_updates', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">links +</div><div class="font-bold">{{ preview_summary.get('card_pack_links_to_add', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">links -</div><div class="font-bold">{{ preview_summary.get('card_pack_links_to_remove', 0) }}</div></div>
-            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">source</div><div class="font-bold">{{ preview_payload.get('source', '-') }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_col_sets or 'Sets' }}</div><div class="font-bold">{{ preview_summary.get('upsert_sets', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_col_packs or 'Packs' }}</div><div class="font-bold">{{ preview_summary.get('upsert_packs', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_col_cards or 'Cards' }}</div><div class="font-bold">{{ preview_summary.get('card_updates', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_metric_links_add or 'Links +' }}</div><div class="font-bold">{{ preview_summary.get('card_pack_links_to_add', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_metric_links_remove or 'Links -' }}</div><div class="font-bold">{{ preview_summary.get('card_pack_links_to_remove', 0) }}</div></div>
+            <div class="border-2 border-subtle p-3 bg-surface"><div class="text-xs text-muted uppercase">{{ t.metadata_label_source or 'Source' }}</div><div class="font-bold">{{ preview_payload.get('source', '-') }}</div></div>
         </div>
         {% endif %}
 
@@ -313,8 +313,8 @@
 
         {% if execute_result %}
         <div class="border-2 border-subtle p-3 bg-surface mb-4">
-            <div class="text-xs text-muted uppercase mb-1">Result</div>
-            <div class="font-mono text-sm break-all">snapshot: {{ execute_result.get('snapshot_id', '-') }}</div>
+            <div class="text-xs text-muted uppercase mb-1">{{ t.metadata_label_result or 'Result' }}</div>
+            <div class="font-mono text-sm break-all">{{ t.metadata_label_snapshot_id or 'Snapshot ID' }}: {{ execute_result.get('snapshot_id', '-') }}</div>
             <pre class="mt-2 text-xs overflow-auto">{{ sync_execute_result_json }}</pre>
         </div>
         {% else %}
@@ -353,24 +353,24 @@
         <div id="metadata-health-panel" class="contents">
         <div class="border-2 border-subtle p-4 bg-surface">
             <div class="text-xs font-bold uppercase tracking-widest text-muted mb-2">{{ t.metadata_source_local or '本地数据库' }}</div>
-            <div class="text-sm">sets: {{ local.get('sets', 0) }}</div>
-            <div class="text-sm">packs: {{ local.get('packs', 0) }}</div>
-            <div class="text-sm">cards: {{ local.get('cards', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_sets or 'Sets' }}: {{ local.get('sets', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_packs or 'Packs' }}: {{ local.get('packs', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_cards or 'Cards' }}: {{ local.get('cards', 0) }}</div>
         </div>
         <div class="border-2 border-subtle p-4 bg-surface">
             <div class="text-xs font-bold uppercase tracking-widest text-muted mb-2">flibustier</div>
-            <div class="text-sm">sets: {{ flib.get('sets', 0) }}</div>
-            <div class="text-sm">cards: {{ flib.get('cards', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_sets or 'Sets' }}: {{ flib.get('sets', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_cards or 'Cards' }}: {{ flib.get('cards', 0) }}</div>
         </div>
         <div class="border-2 border-subtle p-4 bg-surface">
             <div class="text-xs font-bold uppercase tracking-widest text-muted mb-2">52poke</div>
-            <div class="text-sm">series: {{ poke.get('series', 0) }}</div>
-            <div class="text-sm">packs: {{ poke.get('packs', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_metric_series or 'Series' }}: {{ poke.get('series', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_packs or 'Packs' }}: {{ poke.get('packs', 0) }}</div>
         </div>
         <div class="border-2 border-subtle p-4 bg-surface">
             <div class="text-xs font-bold uppercase tracking-widest text-muted mb-2">{{ t.metadata_diff_summary or '差异摘要' }}</div>
-            <div class="text-sm">sets: {{ local.get('sets', 0) }} -> {{ flib.get('sets', 0) }}</div>
-            <div class="text-sm">cards: {{ local.get('cards', 0) }} -> {{ flib.get('cards', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_sets or 'Sets' }}: {{ local.get('sets', 0) }} -> {{ flib.get('sets', 0) }}</div>
+            <div class="text-sm">{{ t.metadata_col_cards or 'Cards' }}: {{ local.get('cards', 0) }} -> {{ flib.get('cards', 0) }}</div>
         </div>
         </div>
     </div>

@@ -236,8 +236,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
+    width: 2.75rem;
+    height: 2.75rem;
     border: var(--border-width) solid var(--border-color);
     border-radius: var(--radius);
     background: var(--bg-surface);
