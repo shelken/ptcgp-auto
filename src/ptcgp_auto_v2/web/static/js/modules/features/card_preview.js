@@ -20,11 +20,13 @@ export const cardPreviewState = {
     currentY: 0,
     rotateX: 0,
     rotateY: 0,
-    targetElement: null
+    targetElement: null,
+    dragCleanup: null
 };
 
 // --- 绑定拖拽事件（通用）---
 function bindDragEvents(element, options = {}) {
+    if (!element) return null;
     const {
         maxRotateX = 30,
         maxRotateY = 30,
@@ -104,6 +106,26 @@ function bindDragEvents(element, options = {}) {
     element.addEventListener('touchstart', handleDragStart, { passive: false });
     document.addEventListener('touchmove', handleDragMove, { passive: false });
     document.addEventListener('touchend', handleDragEnd);
+    document.addEventListener('touchcancel', handleDragEnd);
+
+    return () => {
+        element.removeEventListener('mousedown', handleDragStart);
+        document.removeEventListener('mousemove', handleDragMove);
+        document.removeEventListener('mouseup', handleDragEnd);
+        element.removeEventListener('touchstart', handleDragStart);
+        document.removeEventListener('touchmove', handleDragMove);
+        document.removeEventListener('touchend', handleDragEnd);
+        document.removeEventListener('touchcancel', handleDragEnd);
+
+        if (dragState.targetElement === element) {
+            dragState.isDragging = false;
+            dragState.targetElement = null;
+            dragState.shineElement = null;
+            dragState.onDragEnd = null;
+            dragState.rotateX = 0;
+            dragState.rotateY = 0;
+        }
+    };
 }
 
 // --- 更新旋转角度 ---
@@ -143,15 +165,13 @@ export function initInlineCardDrag(elementId, shineSelector = null) {
 
     const shineElement = shineSelector ? element.querySelector(shineSelector) : null;
 
-    bindDragEvents(element, {
+    return bindDragEvents(element, {
         maxRotateX: 25,
         maxRotateY: 25,
         sensitivity: 0.35,
         shineElement: shineElement,
         autoReset: true
     });
-
-    return element;
 }
 
 // --- 全屏卡牌预览 ---
@@ -206,7 +226,12 @@ export function openCardPreview(cardElement) {
     const cardEl = document.getElementById('card-preview-card');
     const shineEl = document.getElementById('card-preview-shine');
 
-    bindDragEvents(cardEl, {
+    if (cardPreviewState.dragCleanup) {
+        cardPreviewState.dragCleanup();
+        cardPreviewState.dragCleanup = null;
+    }
+
+    cardPreviewState.dragCleanup = bindDragEvents(cardEl, {
         maxRotateX: 45,
         maxRotateY: 45,
         sensitivity: 0.5,
@@ -231,10 +256,17 @@ export function closeCardPreview(event) {
 
     overlay.classList.remove('active');
 
+    if (cardPreviewState.dragCleanup) {
+        cardPreviewState.dragCleanup();
+        cardPreviewState.dragCleanup = null;
+    }
+
     setTimeout(() => {
         overlay.remove();
         cardPreviewState.isOpen = false;
         cardPreviewState.targetElement = null;
+        cardPreviewState.rotateX = 0;
+        cardPreviewState.rotateY = 0;
         document.body.style.overflow = '';
     }, 300);
 }

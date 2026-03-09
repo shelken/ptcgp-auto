@@ -62,6 +62,10 @@ export function updateTaskOrder() {
 
 // --- 初始化拖拽排序 ---
 export function initSortable(context = document) {
+    if (typeof Sortable === 'undefined') {
+        return;
+    }
+
     const taskList = context.querySelector('#tasks-list');
     if (taskList && !taskList.dataset.sortableInit) {
         new Sortable(taskList, {

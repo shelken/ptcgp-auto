@@ -19,7 +19,14 @@ export function showToast(message, duration = 2000) {
     }
 
     const toast = document.createElement('div');
-    toast.className = 'bg-black text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300';
+    toast.className = 'px-4 py-2 transition-opacity duration-300';
+    toast.style.backgroundColor = 'var(--toast-bg)';
+    toast.style.color = 'var(--toast-text)';
+    toast.style.border = 'var(--border-width) solid var(--toast-border)';
+    toast.style.borderRadius = 'var(--radius)';
+    toast.style.boxShadow = 'var(--toast-shadow)';
+    toast.style.fontFamily = 'var(--font-family)';
+    toast.style.fontWeight = '700';
     toast.textContent = message;
     toast.setAttribute('role', 'alert');
 
@@ -119,15 +126,4 @@ export function isElementInActiveTab(element) {
     const tabContent = element.closest('.tab-content');
     if (!tabContent) return true;
     return !tabContent.classList.contains('hidden');
-}
-
-// 导出到全局（供内联 onclick 使用）
-if (typeof window !== 'undefined') {
-    window.showToast = showToast;
-    window.setButtonLoading = setButtonLoading;
-    window.saveFocus = saveFocus;
-    window.restoreFocus = restoreFocus;
-    window.throttle = throttle;
-    window.debounce = debounce;
-    window.isElementInActiveTab = isElementInActiveTab;
 }

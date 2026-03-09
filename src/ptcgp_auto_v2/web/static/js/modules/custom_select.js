@@ -58,6 +58,19 @@ export function reinitCustomSelect(selectElement) {
     initCustomSelects(originalParent);
 }
 
+// --- 生成唯一 ID ---
+let _csUidCounter = 0;
+function csUid(prefix) {
+    return `${prefix}-${++_csUidCounter}`;
+}
+
+// --- 关闭下拉并更新 ARIA 状态 ---
+function closeSelect(container, trigger) {
+    container.classList.remove('open');
+    container.classList.remove('open-up');
+    trigger.setAttribute('aria-expanded', 'false');
+}
+
 // --- 初始化自定义选择器 ---
 export function initCustomSelects(context = document) {
     const selects = context.querySelectorAll('select.js-custom-select:not(.custom-select-initialized)');
@@ -88,23 +101,54 @@ export function initCustomSelects(context = document) {
         select.parentNode.insertBefore(container, select);
         container.appendChild(select);
 
+        // --- ARIA: 生成唯一 ID ---
+        const listboxId = csUid('cs-listbox');
+        const labelText = select.getAttribute('aria-label')
+            || select.closest('[data-select-label]')?.dataset.selectLabel
+            || '';
+
+        // --- trigger: role=combobox ---
         const trigger = document.createElement('div');
         trigger.className = 'custom-select-trigger';
+        trigger.setAttribute('role', 'combobox');
+        trigger.setAttribute('tabindex', '0');
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-controls', listboxId);
+        if (labelText) {
+            trigger.setAttribute('aria-label', labelText);
+        }
         if (triggerClasses.length > 0) {
             trigger.classList.add(...triggerClasses);
         }
 
         const selectedOption = select.options[select.selectedIndex];
         const initialText = selectedOption ? selectedOption.text : 'Select...';
-        trigger.innerHTML = `<span>${initialText}</span><span class="custom-select-arrow">▼</span>`;
+        const textSpan = document.createElement('span');
+        textSpan.textContent = initialText;
+        const arrowSpan = document.createElement('span');
+        arrowSpan.className = 'custom-select-arrow';
+        arrowSpan.textContent = '▼';
+        arrowSpan.setAttribute('aria-hidden', 'true');
+        trigger.appendChild(textSpan);
+        trigger.appendChild(arrowSpan);
         container.appendChild(trigger);
 
+        // --- optionsList: role=listbox ---
         const optionsList = document.createElement('div');
         optionsList.className = 'custom-select-options';
+        optionsList.setAttribute('role', 'listbox');
+        optionsList.id = listboxId;
+        if (labelText) {
+            optionsList.setAttribute('aria-label', labelText);
+        }
 
         Array.from(select.options).forEach(option => {
             const optDiv = document.createElement('div');
             optDiv.className = 'custom-select-option';
+            optDiv.setAttribute('role', 'option');
+            optDiv.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+            optDiv.id = csUid('cs-opt');
             if (option.selected) optDiv.classList.add('selected');
             optDiv.textContent = option.text;
             optDiv.dataset.value = option.value;
@@ -118,11 +162,16 @@ export function initCustomSelects(context = document) {
                 select.dispatchEvent(new Event('change', { bubbles: true }));
 
                 trigger.querySelector('span').textContent = option.text;
-                container.querySelectorAll('.custom-select-option').forEach(el => el.classList.remove('selected'));
+                container.querySelectorAll('.custom-select-option').forEach(el => {
+                    el.classList.remove('selected');
+                    el.setAttribute('aria-selected', 'false');
+                });
                 optDiv.classList.add('selected');
+                optDiv.setAttribute('aria-selected', 'true');
+                trigger.setAttribute('aria-activedescendant', optDiv.id);
 
-                container.classList.remove('open');
-                container.classList.remove('open-up');
+                closeSelect(container, trigger);
+                trigger.focus();
             });
 
             optionsList.appendChild(optDiv);
@@ -136,6 +185,8 @@ export function initCustomSelects(context = document) {
             searchInput.type = 'text';
             searchInput.className = 'custom-select-search brutal-input text-xs w-full';
             searchInput.placeholder = placeholder;
+            searchInput.setAttribute('aria-label', placeholder);
+            searchInput.setAttribute('role', 'searchbox');
             searchInput.addEventListener('input', () => {
                 filterCustomSelectOptionsByElement(select, searchInput.value);
             });
@@ -163,6 +214,8 @@ export function initCustomSelects(context = document) {
             const focused = visible[bounded];
             focused.classList.add('focused');
             focused.scrollIntoView({ block: 'nearest' });
+            // 更新 aria-activedescendant 指向当前高亮项
+            trigger.setAttribute('aria-activedescendant', focused.id);
             return focused;
         };
 
@@ -173,16 +226,31 @@ export function initCustomSelects(context = document) {
 
             if (event.key === 'ArrowDown') {
                 event.preventDefault();
+                // 如果下拉未打开，先打开
+                if (!container.classList.contains('open')) {
+                    trigger.click();
+                    return;
+                }
                 updateFocusedOption(currentIndex < 0 ? 0 : currentIndex + 1);
             }
 
             if (event.key === 'ArrowUp') {
                 event.preventDefault();
+                if (!container.classList.contains('open')) {
+                    trigger.click();
+                    return;
+                }
                 updateFocusedOption(currentIndex < 0 ? 0 : currentIndex - 1);
             }
 
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' || event.key === ' ') {
+                // 空格键仅在非搜索输入时生效
+                if (event.key === ' ' && event.target.classList.contains('custom-select-search')) return;
                 event.preventDefault();
+                if (!container.classList.contains('open')) {
+                    trigger.click();
+                    return;
+                }
                 const focused = currentIndex >= 0 ? visible[currentIndex] : visible[0];
                 if (focused) {
                     focused.click();
@@ -191,8 +259,8 @@ export function initCustomSelects(context = document) {
 
             if (event.key === 'Escape') {
                 event.preventDefault();
-                container.classList.remove('open');
-                container.classList.remove('open-up');
+                closeSelect(container, trigger);
+                trigger.focus();
             }
         };
 
@@ -201,14 +269,15 @@ export function initCustomSelects(context = document) {
 
             document.querySelectorAll('.custom-select-container.open').forEach(el => {
                 if (el !== container) {
+                    const otherTrigger = el.querySelector('.custom-select-trigger');
+                    if (otherTrigger) otherTrigger.setAttribute('aria-expanded', 'false');
                     el.classList.remove('open');
                     el.classList.remove('open-up');
                 }
             });
 
             if (container.classList.contains('open')) {
-                container.classList.remove('open');
-                container.classList.remove('open-up');
+                closeSelect(container, trigger);
             } else {
                 const rect = container.getBoundingClientRect();
                 const viewportHeight = window.innerHeight;
@@ -222,6 +291,7 @@ export function initCustomSelects(context = document) {
                 }
 
                 container.classList.add('open');
+                trigger.setAttribute('aria-expanded', 'true');
                 if (select.dataset.searchable === 'true') {
                     const searchInput = container.querySelector('.custom-select-search');
                     if (searchInput) {
@@ -249,10 +319,13 @@ export function initCustomSelects(context = document) {
             if (newOption) {
                 trigger.querySelector('span').textContent = newOption.text;
                 container.querySelectorAll('.custom-select-option').forEach(el => {
-                    if (el.dataset.value === newOption.value) {
+                    const isSelected = el.dataset.value === newOption.value;
+                    if (isSelected) {
                         el.classList.add('selected');
+                        el.setAttribute('aria-selected', 'true');
                     } else {
                         el.classList.remove('selected');
+                        el.setAttribute('aria-selected', 'false');
                     }
                 });
             }
@@ -262,6 +335,8 @@ export function initCustomSelects(context = document) {
     if (!window.hasCustomSelectGlobalListener) {
         document.addEventListener('click', () => {
             document.querySelectorAll('.custom-select-container.open').forEach(el => {
+                const t = el.querySelector('.custom-select-trigger');
+                if (t) t.setAttribute('aria-expanded', 'false');
                 el.classList.remove('open');
                 el.classList.remove('open-up');
             });

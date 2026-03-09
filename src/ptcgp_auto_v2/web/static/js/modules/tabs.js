@@ -41,10 +41,14 @@ export function switchTab(tabName, options = {}) {
 
     currentTabName = tabName;
 
-    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('active');
+        el.setAttribute('aria-selected', 'false');
+    });
     const activeBtn = document.getElementById(`tab-btn-${tabName}`);
     if (activeBtn) {
         activeBtn.classList.add('active');
+        activeBtn.setAttribute('aria-selected', 'true');
 
         const newTitle = activeBtn.getAttribute('data-title');
         const titleEl = document.getElementById('main-title');

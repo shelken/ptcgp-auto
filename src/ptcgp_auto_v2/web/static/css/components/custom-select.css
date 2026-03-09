@@ -41,18 +41,10 @@
 }
 
 .custom-select-container.open .custom-select-trigger {
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--focus-shadow);
+  border-color: var(--btn-focus-ring);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-[data-theme="retro"] .custom-select-container.open .custom-select-trigger {
-  box-shadow: 0 0 8px var(--border-color);
-}
-
-[data-theme="luxury"] .custom-select-container.open .custom-select-trigger {
-  border-color: var(--active-color);
-  box-shadow: 0 0 10px var(--shadow-color);
 }
 
 .custom-select-arrow {
@@ -105,22 +97,8 @@
 .custom-select-option:hover,
 .custom-select-option.selected,
 .custom-select-option.focused {
-  background-color: var(--bg-subtle);
+  background-color: var(--row-hover-bg);
   color: var(--text-color);
-}
-
-[data-theme="retro"] .custom-select-option:hover,
-[data-theme="retro"] .custom-select-option.selected,
-[data-theme="retro"] .custom-select-option.focused {
-  background-color: rgba(0, 255, 157, 0.2);
-  color: var(--active-color);
-}
-
-[data-theme="luxury"] .custom-select-option:hover,
-[data-theme="luxury"] .custom-select-option.selected,
-[data-theme="luxury"] .custom-select-option.focused {
-  background-color: rgba(212, 175, 55, 0.15);
-  border-left: 2px solid var(--active-color);
 }
 
 .custom-select-option.selected {
