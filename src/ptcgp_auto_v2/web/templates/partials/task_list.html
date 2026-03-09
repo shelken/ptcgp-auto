@@ -1,5 +1,6 @@
 {% from "partials/macros/tables.html" import table_container, table_row, pagination, status_chip %}
 {% from "partials/macros/data_table.html" import data_table_card, data_table_pager_row, data_table_toolbar_layout %}
+{% from "partials/macros/account.html" import account_primary_text %}
 
 {% set table_headers = [
     t.col_account or 'Account',
@@ -16,8 +17,7 @@
 {% set rows_content %}
     {% for item in items %}
         {% set account_cell %}
-            <div>{{ item.account_name }}</div>
-            <div class="text-xs text-muted">#{{ item.account_id }}</div>
+            <div>{{ account_primary_text(item.account_id, item.account_name) }}</div>
         {% endset %}
         {% set task_cell %}
             <div class="whitespace-nowrap">{{ t['task_' + item.task_type] or item.task_type }}</div>

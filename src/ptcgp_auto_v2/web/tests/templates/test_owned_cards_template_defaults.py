@@ -32,3 +32,12 @@ def test_owned_card_detail_uses_compact_tag_layout():
     assert '{{ t.label_rarity }}' not in template
     assert '<span class="brutal-tag text-xs">#{{ card.number }}</span>' in template
     assert '<span class="brutal-tag text-xs">{{ card.rarity|rarity_display(current_lang) }}</span>' in template
+
+
+def test_owned_card_modal_probe_uses_same_compact_account_row():
+    """拥有卡牌弹窗 probe 的账号行应与真实表格保持同构，避免 page_size 算偏。"""
+    template = Path("src/ptcgp_auto_v2/web/templates/index.html").read_text(encoding="utf-8")
+
+    assert '<div class="space-y-1 account-identity-cell">' in template
+    assert '<div class="font-bold text-base leading-tight">#1 {{ t.probe_placeholder or \'PROBE\' }}</div>' in template
+    assert '{{ t.account_id or \'Account ID\' }}: #1' not in template

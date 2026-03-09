@@ -1,5 +1,6 @@
 {% from "partials/macros/tables.html" import table_container, auto_refresh_container, status_chip %}
 {% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
+{% from "partials/macros/account.html" import account_primary_text %}
 
 {% call auto_refresh_container("/management/daily-gift?lang=" ~ current_lang, '#daily-gift-state-form', 'outerHTML', 'space-y-6') %}
 <form id="daily-gift-state-form" class="hidden" hidden data-filter-cache-key="ptcgp_filter:daily-gift">
@@ -134,9 +135,8 @@
         {% for row in pair_send_status_rows %}
         <tr class="border-b border-subtle hover-bg-subtle transition-colors">
             <td class="p-3">
-                <div class="font-bold">{{ row.left_name }}</div>
-                <div class="text-xs text-muted">#{{ row.left_account_id }}</div>
-                <div class="text-xs text-muted">↔ {{ row.right_name }} · #{{ row.right_account_id }}</div>
+                <div class="font-bold">{{ account_primary_text(row.left_account_id, row.left_name) }}</div>
+                <div class="text-xs text-muted">↔ {{ account_primary_text(row.right_account_id, row.right_name) }}</div>
             </td>
             <td class="p-3">
                 {{ status_chip(row.left_to_right_status, t, key_prefix='gift_status_', reason=row.left_to_right_error or '') }}
@@ -164,13 +164,12 @@
         <tr class="border-b border-subtle hover-bg-subtle transition-colors">
             <td class="p-3">#{{ row.id }}</td>
             <td class="p-3">
-                <div>{{ row.account_name }}</div>
-                <div class="text-xs text-muted">#{{ row.account_id }}</div>
+                <div>{{ account_primary_text(row.account_id, row.account_name) }}</div>
             </td>
             <td class="p-3">
                 <div>{{ row.target_friend_id or '-' }}</div>
                 {% if row.target_account_id %}
-                    <div class="text-xs text-muted">{{ row.target_name }} · #{{ row.target_account_id }}</div>
+                    <div class="text-xs text-muted">{{ account_primary_text(row.target_account_id, row.target_name) }}</div>
                 {% endif %}
             </td>
             <td class="p-3">{{ row.card_label }}</td>
@@ -200,13 +199,11 @@
         {% for item in pair_cards %}
         <div class="border-2 border-subtle rounded-lg p-4 bg-subtle space-y-2">
             <div>
-                <div class="font-bold">{{ item.left_name }}</div>
-                <div class="text-xs text-muted">#{{ item.left_account_id }}</div>
+                <div class="font-bold">{{ account_primary_text(item.left_account_id, item.left_name) }}</div>
             </div>
             <div class="text-center text-xs uppercase tracking-widest text-muted">{{ t.label_pair_link or 'PAIRED WITH' }}</div>
             <div>
-                <div class="font-bold">{{ item.right_name }}</div>
-                <div class="text-xs text-muted">#{{ item.right_account_id }}</div>
+                <div class="font-bold">{{ account_primary_text(item.right_account_id, item.right_name) }}</div>
             </div>
             <div class="text-xs text-muted">{{ t.col_friend_id or '朋友id' }}: {{ item.left_friend_id }} <-> {{ item.right_friend_id }}</div>
         </div>
@@ -226,13 +223,12 @@
         {% for row in pair_anomalies %}
         <tr class="border-b border-subtle hover-bg-subtle transition-colors">
             <td class="p-3">
-                <div>{{ row.account_name }}</div>
-                <div class="text-xs text-muted">#{{ row.account_id }}</div>
+                <div>{{ account_primary_text(row.account_id, row.account_name) }}</div>
             </td>
             <td class="p-3">
                 <div>{{ row.account_friend_id }} -> {{ row.target_friend_id }}</div>
                 {% if row.target_account_id %}
-                    <div class="text-xs text-muted">{{ row.target_name }} · #{{ row.target_account_id }}</div>
+                    <div class="text-xs text-muted">{{ account_primary_text(row.target_account_id, row.target_name) }}</div>
                 {% endif %}
             </td>
             <td class="p-3">{{ t['gift_pair_reason_' + row.reason_code] or row.reason_code }}</td>
