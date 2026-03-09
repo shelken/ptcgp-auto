@@ -50,7 +50,7 @@
         {% for item in data_items %}
         <div {% if item.full_width %}class="col-span-2"{% endif %}>
             <span class="block text-muted font-bold uppercase text-xs">{{ item.label }}</span>
-            <span class="font-mono font-bold {% if item.truncate %}text-xs truncate{% endif %}" {% if item.title %}title="{{ item.title }}"{% endif %}>{{ item.value }}</span>
+            <span class="font-mono font-bold{% if item.truncate %} text-xs truncate{% endif %}{% if item.title %} tooltip-text{% endif %}" {% if item.title %}data-tooltip="{{ item.title }}"{% endif %}>{{ item.value }}</span>
         </div>
         {% endfor %}
     </div>

@@ -55,18 +55,14 @@
                     <td class="py-2 px-2 align-top">
                         {{ account_identity_block(item.account_id, item.nickname) }}
                         {% if item.friend_id %}
-                        <div class="group relative text-xs mt-1 inline-block cursor-pointer"
+                        <div class="tooltip-text text-xs mt-1 inline-block cursor-pointer"
                              data-action="copy-text"
                              data-copy-text="{{ item.friend_id }}"
-                             data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
+                             data-copy-toast="{{ t.msg_copied or 'Copied!' }}"
+                             data-tooltip="{{ (t.col_game_id or 'Game ID') ~ ': ' ~ item.game_id }}">
                             <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">
                                 {{ item.friend_id[:4] }}-{{ item.friend_id[4:8] }}-{{ item.friend_id[8:12] }}-{{ item.friend_id[12:] }}
                             </span>
-                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
-                                <div class="bg-card text-theme border-2 border-theme text-xs p-2 rounded shadow-lg">
-                                    {{ t.col_game_id or 'Game ID' }}: {{ item.game_id }}
-                                </div>
-                            </div>
                         </div>
                         {% else %}
                         <span class="text-xs text-muted mt-1">-</span>
