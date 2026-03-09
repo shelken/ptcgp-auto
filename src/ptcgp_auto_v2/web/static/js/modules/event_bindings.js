@@ -15,6 +15,7 @@ import { initDailyGiftDatePickers } from './features/daily_gift.js';
 import { buildAutoRefreshUrl } from './auto_refresh.js';
 import { updateRelativeTimes } from './relative_time.js';
 import { initExchangeCards } from './features/exchange_cards.js';
+import { initTooltipLayer } from './features/tooltips.js';
 import { handleActionClick } from './action_handlers.js';
 import { syncManagementSidebarRequestUrls } from './tabs.js';
 import {
@@ -479,6 +480,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     initExchangeCards(document);
     initPlans(document);
     initTasks(document);
+    initTooltipLayer();
     initOwnedCardModalPageSizeWarmup();
     syncPartialState(document);
 }
