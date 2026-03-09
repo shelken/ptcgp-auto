@@ -61,7 +61,7 @@
             </div>
 
             <div id="exchange-form-container" class="hidden mb-4 pt-3 border-t border-subtle">
-                <h5 class="text-sm font-bold uppercase tracking-widest mb-3">{{ t.exchange_entry_title or '交换卡牌' }}</h5>
+                <h5 class="text-sm font-bold uppercase tracking-widest mb-3">{{ t.exchange_entry_action or '交换卡牌' }}</h5>
                 <form
                     id="exchange-request-form"
                     hx-post="/api/exchange-cards/requests?lang={{ current_lang }}"

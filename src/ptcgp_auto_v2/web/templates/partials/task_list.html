@@ -217,6 +217,7 @@
                            value="{{ selected_account_query or '' }}"
                            class="brutal-input table-control"
                            placeholder="{{ t.filter_account_search_placeholder or 'Search account' }}"
+                           aria-label="{{ t.filter_account or 'Account' }}"
                            autocomplete="off"
                            data-action="search-task-accounts"
                            data-options-url="/api/tasks/account-options?lang={{ current_lang }}"

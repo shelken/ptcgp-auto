@@ -20,6 +20,8 @@
                 src="{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.png&w=400&output=png"
                 alt="{{ item.card_display_name or item.card.name }}"
                 class="owned-card-image"
+                width="400"
+                height="600"
                 loading="lazy"
                 decoding="async"
                 onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.webp&w=400&output=webp';}else{this.onerror=null;this.style.display='none';this.nextElementSibling.classList.remove('hidden');}">

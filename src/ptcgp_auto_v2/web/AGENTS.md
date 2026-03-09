@@ -62,7 +62,9 @@ src/ptcgp_auto_v2/web/
 │           └── edit_plan.html
 ├── static/                     # 静态资源
 │   ├── css/
-│   │   └── main.css           # 主样式文件（CSS 变量 + 工具类）
+│   │   ├── main.css           # CSS 模块入口（@import 列表，仅作为结构索引）
+│   │   ├── tailwind.input.css # Tailwind 输入文件
+│   │   └── tailwind.generated.css # Tailwind 预构建产物（替代 Play CDN）
 │   └── js/
 │       ├── main.js             # 主 JS 入口
 │       └── modules/            # ES6 模块
@@ -124,7 +126,10 @@ src/ptcgp_auto_v2/web/
   - `modules/features/filters/*`: 按 records/owned/tasks 分拆筛选逻辑，`shared_form.js` 负责通用序列化/回填
   - `modules/utils.js`: 工具函数（toast、throttle、debounce、元素可见性检测）
 - **CSS 架构**: CSS 变量驱动主题
-  - `main.css` 定义主题变量和工具类
+  - `main.css` 仅维护模块导入顺序（索引用途）
+  - 页面在 `index.html` 直接按顺序加载各模块 CSS（不使用 bundle 产物）
+  - `tailwind.generated.css` 为 Tailwind 预构建结果（不再使用 Play CDN，生成文件不入库）
+  - 本地开发统一使用 `./scripts/web_dev.sh`，脚本会自动构建并 watch Tailwind
   - 支持多主题（Retro、Luxury、Organic 等）
 
 ## 开发规范
@@ -134,10 +139,13 @@ src/ptcgp_auto_v2/web/
 - 页面任何文本显示必须做本地化处理
 - 在 `locales/` 目录下添加翻译键值对
 - 变更界面时需要同步更新 `locales/*.json` 的内容
+- 修改 `locales/*.json` 前，必须先检查重复 key 与重复 value；重复 value 语义完全一致且调用可统一时，必须合并并删除冗余 key。
+- 每次修改 `locales/*.json` 后，必须将 key 按字母排序（包含嵌套对象，如 `themes`）。
+- 禁止手工随意插入新 key 到任意位置；统一在排序后提交，确保 diff 稳定可审阅。
 
 ### 静态文件缓存
 
-- 修改 `static/css/main.css` 或 `static/js/main.js` 后
+- 修改 `static/css/*` 或 `static/js/main.js` 后
 - 必须同步更新 `templates/index.html` 中的版本号参数（如 `?v=2.3` → `?v=2.4`）
 - 强制浏览器加载最新文件而非缓存版本
 

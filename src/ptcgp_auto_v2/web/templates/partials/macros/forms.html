@@ -5,7 +5,10 @@
 <div class="space-y-2">
     <label for="{{ element_id or name }}" class="block font-bold uppercase tracking-widest text-sm text-muted">
         {{ label }}
-        {% if required %}<span class="text-accent">*</span>{% endif %}
+        {% if required %}
+            <span class="text-accent" aria-hidden="true">*</span>
+            <span class="sr-only">{{ t.label_required or 'Required' }}</span>
+        {% endif %}
     </label>
     <input type="{{ type }}" 
            id="{{ element_id or name }}" 

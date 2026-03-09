@@ -1,5 +1,8 @@
+import { throttle } from '../utils.js';
+
 const STORAGE_KEY_OWNED_COLS = 'ptcgp_owned_cols';
 const STORAGE_KEY_OWNED_MODAL_PAGE_SIZE = 'ptcgp_owned_modal_page_size';
+const OWNED_MODAL_PAGE_SIZE_RESIZE_THROTTLE_MS = 150;
 let ownedCardModalProbeHost = null;
 let ownedCardModalPageSize = null;
 let ownedCardModalPageSizeStable = false;
@@ -8,6 +11,7 @@ let ownedCardModalPageSizeStableCount = 0;
 let ownedCardModalPageSizeTimer = null;
 let pendingOwnedCardModalButton = null;
 let replayingOwnedCardModalClick = false;
+const throttledOwnedCardModalWarmup = throttle(scheduleOwnedCardModalPageSizeWarmup, OWNED_MODAL_PAGE_SIZE_RESIZE_THROTTLE_MS);
 
 function restoreOwnedCardModalPageSize() {
     const rawValue = window.localStorage.getItem(STORAGE_KEY_OWNED_MODAL_PAGE_SIZE);
@@ -190,7 +194,7 @@ export function initOwnedCardModalPageSizeWarmup() {
     ownedCardModalPageSize = restoreOwnedCardModalPageSize();
     document.addEventListener('click', handleOwnedCardModalClick, true);
     window.addEventListener('load', scheduleOwnedCardModalPageSizeWarmup);
-    window.addEventListener('resize', scheduleOwnedCardModalPageSizeWarmup);
+    window.addEventListener('resize', throttledOwnedCardModalWarmup);
     window.setTimeout(scheduleOwnedCardModalPageSizeWarmup, 0);
     window.setTimeout(scheduleOwnedCardModalPageSizeWarmup, 300);
 }

@@ -1,5 +1,5 @@
 import { getModal } from './modal.js';
-import { isElementInActiveTab, setButtonLoading, showToast } from './utils.js';
+import { isElementInActiveTab, setButtonLoading, showToast, throttle } from './utils.js';
 import { initCustomSelects } from './custom_select.js';
 import { initTaskRemoteAccountSearch } from './features/filters/tasks_remote_account.js';
 import {
@@ -24,6 +24,9 @@ import {
 } from './features/owned_cards.js';
 
 const htmxLoadingButtons = new WeakMap();
+const RESIZE_THROTTLE_MS = 150;
+const CUSTOM_SELECT_OBSERVER_ROOT_IDS = ['tab-content', 'modal-content', 'notification-panel-container', 'management-content'];
+let inlineCardDragCleanup = null;
 
 function hideGlobalLoader() {
     const loader = document.querySelector('.htmx-indicator');
@@ -176,6 +179,18 @@ function saveFilterCacheForElement(element) {
     syncManagementSidebarRequestUrls();
 }
 
+function observeCustomSelectRoots(observer) {
+    if (!(observer instanceof MutationObserver)) return;
+
+    CUSTOM_SELECT_OBSERVER_ROOT_IDS.forEach((rootId) => {
+        const root = document.getElementById(rootId);
+        if (!(root instanceof HTMLElement)) return;
+        if (root.dataset.customSelectObserved === 'true') return;
+        observer.observe(root, { childList: true, subtree: true });
+        root.dataset.customSelectObserved = 'true';
+    });
+}
+
 function bindMutationObserver() {
     if (window.customSelectObserver) return;
 
@@ -196,8 +211,8 @@ function bindMutationObserver() {
             });
         }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
     window.customSelectObserver = observer;
+    observeCustomSelectRoots(observer);
 }
 
 function bindHtmxRequestEvents() {
@@ -214,7 +229,7 @@ function bindHtmxRequestEvents() {
             : (elt instanceof Element ? elt.closest('form') : null);
         if (shouldBlockSearchSubmit(requestForm)) {
             event.preventDefault();
-            showToast('搜索关键字至少 2 个字符');
+            showToast(document.body.dataset.msgSearchMinLength || 'Search keyword must be at least 2 characters');
             return;
         }
 
@@ -281,6 +296,8 @@ function bindHtmxRequestEvents() {
 }
 
 export function bindAppEventHandlers(restoreRecordFilterPanelState) {
+    const throttledRestoreRecordFilterPanelState = throttle(restoreRecordFilterPanelState, RESIZE_THROTTLE_MS);
+
     document.body.addEventListener('click', handleActionClick);
 
     document.addEventListener('keydown', (e) => {
@@ -356,7 +373,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
 
         if (shouldBlockSearchSubmit(form)) {
             event.preventDefault();
-            showToast('搜索关键字至少 2 个字符');
+            showToast(document.body.dataset.msgSearchMinLength || 'Search keyword must be at least 2 characters');
             return;
         }
 
@@ -382,6 +399,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
             updateRelativeTimes(newContent);
             syncManagementSidebarRequestUrls();
             syncPartialState(newContent);
+            observeCustomSelectRoots(window.customSelectObserver);
         }
     });
 
@@ -391,7 +409,17 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         if (modalContent.querySelector('.sortable-list')) {
             initSortable(modalContent);
         }
-        initInlineCardDrag('modal-card-preview', '.owned-card-shine');
+        if (inlineCardDragCleanup) {
+            inlineCardDragCleanup();
+            inlineCardDragCleanup = null;
+        }
+        inlineCardDragCleanup = initInlineCardDrag('modal-card-preview', '.owned-card-shine');
+    });
+
+    document.addEventListener('modal:closed', () => {
+        if (!inlineCardDragCleanup) return;
+        inlineCardDragCleanup();
+        inlineCardDragCleanup = null;
     });
 
     const triggerAutoRefreshAll = () => {
@@ -410,7 +438,7 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
 
     document.addEventListener('visibilitychange', triggerAutoRefreshAll);
     window.addEventListener('focus', triggerAutoRefreshAll);
-    window.addEventListener('resize', restoreRecordFilterPanelState);
+    window.addEventListener('resize', throttledRestoreRecordFilterPanelState);
 
     bindHtmxRequestEvents();
 
