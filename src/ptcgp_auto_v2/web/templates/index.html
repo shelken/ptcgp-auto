@@ -5,26 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ t.app_title }}</title>
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts（仅加载基础字体，主题字体按需注入） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link id="core-fonts-stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
-    <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Custom CSS（模块化直接加载，不使用 bundle 产物） -->
+    <link rel="stylesheet" href="/static/css/base/tokens.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/base/reset.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/base/typography.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/base/motion.css?v=6.18">
 
-    <!-- Marked.js - Markdown 解析 -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="/static/css/themes/brutalist.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/retro.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/organic.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/luxury.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/playful.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/editorial.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/art_deco.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/themes/pastel.css?v=6.18">
 
-    <!-- DOMPurify - XSS 防护 -->
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.0/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="/static/css/components/buttons.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/inputs.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/cards.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/status-chip.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/tables.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/tooltips.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/custom-select.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/theme-popover.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/filters.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/daily-gift.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/owned-cards.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/record-grid.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/modal.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/card-preview.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/components/notification-panel.css?v=6.18">
 
-    <!-- SortableJS -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link rel="stylesheet" href="/static/css/utilities/colors.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/utilities/layout.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/utilities/states.css?v=6.18">
+    <link rel="stylesheet" href="/static/css/utilities/responsive.css?v=6.18">
 
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Bodoni+Moda:wght@400;700&family=Limelight&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS（预构建产物，替代 Play CDN 运行时生成） -->
+    <link rel="stylesheet" href="/static/css/tailwind.generated.css?v=1.2">
 
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/main.css?v=6.16">
+    <!-- 第三方库（defer，避免阻塞渲染） -->
+    <script defer src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.2.0/dist/purify.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 </head>
 <body class="min-h-screen p-4 md:p-8"
       data-msg-search-min-length="{{ t.msg_search_min_length or 'Search keyword must be at least 2 characters' }}">
@@ -92,11 +121,11 @@
                             <button type="button" class="theme-option" data-action="select-theme" data-theme-value="organic" data-group="light">
                                 {{ t.themes.organic }}
                             </button>
-                            <button type="button" class="theme-option" data-action="select-theme" data-theme-value="luxury" data-group="light">
-                                {{ t.themes.luxury }}
-                            </button>
                             <button type="button" class="theme-option" data-action="select-theme" data-theme-value="editorial" data-group="light">
                                 {{ t.themes.editorial }}
+                            </button>
+                            <button type="button" class="theme-option" data-action="select-theme" data-theme-value="playful" data-group="light">
+                                {{ t.themes.playful }}
                             </button>
                             <button type="button" class="theme-option" data-action="select-theme" data-theme-value="pastel" data-group="light">
                                 {{ t.themes.pastel }}
@@ -112,8 +141,8 @@
                             <button type="button" class="theme-option" data-action="select-theme" data-theme-value="art_deco" data-group="dark">
                                 {{ t.themes.art_deco }}
                             </button>
-                            <button type="button" class="theme-option" data-action="select-theme" data-theme-value="playful" data-group="dark">
-                                {{ t.themes.playful }}
+                            <button type="button" class="theme-option" data-action="select-theme" data-theme-value="luxury" data-group="dark">
+                                {{ t.themes.luxury }}
                             </button>
                         </div>
                     </div>
@@ -747,6 +776,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=5.11"></script>
+    <script type="module" src="/static/js/main.js?v=5.13"></script>
 </body>
 </html>

@@ -271,3 +271,21 @@
 | `/optimize` | ~8 | Tailwind CDN、CSS 合并、脚本 defer、内存泄漏、字体加载 |
 | `/normalize` | ~7 | 主题分类修正、暗色主题 hover 覆盖、硬编码色值清理 |
 | `/adapt` | ~3 | 表格移动端适配、触摸目标尺寸 |
+
+---
+
+## 本轮修复备注（2026-03-10）
+
+以下为本轮按报告执行后的落地说明（含实现取舍）：
+
+1. `C-02` 已处理：移除 Tailwind Play CDN，改为预构建 `tailwind.generated.css`。
+2. `H-06` 已处理：消除 `main.css` 的 `@import` 串行瀑布；**运行时改为在 `index.html` 直接按顺序加载模块 CSS**，不使用 `main.bundle.css`。
+3. `H-07` 已处理：HTMX/Marked/DOMPurify/Sortable 改为 `defer` 加载，避免阻塞渲染。
+4. `H-08` 已处理：`card_preview` 拖拽事件增加完整 cleanup，关闭预览与 modal 时释放 document 级监听。
+5. `M-09` 已处理：字体改为“基础字体首屏 + 主题字体按需加载”。
+6. `M-10` 已处理：`resize` 事件补齐 throttle（全局绑定与 owned card modal 预热）。
+7. `L-04` 已处理：记录与拥有卡牌图片补充 `width/height`，降低 CLS。
+8. `L-05` 已处理：`MutationObserver` 从 `document.body subtree` 收敛到关键容器监听。
+
+实现约束备注：
+- 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。
