@@ -53,13 +53,8 @@
             {% set nickname_cell %}
                 {{ account_identity_block(item.id, item.nickname or item.display_name) }}
                 {% if item.friend_id %}
-                <div class="group relative text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ item.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}">
+                <div class="tooltip-text text-xs mt-1 inline-block cursor-pointer" data-action="copy-text" data-copy-text="{{ item.friend_id }}" data-copy-toast="{{ t.msg_copied or 'Copied!' }}" data-tooltip="{{ (t.col_game_id or 'Game ID') ~ ': ' ~ item.game_id }}">
                     <span class="font-mono font-bold hover:opacity-50 transition-colors border-b border-dashed border-theme">{{ item.friend_id[:4] }}-{{ item.friend_id[4:8] }}-{{ item.friend_id[8:12] }}-{{ item.friend_id[12:] }}</span>
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10 w-max max-w-xs">
-                        <div class="bg-card text-theme border-2 border-theme text-xs p-2 rounded shadow-lg">
-                            {{ t.col_game_id or 'Game ID' }}: {{ item.game_id }}
-                        </div>
-                    </div>
                 </div>
                 {% else %}
                 <span class="text-xs text-muted mt-1">-</span>
@@ -71,7 +66,7 @@
                     {% for assoc in item.task_plan_associations|sort(attribute='priority', reverse=True) %}
                         {% if assoc.is_active and assoc.task_plan %}
                             {% set ns.found = true %}
-                            <span class="brutal-tag text-xs cursor-help" title="Priority: {{ assoc.priority }}">
+                            <span class="brutal-tag text-xs cursor-help tooltip-text" data-tooltip="Priority: {{ assoc.priority }}">
                                 {{ assoc.task_plan.name }}
                             </span>
                         {% endif %}
@@ -105,21 +100,21 @@
             {% endset %}
             {% set actions_cell %}
                 <div class="flex justify-end gap-2">
-                    <button class="brutal-btn text-xs p-2"
+                    <button class="brutal-btn text-xs p-2 tooltip-text"
                             hx-get="/management/accounts/{{ item.id }}/edit?lang={{ current_lang }}"
                             hx-target="#modal-content"
                             aria-label="{{ t.btn_edit_account_title or 'Edit Account' }}"
-                            title="{{ t.btn_edit_account_title or 'Edit Account' }}">
+                            data-tooltip="{{ t.btn_edit_account_title or 'Edit Account' }}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                         </svg>
                     </button>
-                    <button class="brutal-btn text-xs p-2"
+                    <button class="brutal-btn text-xs p-2 tooltip-text"
                             hx-get="/management/accounts/{{ item.id }}/pack-config?lang={{ current_lang }}"
                             hx-target="#modal-content"
                             aria-label="{{ t.btn_pack_config_title or 'Configure Target Pack' }}"
-                            title="{{ t.btn_pack_config_title or 'Configure Target Pack' }}">
+                            data-tooltip="{{ t.btn_pack_config_title or 'Configure Target Pack' }}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                             <line x1="3" y1="9" x2="21" y2="9"></line>

@@ -83,3 +83,59 @@
 .tooltip-text--left:hover::before {
   transform: translateY(-50%);
 }
+
+body.tooltip-layer-enabled .tooltip-tag::before,
+body.tooltip-layer-enabled .tooltip-tag::after,
+body.tooltip-layer-enabled .tooltip-text::before,
+body.tooltip-layer-enabled .tooltip-text::after {
+  display: none;
+}
+
+#app-tooltip-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  max-width: min(28rem, calc(100vw - 16px));
+  padding: 6px 10px;
+  background-color: var(--bg-surface);
+  color: var(--text-color);
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 8px 18px rgb(17 17 17 / 0.12), 2px 2px 0 var(--border-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  pointer-events: none;
+  isolation: isolate;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  z-index: 2147483647;
+}
+
+#app-tooltip-layer[data-visible="true"] {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+#app-tooltip-layer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: var(--border-color) transparent transparent transparent;
+}
+
+#app-tooltip-layer[data-placement="left"]::after {
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  border-color: transparent transparent transparent var(--border-color);
+}
