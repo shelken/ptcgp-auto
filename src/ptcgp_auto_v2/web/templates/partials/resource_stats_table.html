@@ -1,5 +1,6 @@
 {% from "partials/macros/data_table.html" import data_table_sort_button %}
 {% from "partials/macros/tables.html" import table_container, table_row %}
+{% from "partials/macros/account.html" import account_identity_block %}
 
 {% set next_order_account = 'desc' if (sort_by or 'id') == 'id' and (sort_order or 'asc') == 'asc' else 'asc' %}
 {% set next_order_exchange = 'asc' if sort_by == 'exchange_points' and (sort_order or 'asc') == 'desc' else 'desc' %}
@@ -18,13 +19,10 @@
 ], t, (t.empty_resource_stats or 'No resource data') if not items else '') %}
     {% for item in items %}
         {% set account_cell %}
-            <div class="space-y-1 account-identity-cell">
-                <div class="font-bold text-base leading-tight">{{ item.nickname or '-' }}</div>
-                <div class="text-xs text-muted">{{ t.col_account_id or 'Account ID' }}: #{{ item.account_id }}</div>
-                {% if item.friend_id %}
-                <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.friend_id }}</div>
-                {% endif %}
-            </div>
+            {{ account_identity_block(item.account_id, item.nickname) }}
+            {% if item.friend_id %}
+            <div class="text-xs text-muted">{{ t.col_friend_id or 'Friend ID' }}: {{ item.friend_id }}</div>
+            {% endif %}
         {% endset %}
         {% set updated_at_cell %}
             {% if item.updated_at %}

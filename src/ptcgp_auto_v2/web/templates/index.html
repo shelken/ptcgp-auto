@@ -498,14 +498,14 @@
                             <button type="button" data-action="refresh-owned-cards" class="brutal-btn text-xs tracking-widest uppercase" aria-label="{{ t.refresh }}">
                                 {{ t.refresh }} ↻
                             </button>
-                            <button type="button" data-action="toggle-owned-counts" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_toggle }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
-                                {{ t.owned_counts_toggle }}
+                            <button type="button" data-action="toggle-owned-counts" class="brutal-btn text-xs tracking-widest uppercase" id="owned-counts-toggle" aria-label="{{ t.owned_counts_hide }}" data-show-text="{{ t.owned_counts_toggle }}" data-hide-text="{{ t.owned_counts_hide }}">
+                                {{ t.owned_counts_hide }}
                             </button>
                         </div>
                     </div>
 
                     <div id="owned-cards-container"
-                         class="space-y-6"
+                         class="space-y-6 show-counts"
                          aria-live="polite"
                          data-loaded="false"
                          data-url="/api/owned-cards?page=0&lang={{ current_lang }}"
@@ -725,9 +725,8 @@
                                         <tbody>
                                             <tr class="border-b border-subtle-light">
                                                 <td class="py-2 px-2 align-top">
-                                                    <div class="space-y-2 account-identity-cell">
-                                                        <div class="font-bold text-base leading-tight">{{ t.probe_placeholder or 'PROBE' }}</div>
-                                                        <div class="text-xs text-muted">{{ t.account_id or 'Account ID' }}: #1</div>
+                                                    <div class="space-y-1 account-identity-cell">
+                                                        <div class="font-bold text-base leading-tight">#1 {{ t.probe_placeholder or 'PROBE' }}</div>
                                                     </div>
                                                     <div class="text-xs mt-1">0000-0000-0000-0000</div>
                                                 </td>

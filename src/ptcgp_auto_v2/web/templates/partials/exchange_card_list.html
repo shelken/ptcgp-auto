@@ -1,5 +1,6 @@
 {% from "partials/macros/tables.html" import table_container, auto_refresh_container, status_chip %}
 {% from "partials/macros/data_table.html" import data_table_card, data_table_toolbar_layout, data_table_pager %}
+{% from "partials/macros/account.html" import account_primary_text %}
 
 {% call auto_refresh_container("/management/exchange-cards?lang=" ~ current_lang, '#exchange-card-state-form', 'outerHTML', 'space-y-6') %}
 <form id="exchange-card-state-form" class="hidden" hidden data-filter-cache-key="ptcgp_filter:exchange-cards">
@@ -66,13 +67,12 @@
         <tr class="border-b border-subtle hover-bg-subtle transition-colors">
             <td class="p-3">#{{ row.id }}</td>
             <td class="p-3">
-                <div>{{ account_name_map.get(row.from_account_id, t.unknown_account or 'Unknown') }}</div>
-                <div class="text-xs text-muted">#{{ row.from_account_id }}</div>
+                <div>{{ account_primary_text(row.from_account_id, account_name_map.get(row.from_account_id, t.unknown_account or 'Unknown'), t.unknown_account or 'Unknown') }}</div>
             </td>
             <td class="p-3">
                 <div>{{ row.to_friend_id or '-' }}</div>
                 {% if row.to_account_id %}
-                    <div class="text-xs text-muted">{{ account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown') }} · #{{ row.to_account_id }}</div>
+                    <div class="text-xs text-muted">{{ account_primary_text(row.to_account_id, account_name_map.get(row.to_account_id, t.unknown_account or 'Unknown'), t.unknown_account or 'Unknown') }}</div>
                 {% endif %}
             </td>
             <td class="p-3">#{{ row.target_card_id }} · {{ row.target_card_rarity|rarity_display(current_lang) }}</td>

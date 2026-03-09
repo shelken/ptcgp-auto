@@ -90,6 +90,7 @@ def test_task_list_renders_lazy_target_pack_placeholder_for_open_pack() -> None:
     assert "/management/tasks/8/target-pack?lang=zh_CN" in html
     assert 'hx-trigger="load"' in html
     assert "加载中" in html
+    assert "#10 Alpha" in html
 
 
 def test_task_list_renders_remote_account_search_controls() -> None:

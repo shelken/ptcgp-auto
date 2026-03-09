@@ -1,6 +1,7 @@
+{% from "partials/macros/account.html" import account_option_label %}
 {% if accounts %}
     {% for account in accounts %}
-    {% set account_label = (account.nickname or account.display_name or ('#' ~ account.id)) ~ ' #' ~ account.id %}
+    {% set account_label = account_option_label(account.id, account.nickname or account.display_name) %}
     <button type="button"
             class="task-account-option w-full text-left px-3 py-2 hover-bg-subtle"
             data-action="select-task-account-option"
