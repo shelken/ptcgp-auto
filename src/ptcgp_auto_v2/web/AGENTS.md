@@ -128,7 +128,8 @@ src/ptcgp_auto_v2/web/
 - **CSS 架构**: CSS 变量驱动主题
   - `main.css` 仅维护模块导入顺序（索引用途）
   - 页面在 `index.html` 直接按顺序加载各模块 CSS（不使用 bundle 产物）
-  - `tailwind.generated.css` 为 Tailwind 预构建结果（不再使用 Play CDN）
+  - `tailwind.generated.css` 为 Tailwind 预构建结果（不再使用 Play CDN，生成文件不入库）
+  - 本地开发统一使用 `./scripts/web_dev.sh`，脚本会自动构建并 watch Tailwind
   - 支持多主题（Retro、Luxury、Organic 等）
 
 ## 开发规范
