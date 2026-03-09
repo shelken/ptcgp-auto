@@ -294,6 +294,7 @@
 14. `M-13` 已处理：通知铃铛、通知关闭、筛选清除按钮、modal 关闭按钮、owned card 关闭按钮统一提升到 `>=44px` 触控尺寸。
 15. `L-08` 已处理：`utils.js` 移除无用 `window.*` 全局导出，统一通过 ES Module 显式导入调用。
 16. `L-10` 已处理：`metadata_list.html` 的 Step/Snapshot/Mode/Action/summary/result 等英文标签改为 i18n key，`en/zh_CN` 同步补齐。
+17. `L-11` 已处理：`index.html` 的 owned-card probe 模板去除中英硬编码，统一使用 i18n key。
 
 实现约束备注：
 - 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。

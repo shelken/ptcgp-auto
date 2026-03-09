@@ -467,6 +467,7 @@
   "search_accounts_placeholder": "ID / 昵称 / 朋友id / 游戏ID",
   "msg_copied": "已复制！",
   "label_loading": "加载中",
+  "probe_placeholder": "占位",
   "metadata_preview_detail": "预览明细 JSON",
   "metadata_execute_confirm_desc": "确认后将按预览快照执行同步。",
   "metadata_execute_confirm_btn": "确认执行",
