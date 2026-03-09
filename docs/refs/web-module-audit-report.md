@@ -299,6 +299,7 @@
 19. `M-04` 已处理：补充页面主标题 `<h1 class="sr-only">`，修复无主标题问题。
 20. `M-06` 已处理：表单宏必填星号增加屏幕阅读器文本（`label_required`）。
 21. `M-07` 已处理：`account_list` 与 `task_list` 搜索输入补充 `aria-label`。
+22. `L-12` 已处理：`routers/metadata.py` 抽取统一表单解析函数，消除 4 个 POST 端点重复样板。
 
 实现约束备注：
 - 维护策略采用“源码直接加载”优先，不引入 `main.bundle.css` 这类需要手工同步的源码内生成物。
