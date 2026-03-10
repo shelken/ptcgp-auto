@@ -183,7 +183,7 @@ Scheduler (Loop)
 auto_scale_emulators = False
 auto_scale_instance_prefix = "auto-"
 auto_scale_min_idle_devices = 1
-auto_scale_max_devices = 2
+auto_scale_max_devices = 3
 auto_scale_pending_step = 10
 auto_scale_eval_interval_seconds = 60
 auto_scale_idle_seconds = 180

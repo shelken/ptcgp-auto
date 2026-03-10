@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 from ptcgp_auto_v2.config.settings import Settings
-from ptcgp_auto_v2.core.scheduler import Scheduler
+from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
 from ptcgp_auto_v2.core.task_base import ResetType
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import Account, TaskPlan, TaskInstance, AccountTaskPlan
@@ -107,10 +107,26 @@ def test_aggregation_logic(mock_scheduler):
 
 def test_settings_auto_scale_defaults():
     settings = Settings()
-    assert settings.auto_scale_emulators is False
+    assert settings.auto_scale_emulators is True
     assert settings.auto_scale_instance_prefix == "auto-"
     assert settings.auto_scale_min_idle_devices == 1
-    assert settings.auto_scale_max_devices == 2
+    assert settings.auto_scale_max_devices == 3
     assert settings.auto_scale_pending_step == 10
     assert settings.auto_scale_eval_interval_seconds == 60
-    assert settings.auto_scale_idle_seconds == 180
+    assert settings.auto_scale_idle_seconds == 60
+
+
+def test_scheduler_config_uses_settings_auto_scale_defaults():
+    settings = Settings()
+    config = Scheduler(device_addresses=[], config=SchedulerConfig()).config
+
+    assert config.auto_scale_emulators == settings.auto_scale_emulators
+    assert config.auto_scale_instance_prefix == settings.auto_scale_instance_prefix
+    assert config.auto_scale_min_idle_devices == settings.auto_scale_min_idle_devices
+    assert config.auto_scale_max_devices == settings.auto_scale_max_devices
+    assert config.auto_scale_pending_step == settings.auto_scale_pending_step
+    assert (
+        config.auto_scale_eval_interval_seconds
+        == settings.auto_scale_eval_interval_seconds
+    )
+    assert config.auto_scale_idle_seconds == settings.auto_scale_idle_seconds
