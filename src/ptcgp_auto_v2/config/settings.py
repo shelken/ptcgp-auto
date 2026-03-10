@@ -183,7 +183,7 @@ class Settings:
     auto_scale_emulators: bool = True
     auto_scale_instance_prefix: str = "auto-"
     auto_scale_min_idle_devices: int = 1
-    auto_scale_max_devices: int = 2
+    auto_scale_max_devices: int = 3
     auto_scale_pending_step: int = 10
     auto_scale_eval_interval_seconds: int = 60
     auto_scale_idle_seconds: int = 60
