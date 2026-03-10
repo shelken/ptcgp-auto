@@ -489,7 +489,8 @@ def run_single_task(
 
     scheduler = Scheduler(
         device_addresses=[device],
-        config=SchedulerConfig(
+        config=SchedulerConfig.from_settings(
+            settings,
             max_workers=1,
             executor_config=ExecutorConfig(
                 app_package=settings.app_package,
@@ -544,18 +545,12 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
 
     scheduler = Scheduler(
         device_addresses=settings.device_addresses,
-        config=SchedulerConfig(
+        config=SchedulerConfig.from_settings(
+            settings,
             poll_interval=settings.poll_interval,
             max_workers=settings.max_workers,
             task_generation_interval=settings.task_generation_interval,
             init_first=args.init_first,
-            auto_scale_emulators=settings.auto_scale_emulators,
-            auto_scale_instance_prefix=settings.auto_scale_instance_prefix,
-            auto_scale_min_idle_devices=settings.auto_scale_min_idle_devices,
-            auto_scale_max_devices=settings.auto_scale_max_devices,
-            auto_scale_pending_step=settings.auto_scale_pending_step,
-            auto_scale_eval_interval_seconds=settings.auto_scale_eval_interval_seconds,
-            auto_scale_idle_seconds=settings.auto_scale_idle_seconds,
             executor_config=ExecutorConfig(
                 max_retries=settings.max_retries,
                 retry_delay=settings.retry_delay,
