@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from math import ceil
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from ptcgp_auto_v2.config.settings import get_settings
+from ptcgp_auto_v2.config.settings import Settings, get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
     ExecutorConfig,
@@ -67,14 +67,39 @@ class SchedulerConfig:
     stale_task_check_interval: float = DEFAULT_STALE_CHECK_INTERVAL
     init_first: bool = False  # 是否优先执行 init_account 任务
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
-    # 自动扩缩容配置
-    auto_scale_emulators: bool = False
-    auto_scale_instance_prefix: str = "auto-"
-    auto_scale_min_idle_devices: int = 1
-    auto_scale_max_devices: int = 2
-    auto_scale_pending_step: int = 10
-    auto_scale_eval_interval_seconds: int = 60
-    auto_scale_idle_seconds: int = 180
+    # 自动扩缩容配置统一从 Settings 补齐，避免默认值分散定义。
+    auto_scale_emulators: Optional[bool] = None
+    auto_scale_instance_prefix: Optional[str] = None
+    auto_scale_min_idle_devices: Optional[int] = None
+    auto_scale_max_devices: Optional[int] = None
+    auto_scale_pending_step: Optional[int] = None
+    auto_scale_eval_interval_seconds: Optional[int] = None
+    auto_scale_idle_seconds: Optional[int] = None
+
+    def apply_settings(self, settings: Settings) -> "SchedulerConfig":
+        """使用全局配置补齐自动扩缩容参数。"""
+        if self.auto_scale_emulators is None:
+            self.auto_scale_emulators = settings.auto_scale_emulators
+        if self.auto_scale_instance_prefix is None:
+            self.auto_scale_instance_prefix = settings.auto_scale_instance_prefix
+        if self.auto_scale_min_idle_devices is None:
+            self.auto_scale_min_idle_devices = settings.auto_scale_min_idle_devices
+        if self.auto_scale_max_devices is None:
+            self.auto_scale_max_devices = settings.auto_scale_max_devices
+        if self.auto_scale_pending_step is None:
+            self.auto_scale_pending_step = settings.auto_scale_pending_step
+        if self.auto_scale_eval_interval_seconds is None:
+            self.auto_scale_eval_interval_seconds = (
+                settings.auto_scale_eval_interval_seconds
+            )
+        if self.auto_scale_idle_seconds is None:
+            self.auto_scale_idle_seconds = settings.auto_scale_idle_seconds
+        return self
+
+    @classmethod
+    def from_settings(cls, settings: Settings, **kwargs: Any) -> "SchedulerConfig":
+        """从全局配置构造调度器配置。"""
+        return cls(**kwargs).apply_settings(settings)
 
 
 class Scheduler:
@@ -100,8 +125,8 @@ class Scheduler:
             device_addresses: ADB 设备地址列表
             config: 调度器配置
         """
-        self.config = config or SchedulerConfig()
         self._settings = get_settings()
+        self.config = (config or SchedulerConfig()).apply_settings(self._settings)
 
         self.device_pool = DevicePool(device_addresses)
         self._running = False
