@@ -18,8 +18,7 @@ from ptcgp_auto_v2.config.settings import Settings, get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
     ExecutorConfig,
-    run_account_batch_executor,
-    run_executor,
+    run_account_executor,
 )
 from ptcgp_auto_v2.core.task_base import ResetType, TaskRegistry
 from ptcgp_auto_v2.core.task_schedule import (
@@ -680,7 +679,7 @@ class Scheduler:
             ),
         )
 
-    def _dispatch_account_batch(
+    def _dispatch_account_tasks(
         self, account: "Account", task_instances: list["TaskInstance"]
     ):
         """
@@ -696,7 +695,7 @@ class Scheduler:
             logger.debug(f"账号 {account.nickname} 没有可用设备，等待...")
             return
 
-        self._submit_account_batch_executor(device, account, task_instances)
+        self._submit_account_executor(device, account, task_instances)
 
     def _ensure_fetch_account_info(
         self, account: "Account", tasks: list["TaskInstance"]
@@ -890,45 +889,18 @@ class Scheduler:
             retry_delay=self.config.executor_config.retry_delay,
             recovery_delay=self.config.executor_config.recovery_delay,
             app_package=self.config.executor_config.app_package,
+            template_threshold=self.config.executor_config.template_threshold,
+            auto_scale_instance_prefix=self.config.auto_scale_instance_prefix,
             stop_event=self._stop_event,
         )
 
-    def _submit_task_executor(self, device: Device, task_instance: "TaskInstance"):
-        """提交单任务执行"""
-        self._mark_account_active(task_instance.account_id)
-
-        # 【关键】在提交到线程池之前，立即将状态改为 running
-        # 防止同一账号的任务被分配到多个设备
-        task_instance.status = TaskStatus.RUNNING.value
-        task_instance.save()
-
-        logger.debug(
-            f"分配任务: {task_instance.task_type} "
-            f"(账号: {task_instance.account.nickname}, "
-            f"设备: {device.address})"
-        )
-
-        executor_config = self._build_executor_config()
-        try:
-            future = self._executor_pool.submit(
-                run_executor,
-                device=device,
-                task_instance=task_instance,
-                device_pool=self.device_pool,
-                config=executor_config,
-            )
-        except Exception:
-            self._unmark_account_active(task_instance.account_id)
-            raise
-        self._bind_account_release_on_future(future, task_instance.account_id)
-
-    def _submit_account_batch_executor(
+    def _submit_account_executor(
         self,
         device: Device,
         account: "Account",
         task_instances: list["TaskInstance"],
     ):
-        """提交批量任务执行"""
+        """提交账号任务执行。"""
         self._mark_account_active(account.id)
 
         # 将所有任务状态改为 running，防止被其他线程分配
@@ -945,7 +917,7 @@ class Scheduler:
         executor_config = self._build_executor_config()
         try:
             future = self._executor_pool.submit(
-                run_account_batch_executor,
+                run_account_executor,
                 device=device,
                 account=account,
                 task_instances=task_instances,
@@ -992,7 +964,7 @@ class Scheduler:
                             task.task_type == "init_account" for task in task_instances
                         )
                         if has_init_task:
-                            self._dispatch_account_batch(account, task_instances)
+                            self._dispatch_account_tasks(account, task_instances)
                             continue
 
                         # 当前无 init 任务可执行，优先触发新账号创建
@@ -1008,7 +980,7 @@ class Scheduler:
                 if batch:
                     # 有待执行任务，优先执行
                     account, task_instances = batch
-                    self._dispatch_account_batch(account, task_instances)
+                    self._dispatch_account_tasks(account, task_instances)
                 elif self._settings.auto_create_accounts:
                     # 没有待执行任务，且启用自动创建，为每个空闲设备创建新账号
                     self._trigger_multi_device_creation()
@@ -1140,7 +1112,7 @@ class Scheduler:
         Returns:
             True 表示任务成功
         """
-        from ptcgp_auto_v2.core.executor import AccountBatchExecutor
+        from ptcgp_auto_v2.core.executor import AccountExecutor
 
         logger.info(f"运行单个任务: {task_type} (账号 ID: {account_id})")
 
@@ -1163,6 +1135,12 @@ class Scheduler:
         # 构建任务列表（自动添加前置任务）
         tasks = self._ensure_prerequisites_in_batch(account, [instance])
 
+        # 调试单任务路径也需要先标记为 running，
+        # 这样执行器初始化阶段异常时才能被统一收口为 failed。
+        for task in tasks:
+            task.status = TaskStatus.RUNNING.value
+            task.save()
+
         # 创建临时设备池
         temp_pool = DevicePool([device_address])
         device = temp_pool.acquire()
@@ -1170,8 +1148,8 @@ class Scheduler:
             logger.error("无法获取设备")
             return False
 
-        # 使用 AccountBatchExecutor 执行（统一逻辑）
-        executor = AccountBatchExecutor(
+        # 使用 AccountExecutor 执行（统一逻辑）
+        executor = AccountExecutor(
             device=device,
             account=account,
             task_instances=tasks,
