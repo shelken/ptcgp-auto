@@ -83,8 +83,12 @@ def compute_next_run_for_instance(
             instance.reset_type,
         )
     )
+    schedule_anchor_at = getattr(instance, "schedule_anchor_at", None)
+    if schedule_anchor_at is None:
+        schedule_anchor_at = instance.last_completed_at
+
     next_run_at = compute_next_run_at(
-        instance.last_completed_at,
+        schedule_anchor_at,
         effective_reset_type,
         config,
     )

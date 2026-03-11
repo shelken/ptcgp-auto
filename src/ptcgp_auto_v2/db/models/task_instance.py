@@ -32,22 +32,44 @@ class TaskInstance(SQLModel, table=True):
     __tablename__ = "task_instances"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(index=True)
-    task_type: str
+    account_id: int = Field(index=True, description="所属账号 ID，用于关联具体执行账号")
+    task_type: str = Field(description="任务类型标识，如 open_pack / send_card_daily")
     status: str = Field(
         default="pending",
-        description="pending/running/completed/failed/skipped/blocked",
+        description="任务实例当前状态：pending/running/completed/failed/skipped/blocked",
     )
-    reset_type: str = Field(default="daily", description="daily/weekly/once")
-    error_message: Optional[str] = None
-    last_completed_at: Optional[datetime] = None
+    reset_type: str = Field(
+        default="daily",
+        description="任务重置规则：daily/weekly/once/interval",
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="最近一次收敛时记录的错误、跳过或完成原因",
+    )
+    last_completed_at: Optional[datetime] = Field(
+        default=None,
+        description="展示用途：最近一次真实完成时间；特殊 completed 场景可保留旧值",
+    )
+    schedule_anchor_at: Optional[datetime] = Field(
+        default=None,
+        description="调度用途：本次完成用于计算重置/下次运行的时间锚点",
+    )
     last_duration_seconds: Optional[int] = Field(
         default=None,
         description="任务实例上一次自身执行耗时（秒）",
     )
-    next_run_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    next_run_at: Optional[datetime] = Field(
+        default=None,
+        description="派生缓存：按当前锚点与重置规则计算出的下次可运行时间",
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.now,
+        description="任务实例创建时间",
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.now,
+        description="任务实例最近一次写库时间",
+    )
 
     # 关系
     account: Optional["Account"] = Relationship(
@@ -75,6 +97,11 @@ class TaskInstance(SQLModel, table=True):
             "error_message": self.error_message,
             "last_completed_at": (
                 self.last_completed_at.isoformat() if self.last_completed_at else None
+            ),
+            "schedule_anchor_at": (
+                self.schedule_anchor_at.isoformat()
+                if self.schedule_anchor_at
+                else None
             ),
             "last_duration_seconds": self.last_duration_seconds,
             "next_run_at": self.next_run_at.isoformat() if self.next_run_at else None,

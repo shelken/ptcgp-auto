@@ -16,6 +16,7 @@ class FakeTaskInstance:
         self.reset_type = "daily"
         self.status = None
         self.last_completed_at = None
+        self.schedule_anchor_at = None
         self.last_duration_seconds = None
         self.next_run_at = None
         self.error_message = "previous"
@@ -68,6 +69,7 @@ class TestApplyTaskStatus(unittest.TestCase):
 
         self.assertEqual(TaskStatus.COMPLETED.value, task.status)
         self.assertIsInstance(task.last_completed_at, datetime)
+        self.assertIsInstance(task.schedule_anchor_at, datetime)
         self.assertEqual(125, task.last_duration_seconds)
         self.assertIsNone(task.error_message)
         self.assertIsInstance(task.updated_at, datetime)
@@ -86,6 +88,26 @@ class TestApplyTaskStatus(unittest.TestCase):
 
         self.assertEqual("previous", task.error_message)
         self.assertEqual(8, task.last_duration_seconds)
+
+    def test_completed_status_can_preserve_last_completed_at(self):
+        task = FakeTaskInstance()
+        previous_completed_at = datetime(2026, 3, 1, 8, 30, 0)
+        task.last_completed_at = previous_completed_at
+
+        self.executor._apply_task_status(
+            task_instance=task,
+            account=self.account,
+            status=TaskStatus.COMPLETED,
+            clear_error_on_success=True,
+            duration_seconds=12,
+            preserve_last_completed_at=True,
+        )
+
+        self.assertEqual(previous_completed_at, task.last_completed_at)
+        self.assertIsInstance(task.schedule_anchor_at, datetime)
+        self.assertIsInstance(task.next_run_at, datetime)
+        self.assertEqual(12, task.last_duration_seconds)
+        self.assertTrue(self.executor.unblocked)
 
     def test_failed_status_sets_error(self):
         task = FakeTaskInstance()

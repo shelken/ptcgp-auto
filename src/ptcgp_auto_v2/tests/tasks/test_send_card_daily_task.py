@@ -50,6 +50,7 @@ class TestSendCardDailyTask(unittest.TestCase):
         self.task.on_start()
 
         self.assertTrue(self.task.is_completed())
+        self.assertTrue(self.task.should_preserve_last_completed_at())
         pairing_service_mock.ensure_pairs_for_account.assert_not_called()
 
     @patch("ptcgp_auto_v2.tasks.send_card_daily.GiftPairingService")

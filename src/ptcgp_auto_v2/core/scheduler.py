@@ -503,6 +503,7 @@ class Scheduler:
                 f"重置任务: {task_type} (账号: {account.nickname}, 规则: {reset_type.value})"
             )
             instance.status = TaskStatus.PENDING.value
+            instance.next_run_at = None
             # 如果 reset_type 变了，更新数据库
             if instance.reset_type != reset_type.value:
                 instance.reset_type = reset_type.value

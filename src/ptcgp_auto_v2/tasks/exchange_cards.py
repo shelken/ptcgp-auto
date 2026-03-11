@@ -282,12 +282,14 @@ class ExchangeCardsTask(Task):
         self._skip_reason = None
 
         if self.account.id is None:
+            self.mark_completed_without_timestamp("账号ID为空")
             self._ctx.runtime.completed = True
             self._ctx.runtime.complete_reason = "账号ID为空"
             return
 
         request = self._request_repo.get_active_by_account(self.account.id)
         if request is None:
+            self.mark_completed_without_timestamp("无活跃交换请求")
             self._ctx.runtime.completed = True
             self._ctx.runtime.complete_reason = "无活跃交换请求"
             return
@@ -299,6 +301,7 @@ class ExchangeCardsTask(Task):
                 self._request_repo.mark_canceled(
                     request, reason="交换请求已过期（未送出）"
                 )
+                self.mark_completed_without_timestamp("交换请求已过期（未送出）")
                 self._ctx.runtime.completed = True
                 self._ctx.runtime.complete_reason = "交换请求已过期（未送出）"
                 return
@@ -320,7 +323,7 @@ class ExchangeCardsTask(Task):
             if is_account_pending_same_day_cooldown(self.account.created_at, 14):
                 self._mark_skipped("账号未过14天冷冻期（同日待到期）")
                 return
-            self._fail_request("账号未过14天冷静期")
+            self._fail_request("账号未过14天冷静期", preserve_last_completed_at=True)
             return
 
         if request.status == "sending":
@@ -328,7 +331,7 @@ class ExchangeCardsTask(Task):
                 self.account.id, request.target_card_id
             )
             if account_card is None or account_card.count < 1:
-                self._fail_request("目标卡牌库存不足")
+                self._fail_request("目标卡牌库存不足", preserve_last_completed_at=True)
                 return
 
         request_nickname = getattr(request, "to_nickname", None)
@@ -407,23 +410,35 @@ class ExchangeCardsTask(Task):
         rarity_code = (request.target_card_rarity or "").upper()
 
         if request.status not in {"sending", "sended"}:
-            self._fail_request(f"请求状态非法: {request.status}")
+            self._fail_request(
+                f"请求状态非法: {request.status}",
+                preserve_last_completed_at=True,
+            )
             return
 
         if rarity_code in ExchangeCardService.NON_EXCHANGEABLE_RARITIES:
-            self._fail_request("目标稀有度不可交换")
+            self._fail_request("目标稀有度不可交换", preserve_last_completed_at=True)
             return
 
         if rarity_code not in ExchangeCardService.EXCHANGE_POINT_COSTS:
-            self._fail_request(f"不支持的目标稀有度: {rarity_code}")
+            self._fail_request(
+                f"不支持的目标稀有度: {rarity_code}",
+                preserve_last_completed_at=True,
+            )
             return
 
         if not self._ctx.card.set_code or self._ctx.card.number is None:
-            self._fail_request("目标卡牌不存在，无法执行交换")
+            self._fail_request(
+                "目标卡牌不存在，无法执行交换",
+                preserve_last_completed_at=True,
+            )
             return
 
         if request.status == "sending" and not self._ctx.card.name:
-            self._fail_request("目标卡牌名称缺失，无法在确认页核验")
+            self._fail_request(
+                "目标卡牌名称缺失，无法在确认页核验",
+                preserve_last_completed_at=True,
+            )
             return
 
     def get_pre_hooks(self) -> list:
@@ -976,10 +991,12 @@ class ExchangeCardsTask(Task):
         self._mark_skipped("交换功能未解锁（14天冷冻期未到）")
         return result
 
-    def _fail_request(self, reason: str):
+    def _fail_request(self, reason: str, preserve_last_completed_at: bool = False):
         """将当前请求标记失败并结束任务。"""
         if self._ctx.runtime.current_request is not None:
             self._request_repo.mark_failed(self._ctx.runtime.current_request, reason)
+        if preserve_last_completed_at:
+            self.mark_completed_without_timestamp(reason)
         self._ctx.runtime.completed = True
         self._ctx.runtime.complete_reason = reason
 
