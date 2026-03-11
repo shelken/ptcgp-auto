@@ -20,8 +20,8 @@ from ptcgp_auto_v2.infra.template import TemplateMatcher
 from ptcgp_auto_v2.utils.action_result import ActionResult
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account
     from ptcgp_auto_v2.core.hooks import Hook, HookContext
+    from ptcgp_auto_v2.db.models import Account
 
 
 Recognizer = tuple[OcrEngine, TemplateMatcher]
@@ -106,6 +106,7 @@ class Task(ABC):
     max_unknown_pages: int = MAX_UNKNOWN_PAGES
 
     # 页面检测默认截图模式：False=默认链路，True=无损截图
+    # 当 部分页面文本识别不够好且无法调整 或 需要高精度文本时 设为 True
     screenshot_lossless: bool = False
 
     def __init__(
@@ -354,7 +355,9 @@ class Task(ABC):
                     )
                 else:
                     complete_reason = getattr(self, "_complete_reason", None)
-                    preserve_last_completed_at = self.should_preserve_last_completed_at()
+                    preserve_last_completed_at = (
+                        self.should_preserve_last_completed_at()
+                    )
                     if complete_reason:
                         if preserve_last_completed_at:
                             result = TaskResult.ok_without_timestamp(
