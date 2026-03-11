@@ -89,7 +89,10 @@ export function initCustomSelects(context = document) {
             if (cls.startsWith('w-') || cls.startsWith('m-')) {
                 containerClasses.push(cls);
             }
-            if (cls.startsWith('text-') || cls.startsWith('font-') || cls.startsWith('p-') || cls.startsWith('px-') || cls.startsWith('py-') || cls.startsWith('h-')) {
+            if (cls.startsWith('text-') || cls.startsWith('font-') || cls.startsWith('leading-')) {
+                containerClasses.push(cls);
+            }
+            if (cls.startsWith('p-') || cls.startsWith('px-') || cls.startsWith('py-') || cls.startsWith('h-')) {
                 triggerClasses.push(cls);
             }
         });

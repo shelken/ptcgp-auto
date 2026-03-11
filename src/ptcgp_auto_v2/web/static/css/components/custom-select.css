@@ -25,19 +25,28 @@
   width: 100%;
   user-select: none;
   transition: background-color 0.2s, border-color 0.2s, transform 0.2s;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
 }
 
 /* Unified table filter size profile */
-.table-control.custom-select-initialized + .custom-select-container .custom-select-trigger {
+.table-control.custom-select-initialized + .custom-select-container {
   min-height: 2.5rem;
-  padding: 0.6rem 0.7rem;
   font-size: 0.9rem;
+  line-height: 1.2;
 }
 
+.table-control.custom-select-initialized + .custom-select-container .custom-select-trigger,
 .panel-control.custom-select-initialized + .custom-select-container .custom-select-trigger {
   min-height: 2.5rem;
   padding: 0.6rem 0.7rem;
+}
+
+.panel-control.custom-select-initialized + .custom-select-container {
+  min-height: 2.5rem;
   font-size: 0.9rem;
+  line-height: 1.2;
 }
 
 .custom-select-container.open .custom-select-trigger {
@@ -88,6 +97,9 @@
   cursor: pointer;
   transition: background-color 0.1s;
   border-bottom: 1px solid var(--border-subtle-light);
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
 }
 
 .custom-select-option:last-child {
@@ -110,4 +122,24 @@
   position: absolute;
   right: 10px;
   font-weight: bold;
+}
+
+.custom-select-container:has(select.owned-sort-select-control) {
+  min-width: 16.5rem;
+  width: 16.5rem;
+  flex: 0 0 16.5rem;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.custom-select-container:has(select.owned-sort-select-control) .custom-select-trigger span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-container:has(select.owned-sort-select-control) .custom-select-option {
+  padding: 4px 8px;
+  white-space: nowrap;
 }
