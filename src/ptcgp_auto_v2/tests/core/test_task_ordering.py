@@ -1,8 +1,9 @@
 import sys
 import unittest
+from datetime import datetime
 from pathlib import Path
 
-from sqlmodel import select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 src_dir = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(src_dir))
@@ -33,7 +34,42 @@ class TestTaskOrdering(unittest.TestCase):
 
         self.assertIn("reset_type", sql_text)
         self.assertIn("next_run_at", sql_text)
+        self.assertIn("schedule_anchor_at", sql_text)
         self.assertIn("last_completed_at", sql_text)
+
+    def test_build_dispatch_priority_order_prefers_schedule_anchor_at(self):
+        engine = create_engine("sqlite:///:memory:")
+        SQLModel.metadata.create_all(engine)
+
+        with Session(engine) as session:
+            early_anchor = TaskInstance(
+                account_id=1,
+                task_type="open_pack",
+                status="pending",
+                reset_type="daily",
+                next_run_at=None,
+                last_completed_at=datetime(2026, 3, 1, 8, 0, 0),
+                schedule_anchor_at=datetime(2026, 3, 5, 8, 0, 0),
+            )
+            late_anchor = TaskInstance(
+                account_id=2,
+                task_type="claim_rewards",
+                status="pending",
+                reset_type="daily",
+                next_run_at=None,
+                last_completed_at=datetime(2026, 2, 1, 8, 0, 0),
+                schedule_anchor_at=datetime(2026, 3, 6, 8, 0, 0),
+            )
+            session.add(early_anchor)
+            session.add(late_anchor)
+            session.commit()
+
+            statement = select(TaskInstance).order_by(
+                *build_task_instance_order_by("dispatch_priority", "asc")
+            )
+            ordered = list(session.exec(statement).all())
+
+        self.assertEqual([1, 2], [item.account_id for item in ordered])
 
     def test_normalize_task_sort_accepts_last_duration(self):
         sort_by, sort_order = normalize_task_sort(

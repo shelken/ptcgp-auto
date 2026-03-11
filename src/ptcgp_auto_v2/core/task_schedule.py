@@ -65,13 +65,17 @@ def should_reset_task(
     if instance.status != TaskStatus.COMPLETED.value:
         return False
 
-    if not instance.last_completed_at:
-        return False
-
     if now is None:
         now = datetime.now()
 
-    last_completed = instance.last_completed_at
+    schedule_anchor_at = getattr(instance, "schedule_anchor_at", None)
+    if schedule_anchor_at is None:
+        schedule_anchor_at = instance.last_completed_at
+
+    if not schedule_anchor_at:
+        return False
+
+    last_completed = schedule_anchor_at
 
     if reset_type == ResetType.DAILY:
         return last_completed.date() < now.date()

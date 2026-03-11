@@ -6,7 +6,7 @@
 
 from typing import Any, cast
 
-from sqlmodel import case, col
+from sqlmodel import case, col, func
 
 from ptcgp_auto_v2.db.models import TaskInstance
 
@@ -43,6 +43,10 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
 
     next_run_col = col(cast(Any, TaskInstance.next_run_at))
     last_completed_col = col(cast(Any, TaskInstance.last_completed_at))
+    schedule_anchor_col = func.coalesce(
+        col(cast(Any, TaskInstance.schedule_anchor_at)),
+        last_completed_col,
+    )
     last_duration_col = col(cast(Any, TaskInstance.last_duration_seconds))
 
     if normalized_sort_by == TASK_SORT_BY_DISPATCH_PRIORITY:
@@ -50,7 +54,7 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
         return [
             reset_priority.asc(),
             next_run_col.asc().nulls_first(),
-            last_completed_col.asc().nulls_first(),
+            schedule_anchor_col.asc().nulls_first(),
         ]
 
     if normalized_sort_by == TASK_SORT_BY_NEXT_RUN:

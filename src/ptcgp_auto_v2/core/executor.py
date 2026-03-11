@@ -307,11 +307,15 @@ class BaseExecutor(ABC):
         error_message: Optional[str] = None,
         clear_error_on_success: bool = True,
         duration_seconds: Optional[int] = None,
+        preserve_last_completed_at: bool = False,
     ):
         """更新任务实例状态"""
         task_instance.status = status.value
         if status == TaskStatus.COMPLETED:
-            task_instance.last_completed_at = datetime.now()
+            completed_at = datetime.now()
+            task_instance.schedule_anchor_at = completed_at
+            if not preserve_last_completed_at:
+                task_instance.last_completed_at = completed_at
             # 根据账号计划配置计算下次运行时间
             account_cache = build_account_plan_cache(account)
             next_run_at, _, _, _ = compute_next_run_for_instance(
@@ -392,6 +396,7 @@ class BaseExecutor(ABC):
                     error_message=f"完成: {complete_reason}",
                     clear_error_on_success=False,
                     duration_seconds=duration_seconds,
+                    preserve_last_completed_at=result.preserve_last_completed_at,
                 )
                 return
 
@@ -402,6 +407,7 @@ class BaseExecutor(ABC):
                 status=TaskStatus.COMPLETED,
                 clear_error_on_success=True,
                 duration_seconds=duration_seconds,
+                preserve_last_completed_at=result.preserve_last_completed_at,
             )
             return
 
@@ -538,6 +544,7 @@ class BaseExecutor(ABC):
             error_message=f"跳过: {result.skip_reason}" if result.skipped else None,
             clear_error_on_success=not result.skipped,
             duration_seconds=self._get_result_duration_seconds(result),
+            preserve_last_completed_at=result.preserve_last_completed_at,
         )
 
     def _run_prerequisite_tasks(
