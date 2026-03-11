@@ -9,7 +9,7 @@ from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult, ActionResult
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.core.scheduler import Scheduler
-from ptcgp_auto_v2.core.executor import TaskExecutor
+from ptcgp_auto_v2.core.executor import AccountExecutor
 
 __all__ = [
     "Device",
@@ -20,5 +20,5 @@ __all__ = [
     "ActionResult",
     "TaskStatus",
     "Scheduler",
-    "TaskExecutor",
+    "AccountExecutor",
 ]
