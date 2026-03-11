@@ -332,7 +332,6 @@
                               class="space-y-4"
                               data-filter-cache-key="ptcgp_filter:owned-cards"
                               data-action="save-owned-filters">
-
                             <div>
                                 <label for="owned-account-id" class="block text-xs uppercase tracking-widest text-muted mb-2">
                                     {{ t.filter_account_id or t.account_id }}
@@ -469,7 +468,40 @@
 
                 <div class="flex-1">
                     <div class="flex flex-wrap justify-between items-center gap-6 mb-6">
-                        <div class="flex items-center gap-3">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="owned-scope-segmented" role="radiogroup" aria-label="{{ t.owned_scope_label }}">
+                                <input type="radio"
+                                       id="owned-scope-owned"
+                                       class="sr-only owned-scope-input"
+                                       name="ownership_scope"
+                                       value="owned"
+                                       form="owned-filter-form"
+                                       checked
+                                       hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
+                                       hx-target="#owned-cards-container"
+                                       hx-include="#owned-filter-form,#owned-sort-select">
+                                <label for="owned-scope-owned" class="brutal-btn owned-scope-btn">{{ t.owned_scope_owned }}</label>
+                                <input type="radio"
+                                       id="owned-scope-missing"
+                                       class="sr-only owned-scope-input"
+                                       name="ownership_scope"
+                                       value="missing"
+                                       form="owned-filter-form"
+                                       hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
+                                       hx-target="#owned-cards-container"
+                                       hx-include="#owned-filter-form,#owned-sort-select">
+                                <label for="owned-scope-missing" class="brutal-btn owned-scope-btn">{{ t.owned_scope_missing }}</label>
+                                <input type="radio"
+                                       id="owned-scope-all"
+                                       class="sr-only owned-scope-input"
+                                       name="ownership_scope"
+                                       value="all"
+                                       form="owned-filter-form"
+                                       hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
+                                       hx-target="#owned-cards-container"
+                                       hx-include="#owned-filter-form,#owned-sort-select">
+                                <label for="owned-scope-all" class="brutal-btn owned-scope-btn">{{ t.owned_scope_all }}</label>
+                            </div>
                             <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.owned_cols_label }}</span>
                             <div class="owned-cols-segmented" role="group" aria-label="{{ t.owned_cols_label }}">
                                 <button type="button" class="brutal-btn owned-cols-btn" data-action="set-owned-grid-cols" data-cols="5" aria-pressed="false">5</button>
@@ -502,6 +534,12 @@
                                 {{ t.owned_counts_hide }}
                             </button>
                         </div>
+                    </div>
+
+                    <div id="owned-cards-stats-container"
+                         class="mb-6"
+                         aria-live="polite"
+                         data-refresh-target="#owned-cards-stats-container">
                     </div>
 
                     <div id="owned-cards-container"

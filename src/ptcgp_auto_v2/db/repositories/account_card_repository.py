@@ -1,11 +1,12 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import String, case, cast, distinct, func, or_
+from sqlalchemy import String, Select, case, cast, distinct, func, or_
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Account, AccountCard, AccountStat, Card, CardPack
+from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS
 
 
 class AccountCardRepository:
@@ -34,6 +35,69 @@ class AccountCardRepository:
             Account.friend_id.ilike(like_value),
             Account.game_id.ilike(like_value),
         ]
+
+    def _build_card_ownership_subquery(self, account_query: str):
+        """构建按卡牌聚合后的拥有信息子查询。"""
+        statement = select(
+            col(AccountCard.card_id).label("card_id"),
+            func.count(distinct(col(AccountCard.account_id))).label("accounts_count"),
+            func.coalesce(func.sum(col(AccountCard.count)), 0).label("total_count"),
+            func.max(col(AccountCard.created_at)).label("latest_acquired_at"),
+        )
+
+        if account_query:
+            statement = statement.join(
+                Account, col(Account.id) == col(AccountCard.account_id)
+            ).where(or_(*self._build_account_search_filters(account_query)))
+
+        return statement.group_by(col(AccountCard.card_id)).subquery()
+
+    def _apply_card_filters(
+        self,
+        statement: Select,
+        *,
+        rarities: List[str],
+        card_types: List[str],
+        set_codes: List[str],
+        pack_names: List[str],
+        elements: List[str],
+    ) -> Select:
+        """统一追加卡牌元数据筛选条件。"""
+        if rarities:
+            statement = statement.where(col(Card.rarity).in_(rarities))
+
+        if card_types:
+            statement = statement.where(col(Card.type).in_(card_types))
+
+        if set_codes:
+            statement = statement.where(col(Card.set_code).in_(set_codes))
+
+        if elements:
+            statement = statement.where(func.lower(col(Card.element)).in_(elements))
+
+        if pack_names:
+            pack_subquery = (
+                select(CardPack.card_id)
+                .where(col(CardPack.pack_name).in_(pack_names))
+                .distinct()
+            )
+            statement = statement.where(col(Card.id).in_(pack_subquery))
+
+        return statement
+
+    def _apply_ownership_scope(
+        self,
+        statement: Select,
+        *,
+        ownership_total_count: Any,
+        ownership_scope: str,
+    ) -> Select:
+        """统一追加拥有范围过滤。"""
+        if ownership_scope == "missing":
+            return statement.where(ownership_total_count <= 0)
+        if ownership_scope == "all":
+            return statement
+        return statement.where(ownership_total_count > 0)
 
     def get(self, account_id: int, card_id: int) -> Optional[AccountCard]:
         with Session(get_engine()) as session:
@@ -90,6 +154,7 @@ class AccountCardRepository:
         pack_names: Optional[List[str]] = None,
         elements: Optional[List[str]] = None,
         sort_by: str = "rarity",
+        ownership_scope: str = "owned",
     ) -> List[Dict[str, Any]]:
         rarities = rarities or []
         card_types = card_types or []
@@ -97,6 +162,11 @@ class AccountCardRepository:
         pack_names = pack_names or []
         elements = [str(e).lower() for e in (elements or []) if e]
         normalized_account_query = (account_query or "").strip()
+        normalized_scope = ownership_scope if ownership_scope in {
+            "owned",
+            "missing",
+            "all",
+        } else "owned"
 
         rarity_case = case(
             *[
@@ -105,10 +175,11 @@ class AccountCardRepository:
             ],
             else_=0,
         )
-
-        accounts_count = func.count(distinct(col(AccountCard.account_id)))
-        total_count = func.sum(col(AccountCard.count))
-        latest_acquired = func.max(col(AccountCard.created_at))
+        ownership_subquery = self._build_card_ownership_subquery(normalized_account_query)
+        accounts_count = func.coalesce(ownership_subquery.c.accounts_count, 0)
+        total_count = func.coalesce(ownership_subquery.c.total_count, 0)
+        latest_acquired = ownership_subquery.c.latest_acquired_at
+        acquired_missing_rank = case((latest_acquired.is_(None), 1), else_=0)
 
         with Session(get_engine()) as session:
             statement = (
@@ -116,38 +187,28 @@ class AccountCardRepository:
                     Card,
                     accounts_count.label("accounts_count"),
                     total_count.label("total_count"),
+                    latest_acquired.label("latest_acquired_at"),
                 )
-                .join(AccountCard, col(AccountCard.card_id) == col(Card.id))
-                .group_by(col(Card.id))  # type: ignore[arg-type]
+                .outerjoin(ownership_subquery, ownership_subquery.c.card_id == col(Card.id))
             )
 
-            if normalized_account_query:
-                statement = statement.join(
-                    Account, col(Account.id) == col(AccountCard.account_id)
-                ).where(or_(*self._build_account_search_filters(normalized_account_query)))
-
-            if rarities:
-                statement = statement.where(col(Card.rarity).in_(rarities))
-
-            if card_types:
-                statement = statement.where(col(Card.type).in_(card_types))
-
-            if set_codes:
-                statement = statement.where(col(Card.set_code).in_(set_codes))
-
-            if elements:
-                statement = statement.where(func.lower(col(Card.element)).in_(elements))
-
-            if pack_names:
-                pack_subquery = (
-                    select(CardPack.card_id)
-                    .where(col(CardPack.pack_name).in_(pack_names))
-                    .distinct()
-                )
-                statement = statement.where(col(Card.id).in_(pack_subquery))
+            statement = self._apply_card_filters(
+                statement,
+                rarities=rarities,
+                card_types=card_types,
+                set_codes=set_codes,
+                pack_names=pack_names,
+                elements=elements,
+            )
+            statement = self._apply_ownership_scope(
+                statement,
+                ownership_total_count=total_count,
+                ownership_scope=normalized_scope,
+            )
 
             if sort_by == "acquired":
                 statement = statement.order_by(
+                    acquired_missing_rank.asc(),
                     latest_acquired.desc(),
                     rarity_case.desc(),
                     col(Card.set_code),
@@ -167,20 +228,112 @@ class AccountCardRepository:
                     col(Card.number),
                 )
 
-            statement = statement.offset(page * page_size).limit(page_size)
+            statement = statement.offset(page * page_size).limit(page_size + 1)
 
             rows = session.exec(statement).all()
             items = []
             for row in rows:
-                card, accounts_count_value, total_count_value = row
+                (
+                    card,
+                    accounts_count_value,
+                    total_count_value,
+                    latest_acquired_value,
+                ) = row
+                normalized_total_count = int(total_count_value or 0)
                 items.append(
                     {
                         "card": card,
                         "owned_accounts_count": int(accounts_count_value or 0),
-                        "total_count": int(total_count_value or 0),
+                        "total_count": normalized_total_count,
+                        "latest_acquired_at": latest_acquired_value,
+                        "ownership_state": (
+                            "owned" if normalized_total_count > 0 else "missing"
+                        ),
                     }
                 )
             return items
+
+    def count_cards_by_scope(
+        self,
+        account_query: Optional[str] = None,
+        rarities: Optional[List[str]] = None,
+        card_types: Optional[List[str]] = None,
+        set_codes: Optional[List[str]] = None,
+        pack_names: Optional[List[str]] = None,
+        elements: Optional[List[str]] = None,
+        ownership_scope: str = "owned",
+    ) -> int:
+        """统计当前列表条件下的卡牌数量。"""
+        rarities = rarities or []
+        card_types = card_types or []
+        set_codes = set_codes or []
+        pack_names = pack_names or []
+        elements = [str(e).lower() for e in (elements or []) if e]
+        normalized_account_query = (account_query or "").strip()
+        normalized_scope = ownership_scope if ownership_scope in {
+            "owned",
+            "missing",
+            "all",
+        } else "owned"
+
+        ownership_subquery = self._build_card_ownership_subquery(normalized_account_query)
+        total_count = func.coalesce(ownership_subquery.c.total_count, 0)
+
+        with Session(get_engine()) as session:
+            statement = (
+                select(func.count())
+                .select_from(Card)
+                .outerjoin(ownership_subquery, ownership_subquery.c.card_id == col(Card.id))
+            )
+            statement = self._apply_card_filters(
+                statement,
+                rarities=rarities,
+                card_types=card_types,
+                set_codes=set_codes,
+                pack_names=pack_names,
+                elements=elements,
+            )
+            statement = self._apply_ownership_scope(
+                statement,
+                ownership_total_count=total_count,
+                ownership_scope=normalized_scope,
+            )
+            return int(session.exec(statement).one() or 0)
+
+    def get_high_rarity_progress(self) -> List[Dict[str, int | str]]:
+        """统计全局高稀有度卡牌进度。"""
+        ownership_subquery = self._build_card_ownership_subquery("")
+        total_count = func.coalesce(ownership_subquery.c.total_count, 0)
+        owned_case = case((total_count > 0, 1), else_=0)
+
+        with Session(get_engine()) as session:
+            statement = (
+                select(
+                    col(Card.rarity).label("rarity"),
+                    func.count(col(Card.id)).label("total_cards"),
+                    func.sum(owned_case).label("owned_cards"),
+                )
+                .outerjoin(ownership_subquery, ownership_subquery.c.card_id == col(Card.id))
+                .where(col(Card.rarity).in_(HIGH_RARITY_TARGETS))
+                .group_by(col(Card.rarity))
+            )
+            rows = session.exec(statement).all()
+
+        progress_map = {
+            str(rarity): {
+                "rarity": str(rarity),
+                "owned_count": int(owned_cards or 0),
+                "total_count": int(total_cards or 0),
+            }
+            for rarity, total_cards, owned_cards in rows
+        }
+        return [
+            progress_map.get(
+                rarity,
+                {"rarity": rarity, "owned_count": 0, "total_count": 0},
+            )
+            for rarity in HIGH_RARITY_TARGETS
+        ]
 
     def get_owned_card_accounts(self, card_id: int) -> Dict[str, Any]:
         with Session(get_engine()) as session:

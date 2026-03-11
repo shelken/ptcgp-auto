@@ -16,6 +16,11 @@ def _resolve_card_display_name(card: Card) -> str:
     return resolve_card_name_from_data(card.data, fallback=card.name)
 
 
+def _normalize_ownership_scope(ownership_scope: str) -> str:
+    """标准化拥有范围参数。"""
+    return ownership_scope if ownership_scope in {"owned", "missing", "all"} else "owned"
+
+
 def build_owned_cards_list_context(
     *,
     session: Session,
@@ -28,6 +33,7 @@ def build_owned_cards_list_context(
     pack_name: list[str] | None = None,
     element: list[str] | None = None,
     sort_by: str = "acquired",
+    ownership_scope: str = "owned",
 ) -> dict[str, Any]:
     """构建已拥有卡牌列表视图上下文（统一列表协议）。
 
@@ -43,6 +49,7 @@ def build_owned_cards_list_context(
 
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
+    normalized_scope = _normalize_ownership_scope(ownership_scope)
 
     repo = AccountCardRepository()
     items = repo.list_owned_cards(
@@ -55,16 +62,22 @@ def build_owned_cards_list_context(
         pack_names=pack_name or [],
         elements=element or [],
         sort_by=sort_by,
+        ownership_scope=normalized_scope,
     )
 
-    # 判断是否还有更多数据（items 长度等于 page_size 时可能有更多）
-    has_next = len(items) >= normalized_page_size
+    has_next = len(items) > normalized_page_size
+    items = items[:normalized_page_size]
     has_prev = normalized_page > 0
 
-    # 估算总数
-    total = len(items) + (normalized_page * normalized_page_size)
-    if has_next:
-        total += normalized_page_size
+    total = repo.count_cards_by_scope(
+        account_query=account_id,
+        rarities=rarity or [],
+        card_types=card_type or [],
+        set_codes=set_code or [],
+        pack_names=pack_name or [],
+        elements=element or [],
+        ownership_scope=normalized_scope,
+    )
 
     for item in items:
         card = item.get("card") if isinstance(item, dict) else None
@@ -78,11 +91,45 @@ def build_owned_cards_list_context(
         "has_prev": has_prev,
         "has_next": has_next,
         "total": total,
+        "ownership_scope": normalized_scope,
+    }
+
+
+def build_owned_cards_progress_context(
+    *,
+    account_id: str | None = None,
+    rarity: list[str] | None = None,
+    card_type: list[str] | None = None,
+    set_code: list[str] | None = None,
+    pack_name: list[str] | None = None,
+    element: list[str] | None = None,
+    ownership_scope: str = "owned",
+) -> dict[str, Any]:
+    """构建拥有卡牌页顶部统计上下文。"""
+    normalized_scope = _normalize_ownership_scope(ownership_scope)
+    repo = AccountCardRepository()
+    filtered_cards_count = repo.count_cards_by_scope(
+        account_query=account_id,
+        rarities=rarity or [],
+        card_types=card_type or [],
+        set_codes=set_code or [],
+        pack_names=pack_name or [],
+        elements=element or [],
+        ownership_scope=normalized_scope,
+    )
+    rarity_progress = repo.get_high_rarity_progress()
+    return {
+        "filtered_cards_count": filtered_cards_count,
+        "rarity_progress": rarity_progress,
+        "ownership_scope": normalized_scope,
     }
 
 
 def build_owned_card_modal_context(
-    session: Session, card_id: int, page_size: int = 10
+    session: Session,
+    card_id: int,
+    page_size: int = 10,
+    ownership_state: str = "owned",
 ) -> dict[str, Any] | None:
     """构建已拥有卡牌详情弹窗所需数据。"""
     card = session.get(Card, card_id)
@@ -102,6 +149,7 @@ def build_owned_card_modal_context(
     return {
         "card": card,
         "card_display_name": _resolve_card_display_name(card),
+        "ownership_state": _normalize_ownership_scope(ownership_state),
         "exchange_blocked": exchange_blocked,
         "total_accounts": table_context["total_items"],
         "total_count": table_context["total_count"],

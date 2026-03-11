@@ -23,7 +23,7 @@
             </div>
 
             <div class="owned-card-preview-wrap" style="perspective: 800px;">
-                <div class="owned-card-preview owned-card-draggable"
+                <div class="owned-card-preview owned-card-draggable{% if ownership_state == 'missing' %} owned-card-preview--missing{% endif %}"
                      id="modal-card-preview"
                      style="transform-style: preserve-3d; transition: transform 0.1s ease-out;">
                     <img
