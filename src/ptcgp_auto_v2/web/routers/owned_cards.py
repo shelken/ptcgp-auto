@@ -8,6 +8,7 @@ from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.exchange_card_service import create_exchange_request_with_task
 from ptcgp_auto_v2.web.services.owned_card_service import (
     build_owned_cards_list_context,
+    build_owned_cards_progress_context,
     build_owned_card_modal_context,
     build_owned_card_exchange_accounts_context,
 )
@@ -31,6 +32,7 @@ async def get_owned_cards(
     pack_name: list[str] = Query(default=[]),
     element: list[str] = Query(default=[]),
     sort_by: str = Query(default="acquired"),
+    ownership_scope: str = Query(default="owned"),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌列表。"""
@@ -45,22 +47,53 @@ async def get_owned_cards(
         pack_name=pack_name,
         element=element,
         sort_by=sort_by,
+        ownership_scope=ownership_scope,
     )
     if not context["items"] and page > 0:
         return ""
     return render_template(request, "partials/owned_card_list.html", context)
 
 
+@router.get("/api/owned-cards/stats", response_class=HTMLResponse)
+async def get_owned_cards_stats(
+    request: Request,
+    account_id: str | None = Query(default=None),
+    rarity: list[str] = Query(default=[]),
+    card_type: list[str] = Query(default=[]),
+    set_code: list[str] = Query(default=[]),
+    pack_name: list[str] = Query(default=[]),
+    element: list[str] = Query(default=[]),
+    ownership_scope: str = Query(default="owned"),
+):
+    """获取拥有卡牌页顶部统计。"""
+    context = build_owned_cards_progress_context(
+        account_id=account_id,
+        rarity=rarity,
+        card_type=card_type,
+        set_code=set_code,
+        pack_name=pack_name,
+        element=element,
+        ownership_scope=ownership_scope,
+    )
+    return render_template(request, "partials/owned_card_stats.html", context)
+
+
 @router.get("/api/owned-cards/modal", response_class=HTMLResponse)
 async def get_owned_card_modal(
     request: Request,
     card_id: int,
+    ownership_state: str = Query(default="owned"),
     page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取已拥有卡牌详情弹窗。"""
     current_lang = get_current_lang()
-    context = build_owned_card_modal_context(session, card_id, page_size=page_size)
+    context = build_owned_card_modal_context(
+        session,
+        card_id,
+        page_size=page_size,
+        ownership_state=ownership_state,
+    )
     if not context:
         t = get_translations(current_lang)
         return HTMLResponse(
