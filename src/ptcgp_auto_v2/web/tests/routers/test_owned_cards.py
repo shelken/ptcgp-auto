@@ -60,11 +60,86 @@ def test_get_owned_cards_returns_empty_when_items_empty_and_page_gt_zero(monkeyp
             pack_name=[],
             element=[],
             sort_by="acquired",
+            ownership_scope="owned",
             session=object(),
         )
     )
 
     assert response == ""
+
+
+def test_get_owned_cards_passes_ownership_scope(monkeypatch):
+    """列表路由应透传拥有范围。"""
+    captured = {}
+
+    def _fake_build_owned_cards_list_context(**kwargs):
+        captured.update(kwargs)
+        return {"items": [object()]}
+
+    monkeypatch.setattr(router, "build_owned_cards_list_context", _fake_build_owned_cards_list_context)
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda request, name, context: HTMLResponse(f"tpl:{name}"),
+    )
+
+    response = asyncio.run(
+        router.get_owned_cards(
+            request=_build_request("GET"),
+            page=0,
+            page_size=60,
+            account_id=None,
+            rarity=[],
+            card_type=[],
+            set_code=[],
+            pack_name=[],
+            element=[],
+            sort_by="acquired",
+            ownership_scope="all",
+            session=object(),
+        )
+    )
+
+    assert response.status_code == 200
+    assert captured["ownership_scope"] == "all"
+
+
+def test_get_owned_cards_stats_renders_stats_partial(monkeypatch):
+    """顶部统计路由应渲染统计 partial。"""
+    captured = {}
+
+    def _fake_build_owned_cards_progress_context(**kwargs):
+        captured.update(kwargs)
+        return {"filtered_cards_count": 57, "rarity_progress": []}
+
+    monkeypatch.setattr(
+        router,
+        "build_owned_cards_progress_context",
+        _fake_build_owned_cards_progress_context,
+    )
+    monkeypatch.setattr(
+        router,
+        "render_template",
+        lambda request, name, context: HTMLResponse(f"tpl:{name}"),
+    )
+
+    response = asyncio.run(
+        router.get_owned_cards_stats(
+            request=_build_request("GET"),
+            account_id="rbksh2",
+            rarity=["SR"],
+            card_type=[],
+            set_code=[],
+            pack_name=[],
+            element=[],
+            ownership_scope="missing",
+        )
+    )
+
+    assert response.status_code == 200
+    assert captured["account_id"] == "rbksh2"
+    assert captured["rarity"] == ["SR"]
+    assert captured["ownership_scope"] == "missing"
 
 
 def test_get_owned_card_modal_returns_404_when_not_found(monkeypatch):
@@ -88,10 +163,13 @@ def test_get_owned_card_modal_passes_page_size_to_service(monkeypatch):
     """弹窗路由应透传前端预估的 page_size。"""
     captured = {}
 
-    def _fake_build_owned_card_modal_context(session, card_id, page_size=10):
+    def _fake_build_owned_card_modal_context(
+        session, card_id, page_size=10, ownership_state="owned"
+    ):
         captured["session"] = session
         captured["card_id"] = card_id
         captured["page_size"] = page_size
+        captured["ownership_state"] = ownership_state
         return {"card": object()}
 
     monkeypatch.setattr(
@@ -109,6 +187,7 @@ def test_get_owned_card_modal_passes_page_size_to_service(monkeypatch):
         router.get_owned_card_modal(
             request=_build_request("GET"),
             card_id=153,
+            ownership_state="missing",
             page_size=5,
             session=object(),
         )
@@ -117,6 +196,7 @@ def test_get_owned_card_modal_passes_page_size_to_service(monkeypatch):
     assert response.status_code == 200
     assert captured["card_id"] == 153
     assert captured["page_size"] == 5
+    assert captured["ownership_state"] == "missing"
 
 
 def test_create_exchange_request_success_sets_close_modal_and_enqueue_task(monkeypatch):
