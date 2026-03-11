@@ -80,12 +80,6 @@ def parse_args(argv: list[str] | None = None):
     )
 
     parser.add_argument(
-        "--single",
-        action="store_true",
-        help="单次运行模式，执行一轮任务后退出",
-    )
-
-    parser.add_argument(
         "--task",
         type=str,
         nargs="+",
@@ -694,15 +688,6 @@ def main():
 
     # 处理单任务模式
     if args.task:
-        # Start web server even in single task mode if requested (optional, but good for monitoring)
-        # For now, let's keep it simple and only run in daemon mode or if explicitly requested?
-        # The user asked to integrate it so it runs in the background when the main app starts.
-        # But typically "main app starts" implies daemon mode for long-running processes.
-        # Let's add it to single task mode too if it doesn't exit immediately?
-        # Actually single task mode exits after completion, so web server would die too.
-        # So it makes most sense in daemon mode.
-
-        # 原有错误处理保留
         if not args.account and not args.disable_switch:
             print("错误: --task 需要配合 --account 使用，或使用 --disable-switch")
             return 1

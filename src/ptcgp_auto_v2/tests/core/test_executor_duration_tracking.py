@@ -3,7 +3,7 @@
 
 from types import SimpleNamespace
 
-from ptcgp_auto_v2.core.executor import AccountBatchExecutor, BaseExecutor, TaskExecutor
+from ptcgp_auto_v2.core.executor import AccountExecutor, BaseExecutor
 from ptcgp_auto_v2.core.task_base import TaskResult
 from ptcgp_auto_v2.core.task_status import TaskStatus
 
@@ -128,8 +128,8 @@ def test_execute_task_with_prerequisites_keeps_main_duration_isolated(monkeypatc
     assert prereq_instance.last_duration_seconds == 2
 
 
-def test_task_executor_account_switch_failure_records_zero_duration(monkeypatch):
-    """单任务执行器账号切换失败时应写入 0 秒耗时。"""
+def test_account_executor_single_task_switch_failure_records_zero_duration(monkeypatch):
+    """统一执行器在单任务切换失败时应写入 0 秒耗时。"""
     account = SimpleNamespace(
         id=1,
         nickname="user",
@@ -137,7 +137,12 @@ def test_task_executor_account_switch_failure_records_zero_duration(monkeypatch)
         task_plan_associations=[],
     )
     task_instance = FakeTaskInstance("open_pack", account, task_id=1)
-    executor = TaskExecutor(FakeDevice(), task_instance, FakeDevicePool())
+    executor = AccountExecutor(
+        FakeDevice(),
+        account,
+        [task_instance],
+        FakeDevicePool(),
+    )
 
     monkeypatch.setattr(executor, "_init_components", lambda: None)
     monkeypatch.setattr(executor, "_is_current_account", lambda _account: False)
@@ -152,10 +157,10 @@ def test_task_executor_account_switch_failure_records_zero_duration(monkeypatch)
     assert task_instance.last_duration_seconds == 0
 
 
-def test_account_batch_executor_account_switch_failure_records_zero_duration(
+def test_account_executor_multi_task_switch_failure_records_zero_duration(
     monkeypatch,
 ):
-    """批量执行器账号切换失败时应为所有任务写入 0 秒耗时。"""
+    """统一执行器账号切换失败时应为所有任务写入 0 秒耗时。"""
     account = SimpleNamespace(
         id=1,
         nickname="batch",
@@ -166,7 +171,7 @@ def test_account_batch_executor_account_switch_failure_records_zero_duration(
         FakeTaskInstance("open_pack", account, task_id=1),
         FakeTaskInstance("claim_gifts", account, task_id=2),
     ]
-    executor = AccountBatchExecutor(
+    executor = AccountExecutor(
         FakeDevice(),
         account,
         task_instances,
@@ -188,8 +193,8 @@ def test_account_batch_executor_account_switch_failure_records_zero_duration(
     assert [task.last_duration_seconds for task in task_instances] == [0, 0]
 
 
-def test_account_batch_executor_catches_non_runtime_error(monkeypatch):
-    """批量执行器应收口非 RuntimeError，避免 Future 冒泡未处理异常。"""
+def test_account_executor_catches_non_runtime_error(monkeypatch):
+    """统一执行器应收口非 RuntimeError，避免 Future 冒泡未处理异常。"""
     account = SimpleNamespace(
         id=1,
         nickname="batch",
@@ -197,14 +202,14 @@ def test_account_batch_executor_catches_non_runtime_error(monkeypatch):
         task_plan_associations=[],
     )
     task_instances = [FakeTaskInstance("claim_rewards", account, task_id=1)]
-    executor = AccountBatchExecutor(
+    executor = AccountExecutor(
         FakeDevice(),
         account,
         task_instances,
         FakeDevicePool(),
     )
 
-    monkeypatch.setattr(executor, "_prepare_batch_run", lambda: True)
+    monkeypatch.setattr(executor, "_prepare_run", lambda: True)
     monkeypatch.setattr(
         executor,
         "_execute_task_with_prerequisites",
