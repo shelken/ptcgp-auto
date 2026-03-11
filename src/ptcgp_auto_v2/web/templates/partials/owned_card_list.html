@@ -8,12 +8,13 @@
     {% for item in items %}
     <button
         type="button"
-        class="owned-card brutal-card group"
+        class="owned-card brutal-card group{% if item.ownership_state == 'missing' %} owned-card--missing{% endif %}"
         hx-get="/api/owned-cards/modal"
         hx-target="#modal-content"
         hx-swap="innerHTML"
         data-card-id="{{ item.card.id }}"
-        data-lang="{{ current_lang }}">
+        data-lang="{{ current_lang }}"
+        data-ownership-state="{{ item.ownership_state }}">
         <div class="owned-card-media">
             <img
                 src="{{ image_base_url }}/{{ item.card.set_code }}/{{ item.card.number }}.png&w=400&output=png"
@@ -30,7 +31,7 @@
         </div>
 
         <div class="owned-card-count tooltip-text" data-tooltip="{{ item.owned_accounts_count }} {{ t.owned_accounts_label }}">
-            {{ item.owned_accounts_count }}
+            {{ 0 if item.ownership_state == 'missing' else item.owned_accounts_count }}
         </div>
 
         <div class="absolute bottom-0 left-0 right-0 text-xs py-2 px-2 text-center font-bold translate-y-full group-hover:translate-y-0 transition-transform duration-200 card-name-overlay tooltip-text"
@@ -43,7 +44,13 @@
 </div>
 {% else %}
 <div class="text-center py-16 text-muted font-mono" data-owned-cards-empty="true">
+    {% if ownership_scope == 'missing' %}
+    {{ t.owned_cards_missing_empty }}
+    {% elif ownership_scope == 'all' %}
+    {{ t.owned_cards_all_empty }}
+    {% else %}
     {{ t.owned_cards_empty }}
+    {% endif %}
 </div>
 {% endif %}
 

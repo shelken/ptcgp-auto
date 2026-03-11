@@ -156,6 +156,23 @@ function scheduleOwnedCardModalPageSizeWarmup() {
     ownedCardModalPageSizeTimer = window.setTimeout(warmOwnedCardModalPageSize, 0);
 }
 
+function buildOwnedCardsStatsUrl() {
+    const form = document.getElementById('owned-filter-form');
+    const urlParams = new URLSearchParams(window.location.search);
+    const lang = urlParams.get('lang') || 'en';
+    const params = new URLSearchParams();
+    params.set('lang', lang);
+
+    if (form instanceof HTMLFormElement) {
+        const formData = new FormData(form);
+        formData.forEach((value, key) => {
+            params.append(key, value);
+        });
+    }
+
+    return `/api/owned-cards/stats?${params.toString()}`;
+}
+
 function handleOwnedCardModalClick(event) {
     if (replayingOwnedCardModalClick) {
         return;
@@ -207,11 +224,14 @@ export function updateOwnedCardModalRequest(event) {
     if (!(elt instanceof Element)) return;
     if (!elt.matches('.owned-card[hx-get="/api/owned-cards/modal"]')) return;
 
-    const { cardId, lang } = elt.dataset;
+    const { cardId, lang, ownershipState } = elt.dataset;
     if (!cardId || !lang) return;
 
     event.detail.parameters.card_id = cardId;
     event.detail.parameters.lang = lang;
+    if (ownershipState) {
+        event.detail.parameters.ownership_state = ownershipState;
+    }
     const pageSize = Number.isInteger(ownedCardModalPageSize) && ownedCardModalPageSize > 0
         ? ownedCardModalPageSize
         : calculateOwnedCardModalPageSize();
@@ -235,6 +255,22 @@ export function syncOwnedCardListState(root = document) {
     if (!(loader instanceof HTMLElement)) return;
     loader.classList.remove('flex');
     loader.classList.add('hidden');
+}
+
+/**
+ * 刷新拥有卡牌页顶部统计，列表与统计共享当前表单条件。
+ */
+export function refreshOwnedCardsStats() {
+    const statsContainer = document.getElementById('owned-cards-stats-container');
+    if (!(statsContainer instanceof HTMLElement)) {
+        return;
+    }
+
+    const url = buildOwnedCardsStatsUrl();
+    htmx.ajax('GET', url, {
+        target: '#owned-cards-stats-container',
+        swap: 'innerHTML',
+    });
 }
 
 // --- 设置已拥有卡牌网格列数 ---
@@ -292,6 +328,10 @@ document.addEventListener('tab:switched', (event) => {
     if (tabName === 'owned-cards') {
         window.activeScrollAwareTab = 'ownedCardsUserScrolled';
         scheduleOwnedCardModalPageSizeWarmup();
+        const statsContainer = document.getElementById('owned-cards-stats-container');
+        if (statsContainer instanceof HTMLElement && !statsContainer.innerHTML.trim()) {
+            refreshOwnedCardsStats();
+        }
     } else {
         window.activeScrollAwareTab = null;
     }

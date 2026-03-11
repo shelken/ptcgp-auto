@@ -20,6 +20,7 @@ import { handleActionClick } from './action_handlers.js';
 import { syncManagementSidebarRequestUrls } from './tabs.js';
 import {
     initOwnedCardModalPageSizeWarmup,
+    refreshOwnedCardsStats,
     syncOwnedCardListState,
     updateOwnedCardModalRequest,
 } from './features/owned_cards.js';
@@ -393,6 +394,9 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     document.body.addEventListener('htmx:afterSwap', (evt) => {
         if (evt.detail && evt.detail.target && evt.detail.target.id === 'modal-content') {
             getModal().openFromSwap();
+        }
+        if (evt.detail && evt.detail.target && evt.detail.target.id === 'owned-cards-container') {
+            refreshOwnedCardsStats();
         }
         // 使用 evt.detail.elt（新加载的元素）而不是 target（旧目标）
         const newContent = evt.detail.elt || evt.detail.target;
