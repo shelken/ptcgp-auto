@@ -54,6 +54,7 @@ class TaskResult:
 
     success: bool
     skipped: bool = False  # 是否被跳过（不更新 last_completed_at）
+    preserve_last_completed_at: bool = False  # 是否保留上次完成时间
     skip_reason: Optional[str] = None  # 跳过原因
     error: Optional[str] = None
     data: dict = field(default_factory=dict)  # 附加数据
@@ -62,6 +63,11 @@ class TaskResult:
     def ok(cls, **data) -> "TaskResult":
         """创建成功结果"""
         return cls(success=True, data=data)
+
+    @classmethod
+    def ok_without_timestamp(cls, **data) -> "TaskResult":
+        """创建成功结果，但不更新 last_completed_at。"""
+        return cls(success=True, preserve_last_completed_at=True, data=data)
 
     @classmethod
     def fail(cls, error: str, **data) -> "TaskResult":
@@ -123,6 +129,7 @@ class Task(ABC):
         self._handlers: dict[str, Callable[[dict], ActionResult]] = {}
         self._stop_event: Optional[threading.Event] = None
         self._hook_context: Optional["HookContext"] = None
+        self._preserve_last_completed_at = False
 
     def set_stop_event(self, stop_event: threading.Event):
         """设置停止事件，用于响应外部中断信号"""
@@ -186,6 +193,16 @@ class Task(ABC):
         子类可覆盖此方法进行初始化操作。
         """
         pass
+
+    def mark_completed_without_timestamp(self, reason: Optional[str] = None):
+        """标记本次完成需要保留上次完成时间。"""
+        self._preserve_last_completed_at = True
+        if reason is not None:
+            setattr(self, "_complete_reason", reason)
+
+    def should_preserve_last_completed_at(self) -> bool:
+        """是否保留上次完成时间。"""
+        return self._preserve_last_completed_at
 
     def on_complete(self, result: TaskResult):
         """
@@ -308,6 +325,7 @@ class Task(ABC):
         """
         import time
 
+        self._preserve_last_completed_at = False
         self.on_start()
         if not skip_pre_hooks:
             pre_result = self._run_pre_hooks()
@@ -336,13 +354,25 @@ class Task(ABC):
                     )
                 else:
                     complete_reason = getattr(self, "_complete_reason", None)
+                    preserve_last_completed_at = self.should_preserve_last_completed_at()
                     if complete_reason:
-                        result = TaskResult.ok(
-                            iterations=iteration,
-                            complete_reason=complete_reason,
-                        )
+                        if preserve_last_completed_at:
+                            result = TaskResult.ok_without_timestamp(
+                                iterations=iteration,
+                                complete_reason=complete_reason,
+                            )
+                        else:
+                            result = TaskResult.ok(
+                                iterations=iteration,
+                                complete_reason=complete_reason,
+                            )
                     else:
-                        result = TaskResult.ok(iterations=iteration)
+                        if preserve_last_completed_at:
+                            result = TaskResult.ok_without_timestamp(
+                                iterations=iteration
+                            )
+                        else:
+                            result = TaskResult.ok(iterations=iteration)
                 break
 
             # 识别当前页面

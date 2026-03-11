@@ -138,6 +138,7 @@ class TestExchangeCardsTask(unittest.TestCase):
             task.on_start()
 
         self.assertTrue(task.is_completed())
+        self.assertTrue(task.should_preserve_last_completed_at())
         repo.mark_failed.assert_called_once()
 
     def test_on_start_skips_when_same_day_pending_cooldown(self):

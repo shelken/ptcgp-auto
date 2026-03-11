@@ -251,7 +251,7 @@ class SendCardDailyTask(Task):
         self._friend_flow = FriendSelectionFlow()
 
         if self.account.id is None:
-            self._complete_reason = "账号ID为空"
+            self.mark_completed_without_timestamp("账号ID为空")
             self._completed = True
             return
 
@@ -265,7 +265,7 @@ class SendCardDailyTask(Task):
             ):
                 self._mark_skipped("账号未过14天冷冻期（同日待到期）")
                 return
-            self._complete_reason = "账号未过14天冷冻期"
+            self.mark_completed_without_timestamp("账号未过14天冷冻期")
             self._completed = True
             return
 
@@ -282,7 +282,7 @@ class SendCardDailyTask(Task):
                 self._friend_flow.nickname = target_account.nickname
 
         if not self._target_friend_id:
-            self._complete_reason = "目标 friend_id 为空"
+            self.mark_completed_without_timestamp("目标 friend_id 为空")
             self._completed = True
             return
 
@@ -293,7 +293,7 @@ class SendCardDailyTask(Task):
         self._fixed_card_id = fixed_card.id if fixed_card else None
 
         if GiftRecordService.is_daily_success(self.account.id, self._target_friend_id):
-            self._complete_reason = "今日已送卡成功"
+            self.mark_completed_without_timestamp("今日已送卡成功")
             self._completed = True
             return
 

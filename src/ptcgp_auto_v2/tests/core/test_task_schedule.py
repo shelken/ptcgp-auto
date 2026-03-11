@@ -1,7 +1,9 @@
 from datetime import datetime
+from types import SimpleNamespace
 
 from ptcgp_auto_v2.core.task_base import ResetType
 from ptcgp_auto_v2.core import task_schedule
+from ptcgp_auto_v2.core.task_status import TaskStatus
 
 
 class DummyTask:
@@ -35,3 +37,39 @@ def test_next_run_at_interval_uses_config_seconds():
         {"interval_seconds": 259200},
     )
     assert result == _dt("2026-02-06 17:23:00")
+
+
+def test_should_reset_task_prefers_schedule_anchor_at_over_last_completed_at():
+    instance = SimpleNamespace(
+        status=TaskStatus.COMPLETED.value,
+        last_completed_at=_dt("2026-02-01 08:00:00"),
+        schedule_anchor_at=_dt("2026-02-04 09:00:00"),
+        next_run_at=_dt("2026-02-06 00:00:00"),
+    )
+
+    result = task_schedule.should_reset_task(
+        instance,
+        ResetType.DAILY,
+        {},
+        now=_dt("2026-02-05 12:00:00"),
+    )
+
+    assert result is True
+
+
+def test_should_not_reset_task_when_schedule_anchor_at_not_due():
+    instance = SimpleNamespace(
+        status=TaskStatus.COMPLETED.value,
+        last_completed_at=None,
+        schedule_anchor_at=_dt("2026-02-05 09:00:00"),
+        next_run_at=_dt("2026-02-05 00:00:00"),
+    )
+
+    result = task_schedule.should_reset_task(
+        instance,
+        ResetType.DAILY,
+        {},
+        now=_dt("2026-02-05 12:00:00"),
+    )
+
+    assert result is False
