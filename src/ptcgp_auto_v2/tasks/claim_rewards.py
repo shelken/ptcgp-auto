@@ -130,6 +130,7 @@ class ClaimRewardsTask(Task):
     reset_type = ResetType.DAILY
     max_iterations = 100
     max_unknown_pages = 15
+    screenshot_lossless = True
     pages = _build_claim_rewards_pages()
 
     def __init__(self, adb, recognizer, page_detector):
