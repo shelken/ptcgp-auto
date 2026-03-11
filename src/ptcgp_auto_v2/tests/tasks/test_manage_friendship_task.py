@@ -54,41 +54,68 @@ class TestManageFriendshipTask(unittest.TestCase):
         )
         self.task.bind_account(SimpleNamespace(id=1, friend_id="9999000011112222"))
 
+    def test_on_start_preserves_last_completed_at_when_no_pending_requests(self):
+        with patch.object(self.task, "_get_pending_requests", return_value=[]):
+            self.task.on_start()
+
+        self.assertTrue(self.task.is_completed())
+        self.assertTrue(self.task.should_preserve_last_completed_at())
+
     @patch("ptcgp_auto_v2.tasks.manage_friendship.AccountRepository")
-    @patch("ptcgp_auto_v2.tasks.manage_friendship.FriendRequestRepository")
-    def test_collect_accept_whitelist_only_with_sender_friend_id(
-        self, request_repo_cls, account_repo_cls
+    def test_resolve_request_friend_id_prefers_sender_for_incoming_sended(
+        self, account_repo_cls
     ):
-        request_repo = request_repo_cls.return_value
         account_repo = account_repo_cls.return_value
+        account_repo.get_by_id.return_value = SimpleNamespace(
+            id=2, friend_id="1234567890123456"
+        )
 
-        req_keep = SimpleNamespace(from_account_id=2)
-        req_drop = SimpleNamespace(from_account_id=3)
-        request_repo.get_by_to_account_and_status.return_value = [req_keep, req_drop]
-        account_repo.get_by_id.side_effect = [
-            SimpleNamespace(id=2, friend_id="1234567890123456"),
-            SimpleNamespace(id=3, friend_id=None),
-        ]
+        req = SimpleNamespace(
+            request_type="add",
+            status="sended",
+            from_account_id=2,
+            to_account_id=1,
+            to_friend_id="0000000000000000",
+        )
 
-        whitelist = self.task._collect_accept_whitelist()
+        self.assertEqual(
+            "1234567890123456",
+            self.task._resolve_request_friend_id(req),
+        )
 
-        self.assertEqual({"1234567890123456": req_keep}, whitelist)
+    def test_resolve_request_friend_id_uses_request_to_friend_id(self):
+        req = SimpleNamespace(
+            request_type="add",
+            status="sending",
+            from_account_id=1,
+            to_account_id=2,
+            to_friend_id="2785919909681661",
+        )
 
-    def test_decide_reply_action_by_whitelist(self):
-        req = SimpleNamespace(from_account_id=2)
-        self.task._accept_whitelist = {"1234567890123456": req}
-
-        self.assertEqual("accept", self.task._decide_reply_action("1234567890123456"))
-        self.assertEqual("reject", self.task._decide_reply_action("0000000000000000"))
-
-    def test_extract_friend_id_from_ocr(self):
-        ocr_results = [
-            {"text": "朋友ID", "box": (0, 0, 0, 0)},
-            {"text": "2785-9199-0968-1661", "box": (0, 0, 0, 0)},
-        ]
         self.assertEqual(
             "2785919909681661",
-            self.task._extract_friend_id_from_ocr(ocr_results),
+            self.task._resolve_request_friend_id(req),
+        )
+
+    @patch("ptcgp_auto_v2.tasks.manage_friendship.AccountRepository")
+    def test_resolve_request_friend_id_falls_back_to_target_account(
+        self, account_repo_cls
+    ):
+        account_repo = account_repo_cls.return_value
+        account_repo.get_by_id.return_value = SimpleNamespace(
+            id=2, friend_id="5231700486153177"
+        )
+        req = SimpleNamespace(
+            request_type="add",
+            status="sending",
+            from_account_id=1,
+            to_account_id=2,
+            to_friend_id=None,
+        )
+
+        self.assertEqual(
+            "5231700486153177",
+            self.task._resolve_request_friend_id(req),
         )
 
     @patch("ptcgp_auto_v2.tasks.manage_friendship.is_text_visible")
@@ -121,8 +148,7 @@ class TestManageFriendshipTask(unittest.TestCase):
     def test_add_sending_should_click_apply_when_apply_visible(
         self, is_text_visible_mock
     ):
-        # 顺序：先检查取消邀请(False)，再检查申请按钮(True)
-        is_text_visible_mock.side_effect = [False, True]
+        is_text_visible_mock.return_value = False
         req = SimpleNamespace(
             id=9,
             request_type="add",
@@ -133,8 +159,11 @@ class TestManageFriendshipTask(unittest.TestCase):
         )
 
         with (
-            patch.object(
-                self.task, "_tap_apply_button", return_value=ActionResult.ok(wait=0.1)
+            patch.object(self.task, "_is_pending_reply_by_icons", return_value=False),
+            patch.object(self.task, "_is_already_friend_by_icons", return_value=False),
+            patch(
+                "ptcgp_auto_v2.tasks.manage_friendship.tap_text_exact",
+                return_value=ActionResult.ok(wait=0.1),
             ) as apply_mock,
             patch.object(
                 self.task, "_complete_add_already_friend_request"
@@ -182,8 +211,7 @@ class TestManageFriendshipTask(unittest.TestCase):
         self, is_text_visible_mock
     ):
         """申请阶段若仍看到申请按钮，应继续点击重试。"""
-        # 顺序：先检查取消邀请(False)，再检查申请按钮(True)
-        is_text_visible_mock.side_effect = [False, True]
+        is_text_visible_mock.return_value = False
         req = SimpleNamespace(
             id=11,
             request_type="add",
@@ -194,9 +222,14 @@ class TestManageFriendshipTask(unittest.TestCase):
         )
         self.task._action_cache["add_apply_clicked"] = True
 
-        with patch.object(
-            self.task, "_tap_apply_button", return_value=ActionResult.ok(wait=0.1)
-        ) as apply_mock:
+        with (
+            patch.object(self.task, "_is_pending_reply_by_icons", return_value=False),
+            patch.object(self.task, "_is_already_friend_by_icons", return_value=False),
+            patch(
+                "ptcgp_auto_v2.tasks.manage_friendship.tap_text_exact",
+                return_value=ActionResult.ok(wait=0.1),
+            ) as apply_mock,
+        ):
             result = self.task._handle_add_sending_result(req, {"ocr_results": []})
 
         self.assertTrue(result.success)

@@ -182,6 +182,7 @@ class ManageFriendshipTask(Task):
             ),
         )
         if not self.requests_to_process:
+            self.mark_completed_without_timestamp("没有待处理的好友请求")
             self._completed = True
             logger.info("没有待处理的好友请求，任务完成")
 
