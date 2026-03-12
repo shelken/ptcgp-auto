@@ -12,7 +12,7 @@ import { initSortable, initTasks } from './features/tasks.js';
 import { initPlans } from './features/plans.js';
 import { initInlineCardDrag, cardPreviewState, closeCardPreview } from './features/card_preview.js';
 import { initDailyGiftDatePickers } from './features/daily_gift.js';
-import { buildAutoRefreshUrl } from './auto_refresh.js';
+import { refreshAutoRefreshContainers } from './auto_refresh.js';
 import { updateRelativeTimes } from './relative_time.js';
 import { initExchangeCards } from './features/exchange_cards.js';
 import { initTooltipLayer } from './features/tooltips.js';
@@ -83,39 +83,6 @@ function resolveRequestButton(detail) {
     }
 
     return elt.closest('button, input[type="submit"]');
-}
-
-// --- 自动刷新列表 ---
-function autoRefreshList(container) {
-    if (!container) return;
-    if (!isElementInActiveTab(container)) return;
-    if (!document.hasFocus()) return;
-    if (container.dataset.loaded && container.dataset.loaded !== 'true') return;
-
-    // 检查是否有滚动暂停配置（data-pause-auto-refresh-until 属性）
-    const pauseUntil = container.dataset.pauseAutoRefreshUntil;
-    if (pauseUntil && Date.now() < parseInt(pauseUntil, 10)) {
-        return;
-    }
-
-    const includeSelector = container.dataset.refreshInclude;
-    const swap = container.dataset.refreshSwap || 'innerHTML';
-    const targetSelector = container.dataset.refreshTarget;
-    const target = targetSelector ? document.querySelector(targetSelector) : container;
-    if (target?.dataset?.refreshing === '1') {
-        return;
-    }
-    if (target?.dataset) {
-        target.dataset.refreshing = '1';
-    }
-
-    const url = includeSelector ? buildAutoRefreshUrl(container) : container.dataset.autoRefresh;
-    if (!url) return;
-
-    htmx.ajax('GET', url, {
-        target: target || container,
-        swap
-    });
 }
 
 // --- 绑定筛选表单通用事件 ---
@@ -245,6 +212,9 @@ function bindHtmxRequestEvents() {
         }
         if (target && target.dataset) {
             target.dataset.refreshing = '1';
+            if (target.dataset.loaded !== undefined || target.dataset.trackLoadingState === 'true') {
+                target.dataset.loading = 'true';
+            }
         }
 
         // 处理懒加载触发器（data-lazy-load-scroll-aware 属性）
@@ -276,8 +246,8 @@ function bindHtmxRequestEvents() {
         const target = event.detail && event.detail.target;
         if (target && target.dataset) {
             target.dataset.refreshing = '0';
-            // 更新加载状态（如果容器标记了 data-track-loading-state）
-            if (target.dataset.trackLoadingState === 'true') {
+            // 只要容器显式声明了 data-loaded，就在成功请求后转为已加载。
+            if (target.dataset.loaded !== undefined || target.dataset.trackLoadingState === 'true') {
                 target.dataset.loaded = 'true';
                 target.dataset.loading = 'false';
             }
@@ -428,17 +398,14 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
     });
 
     const triggerAutoRefreshAll = () => {
-        if (document.visibilityState !== 'visible') {
-            return;
-        }
         const now = Date.now();
         if (window.lastAutoRefreshAt && now - window.lastAutoRefreshAt < 500) {
             return;
         }
-        window.lastAutoRefreshAt = now;
-        document.querySelectorAll('[data-auto-refresh]').forEach((container) => {
-            autoRefreshList(container);
-        });
+        const refreshedCount = refreshAutoRefreshContainers(document, { requireVisible: true });
+        if (refreshedCount > 0) {
+            window.lastAutoRefreshAt = now;
+        }
     };
 
     document.addEventListener('visibilitychange', triggerAutoRefreshAll);

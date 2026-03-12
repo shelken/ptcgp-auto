@@ -8,7 +8,11 @@ from ptcgp_auto_v2.web.queries.record_queries import (
     fetch_pack_points_map,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
-from ptcgp_auto_v2.web.utils.i18n import resolve_label, resolve_card_name_from_data
+from ptcgp_auto_v2.web.utils.i18n import (
+    get_current_i18n,
+    resolve_label,
+    resolve_card_name_from_data,
+)
 from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 
 
@@ -64,6 +68,7 @@ def build_records_list_context(
 
     points_map = fetch_pack_points_map(session, results)
     items = []
+    _, translations = get_current_i18n()
 
     for record in results:
         sorted_cards = sorted(record.cards, key=lambda card: card.position)
@@ -99,6 +104,9 @@ def build_records_list_context(
             pack_name_display = resolve_label(
                 packs_map[record.pack_name], fallback=record.pack_name
             )
+        pack_type_display = str(
+            translations.get(record.pack_type, record.pack_type or "")
+        )
 
         items.append(
             {
@@ -113,6 +121,7 @@ def build_records_list_context(
                 "series": series_code,
                 "set_name_display": set_name_display,
                 "pack_name_display": pack_name_display,
+                "pack_type_display": pack_type_display,
             }
         )
 
