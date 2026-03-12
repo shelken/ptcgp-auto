@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 """
 基础手势与点击工具
 """
@@ -6,9 +8,10 @@
 import logging
 import math
 import time
-from typing import Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Optional, Tuple
 
-from ptcgp_auto_v2.infra.adb import AdbController
+if TYPE_CHECKING:
+    from ptcgp_auto_v2.infra.adb import AdbController
 
 Box = tuple[int, int, int, int]
 
@@ -200,6 +203,12 @@ def tap_ok(
     return tap_text_exact(adb, ocr_results, get_text_patterns("popup_ok"), wait=wait)
 
 
+def hide_fast_input_ime(adb: AdbController, wait: float = 0.0) -> ActionResult:
+    """显式隐藏 FastInputIME，避免输入法状态残留影响后续点击。"""
+    adb.shell("am broadcast -a ADB_KEYBOARD_HIDE")
+    return ActionResult.ok(wait=wait)
+
+
 def clear_text(
     adb: AdbController, x: int, y: int, max_chars: int = 20, wait: float = 0.5
 ) -> ActionResult:
@@ -229,6 +238,7 @@ def clear_text(
     # 速度优先：使用 uiautomator2 原生清空输入框能力
     device.clear_text()
     time.sleep(0.05)
+    hide_fast_input_ime(adb, wait=0.0)
 
     logger.debug(f"清空输入框 ({x}, {y})，删除 {max_chars} 个字符")
     return ActionResult.ok(wait=wait)
@@ -682,7 +692,9 @@ def input_text(adb: AdbController, text: str, wait: float = 0.5) -> ActionResult
 
     try:
         device.send_keys(text)
+        hide_fast_input_ime(adb, wait=0.0)
         return ActionResult.ok(wait=wait)
     except Exception as exc:
+        hide_fast_input_ime(adb, wait=0.0)
         logger.error(f"输入文本失败: {exc}")
         return ActionResult.ok(wait=wait)

@@ -5,6 +5,8 @@
 
 from ptcgp_auto_v2.utils.gesture import (
     calculate_swipe_steps,
+    clear_text,
+    input_text,
     is_text_visible,
     normalize_text,
     perform_swipe,
@@ -152,3 +154,25 @@ def test_pinch_in_clamps_steps_minimum():
     assert len(fake_device.gestures) == 1
     _, kwargs = fake_device.gestures[0]
     assert kwargs["steps"] == 2
+
+
+def test_clear_text_should_hide_fast_input_ime():
+    """验证清空输入框后会显式隐藏 FastInputIME。"""
+    adb, fake_device = _build_adb_with_fake_device()
+
+    result = clear_text(adb, 320, 480, wait=0.0)
+
+    assert result.ok is True
+    assert fake_device.clicks == [(320, 480)]
+    assert fake_device.shell_commands[-1] == "am broadcast -a ADB_KEYBOARD_HIDE"
+
+
+def test_input_text_should_hide_fast_input_ime():
+    """验证输入文本后会显式隐藏 FastInputIME。"""
+    adb, fake_device = _build_adb_with_fake_device()
+
+    result = input_text(adb, "嘎啦嘎啦", wait=0.0)
+
+    assert result.ok is True
+    assert fake_device.sent_keys == ["嘎啦嘎啦"]
+    assert fake_device.shell_commands[-1] == "am broadcast -a ADB_KEYBOARD_HIDE"
