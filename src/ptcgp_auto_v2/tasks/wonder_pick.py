@@ -105,7 +105,7 @@ class WonderPickTask(Task):
     task_type = "wonder_pick"
     reset_type = ResetType.DAILY
     max_iterations = 250
-    max_unknown_pages = 20
+    max_same_page_rounds = max_iterations
     pages = _build_challenge_pages()
 
     def __init__(self, adb, recognizer, page_detector):

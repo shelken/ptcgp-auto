@@ -41,7 +41,7 @@ class ResetType(Enum):
 
 
 MAX_TASK_ITERATIONS = 100  # 最大执行迭代次数
-MAX_UNKNOWN_PAGES = 30  # 连续未知页面上限
+MAX_SAME_PAGE_ROUNDS = 15  # 连续停留在同一页面的上限
 
 
 @dataclass
@@ -102,8 +102,8 @@ class Task(ABC):
     # 最大执行迭代次数
     max_iterations: int = MAX_TASK_ITERATIONS
 
-    # 连续未知页面上限
-    max_unknown_pages: int = MAX_UNKNOWN_PAGES
+    # 连续停留在同一页面的上限
+    max_same_page_rounds: int = MAX_SAME_PAGE_ROUNDS
 
     # 页面检测默认截图模式：False=默认链路，True=无损截图
     # 当 部分页面文本识别不够好且无法调整 或 需要高精度文本时 设为 True
@@ -335,7 +335,8 @@ class Task(ABC):
                 self.on_complete(pre_result)
                 return pre_result
 
-        unknown_count = 0
+        same_page_count = 0
+        last_page_name: Optional[str] = None
         result: Optional[TaskResult] = None
 
         for iteration in range(self.max_iterations):
@@ -383,15 +384,21 @@ class Task(ABC):
                 lossless=self.screenshot_lossless
             )
 
+            if page_name == last_page_name:
+                same_page_count += 1
+            else:
+                same_page_count = 1
+                last_page_name = page_name
+
+            if same_page_count >= self.max_same_page_rounds:
+                result = TaskResult.fail(
+                    f"连续 {self.max_same_page_rounds} 次停留在同一页面: {page_name}",
+                    iterations=iteration,
+                )
+                break
+
             # 处理未知页面
             if page_name == "unknown":
-                unknown_count += 1
-                if unknown_count >= self.max_unknown_pages:
-                    result = TaskResult.fail(
-                        f"连续 {self.max_unknown_pages} 次未识别页面",
-                        iterations=iteration,
-                    )
-                    break
                 # 调用未知页面处理器（子类可覆盖）
                 action_result = self.handle_unknown_page(page_info)
                 if not action_result.success:
@@ -402,9 +409,6 @@ class Task(ABC):
                     break
                 time.sleep(action_result.should_wait)
                 continue
-
-            # 重置未知计数
-            unknown_count = 0
 
             handler = self._handlers.get(page_name)
             if handler:

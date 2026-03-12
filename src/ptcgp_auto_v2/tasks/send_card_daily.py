@@ -160,7 +160,7 @@ class SendCardDailyTask(Task):
     reset_type = ResetType.INTERVAL
     # 实际测试在25上下
     max_iterations = 80
-    max_unknown_pages = 20
+    max_same_page_rounds = 10
     pages = _build_send_card_pages()
 
     def __init__(self, adb, recognizer, page_detector):

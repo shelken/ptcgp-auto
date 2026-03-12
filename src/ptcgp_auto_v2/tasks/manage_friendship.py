@@ -110,7 +110,7 @@ class ManageFriendshipTask(Task):
     task_type = "manage_friendship"
     reset_type = ResetType.ONCE
     pages = _build_manage_friendship_pages()
-    max_unknown_pages = 20
+    max_same_page_rounds = 20
 
     def __init__(self, adb, recognizer, page_detector):
         """初始化任务状态。"""

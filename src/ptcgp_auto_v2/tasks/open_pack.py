@@ -124,7 +124,6 @@ class OpenPackTask(PackOpeningTaskBase):
     reset_type = ResetType.DAILY
     # 实测 66 左右
     max_iterations = 120
-    max_unknown_pages = 15
     pages = _build_open_pack_pages()
 
     def __init__(self, adb, recognizer, page_detector):
@@ -514,7 +513,9 @@ class OpenPackTask(PackOpeningTaskBase):
                     points = int(points_str)
                     # 保存到基类变量，延迟到保存记录时更新
                     self._base_pack_points = points
-                    logger.info(f"  -> 提取到基础开包点数: {set_code} = {points}pt（将在保存记录时累加）")
+                    logger.info(
+                        f"  -> 提取到基础开包点数: {set_code} = {points}pt（将在保存记录时累加）"
+                    )
                     break
         except Exception as e:
             logger.warning(f"  -> 提取开包点数失败: {e}")
