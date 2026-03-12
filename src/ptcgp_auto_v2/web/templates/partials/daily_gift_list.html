@@ -3,13 +3,11 @@
 {% from "partials/macros/account.html" import account_option_label, account_primary_text %}
 
 {% set account_param = "&account_id=" ~ selected_account_id if selected_account_id is not none else "" %}
-{% set q_param = "&q=" ~ (q|urlencode) if q else "" %}
 
 {% call auto_refresh_container("/management/daily-gift?lang=" ~ current_lang, '#daily-gift-state-form', 'outerHTML', 'space-y-6') %}
 <form id="daily-gift-state-form" class="hidden" hidden data-filter-cache-key="ptcgp_filter:daily-gift">
     <input type="hidden" name="biz_date_local" value="{{ selected_biz_date_local }}">
     <input type="hidden" name="account_id" value="{{ selected_account_id or '' }}">
-    <input type="hidden" name="q" value="{{ q or '' }}">
     <input type="hidden" name="sort_by" value="{{ sort_by or 'updated_at' }}">
     <input type="hidden" name="sort_order" value="{{ sort_order or 'desc' }}">
     <input type="hidden" name="page" value="{{ page or 0 }}">
@@ -49,20 +47,13 @@
                         'label': t.col_account or 'Account',
                         'order': 20,
                         'min_width': 'clamp(12rem, 22vw, 18rem)'
-                    },
-                    {
-                        'key': 'q',
-                        'label': t.label_search or 'Search',
-                        'order': 30,
-                        'min_width': 'clamp(12rem, 28vw, 22rem)',
-                        'grow': 1
                     }
                 ],
                 'right_items': [
                     {
                         'key': 'refresh',
                         'label': '',
-                        'order': 40,
+                        'order': 30,
                         'min_width': 'clamp(7rem, 10vw, 9rem)'
                     }
                 ]
@@ -111,8 +102,6 @@
                     </option>
                     {% endfor %}
                 </select>
-                {% elif field.key == 'q' %}
-                <input type="text" name="q" value="{{ q or '' }}" class="brutal-input table-control" placeholder="{{ t.col_friend_id or '朋友id' }} / ID">
                 {% elif field.key == 'refresh' %}
                 <button type="submit" class="brutal-btn table-action-btn">{{ t.btn_refresh or 'Refresh' }}</button>
                 {% endif %}
@@ -186,8 +175,8 @@
         </tr>
         {% endfor %}
     {% endcall %}
-    {% set pair_prev_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ q_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ (page or 0) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ ((pair_page or 0) - 1) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
-    {% set pair_next_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ q_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ (page or 0) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ ((pair_page or 0) + 1) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
+    {% set pair_prev_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ (page or 0) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ ((pair_page or 0) - 1) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
+    {% set pair_next_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ (page or 0) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ ((pair_page or 0) + 1) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
     {{ data_table_pager(pair_page or 0, pair_has_prev, pair_has_next, pair_prev_url, pair_next_url, '#management-content', pair_total or 0, t) }}
 {% endcall %}
 
@@ -228,8 +217,8 @@
         </tr>
         {% endfor %}
     {% endcall %}
-    {% set daily_prev_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ q_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ (pair_page or 0) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
-    {% set daily_next_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ q_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ (pair_page or 0) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
+    {% set daily_prev_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ ((page or 0) - 1) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ (pair_page or 0) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
+    {% set daily_next_url = "/management/daily-gift?lang=" ~ current_lang ~ "&biz_date_local=" ~ selected_biz_date_local ~ account_param ~ "&sort_by=" ~ (sort_by or 'updated_at') ~ "&sort_order=" ~ (sort_order or 'desc') ~ "&page=" ~ ((page or 0) + 1) ~ "&page_size=" ~ (page_size or 10) ~ "&pair_page=" ~ (pair_page or 0) ~ "&pair_page_size=" ~ (pair_page_size or 10) %}
     {{ data_table_pager(page or 0, has_prev, has_next, daily_prev_url, daily_next_url, '#management-content', records_total or 0, t) }}
 {% endcall %}
 {% endcall %}
