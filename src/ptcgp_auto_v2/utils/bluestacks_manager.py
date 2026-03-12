@@ -27,7 +27,8 @@ def parse_bluestacks_instance(command: str) -> Optional[str]:
     return None
 
 
-def _extract_port_from_address(address: str) -> Optional[int]:
+def extract_port_from_address(address: str) -> Optional[int]:
+    """从 host:port 形式的地址中提取端口。"""
     if not address:
         return None
     if ":" not in address:
@@ -93,7 +94,7 @@ def restart_bluestacks_instance_for_device(
     bin_path: str = DEFAULT_BLUESTACKS_BIN,
 ) -> bool:
     """重启当前设备对应的 BlueStacks 实例"""
-    port = _extract_port_from_address(device_address)
+    port = extract_port_from_address(device_address)
     if port is None:
         logger.warning("无法解析设备端口: %s", device_address)
         return False
@@ -130,7 +131,7 @@ def _wait_for_port_closed(
     interval_seconds: float = 1.0,
 ) -> bool:
     """等待 BlueStacks 端口关闭。"""
-    port = _extract_port_from_address(device_address)
+    port = extract_port_from_address(device_address)
     if port is None:
         logger.warning("无法解析设备端口: %s", device_address)
         return False
@@ -152,7 +153,7 @@ def wait_for_bluestacks_port(
     interval_seconds: float = 2.0,
 ) -> bool:
     """等待 BlueStacks 端口就绪。"""
-    port = _extract_port_from_address(device_address)
+    port = extract_port_from_address(device_address)
     if port is None:
         logger.warning("无法解析设备端口: %s", device_address)
         return False
@@ -197,7 +198,10 @@ def discover_bluestacks_devices() -> List[str]:
                 port = match.group(1)
                 devices.append(f"127.0.0.1:{port}")
 
-    devices = sorted(devices, key=lambda addr: int(addr.split(":")[1]))
+    devices = sorted(
+        devices,
+        key=lambda addr: extract_port_from_address(addr) or 0,
+    )
     if devices:
         logger.debug("发现 %s 个 BlueStacks 设备", len(devices))
     return devices
@@ -294,6 +298,7 @@ def stop_bluestacks_instance(instance_name: str) -> bool:
 __all__ = [
     "DEFAULT_BLUESTACKS_BIN",
     "DEFAULT_BLUESTACKS_CONF",
+    "extract_port_from_address",
     "parse_bluestacks_instance",
     "find_bluestacks_pid_by_port",
     "find_bluestacks_instance_by_port",
