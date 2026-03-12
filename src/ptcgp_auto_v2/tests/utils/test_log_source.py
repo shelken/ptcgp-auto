@@ -32,3 +32,11 @@ def test_resolve_log_device_falls_back_to_port(monkeypatch):
 
     assert device == "5655"
     assert color_key == "5655"
+
+
+def test_resolve_log_device_returns_placeholder_for_invalid_address():
+    """非法地址应回退到占位符。"""
+    device, color_key = log_source.resolve_log_device("invalid-address", "auto-")
+
+    assert device == "----"
+    assert color_key == "----"

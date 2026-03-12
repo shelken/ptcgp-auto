@@ -27,7 +27,7 @@ from ptcgp_auto_v2.core.task_schedule import (
 )
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.utils.bluestacks_manager import (
-    find_bluestacks_instance_by_port,
+    extract_port_from_address,
     list_manageable_instances,
     start_bluestacks_instance,
     stop_bluestacks_instance,
@@ -270,6 +270,45 @@ class Scheduler:
         logger.info("当前 pending 任务数量: %s", pending_count)
         return pending_count
 
+    def _calculate_target_device_count(self, pending_count: int) -> int:
+        """根据 pending 数量计算目标设备数。"""
+        if pending_count <= 0:
+            return min(
+                self.config.auto_scale_max_devices,
+                max(0, self.config.auto_scale_min_idle_devices),
+            )
+        return min(
+            self.config.auto_scale_max_devices,
+            ceil(pending_count / self.config.auto_scale_pending_step),
+        )
+
+    def _pick_stoppable_idle_devices(
+        self,
+        count: int,
+        manageable_ports: set[int],
+    ) -> list[Device]:
+        """选择允许缩容的空闲 auto 设备。"""
+        if count <= 0:
+            return []
+
+        now = datetime.now()
+        candidates: list[Device] = []
+        for device in self.device_pool.get_idle_devices():
+            port = extract_port_from_address(device.address)
+            if port is None or port not in manageable_ports:
+                continue
+
+            idle_at = device.became_idle_at
+            if idle_at is None:
+                continue
+            if (now - idle_at).total_seconds() < self.config.auto_scale_idle_seconds:
+                continue
+
+            candidates.append(device)
+
+        candidates.sort(key=lambda device: device.became_idle_at or datetime.min)
+        return candidates[:count]
+
     def _refresh_device_pool(self, addresses: Optional[list[str]] = None):
         """刷新设备池（发现新增/移除的设备）"""
         if addresses is None:
@@ -307,65 +346,53 @@ class Scheduler:
             )
             return
 
-        desired = min(
-            self.config.auto_scale_max_devices,
-            ceil(pending_count / self.config.auto_scale_pending_step),
-        )
-        # 仅在无待执行任务时维持最小空闲设备，避免 pending 很小时频繁预热额外实例
-        if pending_count == 0 and idle_count < self.config.auto_scale_min_idle_devices:
-            desired = min(self.config.auto_scale_max_devices, desired + 1)
-
+        target_devices = self._calculate_target_device_count(pending_count)
         manageable_map = list_manageable_instances(
             prefix=self.config.auto_scale_instance_prefix,
         )
+        manageable_ports = set(manageable_map.keys())
+        running_ports = {
+            port
+            for address in running_devices
+            if (port := extract_port_from_address(address)) is not None
+        }
+        running_auto_ports = running_ports & manageable_ports
 
         logger.debug(
-            "扩缩容评估: pending=%s idle=%s running=%s desired=%s manageable=%s",
+            "扩缩容评估: pending=%s idle=%s running=%s target=%s manageable=%s",
             pending_count,
             idle_count,
             running_count,
-            desired,
+            target_devices,
             len(manageable_map),
         )
 
-        to_start = max(0, desired - running_count)
+        to_start = max(0, target_devices - running_count)
         if to_start > 0:
-            running_instances = set()
-            for address in running_devices:
-                port_str = address.rsplit(":", 1)[-1]
-                if not port_str.isdigit():
-                    continue
-                resolved = find_bluestacks_instance_by_port(int(port_str))
-                if resolved:
-                    _, instance = resolved
-                    running_instances.add(instance)
-
             candidates = [
                 instance_name
-                for instance_name, _ in manageable_map.values()
-                if instance_name not in running_instances
+                for port, (instance_name, _) in manageable_map.items()
+                if port not in running_auto_ports
             ]
             if not candidates:
                 logger.warning("没有可启动的 auto 实例，请检查 conf 配置")
             for instance_name in candidates[:to_start]:
                 start_bluestacks_instance(instance_name)
 
-        to_stop = max(0, idle_count - self.config.auto_scale_min_idle_devices)
+        to_stop = max(0, running_count - target_devices)
         if to_stop > 0:
-            idle_devices = self.device_pool.pick_idle_devices_for_shutdown(
+            idle_devices = self._pick_stoppable_idle_devices(
                 to_stop,
-                self.config.auto_scale_idle_seconds,
+                manageable_ports,
             )
             for device in idle_devices:
-                port_str = device.address.rsplit(":", 1)[-1]
-                if not port_str.isdigit():
+                port = extract_port_from_address(device.address)
+                if port is None:
                     continue
-                resolved = find_bluestacks_instance_by_port(int(port_str))
-                if not resolved:
+                auto_info = manageable_map.get(port)
+                if auto_info is None:
                     continue
-                _, instance = resolved
-                auto_info = manageable_map.get(int(port_str))
-                auto_name = auto_info[1] if auto_info else "-"
+                instance, auto_name = auto_info
                 logger.info(
                     "准备关闭 BlueStacks 实例: %s (auto: %s, 设备: %s)",
                     instance,

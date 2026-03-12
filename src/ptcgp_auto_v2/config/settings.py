@@ -186,7 +186,7 @@ class Settings:
     auto_scale_max_devices: int = 3
     auto_scale_pending_step: int = 10
     auto_scale_eval_interval_seconds: int = 60
-    auto_scale_idle_seconds: int = 600
+    auto_scale_idle_seconds: int = 60
 
     # 执行配置
     max_retries: int = DEFAULT_MAX_RETRIES

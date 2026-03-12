@@ -8,6 +8,13 @@ from types import SimpleNamespace
 import ptcgp_auto_v2.utils.bluestacks_manager as bluestacks_manager
 
 
+def test_extract_port_from_address():
+    """从 host:port 地址中提取端口。"""
+    assert bluestacks_manager.extract_port_from_address("127.0.0.1:5555") == 5555
+    assert bluestacks_manager.extract_port_from_address("127.0.0.1") is None
+    assert bluestacks_manager.extract_port_from_address("127.0.0.1:abc") is None
+
+
 def test_parse_instance_from_command():
     """解析 --instance 参数"""
     command = (
