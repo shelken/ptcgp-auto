@@ -1,7 +1,6 @@
 import { syncSidebarRequestParams } from './features/filters/index.js';
-import { buildAutoRefreshUrl } from './auto_refresh.js';
+import { refreshAutoRefreshContainers } from './auto_refresh.js';
 import { isManagementHash } from './constants.js';
-import { isElementInActiveTab } from './utils.js';
 
 const STORAGE_KEY_TAB = 'ptcgp_active_tab';
 const STORAGE_KEY_MANAGEMENT_HASH = 'ptcgp_management_hash';
@@ -72,17 +71,8 @@ export function switchTab(tabName, options = {}) {
         filters.classList.toggle('hidden', tabName !== 'records');
     }
 
-    if (tabName === 'records') {
-        const container = document.getElementById('records-container');
-        submitFilterFormIfNeeded('filter-form', 'records-container');
-        if (container && container.dataset.loaded === 'true' && container.dataset.autoRefresh) {
-            triggerAutoRefresh(container);
-        }
-    }
-
     if (tabName === 'owned-cards') {
         window.ownedCardsUserScrolled = false;
-        submitFilterFormIfNeeded('owned-filter-form', 'owned-cards-container');
     }
 
     localStorage.setItem(STORAGE_KEY_TAB, tabName);
@@ -92,6 +82,7 @@ export function switchTab(tabName, options = {}) {
         detail: { tabName }
     }));
 
+    let shouldRefreshSelectedTab = true;
     if (tabName === 'management' && !skipAutoSelect) {
         syncManagementSidebarRequestUrls();
         const content = document.getElementById('management-content');
@@ -106,34 +97,16 @@ export function switchTab(tabName, options = {}) {
             if (!targetBtn) {
                 targetBtn = document.querySelector('#tab-content-management .sidebar-btn');
             }
-            if (targetBtn) targetBtn.click();
+            if (targetBtn) {
+                shouldRefreshSelectedTab = false;
+                targetBtn.click();
+            }
         }
     }
-}
 
-function triggerAutoRefresh(container) {
-    if (!container) return;
-    if (!isElementInActiveTab(container)) return;
-
-    const url = buildAutoRefreshUrl(container);
-    if (!url) return;
-
-    htmx.ajax('GET', url, {
-        target: container,
-        swap: 'innerHTML'
-    });
-}
-
-function submitFilterFormIfNeeded(formId, containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    if (container.dataset.loaded === 'true' || container.dataset.loading === 'true') return;
-
-    const form = document.getElementById(formId);
-    if (!(form instanceof HTMLFormElement)) return;
-
-    container.dataset.loading = 'true';
-    form.requestSubmit();
+    if (shouldRefreshSelectedTab && selected) {
+        refreshAutoRefreshContainers(selected);
+    }
 }
 
 // --- 更新侧边栏状态 ---
