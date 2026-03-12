@@ -1,5 +1,6 @@
 import { showToast, setButtonLoading } from '../../utils.js';
 import { clearFilterCacheByFormId } from './shared_form.js';
+import { buildAutoRefreshUrl } from '../../auto_refresh.js';
 
 function bindRequestLoading(button, targetId) {
     if (!button) return;
@@ -28,37 +29,21 @@ function bindRequestLoading(button, targetId) {
 
 // --- 清除记录筛选 ---
 export function clearFilters() {
-    document.querySelectorAll('.filter-checkbox').forEach((el) => {
+    document.querySelectorAll('#filter-form .filter-checkbox').forEach((el) => {
         el.checked = false;
     });
     clearFilterCacheByFormId('filter-form');
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lang') || 'en';
-    htmx.ajax('GET', `/api/records?page=0&lang=${lang}`, { target: '#records-container', swap: 'innerHTML' });
+    const container = document.getElementById('records-container');
+    const url = container ? buildAutoRefreshUrl(container) : null;
+    htmx.ajax('GET', url || '/api/records?page=0', { target: '#records-container', swap: 'innerHTML' });
 }
 
 // --- 刷新记录列表 ---
 export function refreshRecords(button = null) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lang') || 'en';
-
-    const form = document.getElementById('filter-form');
-    const formData = form ? new FormData(form) : null;
-    const params = new URLSearchParams();
-
-    params.set('page', '0');
-    params.set('lang', lang);
-
-    if (formData) {
-        formData.forEach((value, key) => {
-            if (key === 'rarity' || key === 'card_type') {
-                params.append(key, value);
-            }
-        });
-    }
-
+    const container = document.getElementById('records-container');
+    const url = container ? buildAutoRefreshUrl(container) : null;
     bindRequestLoading(button, 'records-container');
-    htmx.ajax('GET', `/api/records?${params.toString()}`, { target: '#records-container', swap: 'innerHTML' });
+    htmx.ajax('GET', url || '/api/records?page=0', { target: '#records-container', swap: 'innerHTML' });
     showToast('已刷新');
 }

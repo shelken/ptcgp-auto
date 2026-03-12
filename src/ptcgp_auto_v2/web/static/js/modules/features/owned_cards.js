@@ -1,4 +1,5 @@
 import { throttle } from '../utils.js';
+import { buildUrlWithSelectorFilters } from './filters/shared_form.js';
 
 const STORAGE_KEY_OWNED_COLS = 'ptcgp_owned_cols';
 const STORAGE_KEY_OWNED_MODAL_PAGE_SIZE = 'ptcgp_owned_modal_page_size';
@@ -157,20 +158,9 @@ function scheduleOwnedCardModalPageSizeWarmup() {
 }
 
 function buildOwnedCardsStatsUrl() {
-    const form = document.getElementById('owned-filter-form');
     const urlParams = new URLSearchParams(window.location.search);
     const lang = urlParams.get('lang') || 'en';
-    const params = new URLSearchParams();
-    params.set('lang', lang);
-
-    if (form instanceof HTMLFormElement) {
-        const formData = new FormData(form);
-        formData.forEach((value, key) => {
-            params.append(key, value);
-        });
-    }
-
-    return `/api/owned-cards/stats?${params.toString()}`;
+    return buildUrlWithSelectorFilters('/api/owned-cards/stats', '#owned-filter-form', { lang });
 }
 
 function handleOwnedCardModalClick(event) {
