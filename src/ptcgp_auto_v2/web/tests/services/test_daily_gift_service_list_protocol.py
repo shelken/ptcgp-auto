@@ -8,8 +8,8 @@ from ptcgp_auto_v2.db.models import Account, AccountGiftPair, AccountGiftRecord
 from ptcgp_auto_v2.web.services.daily_gift_service import build_daily_gift_context
 
 
-def test_daily_gift_context_supports_record_search_sort_pagination(session: Session):
-    """daily-gift 记录列表应支持 q/sort/page/page_size 协议。"""
+def test_daily_gift_context_supports_record_sort_pagination(session: Session):
+    """daily-gift 记录列表应支持 sort/page/page_size 协议。"""
     account_a = Account(
         game_id="dg_qs_a", friend_id="5000000000000001", nickname="Alpha"
     )
@@ -55,21 +55,19 @@ def test_daily_gift_context_supports_record_search_sort_pagination(session: Sess
     context = build_daily_gift_context(
         session=session,
         biz_date_local="2026-02-17",
-        q="9999",
         sort_by="updated_at",
         sort_order="desc",
         page=0,
         page_size=10,
     )
-    assert context["records_total"] == 1
-    assert len(context["records"]) == 1
-    assert context["records"][0]["target_friend_id"] == "5000000000009999"
+    assert context["records_total"] == 3
+    assert len(context["records"]) == 3
+    assert context["records"][0]["target_friend_id"] == account_a.friend_id
     assert context["stats"]["total"] == 3
 
     paged = build_daily_gift_context(
         session=session,
         biz_date_local="2026-02-17",
-        q="",
         sort_by="updated_at",
         sort_order="asc",
         page=1,

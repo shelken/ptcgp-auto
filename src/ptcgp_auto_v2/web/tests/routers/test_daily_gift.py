@@ -39,7 +39,7 @@ def _patch_render_template(monkeypatch):
 
 
 def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
-    """daily-gift 管理页应支持 biz_date_local/q/sort/page 参数渲染。"""
+    """daily-gift 管理页应支持 biz_date_local/account/sort/page 参数渲染。"""
     _patch_render_template(monkeypatch)
 
     captured = {}
@@ -49,7 +49,6 @@ def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
             {
                 "biz_date_local": kwargs["biz_date_local"],
                 "account_id": kwargs["account_id"],
-                "q": kwargs["q"],
                 "sort_by": kwargs["sort_by"],
                 "sort_order": kwargs["sort_order"],
                 "page": kwargs["page"],
@@ -69,7 +68,6 @@ def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
             request=_build_request("GET"),
             biz_date_local="2026-02-22",
             account_id="7",
-            q="abc",
             sort_by="updated_at",
             sort_order="desc",
             page=2,
@@ -85,7 +83,6 @@ def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
     assert captured == {
         "biz_date_local": "2026-02-22",
         "account_id": 7,
-        "q": "abc",
         "sort_by": "updated_at",
         "sort_order": "desc",
         "page": 2,
