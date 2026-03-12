@@ -43,6 +43,30 @@ class FakeU2Device:
         """记录双指手势轨迹。"""
         self.gestures.append((paths, kwargs))
 
+    def pinch_in(self, percent: int = 0, steps: int = 0) -> None:
+        """记录 pinch_in 调用，兼容当前 adb 封装。"""
+        self._record_pinch(percent=percent, steps=steps, direction="in")
+
+    def pinch_out(self, percent: int = 0, steps: int = 0) -> None:
+        """记录 pinch_out 调用，兼容当前 adb 封装。"""
+        self._record_pinch(percent=percent, steps=steps, direction="out")
+
+    def _record_pinch(self, percent: int, steps: int, direction: str) -> None:
+        """生成一组位于屏幕内的测试手势点。"""
+        center_x = self._screen_width // 2
+        center_y = self._screen_height // 2
+        offset_x = max(1, int(self._screen_width * max(percent, 1) / 400))
+        offset_y = max(1, int(self._screen_height * max(percent, 1) / 400))
+        paths = (
+            (max(0, center_x - offset_x), center_y),
+            (min(self._screen_width - 1, center_x + offset_x), center_y),
+            (center_x, max(0, center_y - offset_y)),
+            (center_x, min(self._screen_height - 1, center_y + offset_y)),
+        )
+        self.gestures.append(
+            (paths, {"steps": steps, "percent": percent, "direction": direction})
+        )
+
     def screenshot(self):
         """返回模拟截图。"""
         return self._screenshot_image
