@@ -46,36 +46,50 @@ def test_auto_scale_evaluate_expansion(monkeypatch):
     assert calls == ["Tiramisu64_20"]
 
 
-def test_auto_scale_evaluate_scale_down(monkeypatch):
-    """空闲时间达到阈值触发缩容"""
+def test_auto_scale_evaluate_scale_down_by_target_device_count(monkeypatch):
+    """总运行设备数高于目标值时，按目标设备数缩容 auto 实例"""
     config = SchedulerConfig(
         auto_scale_emulators=True,
         auto_scale_eval_interval_seconds=0,
         auto_scale_pending_step=10,
-        auto_scale_max_devices=2,
+        auto_scale_max_devices=3,
         auto_scale_min_idle_devices=1,
         auto_scale_idle_seconds=0,
     )
-    scheduler = Scheduler(["127.0.0.1:5555", "127.0.0.1:5556"], config=config)
+    scheduler = Scheduler(
+        ["127.0.0.1:5555", "127.0.0.1:5556", "127.0.0.1:5557"],
+        config=config,
+    )
     now = datetime.now()
-    for device in scheduler.device_pool.get_all_devices():
-        device.mark_available()
-        device.became_idle_at = now - timedelta(seconds=200)
+    device_5555 = scheduler.device_pool.get_device("127.0.0.1:5555")
+    device_5556 = scheduler.device_pool.get_device("127.0.0.1:5556")
+    device_5557 = scheduler.device_pool.get_device("127.0.0.1:5557")
+    assert device_5555 is not None
+    assert device_5556 is not None
+    assert device_5557 is not None
+    device_5555.mark_busy()
+    device_5556.mark_available()
+    device_5556.became_idle_at = now - timedelta(seconds=200)
+    device_5557.mark_available()
+    device_5557.became_idle_at = now - timedelta(seconds=200)
 
     removed: list[str] = []
     stop_calls: list[str] = []
 
-    monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)
+    monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 9)
     monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         scheduler_module,
         "discover_devices",
-        lambda: ["127.0.0.1:5555", "127.0.0.1:5556"],
+        lambda: ["127.0.0.1:5555", "127.0.0.1:5556", "127.0.0.1:5557"],
     )
     monkeypatch.setattr(
         scheduler_module,
-        "find_bluestacks_instance_by_port",
-        lambda port: (1234, "auto-1"),
+        "list_manageable_instances",
+        lambda prefix="auto-": {
+            5556: ("Tiramisu64_21", "auto-2"),
+            5557: ("Tiramisu64_22", "auto-3"),
+        },
     )
     monkeypatch.setattr(
         scheduler_module,
@@ -89,8 +103,8 @@ def test_auto_scale_evaluate_scale_down(monkeypatch):
     )
 
     scheduler._auto_scale_evaluate()
-    assert stop_calls
-    assert removed
+    assert stop_calls == ["Tiramisu64_21", "Tiramisu64_22"]
+    assert removed == ["127.0.0.1:5556", "127.0.0.1:5557"]
 
 
 def test_auto_scale_evaluate_should_not_stop_last_running_device_when_pool_stale(
@@ -121,16 +135,6 @@ def test_auto_scale_evaluate_should_not_stop_last_running_device_when_pool_stale
     monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)
     monkeypatch.setattr(
         scheduler_module, "discover_devices", lambda: ["127.0.0.1:5555"]
-    )
-    monkeypatch.setattr(
-        scheduler.device_pool,
-        "pick_idle_devices_for_shutdown",
-        lambda count, idle_seconds: [running_device],
-    )
-    monkeypatch.setattr(
-        scheduler_module,
-        "find_bluestacks_instance_by_port",
-        lambda port: (1234, "Tiramisu64_20") if port == 5555 else None,
     )
     monkeypatch.setattr(
         scheduler_module,
@@ -179,14 +183,55 @@ def test_auto_scale_evaluate_should_not_add_extra_capacity_when_pending_below_st
     )
     monkeypatch.setattr(
         scheduler_module,
-        "find_bluestacks_instance_by_port",
-        lambda port: (1234, "Tiramisu64_20") if port == 5555 else None,
-    )
-    monkeypatch.setattr(
-        scheduler_module,
         "start_bluestacks_instance",
         lambda name: calls.append(name) or True,
     )
 
     scheduler._auto_scale_evaluate()
     assert calls == []
+
+
+def test_auto_scale_evaluate_should_not_stop_non_auto_idle_device(monkeypatch):
+    """缩容只能关闭可管理的 auto 实例，不能碰普通运行设备"""
+    config = SchedulerConfig(
+        auto_scale_emulators=True,
+        auto_scale_eval_interval_seconds=0,
+        auto_scale_pending_step=10,
+        auto_scale_max_devices=3,
+        auto_scale_min_idle_devices=1,
+        auto_scale_idle_seconds=0,
+    )
+    scheduler = Scheduler(["127.0.0.1:5555", "127.0.0.1:5556"], config=config)
+    now = datetime.now()
+
+    fixed_device = scheduler.device_pool.get_device("127.0.0.1:5555")
+    auto_device = scheduler.device_pool.get_device("127.0.0.1:5556")
+    assert fixed_device is not None
+    assert auto_device is not None
+    fixed_device.mark_available()
+    fixed_device.became_idle_at = now - timedelta(seconds=200)
+    auto_device.mark_available()
+    auto_device.became_idle_at = now - timedelta(seconds=200)
+
+    stop_calls: list[str] = []
+
+    monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)
+    monkeypatch.setattr(scheduler, "_refresh_device_pool", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        scheduler_module,
+        "discover_devices",
+        lambda: ["127.0.0.1:5555", "127.0.0.1:5556"],
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "list_manageable_instances",
+        lambda prefix="auto-": {5556: ("Tiramisu64_21", "auto-2")},
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "stop_bluestacks_instance",
+        lambda name: stop_calls.append(name) or True,
+    )
+
+    scheduler._auto_scale_evaluate()
+    assert stop_calls == ["Tiramisu64_21"]
