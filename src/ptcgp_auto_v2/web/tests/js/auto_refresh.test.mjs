@@ -5,10 +5,45 @@ import { readFile } from 'node:fs/promises';
 async function loadAutoRefreshModule() {
     const moduleUrl = new URL('../../static/js/modules/auto_refresh.js', import.meta.url);
     const source = await readFile(moduleUrl, 'utf8');
-    const patchedSource = source.replace(
-        "import { isElementInActiveTab } from './utils.js';",
-        'const isElementInActiveTab = () => true;'
-    );
+    const patchedSource = source
+        .replace(
+            "import { isElementInActiveTab } from './utils.js';",
+            'const isElementInActiveTab = () => true;'
+        )
+        .replace(
+            "import { buildUrlWithSelectorFilters } from './features/filters/shared_form.js';",
+            `const buildUrlWithSelectorFilters = (baseUrl, selectors, overrides = {}) => {
+                const url = new URL(baseUrl, window.location.origin);
+                const selectorList = String(selectors || '').split(',').map((item) => item.trim()).filter(Boolean);
+                const filters = {};
+                selectorList.forEach((selector) => {
+                    const element = document.querySelector(selector);
+                    if (!element) return;
+                    if (element.tagName === 'FORM') {
+                        const formData = new FormData(element);
+                        formData.forEach((value, key) => {
+                            if (!filters[key]) {
+                                filters[key] = [];
+                            }
+                            filters[key].push(String(value));
+                        });
+                        return;
+                    }
+                    if (!element.name) return;
+                    filters[element.name] = [String(element.value || '')];
+                });
+                Object.entries(overrides).forEach(([key, value]) => {
+                    filters[key] = [String(value)];
+                });
+                Object.keys(filters).forEach((key) => {
+                    url.searchParams.delete(key);
+                    filters[key].forEach((value) => {
+                        url.searchParams.append(key, value);
+                    });
+                });
+                return \`\${url.pathname}\${url.search}\`;
+            };`
+        );
     return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(patchedSource)}`);
 }
 
@@ -56,5 +91,9 @@ test('buildAutoRefreshUrl 保留多选筛选参数', async () => {
         }
     });
 
-    assert.equal(url, '/api/records?page=0&lang=zh_CN&rarity=SR&rarity=SAR&rarity=UR');
+    const parsedUrl = new URL(url, 'http://192.168.6.10:8000');
+    assert.equal(parsedUrl.pathname, '/api/records');
+    assert.equal(parsedUrl.searchParams.get('page'), '0');
+    assert.equal(parsedUrl.searchParams.get('lang'), 'zh_CN');
+    assert.deepEqual(parsedUrl.searchParams.getAll('rarity'), ['SR', 'SAR', 'UR']);
 });

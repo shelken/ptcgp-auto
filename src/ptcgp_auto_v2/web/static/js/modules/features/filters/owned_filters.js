@@ -1,6 +1,7 @@
 import { showToast, setButtonLoading } from '../../utils.js';
 import { reinitCustomSelect } from '../../custom_select.js';
 import { clearFilterCacheByFormId } from './shared_form.js';
+import { buildAutoRefreshUrl } from '../../auto_refresh.js';
 
 function bindRequestLoading(button, targetId) {
     if (!button) return;
@@ -27,20 +28,11 @@ function bindRequestLoading(button, targetId) {
     }, 10000);
 }
 
-function refreshOwnedCardsByForm(form) {
-    if (!form) return;
-    const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lang') || 'en';
-    const params = new URLSearchParams();
-    params.set('page', '0');
-    params.set('lang', lang);
-
-    const formData = new FormData(form);
-    formData.forEach((value, key) => {
-        params.append(key, value);
-    });
-
-    htmx.ajax('GET', `/api/owned-cards?${params.toString()}`, { target: '#owned-cards-container', swap: 'innerHTML' });
+function refreshOwnedCardsList() {
+    const container = document.getElementById('owned-cards-container');
+    if (!(container instanceof HTMLElement)) return;
+    const url = buildAutoRefreshUrl(container);
+    htmx.ajax('GET', url || '/api/owned-cards?page=0', { target: '#owned-cards-container', swap: 'innerHTML' });
 }
 
 // --- 更新筛选组摘要 ---
@@ -93,7 +85,7 @@ export function clearOwnedFilterGroup(button) {
 
     updateOwnedFilterGroupsState();
     form.dispatchEvent(new Event('change', { bubbles: true }));
-    refreshOwnedCardsByForm(form);
+    refreshOwnedCardsList();
 }
 
 // --- 切换筛选 Chip ---
@@ -177,30 +169,12 @@ export function clearOwnedFilters() {
         form.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lang') || 'en';
-    htmx.ajax('GET', `/api/owned-cards?page=0&lang=${lang}&sort_by=${encodeURIComponent(currentSortBy)}`, { target: '#owned-cards-container', swap: 'innerHTML' });
+    refreshOwnedCardsList();
 }
 
 // --- 刷新已拥有卡牌列表 ---
 export function refreshOwnedCards(button = null) {
-    const urlParams = new URLSearchParams(window.location.search);
-    const lang = urlParams.get('lang') || 'en';
-
-    const form = document.getElementById('owned-filter-form');
-    const formData = form ? new FormData(form) : null;
-    const params = new URLSearchParams();
-
-    params.set('page', '0');
-    params.set('lang', lang);
-
-    if (formData) {
-        formData.forEach((value, key) => {
-            params.append(key, value);
-        });
-    }
-
     bindRequestLoading(button, 'owned-cards-container');
-    htmx.ajax('GET', `/api/owned-cards?${params.toString()}`, { target: '#owned-cards-container', swap: 'innerHTML' });
+    refreshOwnedCardsList();
     showToast('已刷新');
 }

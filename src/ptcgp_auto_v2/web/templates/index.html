@@ -344,7 +344,7 @@
                                     class="brutal-input w-full text-sm"
                                     hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
                                     hx-target="#owned-cards-container"
-                                    hx-include="#owned-filter-form,#owned-sort-select"
+                                    hx-include="#owned-filter-form"
                                     hx-trigger="input changed delay:400ms"
                                     data-action="save-owned-filters-input">
                             </div>
@@ -363,7 +363,7 @@
                                         {% for r in rarities %}
                                         <div>
                                             <input type="checkbox" id="owned-rarity-{{ r }}" name="rarity" value="{{ r }}" class="sr-only owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
                                             <label for="owned-rarity-{{ r }}" class="filter-label brutal-btn">{{ t['rarity_' + r] or r }}</label>
                                         </div>
                                         {% endfor %}
@@ -385,7 +385,7 @@
                                         {% for type in card_types %}
                                         <div>
                                             <input type="checkbox" id="owned-type-{{ type }}" name="card_type" value="{{ type }}" class="sr-only owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
                                             <label for="owned-type-{{ type }}" class="filter-label brutal-btn uppercase">{{ t['type_' + type] or type }}</label>
                                         </div>
                                         {% endfor %}
@@ -407,7 +407,7 @@
                                         {% for item in card_sets %}
                                         <div>
                                             <input type="checkbox" id="owned-set-{{ item.code }}" name="set_code" value="{{ item.code }}" class="sr-only owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
                                             <label for="owned-set-{{ item.code }}" class="filter-label brutal-btn">
                                                 {{ item.display_name or item.code }}
                                             </label>
@@ -431,7 +431,7 @@
                                         {% for item in packs %}
                                         <div>
                                             <input type="checkbox" id="owned-pack-{{ item.name }}" name="pack_name" value="{{ item.name }}" class="sr-only owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
                                             <label for="owned-pack-{{ item.name }}" class="filter-label brutal-btn">
                                                 {{ item.display_name or item.name }}
                                             </label>
@@ -455,7 +455,7 @@
                                         {% for el in elements %}
                                         <div>
                                             <input type="checkbox" id="owned-element-{{ el }}" name="element" value="{{ el }}" class="sr-only owned-filter-checkbox filter-checkbox"
-                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form,#owned-sort-select">
+                                                   hx-get="/api/owned-cards?page=0&lang={{ current_lang }}" hx-target="#owned-cards-container" hx-include="#owned-filter-form">
                                             <label for="owned-element-{{ el }}" class="filter-label brutal-btn uppercase">{{ t['element_' + el] or el }}</label>
                                         </div>
                                         {% endfor %}
@@ -479,7 +479,7 @@
                                        checked
                                        hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
                                        hx-target="#owned-cards-container"
-                                       hx-include="#owned-filter-form,#owned-sort-select">
+                                       hx-include="#owned-filter-form">
                                 <label for="owned-scope-owned" class="brutal-btn owned-scope-btn">{{ t.owned_scope_owned }}</label>
                                 <input type="radio"
                                        id="owned-scope-missing"
@@ -489,7 +489,7 @@
                                        form="owned-filter-form"
                                        hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
                                        hx-target="#owned-cards-container"
-                                       hx-include="#owned-filter-form,#owned-sort-select">
+                                       hx-include="#owned-filter-form">
                                 <label for="owned-scope-missing" class="brutal-btn owned-scope-btn">{{ t.owned_scope_missing }}</label>
                                 <input type="radio"
                                        id="owned-scope-all"
@@ -499,7 +499,7 @@
                                        form="owned-filter-form"
                                        hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
                                        hx-target="#owned-cards-container"
-                                       hx-include="#owned-filter-form,#owned-sort-select">
+                                       hx-include="#owned-filter-form">
                                 <label for="owned-scope-all" class="brutal-btn owned-scope-btn">{{ t.owned_scope_all }}</label>
                             </div>
                             <span class="font-bold uppercase tracking-widest text-sm text-muted">{{ t.owned_cols_label }}</span>
@@ -521,7 +521,7 @@
                                     data-action="save-owned-filters"
                                     hx-get="/api/owned-cards?page=0&lang={{ current_lang }}"
                                     hx-target="#owned-cards-container"
-                                    hx-include="#owned-filter-form,#owned-sort-select">
+                                    hx-include="#owned-filter-form">
                                     <option value="rarity">{{ t.owned_sort_rarity }}</option>
                                     <option value="acquired" selected>{{ t.owned_sort_acquired }}</option>
                                     <option value="count">{{ t.owned_sort_count }}</option>
@@ -549,7 +549,7 @@
                          data-url="/api/owned-cards?page=0&lang={{ current_lang }}"
                          data-base-url="/api/owned-cards?page=0&lang={{ current_lang }}"
                          data-auto-refresh="/api/owned-cards"
-                         data-refresh-include="#owned-filter-form,#owned-sort-select"
+                         data-refresh-include="#owned-filter-form"
                          hx-swap="innerHTML">
                     </div>
 
@@ -814,6 +814,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=5.15"></script>
+    <script type="module" src="/static/js/main.js?v=5.16"></script>
 </body>
 </html>

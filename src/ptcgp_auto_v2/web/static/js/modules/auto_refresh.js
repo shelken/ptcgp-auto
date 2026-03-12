@@ -1,25 +1,5 @@
 import { isElementInActiveTab } from './utils.js';
-
-/**
- * 收集自动刷新需要带上的查询参数，保留同名字段的多值顺序。
- * @param {Element | null} element - 表单或单个输入控件
- * @returns {Array<[string, string]>}
- */
-function collectRefreshEntries(element) {
-    if (!element) return [];
-
-    if (element.tagName === 'FORM') {
-        const entries = [];
-        const formData = new FormData(element);
-        formData.forEach((value, key) => {
-            entries.push([key, String(value)]);
-        });
-        return entries;
-    }
-
-    if (!element.name) return [];
-    return [[element.name, element.value || '']];
-}
+import { buildUrlWithSelectorFilters } from './features/filters/shared_form.js';
 
 // --- 构建自动刷新 URL ---
 export function buildAutoRefreshUrl(container) {
@@ -29,45 +9,20 @@ export function buildAutoRefreshUrl(container) {
     if (!baseUrl) return null;
 
     const parsedUrl = new URL(baseUrl, window.location.origin);
-    const params = new URLSearchParams(parsedUrl.search);
-    params.set('page', '0');
+    const overrides = { page: '0' };
 
-    if (!params.has('lang')) {
+    if (!parsedUrl.searchParams.has('lang')) {
         const urlParams = new URLSearchParams(window.location.search);
         const lang = urlParams.get('lang') || 'en';
-        params.set('lang', lang);
+        overrides.lang = lang;
     }
 
     const includeSelector = container.dataset.refreshInclude;
-    if (!includeSelector) {
-        parsedUrl.search = params.toString();
-        return parsedUrl.pathname + (parsedUrl.search ? parsedUrl.search : '');
-    }
-
-    const selectors = includeSelector.split(',').map((item) => item.trim()).filter(Boolean);
-    const includedEntries = [];
-    selectors.forEach((selector) => {
-        const element = document.querySelector(selector);
-        if (!element) return;
-        includedEntries.push(...collectRefreshEntries(element));
-    });
-
-    const includedKeys = new Set();
-    includedEntries.forEach(([key]) => {
-        if (key) {
-            includedKeys.add(key);
-        }
-    });
-    includedKeys.forEach((key) => {
-        params.delete(key);
-    });
-    includedEntries.forEach(([key, value]) => {
-        if (!key) return;
-        params.append(key, value);
-    });
-
-    parsedUrl.search = params.toString();
-    return parsedUrl.pathname + (parsedUrl.search ? parsedUrl.search : '');
+    return buildUrlWithSelectorFilters(
+        `${parsedUrl.pathname}${parsedUrl.search}`,
+        includeSelector,
+        overrides
+    );
 }
 
 /**
