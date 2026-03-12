@@ -5,62 +5,60 @@
 {% from "partials/macros/account.html" import account_primary_text %}
 
 {% for item in items %}
-<div class="brutal-card p-8 flex flex-col md:flex-row gap-8">
-    <!-- Left: Account & Pack Info -->
-    <div class="w-full md:w-1/4 flex flex-col justify-between md:border-r-4 border-dashed border-subtle md:border-solid md:border-theme md:pr-8 pb-6 md:pb-0 border-b-4 md:border-b-0"
-         style="border-color: var(--border-color);">
-        <div>
-            <div class="flex items-center gap-3 mb-4">
-                <div class="w-4 h-4 rounded-full" style="background-color: var(--active-color); border: 2px solid var(--border-color); box-shadow: 2px 2px 0px var(--shadow-color);"></div>
-                <h2 class="text-3xl font-bold break-words leading-tight">
-                    {{ account_primary_text(item.record.account_id, item.account_name) }}
-                </h2>
-            </div>
-
-            <div class="mt-6 font-mono text-sm brutal-border p-3 shadow-[4px_4px_0px_0px_var(--shadow-color)]" style="background-color: var(--bg-color); box-shadow: 4px 4px 0px var(--shadow-color);">
-                <div class="flex justify-between border-b pb-1 mb-1" style="border-color: var(--border-color);">
-                    <span class="text-muted">{{ t.date_label }}</span>
-                    <span class="font-bold tooltip-text relative-time"
-                          data-iso="{{ item.opened_at.isoformat(timespec='seconds') }}"
-                          data-tooltip="{{ item.opened_at|datetime }}">
-                        {{ item.opened_at|datetime }}
-                    </span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-muted">{{ t.time_label }}</span>
-                    <span class="font-bold tooltip-text relative-time"
-                          data-iso="{{ item.opened_at.isoformat(timespec='seconds') }}"
-                          data-tooltip="{{ item.opened_at|datetime }}">
-                        {{ item.opened_at|datetime }}
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <div class="mt-8">
-            <div class="brutal-tag text-xl mb-2">
-                {% if item.record.set_code %}
-                    {{ item.record.set_code }} / {{ item.pack_name_display }}
-                    <span class="text-sm font-normal">({{ item.record.pack_type }})</span>
-                {% else %}
-                    {{ item.record.pack_type }}
-                {% endif %}
-            </div>
-
-            {% if item.current_points is not none %}
-            <div class="mt-2 text-sm font-bold p-2 brutal-border" style="background-color: var(--accent-color); color: var(--bg-color);">
-                PT: {{ item.current_points }} ({{ item.record.set_code or item.series }})
-            </div>
+<div class="brutal-card p-6 md:p-8 flex flex-col md:flex-row gap-4 md:gap-5">
+    <!-- Left: Compact Meta Rail -->
+    <aside class="w-full md:w-[9.5rem] md:shrink-0 flex flex-col gap-3 md:gap-2.5 md:pr-4 pb-4 md:pb-0 border-b-4 md:border-b-0 md:border-r-4"
+           style="border-color: var(--border-color);">
+        <div class="flex flex-wrap items-center gap-2">
+            {% if item.record.set_code %}
+            <span class="inline-flex items-center min-h-[1.6rem] px-2 py-0.5 border-2 text-[11px] font-black tracking-[0.14em] uppercase shadow-[3px_3px_0px_var(--shadow-color)]"
+                  style="border-color: var(--border-color); background-color: var(--active-color); color: var(--bg-color);">
+                {{ item.record.set_code }}
+            </span>
             {% endif %}
+            <span class="text-[11px] font-extrabold tracking-[0.14em] uppercase text-muted">
+                {{ item.pack_type_display }}
+            </span>
+        </div>
 
-            <div class="text-xs font-bold uppercase tracking-wider text-muted mt-2">
-                {{ item.cards|length }} {{ t.cards_count_suffix }}
+        <h2 class="m-0 text-[1.05rem] md:text-[1.15rem] font-black leading-none uppercase break-words">
+            {% if item.record.set_code %}
+                {{ item.pack_name_display }}
+            {% else %}
+                {{ item.pack_type_display }}
+            {% endif %}
+        </h2>
+
+        <div class="text-[11px] md:text-[12px] font-bold leading-[1.35] text-muted break-words">
+            {{ t.col_account or 'Account' }} · {{ account_primary_text(item.record.account_id, item.account_name) }}
+        </div>
+
+        <div class="w-full border-t-2" style="border-color: var(--border-color);" aria-hidden="true"></div>
+
+        <div class="flex flex-col gap-2">
+            <div class="tooltip-text relative-time text-[12px] md:text-[13px] font-black leading-tight"
+                 data-iso="{{ item.opened_at.isoformat(timespec='seconds') }}"
+                 data-tooltip="{{ item.opened_at|datetime }}">
+                {{ item.opened_at|datetime }}
+            </div>
+
+            <div class="flex flex-wrap gap-1.5">
+                <span class="inline-flex items-center min-h-[1.5rem] px-2 py-0.5 border-2 text-[10px] font-extrabold leading-tight"
+                      style="border-color: var(--border-color); background-color: var(--bg-subtle);">
+                    {{ item.cards|length }} {{ t.cards_count_suffix }}
+                </span>
+            {% if item.current_points is not none %}
+                <span class="inline-flex items-center min-h-[1.5rem] px-2 py-0.5 border-2 text-[10px] font-extrabold leading-tight"
+                      style="border-color: var(--border-color); background-color: var(--accent-color); color: var(--bg-color);">
+                    PT {{ item.current_points }}
+                </span>
+            {% endif %}
             </div>
         </div>
-    </div>
+    </aside>
 
     <!-- Right: Cards Grid -->
-    <div class="w-full md:w-3/4">
+    <div class="w-full min-w-0 flex-1">
         <div class="pack-grid {{ item.layout }}">
             {% for card in item.cards %}
             <div class="card-item relative group aspect-[2/3] overflow-hidden transition-all duration-200 brutal-card cursor-pointer"
@@ -92,9 +90,11 @@
                 {% endif %}
 
                 <!-- Rarity Badge -->
-                <div class="absolute top-0 right-0 text-[10px] px-2 py-1 font-bold z-10"
-                     style="background-color: var(--border-color); color: var(--bg-color); border-left: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
-                    {{ card.rarity|rarity_display(current_lang) }}
+                <div class="absolute top-0 right-0 font-bold z-10 whitespace-nowrap tooltip-text"
+                     data-tooltip="{{ card.rarity|rarity_display(current_lang) }}"
+                     aria-label="{{ card.rarity|rarity_display(current_lang) }}"
+                     style="background-color: var(--border-color); color: var(--bg-color); border-left: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); font-size: clamp(5px, 0.42vw, 8px); line-height: 1; padding: clamp(1px, 0.12vw, 2px) clamp(2px, 0.2vw, 4px);">
+                    {{ card.rarity }}
                 </div>
 
                 <!-- New Badge -->
