@@ -328,10 +328,6 @@ document.addEventListener('tab:switched', (event) => {
     if (tabName === 'owned-cards') {
         window.activeScrollAwareTab = 'ownedCardsUserScrolled';
         scheduleOwnedCardModalPageSizeWarmup();
-        const statsContainer = document.getElementById('owned-cards-stats-container');
-        if (statsContainer instanceof HTMLElement && !statsContainer.innerHTML.trim()) {
-            refreshOwnedCardsStats();
-        }
     } else {
         window.activeScrollAwareTab = null;
     }
