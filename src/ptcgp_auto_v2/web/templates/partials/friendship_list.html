@@ -200,7 +200,7 @@
         {'label': t.col_status or 'Status', 'class_name': 'whitespace-nowrap'},
         {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
-    ], t, (t.empty_friend_requests or '暂无好友请求') if not requests else '') %}
+    ], t, (t.empty_friend_requests or '暂无好友请求') if not requests else '', (request_total if request_total is defined else requests|length)) %}
         {% for row in requests %}
             <tr class="border-b border-subtle hover-bg-subtle transition-colors">
                 <td class="p-3">#{{ row.id }}</td>
@@ -255,7 +255,7 @@
         {'label': t.col_friend_id or 'Friend ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
-    ], t, (t.empty_friendships or '暂无好友关系') if not friendships else '') %}
+    ], t, (t.empty_friendships or '暂无好友关系') if not friendships else '', (friendship_total if friendship_total is defined else friendships|length)) %}
         {% for row in friendships %}
             <tr class="border-b border-subtle hover-bg-subtle transition-colors">
                 <td class="p-3">#{{ row.id }}</td>
@@ -293,6 +293,5 @@
         {% endfor %}
     {% endcall %}
     </div>
-    <div class="text-xs text-muted font-mono mt-2">{{ t.label_total_records or 'Total' }}: {{ friendship_total or 0 }}</div>
 {% endcall %}
 {% endcall %}

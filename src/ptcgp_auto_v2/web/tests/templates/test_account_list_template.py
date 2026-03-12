@@ -35,6 +35,7 @@ def test_account_list_renders_lazy_target_pack_placeholder_when_no_config() -> N
             "btn_edit_account_title": "编辑账号",
             "btn_pack_config_title": "配置目标卡包",
             "label_loading": "加载中",
+            "label_total_records": "总记录",
         },
         items=[
             {
@@ -63,4 +64,5 @@ def test_account_list_renders_lazy_target_pack_placeholder_when_no_config() -> N
     assert 'hx-trigger="load"' in html
     assert "加载中" in html
     assert "#1 Alpha" in html
+    assert "总记录: 1" in html
     assert "账号 ID: #1" not in html
