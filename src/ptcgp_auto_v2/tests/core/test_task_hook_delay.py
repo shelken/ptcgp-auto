@@ -25,7 +25,7 @@ class DummyTask(Task):
         self.recognizer = None
         self._completed = True
         self.max_iterations = 1
-        self.max_unknown_pages = 1
+        self.max_same_page_rounds = 1
         self._handlers = {}
         self._stop_event = None
         self._account = None
