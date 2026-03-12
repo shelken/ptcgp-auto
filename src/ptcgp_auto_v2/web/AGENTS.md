@@ -225,7 +225,7 @@ src/ptcgp_auto_v2/web/
 - **管理页时间渲染规范**：管理类 partial（如 friendship）中的时间列必须使用 `.relative-time + data-iso + data-tooltip` 结构，禁止仅输出 `|datetime` 绝对时间。
 - **Tooltip**：优先使用 `data-tooltip` + 自定义样式，避免依赖浏览器原生 title 在主题/样式下不可见。
 - **筛选条件缓存**：所有列表页面的筛选条件必须缓存（如 localStorage），避免刷新/切换后需要重新选择；恢复时注意不要触发重复请求。
-- **筛选统一策略**：所有带筛选页面仅允许通过 `features/filters/shared_form.js` 统一入口读写缓存（`data-filter-cache-key`）；禁止页面私有缓存模块与旧 key 兼容分支。
+- **筛选统一策略**：所有带筛选页面仅允许通过 `features/filters/shared_form.js` 统一入口读写缓存、采集查询状态与构造请求 URL（`data-filter-cache-key`）；禁止页面私有缓存模块、私有 query 拼接与旧 key 兼容分支并存。
 - **自定义 Select 初始化兜底**：HTMX/动态插入 DOM 后需确保自定义 Select 被自动初始化（可使用 MutationObserver 兜底），防止退回浏览器默认样式。
 - **相对时间更新**：筛选/分页追加后要重新更新相对时间；`updateRelativeTimes` 需要能处理根节点与其最近容器。
 - **相对时间展示一致**：所有列表中的时间字段统一使用“相对时间 + 悬浮具体时间”，并在 HTMX 替换后重算，避免筛选后回退成绝对时间。
@@ -266,6 +266,7 @@ src/ptcgp_auto_v2/web/
 - **Token 驱动主题原则**：新增组件颜色如需主题差异化，必须在 `base/tokens.css` 定义语义变量，在各主题文件赋值，组件代码只消费变量，禁止写死 `[data-theme="xxx"]` 选择器。
 - **白名单单一来源原则**：管理页 hash 白名单必须集中在单一常量模块（如 `constants.js`），`tabs/bootstrap` 统一引用，禁止多处硬编码。
 - **自动刷新 URL 复用原则**：自动刷新容器的查询参数拼装必须复用同一工具函数（如 `buildAutoRefreshUrl`），避免不同模块行为漂移。
+- **查询状态单一来源原则**：列表页的刷新、分页、排序、缓存恢复、侧栏 URL 同步必须统一复用 `shared_form.js` 内的查询状态构造能力；禁止页面私有 query 拼接与多套序列化逻辑并存。
 - **加载态复用原则**：按钮加载态统一复用 `utils.setButtonLoading`，禁止在 `bootstrap/filters/plans` 重复实现同名逻辑。
 - **Bootstrap 职责拆分原则**：`bootstrap.js` 仅保留初始化与事件绑定；动作分发、相对时间、偏好状态、交换卡牌交互必须拆到独立模块，避免单文件膨胀。
 - **事件绑定归口原则**：全局 `click/change/input/submit/htmx` 监听统一放在 `event_bindings.js`，`bootstrap.js` 仅调用绑定入口，避免初始化与事件细节耦合。

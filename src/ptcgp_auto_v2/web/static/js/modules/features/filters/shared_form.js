@@ -39,41 +39,154 @@ function parseStored(raw) {
     }
 }
 
+function appendFilterValue(filters, key, rawValue) {
+    if (!key || rawValue === null || rawValue === undefined) return;
+    const value = String(rawValue);
+    if (Object.prototype.hasOwnProperty.call(filters, key)) {
+        if (Array.isArray(filters[key])) {
+            filters[key].push(value);
+            return;
+        }
+        filters[key] = [filters[key], value];
+        return;
+    }
+    filters[key] = value;
+}
+
+function mergeFilterObjects(target, source) {
+    if (!source || typeof source !== 'object') return target;
+    Object.entries(source).forEach(([key, rawValue]) => {
+        if (Array.isArray(rawValue)) {
+            rawValue.forEach((value) => {
+                appendFilterValue(target, key, value);
+            });
+            return;
+        }
+        appendFilterValue(target, key, rawValue);
+    });
+    return target;
+}
+
+function replaceFilterValue(target, key, rawValue) {
+    if (!key || rawValue === null || rawValue === undefined) return;
+    if (Array.isArray(rawValue)) {
+        target[key] = rawValue.map((value) => String(value));
+        return;
+    }
+    target[key] = String(rawValue);
+}
+
 function appendParam(params, key, rawValue) {
     if (!key) return;
     if (Array.isArray(rawValue)) {
         rawValue.forEach((item) => appendParam(params, key, item));
         return;
     }
-    if (rawValue === '' || rawValue === null || rawValue === undefined) return;
-    const text = String(rawValue).trim();
-    if (!text) return;
-    params.append(key, text);
+    if (rawValue === null || rawValue === undefined) return;
+    params.append(key, String(rawValue));
 }
 
-export function serializeFormFilters(form, extraSelectors = []) {
-    const formData = new FormData(form);
+function normalizeSelectorList(selectors) {
+    if (Array.isArray(selectors)) {
+        return selectors.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    if (typeof selectors === 'string') {
+        return selectors.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+    return [];
+}
+
+function collectFiltersFromForm(form) {
     const filters = {};
+    const formData = new FormData(form);
 
     for (const [key, value] of formData.entries()) {
-        if (filters[key]) {
-            if (Array.isArray(filters[key])) {
-                filters[key].push(value);
-            } else {
-                filters[key] = [filters[key], value];
-            }
-        } else {
-            filters[key] = value;
+        appendFilterValue(filters, key, value);
+    }
+
+    return filters;
+}
+
+function collectFiltersFromControl(element) {
+    const filters = {};
+    if (!(element instanceof Element)) return filters;
+
+    const isInput = element instanceof HTMLInputElement;
+    const isSelect = element instanceof HTMLSelectElement;
+    const isTextarea = element instanceof HTMLTextAreaElement;
+    if (!isInput && !isSelect && !isTextarea) return filters;
+    if (!element.name || element.disabled) return filters;
+
+    if (isInput) {
+        if ((element.type === 'checkbox' || element.type === 'radio') && !element.checked) {
+            return filters;
+        }
+        if (element.type === 'file') {
+            return filters;
         }
     }
 
-    extraSelectors.forEach((selector) => {
-        const element = document.querySelector(selector);
-        if (!element || !element.name) return;
-        filters[element.name] = element.value || '';
+    if (isSelect && element.multiple) {
+        Array.from(element.selectedOptions).forEach((option) => {
+            appendFilterValue(filters, element.name, option.value);
+        });
+        return filters;
+    }
+
+    appendFilterValue(filters, element.name, element.value);
+    return filters;
+}
+
+function collectFiltersFromElements(elements) {
+    const uniqueElements = [];
+    const seenElements = new Set();
+    elements.forEach((element) => {
+        if (!(element instanceof Element)) return;
+        if (seenElements.has(element)) return;
+        seenElements.add(element);
+        uniqueElements.push(element);
+    });
+
+    const selectedForms = new Set();
+    const filters = {};
+
+    uniqueElements.forEach((element) => {
+        if (element instanceof HTMLFormElement) {
+            selectedForms.add(element);
+            mergeFilterObjects(filters, collectFiltersFromForm(element));
+        }
+    });
+
+    uniqueElements.forEach((element) => {
+        if (element instanceof HTMLFormElement) return;
+        const ownerForm = 'form' in element ? element.form : null;
+        if (ownerForm instanceof HTMLFormElement && selectedForms.has(ownerForm)) {
+            return;
+        }
+        mergeFilterObjects(filters, collectFiltersFromControl(element));
     });
 
     return filters;
+}
+
+function resolveElementsBySelectors(selectors, root = document) {
+    const resolvedRoot = root === document ? document : root;
+    if (!(resolvedRoot instanceof Document) && !(resolvedRoot instanceof Element)) {
+        return [];
+    }
+
+    return normalizeSelectorList(selectors)
+        .map((selector) => resolvedRoot.querySelector(selector))
+        .filter((element) => element instanceof Element);
+}
+
+export function collectFiltersFromSelectors(selectors, root = document) {
+    return collectFiltersFromElements(resolveElementsBySelectors(selectors, root));
+}
+
+export function serializeFormFilters(form, extraSelectors = []) {
+    const extraElements = resolveElementsBySelectors(extraSelectors);
+    return collectFiltersFromElements([form, ...extraElements]);
 }
 
 export function applyFormFilters(form, filters, extraSelectors = []) {
@@ -134,7 +247,8 @@ export function saveFilterCache(form, extraSelectors = []) {
 
 export function saveFilterCacheByElement(element, extraSelectors = []) {
     if (!(element instanceof Element)) return null;
-    const form = element instanceof HTMLFormElement ? element : element.closest('form');
+    const linkedForm = 'form' in element ? element.form : null;
+    const form = element instanceof HTMLFormElement ? element : (linkedForm || element.closest('form'));
     if (!(form instanceof HTMLFormElement)) return null;
     return saveFilterCache(form, extraSelectors);
 }
@@ -249,6 +363,16 @@ export function buildUrlWithFilters(baseUrl, filters, paramKeys = null) {
     });
 
     return `${url.pathname}${url.search}`;
+}
+
+export function buildUrlWithSelectorFilters(baseUrl, selectors, overrides = {}, paramKeys = null, root = document) {
+    const filters = collectFiltersFromSelectors(selectors, root);
+    const mergedFilters = {};
+    mergeFilterObjects(mergedFilters, filters);
+    Object.entries(overrides).forEach(([key, value]) => {
+        replaceFilterValue(mergedFilters, key, value);
+    });
+    return buildUrlWithFilters(baseUrl, mergedFilters, paramKeys);
 }
 
 export function syncSidebarRequestParams(button) {
