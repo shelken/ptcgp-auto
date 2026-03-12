@@ -48,11 +48,14 @@ def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
         captured.update(
             {
                 "biz_date_local": kwargs["biz_date_local"],
+                "account_id": kwargs["account_id"],
                 "q": kwargs["q"],
                 "sort_by": kwargs["sort_by"],
                 "sort_order": kwargs["sort_order"],
                 "page": kwargs["page"],
                 "page_size": kwargs["page_size"],
+                "pair_page": kwargs["pair_page"],
+                "pair_page_size": kwargs["pair_page_size"],
             }
         )
         return {"records": [], "t": {}, "current_lang": "zh_CN"}
@@ -65,11 +68,14 @@ def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
         router.get_management_daily_gift(
             request=_build_request("GET"),
             biz_date_local="2026-02-22",
+            account_id="7",
             q="abc",
             sort_by="updated_at",
             sort_order="desc",
             page=2,
             page_size=20,
+            pair_page=3,
+            pair_page_size=15,
             session=object(),
         )
     )
@@ -78,9 +84,12 @@ def test_get_management_daily_gift_renders_with_query_protocol(monkeypatch):
     assert "tpl:partials/daily_gift_list.html" in bytes(response.body).decode("utf-8")
     assert captured == {
         "biz_date_local": "2026-02-22",
+        "account_id": 7,
         "q": "abc",
         "sort_by": "updated_at",
         "sort_order": "desc",
         "page": 2,
         "page_size": 20,
+        "pair_page": 3,
+        "pair_page_size": 15,
     }
