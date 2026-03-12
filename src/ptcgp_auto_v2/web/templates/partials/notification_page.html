@@ -129,7 +129,7 @@
         {'label': t.col_account_id or 'Account ID', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_time or 'Time', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
-    ], t, (t.notification_empty or '暂无通知') if not notifications else '') %}
+    ], t, (t.notification_empty or '暂无通知') if not notifications else '', (total if total is defined else notifications|length)) %}
         {% for n in notifications %}
         <tr class="border-b border-subtle hover-bg-subtle transition-colors">
             <td class="p-3">{% if n.is_read %}<span class="text-muted text-xs">{{ t.label_read or 'Read' }}</span>{% else %}<span class="brutal-tag status-badge status-chip status-tone-waiting">{{ t.label_unread or 'Unread' }}</span>{% endif %}</td>

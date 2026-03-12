@@ -91,6 +91,7 @@ def test_task_list_renders_lazy_target_pack_placeholder_for_open_pack() -> None:
     assert 'hx-trigger="load"' in html
     assert "加载中" in html
     assert "#10 Alpha" in html
+    assert "总记录: 1" in html
 
 
 def test_task_list_renders_remote_account_search_controls() -> None:
@@ -145,4 +146,5 @@ def test_task_list_renders_remote_account_search_controls() -> None:
     assert 'name="account_id"' in html
     assert "/api/tasks/account-options?lang=zh_CN" in html
     assert "task-filter-account-options" in html
+    assert "总记录: 0" in html
     assert '<select id="task-filter-account"' not in html

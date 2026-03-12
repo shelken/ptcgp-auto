@@ -62,7 +62,7 @@
         {'label': t.col_status or 'Status', 'class_name': 'whitespace-nowrap'},
         {'label': t.time_label or 'Time', 'class_name': 'whitespace-nowrap'},
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right whitespace-nowrap'}
-    ], t, (t.empty_exchange_requests or '暂无交换请求') if not requests else '') %}
+    ], t, (t.empty_exchange_requests or '暂无交换请求') if not requests else '', (total_items if total_items is defined else requests|length)) %}
         {% for row in requests %}
         <tr class="border-b border-subtle hover-bg-subtle transition-colors">
             <td class="p-3">#{{ row.id }}</td>
