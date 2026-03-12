@@ -1,5 +1,26 @@
 import { isElementInActiveTab } from './utils.js';
 
+/**
+ * 收集自动刷新需要带上的查询参数，保留同名字段的多值顺序。
+ * @param {Element | null} element - 表单或单个输入控件
+ * @returns {Array<[string, string]>}
+ */
+function collectRefreshEntries(element) {
+    if (!element) return [];
+
+    if (element.tagName === 'FORM') {
+        const entries = [];
+        const formData = new FormData(element);
+        formData.forEach((value, key) => {
+            entries.push([key, String(value)]);
+        });
+        return entries;
+    }
+
+    if (!element.name) return [];
+    return [[element.name, element.value || '']];
+}
+
 // --- 构建自动刷新 URL ---
 export function buildAutoRefreshUrl(container) {
     if (!container) return null;
@@ -24,21 +45,25 @@ export function buildAutoRefreshUrl(container) {
     }
 
     const selectors = includeSelector.split(',').map((item) => item.trim()).filter(Boolean);
+    const includedEntries = [];
     selectors.forEach((selector) => {
         const element = document.querySelector(selector);
         if (!element) return;
+        includedEntries.push(...collectRefreshEntries(element));
+    });
 
-        if (element.tagName === 'FORM') {
-            const formData = new FormData(element);
-            formData.forEach((value, key) => {
-                params.set(key, String(value));
-            });
-            return;
+    const includedKeys = new Set();
+    includedEntries.forEach(([key]) => {
+        if (key) {
+            includedKeys.add(key);
         }
-
-        if (element.name) {
-            params.set(element.name, element.value || '');
-        }
+    });
+    includedKeys.forEach((key) => {
+        params.delete(key);
+    });
+    includedEntries.forEach(([key, value]) => {
+        if (!key) return;
+        params.append(key, value);
     });
 
     parsedUrl.search = params.toString();
