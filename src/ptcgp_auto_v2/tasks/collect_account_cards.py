@@ -102,7 +102,7 @@ class CollectAccountCardsTask(Task):
     task_type = "collect_account_cards"
     reset_type = ResetType.DAILY
     max_iterations = 100
-    max_unknown_pages = 20
+    max_same_page_rounds = max_iterations
     pages = _build_collect_pages()
 
     def __init__(self, adb, recognizer, page_detector):

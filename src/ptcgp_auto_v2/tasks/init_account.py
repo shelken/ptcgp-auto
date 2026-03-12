@@ -214,7 +214,7 @@ class InitAccountTask(PackOpeningTaskBase):
     task_type = "init_account"
     reset_type = ResetType.ONCE
     max_iterations = 200
-    max_unknown_pages = 30
+    max_same_page_rounds = 20
     pages = _build_init_pages()
 
     # 可接受的国家/地区列表（匹配到任一即可）

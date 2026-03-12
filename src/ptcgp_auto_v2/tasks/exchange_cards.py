@@ -248,7 +248,7 @@ class ExchangeCardsTask(Task):
     task_type = "exchange_cards"
     reset_type = ResetType.ONCE
     pages = _build_exchange_pages()
-    max_unknown_pages = 20
+    max_same_page_rounds = 20
     max_iterations = 100
 
     def __init__(self, adb, recognizer, page_detector):

@@ -95,7 +95,6 @@ class ClaimGiftsTask(PackOpeningTaskBase):
     task_type = "claim_gifts"
     reset_type = ResetType.DAILY
     max_iterations = 200
-    max_unknown_pages = 15
     pages = _build_claim_gifts_pages()
 
     def __init__(self, adb, recognizer, page_detector):
