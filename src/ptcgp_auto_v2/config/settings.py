@@ -36,8 +36,8 @@ from ptcgp_auto_v2.config.constants import (
     SCALE_BATTLE_SERIES_SELECT,
     SCALE_PACK_DETAIL,
     SCALE_PACK_LIST,
-    SCALE_PACK_SERIES_SELECT,
     SCALE_PACK_OPENING_SWIPE,
+    SCALE_PACK_SERIES_SELECT,
     TEMPLATE_BASE_WIDTH,
 )
 
@@ -186,7 +186,7 @@ class Settings:
     auto_scale_max_devices: int = 3
     auto_scale_pending_step: int = 10
     auto_scale_eval_interval_seconds: int = 60
-    auto_scale_idle_seconds: int = 60
+    auto_scale_idle_seconds: int = 600
 
     # 执行配置
     max_retries: int = DEFAULT_MAX_RETRIES
