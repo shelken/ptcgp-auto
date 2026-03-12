@@ -15,6 +15,11 @@
 ] %}
 
 {% set rows_content %}
+    <tr class="table-summary-row border-b border-theme bg-subtle">
+        <td class="table-summary-cell p-3 text-xs text-muted font-mono" colspan="{{ table_headers|length }}">
+            {{ t.label_total_records or 'Total' }}: {{ total or 0 }}
+        </td>
+    </tr>
     {% for item in items %}
         {% set account_cell %}
             <div>{{ account_primary_text(item.account_id, item.account_name) }}</div>

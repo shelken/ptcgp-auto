@@ -1,7 +1,7 @@
 {# 表格宏组件 #}
 {# 提供统一的表格容器、表头和行组件 #}
 
-{% macro table_container(headers, t, empty_message='') %}
+{% macro table_container(headers, t, empty_message='', total=None) %}
 <div class="overflow-x-auto">
     <table class="w-full text-left border-collapse">
         <thead>
@@ -16,6 +16,13 @@
             </tr>
         </thead>
         <tbody>
+            {% if total is not none %}
+            <tr class="table-summary-row border-b border-theme bg-subtle">
+                <td class="table-summary-cell p-3 text-xs text-muted font-mono" colspan="{{ headers|length }}">
+                    {{ t.label_total_records or 'Total' }}: {{ total }}
+                </td>
+            </tr>
+            {% endif %}
             {{ caller() }}
         </tbody>
     </table>

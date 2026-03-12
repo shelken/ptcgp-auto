@@ -16,7 +16,7 @@
     {'label': data_table_sort_button(label=(t.col_exchange_points or 'Exchange Points'), url=exchange_sort_url, target='#management-content', active=(sort_by == 'exchange_points'), order=(sort_order or 'asc'))|safe},
     {'label': data_table_sort_button(label=(t.col_pack_hourglass or 'Pack Hourglass'), url=hourglass_sort_url, target='#management-content', active=(sort_by == 'pack_hourglass_count'), order=(sort_order or 'asc'))|safe},
     {'label': data_table_sort_button(label=(t.col_updated_at or 'Updated At'), url=updated_sort_url, target='#management-content', active=(sort_by == 'updated_at'), order=(sort_order or 'asc'))|safe}
-], t, (t.empty_resource_stats or 'No resource data') if not items else '') %}
+], t, (t.empty_resource_stats or 'No resource data') if not items else '', (total if total is defined else items|length)) %}
     {% for item in items %}
         {% set account_cell %}
             {{ account_identity_block(item.account_id, item.nickname) }}
