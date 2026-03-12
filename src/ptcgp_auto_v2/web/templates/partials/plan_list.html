@@ -64,7 +64,7 @@
         t.col_description or 'Description',
         t.col_config or 'Config',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
-    ], t) %}
+    ], t, total=(total if total is defined else items|length)) %}
         {% for item in items %}
             {% set config_cell %}
                 <div class="space-y-1">

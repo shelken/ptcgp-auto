@@ -48,7 +48,7 @@
         t.col_plans or 'Plans',
         t.col_target_pack or 'Target Pack',
         {'label': t.col_actions or 'Actions', 'class_name': 'text-right'}
-    ], t) %}
+    ], t, total=(total if total is defined else items|length)) %}
         {% for item in items %}
             {% set nickname_cell %}
                 {{ account_identity_block(item.id, item.nickname or item.display_name) }}

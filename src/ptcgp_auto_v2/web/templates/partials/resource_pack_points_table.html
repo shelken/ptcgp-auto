@@ -11,7 +11,7 @@
     {% set ns.headers = ns.headers + [{'label': data_table_sort_button(label=series, url=series_sort_url, target='#management-content', active=(sort_by == ('series:' ~ series)), order=(sort_order or 'asc'))|safe}] %}
 {% endfor %}
 
-{% call table_container(ns.headers, t, (t.empty_resource_pack_points or 'No pack point data') if not items else '') %}
+{% call table_container(ns.headers, t, (t.empty_resource_pack_points or 'No pack point data') if not items else '', (total if total is defined else items|length)) %}
     {% for item in items %}
         {% set account_cell %}
             {{ account_identity_block(item.account_id, item.nickname) }}

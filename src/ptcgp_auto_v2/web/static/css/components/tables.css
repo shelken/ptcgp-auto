@@ -35,6 +35,11 @@
     gap: 0.75rem;
 }
 
+.table-summary-row > .table-summary-cell {
+    text-align: left !important;
+    white-space: normal;
+}
+
 .table-toolbar-layout {
     --table-toolbar-gap: clamp(0.5rem, 0.5rem + 0.2vw, 0.85rem);
     display: flex;
