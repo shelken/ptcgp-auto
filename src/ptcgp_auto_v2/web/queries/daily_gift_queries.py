@@ -7,8 +7,7 @@
 
 from typing import Any
 
-from sqlalchemy import String, and_, cast, case, func, or_
-from sqlalchemy.orm import aliased
+from sqlalchemy import and_, case, func, or_
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.models import Account, AccountGiftPair, AccountGiftRecord
@@ -26,17 +25,10 @@ def _build_record_query(
     *,
     biz_date_local: str,
     account_id: int | None,
-    q: str,
-) -> tuple[Any, Any, Any]:
-    """构建送卡记录查询基础语句，并返回源账号/目标账号别名。"""
-    source_account = aliased(Account)
-    target_account = aliased(Account)
-
-    statement = (
-        select(AccountGiftRecord)
-        .join(source_account, source_account.id == AccountGiftRecord.account_id)
-        .outerjoin(target_account, target_account.id == AccountGiftRecord.target_account_id)
-        .where(AccountGiftRecord.biz_date_local == biz_date_local)
+) -> Any:
+    """构建送卡记录查询基础语句。"""
+    statement = select(AccountGiftRecord).where(
+        AccountGiftRecord.biz_date_local == biz_date_local
     )
 
     if account_id is not None:
@@ -46,29 +38,7 @@ def _build_record_query(
                 AccountGiftRecord.target_account_id == account_id,
             )
         )
-
-    normalized_q = q.strip().lower()
-    if normalized_q:
-        like_pattern = f"%{normalized_q}%"
-        statement = statement.where(
-            or_(
-                func.lower(cast(AccountGiftRecord.account_id, String)).like(like_pattern),
-                func.lower(cast(AccountGiftRecord.target_account_id, String)).like(
-                    like_pattern
-                ),
-                func.lower(func.coalesce(AccountGiftRecord.target_friend_id, "")).like(
-                    like_pattern
-                ),
-                func.lower(func.coalesce(source_account.nickname, "")).like(like_pattern),
-                func.lower(func.coalesce(source_account.friend_id, "")).like(like_pattern),
-                func.lower(func.coalesce(source_account.game_id, "")).like(like_pattern),
-                func.lower(func.coalesce(target_account.nickname, "")).like(like_pattern),
-                func.lower(func.coalesce(target_account.friend_id, "")).like(like_pattern),
-                func.lower(func.coalesce(target_account.game_id, "")).like(like_pattern),
-            )
-        )
-
-    return statement, source_account, target_account
+    return statement
 
 
 def fetch_daily_gift_stats(
@@ -118,22 +88,19 @@ def fetch_daily_gift_records_page(
     *,
     biz_date_local: str,
     account_id: int | None,
-    q: str,
     sort_by: str,
     sort_order: str,
     page: int,
     page_size: int,
 ) -> tuple[list[AccountGiftRecord], bool, int]:
     """查询每日送卡记录分页数据。"""
-    statement, _, _ = _build_record_query(
+    statement = _build_record_query(
         biz_date_local=biz_date_local,
         account_id=account_id,
-        q=q,
     )
-    total_statement, _, _ = _build_record_query(
+    total_statement = _build_record_query(
         biz_date_local=biz_date_local,
         account_id=account_id,
-        q=q,
     )
 
     total = int(
