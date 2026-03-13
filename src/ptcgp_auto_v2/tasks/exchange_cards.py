@@ -202,6 +202,7 @@ def _build_exchange_pages() -> list[dict]:
             "name": "friend_profile",
             "match_all": True,
             "identifiers": get_text_patterns("profile_page"),
+            "exclude_identifiers": get_text_patterns("profile_page_exclude"),
             "priority": 55,
         },
         # 請選擇要送給對方的卡牌

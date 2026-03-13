@@ -113,6 +113,7 @@ def _build_send_card_pages() -> list[dict]:
             "name": "friend_profile",
             "match_all": True,
             "identifiers": get_text_patterns("profile_page"),
+            "exclude_identifiers": get_text_patterns("profile_page_exclude"),
             "priority": 99,
         },
         # 我的最愛 / 清除 / OK
