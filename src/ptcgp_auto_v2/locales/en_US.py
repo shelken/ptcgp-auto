@@ -149,7 +149,6 @@ TEXT_PATTERNS = {
     "init_select_favorite_card": ["選1張喜歡的卡牌吧"],
     "friend_list": ["朋友", "申請中", "需回覆"],
     "accept": ["接受"],
-    "friend_profile": ["朋友ID", "戰績"],
     "friend_page_list": ["朋友數", "朋友", "申請中", "需回覆"],
     "friend_page_search_result": ["搜尋結果"],
     "friend_tab_friends": ["朋友"],

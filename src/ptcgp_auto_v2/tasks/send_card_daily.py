@@ -112,7 +112,7 @@ def _build_send_card_pages() -> list[dict]:
         {
             "name": "friend_profile",
             "match_all": True,
-            "identifiers": get_text_patterns("friend_profile"),
+            "identifiers": get_text_patterns("profile_page"),
             "priority": 99,
         },
         # 我的最愛 / 清除 / OK
@@ -315,7 +315,7 @@ class SendCardDailyTask(Task):
             page_detector=self.page_detector,
             flow=self._friend_flow,
             target_friend_id=self._target_friend_id or "",
-            profile_page_name="friend_profile",
+            profile_page_name="profile_page",
             send_text_patterns=get_text_patterns("gift_send_button"),
             account_id=self.account.id,
             on_success=self._on_friend_verified,

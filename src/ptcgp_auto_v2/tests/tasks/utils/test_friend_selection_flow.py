@@ -39,7 +39,7 @@ class TestFriendSelectionFlow(unittest.TestCase):
             page_detector=cast(Any, _DummyPageDetector()),
             flow=flow,
             target_friend_id="1234567890123456",
-            profile_page_name="friend_profile",
+            profile_page_name="profile_page",
             send_text_patterns=["交換"],
             account_id=42,
         )
