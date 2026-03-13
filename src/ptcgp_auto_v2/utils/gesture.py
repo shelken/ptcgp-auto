@@ -514,7 +514,7 @@ def tap_home_icon(adb: AdbController, page_detector, wait: float = 1.0) -> Actio
     return tap_bottom_icon(adb, page_detector, "icon_home", wait)
 
 
-def tap_community_icon(adb, page_detector, wait: float = 1.0) -> ActionResult:
+def tap_community_icon(adb, page_detector, wait: float = 3.0) -> ActionResult:
     return tap_bottom_icon(adb, page_detector, "icon_community", wait)
 
 
