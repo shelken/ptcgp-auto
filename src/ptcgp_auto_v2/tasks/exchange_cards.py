@@ -201,7 +201,7 @@ def _build_exchange_pages() -> list[dict]:
         {
             "name": "friend_profile",
             "match_all": True,
-            "identifiers": get_text_patterns("friend_profile"),
+            "identifiers": get_text_patterns("profile_page"),
             "priority": 55,
         },
         # 請選擇要送給對方的卡牌
@@ -375,7 +375,7 @@ class ExchangeCardsTask(Task):
             page_detector=self.page_detector,
             flow=self._ctx.friend_flow,
             target_friend_id=request.to_friend_id or "",
-            profile_page_name="friend_profile",
+            profile_page_name="profile_page",
             send_text_patterns=get_text_patterns("exchange_send_button"),
             account_id=self.account.id,
             on_nickname_found=self._on_nickname_found,
