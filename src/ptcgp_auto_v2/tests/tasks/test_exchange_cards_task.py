@@ -434,6 +434,30 @@ class TestExchangeCardsTask(unittest.TestCase):
         task._request_repo.mark_canceled.assert_not_called()
         task._request_repo.update.assert_not_called()
 
+    @patch("ptcgp_auto_v2.tasks.exchange_cards.is_text_visible")
+    def test_exchange_main_should_tap_bottom_exchange_button_only(
+        self,
+        is_text_visible_mock,
+    ):
+        """交换主页存在多个同文案时，应点击下方按钮而不是页头标题。"""
+        request = self._prepare_sending_request()
+        task = cast(Any, self.task)
+        task._ctx.runtime.current_request = request
+        is_text_visible_mock.side_effect = [False, False]
+
+        result = task._handle_exchange_page_main(
+            {
+                "ocr_results": [
+                    {"text": "交換", "box": (98, 150, 158, 182)},
+                    {"text": "紀錄", "box": (500, 1140, 560, 1180)},
+                    {"text": "交換", "box": (320, 970, 396, 1032)},
+                ]
+            }
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(task.adb.tap_points[-1], (358, 1001))
+
 
 if __name__ == "__main__":
     unittest.main()

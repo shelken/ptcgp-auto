@@ -168,8 +168,44 @@ def tap_text(
     patterns: list[str],
     wait: float = 1.0,
     exact: bool = False,
+    pick: str | int = "first",
 ) -> Optional[ActionResult]:
     """Tap by matching text patterns."""
+    matches = find_text_matches(ocr_results, patterns, exact=exact)
+
+    if not matches:
+        return None
+
+    item = pick_text_match(matches, pick)
+    adb.tap_center(item["box"])
+    logger.info(f"点击文字: {item['text']}")
+    return ActionResult.ok(wait=wait)
+
+
+def tap_text_exact(
+    adb: AdbController,
+    ocr_results: list[dict],
+    patterns: list[str],
+    wait: float = 1.0,
+    pick: str | int = "first",
+) -> Optional[ActionResult]:
+    return tap_text(
+        adb,
+        ocr_results=ocr_results,
+        patterns=patterns,
+        wait=wait,
+        exact=True,
+        pick=pick,
+    )
+
+
+def find_text_matches(
+    ocr_results: list[dict],
+    patterns: list[str],
+    exact: bool = False,
+) -> list[dict]:
+    """返回按 OCR 原始顺序排列的文本命中项。"""
+    matches: list[dict] = []
     for pattern in patterns:
         pattern_normalized = normalize_text(pattern)
         for item in ocr_results:
@@ -179,28 +215,35 @@ def tap_text(
             else:
                 matched = pattern_normalized in text
             if matched:
-                adb.tap_center(item["box"])
-                logger.info(f"点击文字: {pattern}")
-                return ActionResult.ok(wait=wait)
-    return None
+                matches.append(item)
+    return matches
 
 
-def tap_text_exact(
-    adb: AdbController,
-    ocr_results: list[dict],
-    patterns: list[str],
-    wait: float = 1.0,
-) -> Optional[ActionResult]:
-    return tap_text(
-        adb, ocr_results=ocr_results, patterns=patterns, wait=wait, exact=True
-    )
+def pick_text_match(matches: list[dict], pick: str | int) -> dict:
+    """按 pick 规则选择一个文本命中项。"""
+    if isinstance(pick, int):
+        return matches[pick]
+    if pick == "first":
+        return matches[0]
+    if pick == "last":
+        return matches[-1]
+    raise ValueError(f"不支持的 pick: {pick}")
 
 
 def tap_ok(
-    adb: AdbController, ocr_results: list[dict], wait: float = 1.0
+    adb: AdbController,
+    ocr_results: list[dict],
+    wait: float = 1.0,
+    pick: str | int = "first",
 ) -> Optional[ActionResult]:
     """点击 OK 按钮（通用弹窗确认按钮）"""
-    return tap_text_exact(adb, ocr_results, get_text_patterns("popup_ok"), wait=wait)
+    return tap_text_exact(
+        adb,
+        ocr_results,
+        get_text_patterns("popup_ok"),
+        wait=wait,
+        pick=pick,
+    )
 
 
 def hide_fast_input_ime(adb: AdbController, wait: float = 0.0) -> ActionResult:
@@ -251,6 +294,7 @@ def tap_by_priority(
     patterns: Optional[list[str]] = None,
     template_name: Optional[str] = None,
     wait: float = 1.0,
+    pick: str | int = "first",
 ) -> Optional[ActionResult]:
     """按模板优先、文字次之执行点击"""
     if template_name:
@@ -261,7 +305,7 @@ def tap_by_priority(
     if not ocr_results or not patterns:
         return None
 
-    result = tap_text(adb, ocr_results, patterns, wait=wait)
+    result = tap_text(adb, ocr_results, patterns, wait=wait, pick=pick)
     if result:
         return result
 
@@ -275,6 +319,7 @@ def tap_template_or_text(
     template_name: Optional[str],
     patterns: list[str],
     wait: float = 1.0,
+    pick: str | int = "first",
 ) -> Optional[ActionResult]:
     """模板优先、文本兜底的点击（统一日志与等待）"""
     result = tap_by_priority(
@@ -284,6 +329,7 @@ def tap_template_or_text(
         patterns,
         template_name=template_name,
         wait=wait,
+        pick=pick,
     )
     if result:
         return result
@@ -426,11 +472,12 @@ def tap_continue(
     ocr_results: list[dict],
     patterns: Optional[list[str]] = None,
     wait: float = 1.0,
+    pick: str | int = "first",
 ) -> ActionResult:
     """点击继续文本"""
     if not patterns:
         patterns = get_text_patterns("continue_button")
-    result = tap_text(adb, ocr_results, patterns, exact=True, wait=wait)
+    result = tap_text(adb, ocr_results, patterns, exact=True, wait=wait, pick=pick)
     if result:
         return result
     return tap_center(adb, wait=wait)

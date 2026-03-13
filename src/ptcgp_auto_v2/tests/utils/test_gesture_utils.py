@@ -13,6 +13,7 @@ from ptcgp_auto_v2.utils.gesture import (
     perform_tap,
     quick_tap,
     scroll_points,
+    tap_text_exact,
 )
 from typing import Any, cast
 
@@ -45,6 +46,12 @@ class DummyAdb:
         """模拟点击动作。"""
         self.tap_points.append((x, y))
         return None
+
+    def tap_center(self, box) -> None:
+        """点击边界框中心，兼容真实 ADB 接口。"""
+        x = (box[0] + box[2]) // 2
+        y = (box[1] + box[3]) // 2
+        self.tap_points.append((x, y))
 
     def swipe(
         self, start_x: int, start_y: int, end_x: int, end_y: int, steps: int
@@ -120,6 +127,48 @@ def test_quick_tap_should_click_by_points_in_order():
 
     assert result.ok is True
     assert adb.tap_points == [(100, 200), (300, 400), (500, 600)]
+
+
+def test_tap_text_exact_should_support_pick_last():
+    """验证 pick='last' 可选中最后一个同文案命中项。"""
+    adb = DummyAdb(screen_width=720, screen_height=1280)
+
+    result = tap_text_exact(
+        cast(AdbController, adb),
+        ocr_results=[
+            {"text": "交換", "box": (100, 120, 160, 180)},
+            {"text": "交換", "box": (320, 960, 400, 1040)},
+            {"text": "交換", "box": (320, 880, 400, 940)},
+        ],
+        patterns=["交換"],
+        wait=0.0,
+        pick="last",
+    )
+
+    assert result is not None
+    assert result.ok is True
+    assert adb.tap_points == [(360, 910)]
+
+
+def test_tap_text_exact_should_support_pick_index():
+    """验证 pick 支持直接传索引。"""
+    adb = DummyAdb(screen_width=720, screen_height=1280)
+
+    result = tap_text_exact(
+        cast(AdbController, adb),
+        ocr_results=[
+            {"text": "交換", "box": (100, 120, 160, 180)},
+            {"text": "交換", "box": (320, 960, 400, 1040)},
+            {"text": "交換", "box": (320, 880, 400, 940)},
+        ],
+        patterns=["交換"],
+        wait=0.0,
+        pick=-1,
+    )
+
+    assert result is not None
+    assert result.ok is True
+    assert adb.tap_points == [(360, 910)]
 
 
 def _build_adb_with_fake_device():
