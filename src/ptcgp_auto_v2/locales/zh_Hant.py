@@ -29,6 +29,7 @@ TEXT_PATTERNS = {
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
     "pack_card_register": ["向上輕滑卡牌"],
     "profile_page": ["朋友ID"],
+    "profile_page_exclude": ["搜尋玩家"],  # 搜尋玩家 为搜索好友页面时也出现 朋友ID
     "profile_exclude": [
         "朋友ID",
         "Lv.",

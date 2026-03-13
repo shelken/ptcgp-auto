@@ -82,6 +82,7 @@ def _build_fetch_pages() -> list[dict]:
         {
             "name": "profile_page",
             "identifiers": get_text_patterns("profile_page"),
+            "exclude_identifiers": get_text_patterns("profile_page_exclude"),
             "priority": 20,
         },
         # 商店 / 禮物盒
