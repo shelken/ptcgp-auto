@@ -29,9 +29,9 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_community_icon,
     tap_ok,
     tap_template,
-    tap_text_exact,
     tap_template_or_fallback,
     tap_template_with_scale,
+    tap_text_exact,
 )
 
 logger = logging.getLogger(__name__)
@@ -501,7 +501,7 @@ class ManageFriendshipTask(Task):
         """主页点击社群。"""
         if self._completed:
             return ActionResult.ok(wait=0.5)
-        return tap_community_icon(self.adb, self.page_detector, wait=1.0)
+        return tap_community_icon(self.adb, self.page_detector)
 
     def _handle_community(self, page_info: dict) -> ActionResult:
         """社群页点击朋友入口。"""
