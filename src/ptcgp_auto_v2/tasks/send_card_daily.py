@@ -110,7 +110,7 @@ def _build_send_card_pages() -> list[dict]:
         },
         # 朋友ID / 戰績
         {
-            "name": "friend_profile",
+            "name": "profile_page",
             "match_all": True,
             "identifiers": get_text_patterns("profile_page"),
             "exclude_identifiers": get_text_patterns("profile_page_exclude"),
@@ -459,7 +459,7 @@ class SendCardDailyTask(Task):
         """主页点击社群入口。"""
         if self._completed:
             return ActionResult.ok(wait=0.5)
-        return tap_community_icon(self.adb, self.page_detector, wait=1.0)
+        return tap_community_icon(self.adb, self.page_detector)
 
     def _handle_community(self, page_info: dict) -> ActionResult:
         """社群页面点击分送入口。"""
