@@ -560,12 +560,7 @@ class ExchangeCardsTask(Task):
             return ActionResult.wait(0.8)
 
         if request.status == "sending":
-            result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("exchange_send_button"),
-                wait=0.8,
-            )
+            result = self._tap_exchange_main_button(ocr_results)
             return result if result else ActionResult.wait(0.6)
 
         if request.status == "sended":
@@ -578,12 +573,7 @@ class ExchangeCardsTask(Task):
                 )
                 return result if result else ActionResult.wait(0.6)
 
-            open_result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("exchange_send_button"),
-                wait=0.8,
-            )
+            open_result = self._tap_exchange_main_button(ocr_results)
             if open_result:
                 return open_result
 
@@ -592,6 +582,18 @@ class ExchangeCardsTask(Task):
 
         logger.warning("请求状态不可处理: %s", request.status)
         return ActionResult.wait(0.6)
+
+    def _tap_exchange_main_button(
+        self, ocr_results: list[dict]
+    ) -> Optional[ActionResult]:
+        """交换主页点击最后一个交换文案，避开页头标题。"""
+        return tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("exchange_send_button"),
+            wait=0.8,
+            pick="last",
+        )
 
     def _handle_choose_friend(self, page_info: dict) -> ActionResult:
         """请选择朋友页面：先核验 friend_id，再点击对应交换。"""
