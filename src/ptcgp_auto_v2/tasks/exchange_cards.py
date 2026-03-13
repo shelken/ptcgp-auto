@@ -250,6 +250,7 @@ class ExchangeCardsTask(Task):
     pages = _build_exchange_pages()
     max_same_page_rounds = 20
     max_iterations = 100
+    screenshot_lossless = True
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
