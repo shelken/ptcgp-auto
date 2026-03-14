@@ -2,7 +2,12 @@ import unittest
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
-from ptcgp_auto_v2.tasks.open_pack import HOME_CHECK_THRESHOLD, OpenPackTask
+from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.tasks.open_pack import (
+    ACTION_KEY_10_PACK_CONFIRMED,
+    HOME_CHECK_THRESHOLD,
+    OpenPackTask,
+)
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
 from ptcgp_auto_v2.utils.gesture import scroll_until_template
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
@@ -281,7 +286,8 @@ class TestOpenPackExtractPackPoints(unittest.TestCase):
 
         task._extract_pack_points([{"text": "1,230 pt"}])
 
-        task._pack_point_repo.upsert_points.assert_called_once_with(1, "A1", 1230)
+        self.assertEqual(1230, task._base_pack_points)
+        task._pack_point_repo.upsert_points.assert_not_called()
 
 
 class TestOpenPackPrepareResourcesFailure(unittest.TestCase):
@@ -342,6 +348,83 @@ class TestOpenPackPrepareResourcesFailure(unittest.TestCase):
         result = task.handle_page("game_home_main", {"ocr_results": []})
         self.assertFalse(result.success)
         self.assertEqual(result.error, "准备卡包图片资源失败")
+
+
+class TestOpenPackPaidFlow(unittest.TestCase):
+    def setUp(self):
+        self.adb = FakeAdb()
+        self.page_detector = FakePageDetector()
+        self.task = OpenPackTask(
+            self.adb, recognizer=None, page_detector=self.page_detector
+        )
+        self.task.bind_account(SimpleNamespace(id=1, display_name="tester"))
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.tap_text_exact")
+    def test_handle_pack_paid_only_clicks_open_10_without_marking_opened(
+        self, mock_tap_text_exact
+    ):
+        self.task._pack_hourglass_count = 120
+        mock_tap_text_exact.return_value = ActionResult.ok(wait=1.5)
+
+        result = self.task._handle_pack_paid({"ocr_results": [{"text": "開封10包"}]})
+
+        self.assertTrue(result.success)
+        self.assertFalse(self.task._has_opened_10_pack_this_task())
+        self.assertFalse(self.task._is_action_done(ACTION_KEY_10_PACK_CONFIRMED))
+        mock_tap_text_exact.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.tap_ok")
+    def test_handle_pack_paid_modal_marks_opened_after_confirm(self, mock_tap_ok):
+        self.task._pack_hourglass_count = 120
+        mock_tap_ok.return_value = ActionResult.ok(wait=2.0)
+
+        result = self.task._handle_pack_paid_modal({"ocr_results": [{"text": "OK"}]})
+
+        self.assertTrue(result.success)
+        self.assertTrue(self.task._is_action_done(ACTION_KEY_10_PACK_CONFIRMED))
+        self.assertTrue(self.task._has_opened_10_pack_this_task())
+        mock_tap_ok.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.navigate_back")
+    @patch("ptcgp_auto_v2.tasks.open_pack.tap_text_exact")
+    def test_handle_pack_paid_navigates_back_after_10_pack_opened(
+        self, mock_tap_text_exact, mock_navigate_back
+    ):
+        self.task._pack_hourglass_count = 120
+        self.task._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+        mock_navigate_back.return_value = ActionResult.ok(wait=1.0)
+
+        result = self.task._handle_pack_paid({"ocr_results": []})
+
+        self.assertTrue(result.success)
+        mock_navigate_back.assert_called_once()
+        mock_tap_text_exact.assert_not_called()
+
+    @patch("ptcgp_auto_v2.db.repositories.AccountStatRepository")
+    @patch("ptcgp_auto_v2.db.repositories.AccountPackConfigRepository")
+    def test_on_start_loads_pack_hourglass_count_once(
+        self, mock_pack_config_repo_cls, mock_account_stat_repo_cls
+    ):
+        mock_pack_config_repo = Mock()
+        mock_config = Mock()
+        mock_config.set_code = "A1"
+        mock_config.booster_name = "Test Pack"
+        mock_pack_config_repo.get_by_account_and_type.return_value = mock_config
+        mock_pack_config_repo_cls.return_value = mock_pack_config_repo
+
+        mock_account_stat_repo = Mock()
+        mock_account_stat_repo.get_by_account_id.return_value = SimpleNamespace(
+            pack_hourglass_count=180
+        )
+        mock_account_stat_repo_cls.return_value = mock_account_stat_repo
+
+        self.task._prepare_image_resources = Mock(return_value=True)
+        self.task._preload_target_series_hash = Mock()
+
+        self.task.on_start()
+
+        self.assertEqual(180, self.task._pack_hourglass_count)
+        mock_account_stat_repo.get_by_account_id.assert_called_once_with(1)
 
 
 if __name__ == "__main__":

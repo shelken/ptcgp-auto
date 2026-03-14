@@ -33,11 +33,11 @@ from ptcgp_auto_v2.utils.gesture import (
     navigate_back,
     quick_tap,
     scroll_until_template,
-    tap_bottom_close,
     tap_box,
+    tap_ok,
     tap_right_side,
-    tap_template_or_text,
     tap_template_with_scale,
+    tap_text_exact,
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 
@@ -60,6 +60,12 @@ BASE_PACK_SERIES_SCROLL_DISTANCE_Y = 307  # 1920 * 0.16
 
 # 主页无免费包检查次数阈值
 HOME_CHECK_THRESHOLD = 3
+
+# 開封10包需要消耗的沙漏数量
+OPEN_10_PACK_HOURGLASS_COST = 120
+
+# action_cache 临时桥接：modal 已确认，但 10 包结果尚未累计到 _packs_opened_count
+ACTION_KEY_10_PACK_CONFIRMED = "pack_10_confirmed"
 
 
 # ============================================================
@@ -93,10 +99,16 @@ def _build_open_pack_pages() -> list[dict]:
             "priority": 99,
             "exact_match": True,
         },
-        # 付费包检测（開封1包）
+        # 付费包检测（開封1包）- 免费包开完后出现
         {
             "name": "pack_paid",
             "identifiers": get_text_patterns("open_pack_1"),
+            "priority": 99,
+        },
+        # 付费包确认弹窗（要使用道具）
+        {
+            "name": "pack_paid_modal",
+            "identifiers": get_text_patterns("use_item_confirm"),
             "priority": 99,
         },
         # 商店 / 得卡挑戰
@@ -140,6 +152,10 @@ class OpenPackTask(PackOpeningTaskBase):
 
         # 数据仓储（基类已初始化，此处仅用于类型提示）
         self._pack_config_repo = None
+        self._account_stat_repo = None
+
+        # 任务开始时读取一次，后续页面处理复用缓存值
+        self._pack_hourglass_count: int | None = None
 
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
@@ -167,10 +183,14 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def on_start(self):
         """任务开始前的初始化"""
-        from ptcgp_auto_v2.db.repositories import AccountPackConfigRepository
+        from ptcgp_auto_v2.db.repositories import (
+            AccountPackConfigRepository,
+            AccountStatRepository,
+        )
 
         self._init_repositories()
         self._pack_config_repo = AccountPackConfigRepository()
+        self._account_stat_repo = AccountStatRepository()
 
         self._action_cache.clear()
         self._home_check_count = 0
@@ -180,12 +200,15 @@ class OpenPackTask(PackOpeningTaskBase):
         self._failed = False  # 任务失败标志
         self._result_recognized = False
         self._base_pack_points = None  # 重置基础开包点数
+        self._pack_hourglass_count = None
 
         # 检查账号 ID
         if self.account.id is None:
             logger.error(f"账号 {self.account.display_name} ID 为空")
             self._skipped = True
             return
+
+        self._pack_hourglass_count = self._load_pack_hourglass_count()
 
         # 加载开包配置
         config = self._pack_config_repo.get_by_account_and_type(
@@ -307,7 +330,8 @@ class OpenPackTask(PackOpeningTaskBase):
             "pack_series_select": self._handle_pack_series_select,
             "pack_list": self._handle_pack_list,
             "pack_detail": self._handle_pack_detail,
-            "pack_paid": self._handle_pack_detail,
+            "pack_paid": self._handle_pack_paid,
+            "pack_paid_modal": self._handle_pack_paid_modal,
         }
         # 合并：特定处理器优先覆盖通用处理器
         handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
@@ -411,8 +435,8 @@ class OpenPackTask(PackOpeningTaskBase):
             series_patterns = get_config_value("series")
             if isinstance(series_patterns, dict) and target_series in series_patterns:
                 patterns = series_patterns[target_series]
-                result = tap_template_or_text(
-                    self.adb, self.page_detector, ocr_results, None, patterns, wait=1.0
+                result = tap_text_exact(
+                    self.adb, ocr_results, patterns, wait=1.0
                 )
                 if result:
                     self._mark_action_done("series_clicked")
@@ -537,22 +561,11 @@ class OpenPackTask(PackOpeningTaskBase):
                 logger.info(f"  -> 当前卡包不是目标卡包 ({template_name})，返回")
                 return navigate_back(self.adb, self.page_detector, ocr_results)
 
-        # 检查是否是付费包
-        paid_patterns = get_text_patterns("open_pack_1")
-        if paid_patterns and any(
-            pattern in item["text"] for pattern in paid_patterns for item in ocr_results
-        ):
-            logger.info("  -> 检测到付费包，返回上一页")
-            return navigate_back(self.adb, self.page_detector, ocr_results)
-
         # 点击"開封"按钮
-        open_pack_patterns = get_text_patterns("open_pack")
-        result = tap_template_or_text(
+        result = tap_text_exact(
             self.adb,
-            self.page_detector,
             ocr_results,
-            None,
-            open_pack_patterns,
+            get_text_patterns("open_pack"),
             wait=1.0,
         )
         if result:
@@ -561,6 +574,95 @@ class OpenPackTask(PackOpeningTaskBase):
 
         logger.warning("  -> 未找到开包按钮")
         return ActionResult.ok(wait=1.0)
+
+    def _handle_pack_paid(self, page_info: dict) -> ActionResult:
+        """处理付费包页面（開封1包）- 检查沙漏数量决定是否开10包"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        if self._has_opened_10_pack_this_task():
+            logger.debug("  -> 已使用过開封10包，返回上一页")
+            return navigate_back(self.adb, self.page_detector, ocr_results)
+
+        if not self._can_open_10_pack():
+            logger.info(
+                "  -> 沙漏数量 %s < %s，不满足开10包条件",
+                self._pack_hourglass_count,
+                OPEN_10_PACK_HOURGLASS_COST,
+            )
+            return navigate_back(self.adb, self.page_detector, ocr_results)
+
+        logger.info(
+            "  -> 沙漏数量 %s >= %s，准备开10包",
+            self._pack_hourglass_count,
+            OPEN_10_PACK_HOURGLASS_COST,
+        )
+
+        # 点击開封10包按钮
+        result = tap_text_exact(
+            self.adb,
+            ocr_results,
+            get_text_patterns("open_pack_10"),
+            wait=1.5,
+        )
+        if result:
+            logger.info("  -> 点击開封10包按钮")
+            return result
+
+        logger.warning("  -> 未找到開封10包按钮")
+        return ActionResult.ok(wait=1.0)
+
+    def _handle_pack_paid_modal(self, page_info: dict) -> ActionResult:
+        """处理付费包确认弹窗（要使用道具）"""
+        ocr_results = page_info.get("ocr_results", [])
+
+        if self._should_confirm_10_pack_modal():
+            result = tap_ok(self.adb, ocr_results, wait=2.0)
+            if result:
+                self._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+                logger.info("  -> 点击OK确认使用沙漏开10包")
+                return result
+
+            logger.warning("  -> 未找到OK按钮")
+            return ActionResult.ok(wait=1.0)
+
+        # 不需要开10包，点击关闭弹窗
+        logger.debug("  -> 不需要开10包，关闭弹窗")
+        close_patterns = get_text_patterns("close_button")
+        result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
+        if result:
+            return result
+
+        return ActionResult.ok(wait=1.0)
+
+    def _load_pack_hourglass_count(self) -> int | None:
+        """任务开始时读取一次当前账号沙漏数量。"""
+        if not self.account.id or self._account_stat_repo is None:
+            return None
+
+        try:
+            stat = self._account_stat_repo.get_by_account_id(self.account.id)
+            if stat:
+                return stat.pack_hourglass_count
+        except Exception as e:
+            logger.warning(f"  -> 获取沙漏数量失败: {e}")
+
+        return None
+
+    def _can_open_10_pack(self) -> bool:
+        """判断当前缓存的沙漏数量是否满足開封10包。"""
+        if self._pack_hourglass_count is None:
+            return False
+        return self._pack_hourglass_count >= OPEN_10_PACK_HOURGLASS_COST
+
+    def _has_opened_10_pack_this_task(self) -> bool:
+        """判断本次任务是否已经开过一次10包。"""
+        return self._is_action_done(ACTION_KEY_10_PACK_CONFIRMED) or (
+            self._packs_opened_count >= 10
+        )
+
+    def _should_confirm_10_pack_modal(self) -> bool:
+        """判断当前 modal 是否应该确认 10 包开封。"""
+        return self._can_open_10_pack() and not self._has_opened_10_pack_this_task()
 
     # ============================================================
     # 辅助方法
