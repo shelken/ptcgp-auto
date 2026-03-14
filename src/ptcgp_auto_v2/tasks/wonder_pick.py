@@ -300,7 +300,6 @@ class WonderPickTask(Task):
                 self.adb,
                 self.page_detector,
                 page_info.get("ocr_results", []),
-                get_text_patterns("back_button"),
             )
 
         if self._pending_after_challenge:
