@@ -18,7 +18,7 @@ TEXT_PATTERNS = {
     "pack_list": ["提供比例", "其他擴充包"],
     "pack_list_exclude": ["開封", "開封10包"],
     "open_pack": ["開封"],
-    "open_pack_exclude": ["開封10包", "開封1包", "橫向滑動來開封"],
+    "open_pack_exclude": ["橫向滑動來開封"],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
