@@ -434,9 +434,7 @@ class OpenPackTask(PackOpeningTaskBase):
             return result
 
         # 未找到，返回上一页
-        return navigate_back(
-            self.adb, self.page_detector, ocr_results, get_text_patterns("back_button")
-        )
+        return navigate_back(self.adb, self.page_detector, ocr_results)
 
     def _handle_pack_list(self, page_info: dict) -> ActionResult:
         """选择子包"""
@@ -476,12 +474,7 @@ class OpenPackTask(PackOpeningTaskBase):
 
             if not match:
                 logger.debug("  -> 循环切换子包未找到目标，返回上一页")
-                return navigate_back(
-                    self.adb,
-                    self.page_detector,
-                    ocr_results,
-                    get_text_patterns("back_button"),
-                )
+                return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 匹配成功，提取基础点数（延迟更新，等保存记录时再累加）
         self._extract_pack_points(ocr_results)
@@ -542,12 +535,7 @@ class OpenPackTask(PackOpeningTaskBase):
             )
             if not match:
                 logger.info(f"  -> 当前卡包不是目标卡包 ({template_name})，返回")
-                return navigate_back(
-                    self.adb,
-                    self.page_detector,
-                    ocr_results,
-                    get_text_patterns("back_button"),
-                )
+                return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 检查是否是付费包
         paid_patterns = get_text_patterns("open_pack_1")
@@ -555,12 +543,7 @@ class OpenPackTask(PackOpeningTaskBase):
             pattern in item["text"] for pattern in paid_patterns for item in ocr_results
         ):
             logger.info("  -> 检测到付费包，返回上一页")
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                ocr_results,
-                get_text_patterns("back_button"),
-            )
+            return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 点击"開封"按钮
         open_pack_patterns = get_text_patterns("open_pack")
