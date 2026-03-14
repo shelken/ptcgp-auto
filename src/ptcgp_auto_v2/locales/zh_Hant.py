@@ -19,11 +19,6 @@ TEXT_PATTERNS = {
     "pack_list_exclude": ["開封", "開封10包"],
     "open_pack": ["開封"],
     "open_pack_exclude": ["開封10包", "開封1包", "橫向滑動來開封"],
-    "pack_hourglass_popup": [
-        "要使用道具",
-        "縮短開封卡牌包的等待時間嗎",
-        "使用道具立刻開封擴充包",
-    ],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
