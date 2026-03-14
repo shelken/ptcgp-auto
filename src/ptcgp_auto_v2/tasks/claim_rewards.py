@@ -271,10 +271,7 @@ class ClaimRewardsTask(Task):
             )
             if result:
                 return result
-            back_patterns = get_text_patterns("back_button")
-            return navigate_back(
-                self.adb, self.page_detector, ocr_results, back_patterns
-            )
+            return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 3. Tab 页面没有领取过奖励，需要检查主题收藏
         if not self._is_action_done("theme_checked"):
@@ -294,8 +291,7 @@ class ClaimRewardsTask(Task):
         result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
         if result:
             return result
-        back_patterns = get_text_patterns("back_button")
-        return navigate_back(self.adb, self.page_detector, ocr_results, back_patterns)
+        return navigate_back(self.adb, self.page_detector, ocr_results)
 
     def _try_claim_buttons(
         self, ocr_results: list[dict], screenshot
@@ -349,8 +345,7 @@ class ClaimRewardsTask(Task):
 
         # 无可领取，返回 Tab 页面
         logger.debug("  -> 主题收藏领取完成，返回 Tab 页面")
-        back_patterns = get_text_patterns("back_button")
-        return navigate_back(self.adb, self.page_detector, ocr_results, back_patterns)
+        return navigate_back(self.adb, self.page_detector, ocr_results)
 
     def _handle_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（精英牌组奖励）"""
