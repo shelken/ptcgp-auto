@@ -20,6 +20,10 @@ from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.card_pick import tap_favorite_card
+from ptcgp_auto_v2.tasks.utils.constants import (
+    BASE_PACK_RESULT_SCROLL_DISTANCE_Y,
+    PACK_RESULT_SCROLL_SWIPE_STEPS,
+)
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
@@ -41,8 +45,6 @@ logger = logging.getLogger(__name__)
 # 常量定义（基于 1080x1920 基准分辨率）
 # ============================================================
 
-BASE_SCAN_SCROLL_DISTANCE_Y = 320  # 得卡挑战列表滚动距离（基准像素，小幅滑动）
-WONDER_PICK_SWIPE_STEPS = 8  # 得卡挑战滑动步数
 WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"  # 挑战力图标模板
 
 
@@ -515,10 +517,10 @@ class WonderPickTask(Task):
         """滚动得卡挑战列表。"""
         start, end = scroll_points(
             self.adb,
-            base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y,
+            base_distance_y=BASE_PACK_RESULT_SCROLL_DISTANCE_Y,
             direction=direction,
         )
-        swipe(self.adb, start, end, steps=WONDER_PICK_SWIPE_STEPS, wait=wait)
+        swipe(self.adb, start, end, steps=PACK_RESULT_SCROLL_SWIPE_STEPS, wait=wait)
         return ActionResult.ok(wait=0.4)
 
     def _update_scan_signature(self, detected) -> int:

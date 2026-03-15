@@ -7,7 +7,7 @@ from sqlalchemy import tuple_
 from sqlmodel import Session, col, func, select
 
 from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import PackCard, PackRecord
+from ptcgp_auto_v2.db.models import PackCard, PackRecord, PackRecordType
 from ptcgp_auto_v2.utils.game_time import get_game_day_window
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class PackRecordRepository:
 
         Args:
             account_id: 账号ID
-            pack_type: 卡包类型（来源，如 daily_free）
+            pack_type: 卡包类型（来源，如 daily_free / ten_pack）
             cards: 包含卡牌信息的字典列表
             set_code: 系列代码 (A1)
             pack_name: 卡包名称 (Charizard)
@@ -141,7 +141,7 @@ class PackRecordRepository:
                         parts = record.pack_type.split("/", 1)
                         record.pack_code = parts[0]
                         record.pack_name = parts[1]
-                        record.pack_type = "daily_free"
+                        record.pack_type = PackRecordType.DAILY_FREE
                         session.add(record)
                         count += 1
                     except Exception as e:

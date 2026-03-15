@@ -169,6 +169,7 @@ class Settings:
     # latest 自动选最新包
     # hrw_progress_balance 基于全局进度权重的 HRW 选择
     pack_auto_strategy: str = "hrw_progress_balance"
+    enable_open_10_pack: bool = False
 
     # 调度配置
     poll_interval: float = DEFAULT_POLL_INTERVAL
@@ -260,6 +261,14 @@ class Settings:
         web_port_env = os.getenv("PTCGP_WEB_PORT")
         if web_port_env:
             settings.web_port = int(web_port_env)
+
+        enable_open_10_pack_env = os.getenv("PTCGP_ENABLE_OPEN_10_PACK")
+        if enable_open_10_pack_env:
+            settings.enable_open_10_pack = enable_open_10_pack_env.lower() in (
+                "true",
+                "1",
+                "yes",
+            )
 
         return settings
 
