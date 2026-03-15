@@ -12,6 +12,7 @@
 - get_pack_record_type(): 获取 pack 记录类型（必须实现）
 """
 
+import json
 import logging
 import threading
 import time
@@ -32,14 +33,25 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.booster_inference import (
     infer_pack_by_cards,
 )
+from ptcgp_auto_v2.tasks.utils.constants import (
+    BASE_PACK_RESULT_SCROLL_DISTANCE_Y,
+    PACK_RESULT_SCROLL_SWIPE_STEPS,
+)
 from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
-    long_press_opening_card,
     swipe_card_register,
     swipe_open_pack,
     tap_opening_continue,
 )
-from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
+from ptcgp_auto_v2.tasks.utils.pack_result_mapper import PackResultMapper
+from ptcgp_auto_v2.tasks.utils.pack_result_rows import (
+    BASE_COMMON_CARD_X_TOLERANCE,
+    build_pack_groups,
+    build_row_signature,
+    group_rows,
+    has_incomplete_rows,
+    merge_or_append_rows,
+)
 from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
     PackCandidate,
     PackTemplateMatcher,
@@ -47,6 +59,8 @@ from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
 )
 from ptcgp_auto_v2.utils.gesture import (
     quick_tap,
+    scroll_points,
+    swipe,
     tap_center,
     tap_matched_element,
 )
@@ -63,6 +77,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+PACK_RESULT_MODE_SINGLE = "single"
+PACK_RESULT_MODE_TEN = "ten"
+PACK_RESULT_ROWS_PER_PACK = 2
+OPENING_CARD_QUICK_TAP_TIMES = 6
+OPENING_CARD_WAIT = 3.0
+OPENING_CARD_TEN_FAST_TAP_LIMIT = 10
+
+
 # ============================================================
 # 通用开包页面规则构建
 # ============================================================
@@ -74,6 +96,7 @@ def build_pack_opening_pages() -> list[dict]:
     包含开包过程中的标准页面：
     - 横向滑动开包
     - 长按开包卡牌
+    - 十包总览结果
     - 卡牌注册
     - 开包结果
     """
@@ -94,6 +117,13 @@ def build_pack_opening_pages() -> list[dict]:
         {
             "name": "pack_opening_card",
             "identifiers": get_text_patterns("long_press"),
+            "priority": 99,
+        },
+        # 十包总览结果（第1包/第2包/.../继续）
+        {
+            "name": "pack_opening_multi_result",
+            "identifiers": get_text_patterns("pack_opening_multi_result"),
+            "exact_match": True,
             "priority": 99,
         },
         # 開封結果 / 開包點數 / 閃亮沙子
@@ -142,6 +172,12 @@ class PackOpeningTaskBase(Task):
         self._packs_opened_count = 0  # 本次任务已开包数量
         self._result_recognized = False  # 本次开包是否已识别结果
         self._base_pack_points: int | None = None  # 从OCR提取的基础开包点数
+        self._pack_result_mode = PACK_RESULT_MODE_SINGLE
+        self._pack_result_batch_size = 1
+        self._pack_result_rows: list[list[dict]] = []
+        self._multi_pack_swipe_counted = False
+        self._opening_card_tap_count = 0
+        self._pack_result_mapper: PackResultMapper | None = None
 
         # 数据仓储（延迟初始化）
         self._pack_record_repo: "PackRecordRepository | None" = None
@@ -192,7 +228,7 @@ class PackOpeningTaskBase(Task):
         """获取 pack 记录类型
 
         Returns:
-            记录类型："daily_free", "gift_box", "init_tutorial" 等
+            记录类型：daily_free、ten_pack、gift_box、init_tutorial 等
 
         Raises:
             NotImplementedError: 子类必须实现此方法
@@ -222,9 +258,6 @@ class PackOpeningTaskBase(Task):
 
     def _init_repositories(self):
         """初始化数据仓储（如未初始化）"""
-        if self._card_repo is not None:
-            return
-
         from ptcgp_auto_v2.db.repositories import (
             AccountCardRepository,
             AccountPackPointRepository,
@@ -232,10 +265,21 @@ class PackOpeningTaskBase(Task):
             PackRecordRepository,
         )
 
-        self._account_card_repo = AccountCardRepository()
-        self._pack_record_repo = PackRecordRepository()
-        self._card_repo = CardRepository()
-        self._pack_point_repo = AccountPackPointRepository()
+        if self._account_card_repo is None:
+            self._account_card_repo = AccountCardRepository()
+        if self._pack_record_repo is None:
+            self._pack_record_repo = PackRecordRepository()
+        if self._card_repo is None:
+            self._card_repo = CardRepository()
+        if self._pack_point_repo is None:
+            self._pack_point_repo = AccountPackPointRepository()
+        if self._pack_result_mapper is None:
+            self._pack_result_mapper = PackResultMapper(self._card_repo)
+
+    def _get_pack_result_mapper(self) -> PackResultMapper:
+        """获取统一的开包结果映射器。"""
+        self._init_repositories()
+        return self._pack_result_mapper
 
     def _resolve_scan_set_code(self) -> str | None:
         """解析要使用的 set_code
@@ -278,7 +322,6 @@ class PackOpeningTaskBase(Task):
                 # 开包扫描排除 PROMO 干扰，但保留普通系列下载能力
                 cards = self.card_recognizer.scan(
                     set_code=set_code,
-                    similarity_threshold=0.68,
                     exclude_promo=True,
                 )
             except RuntimeError as e:
@@ -310,11 +353,9 @@ class PackOpeningTaskBase(Task):
         if self._packs_opened_count == 0:
             self._packs_opened_count = 1
 
-        # 使用 set_code 进行映射
-        # set_code=None 表示全局模式，map_detected_cards 会使用每张卡自带的 set_code
-        rows = map_detected_cards(
+        # 使用 set_code 进行映射；set_code=None 时由映射器使用每张卡自带的 set_code
+        rows = self._get_pack_result_mapper().map_detected_cards(
             cards=cards,
-            card_repo=self._card_repo,
             fixed_set_code=set_code,
         )
 
@@ -357,19 +398,27 @@ class PackOpeningTaskBase(Task):
                 pack_name=pack_name,
                 cards=rows,
             )
-            card_names = [f"{row['card_name']}({row['rarity']})" for row in rows]
+            card_names = [
+                f"{self._resolve_log_card_name(row)}({row['rarity']})" for row in rows
+            ]
             logger.info(
                 f"已保存开包记录: {set_code}/{pack_name} "
                 f"({len(rows)} 张): {', '.join(card_names)}"
             )
 
             # 根据开包数量累加开包点数（仅 open_pack 任务：基础点数 + 开包数 × 5）
-            if set_code and self._pack_point_repo and self._base_pack_points is not None:
+            if (
+                set_code
+                and self._pack_point_repo
+                and self._base_pack_points is not None
+            ):
                 final_points = self._base_pack_points + self._packs_opened_count * 5
                 self._pack_point_repo.upsert_points(
                     self.account.id, set_code, final_points
                 )
-                logger.info(f"  -> 更新开包点数: {set_code} = {final_points}pt (基础 {self._base_pack_points}pt + 开包 {self._packs_opened_count} 包 × 5pt)")
+                logger.info(
+                    f"  -> 更新开包点数: {set_code} = {final_points}pt (基础 {self._base_pack_points}pt + 开包 {self._packs_opened_count} 包 × 5pt)"
+                )
 
         except Exception as e:
             logger.error(f"保存开包记录失败: {e}")
@@ -443,7 +492,12 @@ class PackOpeningTaskBase(Task):
 
     def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
         """滑动开包。"""
-        self._packs_opened_count += 1
+        if self._pack_result_mode == PACK_RESULT_MODE_TEN:
+            if not self._multi_pack_swipe_counted:
+                self._packs_opened_count += self._pack_result_batch_size
+                self._multi_pack_swipe_counted = True
+        else:
+            self._packs_opened_count += 1
         self._result_recognized = False
 
         if self.get_target_pack_context() is None:
@@ -510,12 +564,20 @@ class PackOpeningTaskBase(Task):
 
     def _handle_opening_card(self, page_info: dict) -> ActionResult:
         """长按跳过卡牌展示"""
-        ocr_results = page_info.get("ocr_results", [])
-        wait = 3.0
-        result = long_press_opening_card(self.adb, ocr_results, wait=wait)
-        if result:
-            return result
-        return ActionResult.ok(wait=wait)
+        wait = OPENING_CARD_WAIT
+        if self._pack_result_mode == PACK_RESULT_MODE_TEN:
+            self._opening_card_tap_count += 1
+            if self._opening_card_tap_count <= OPENING_CARD_TEN_FAST_TAP_LIMIT:
+                wait = 0.0
+            else:
+                wait = OPENING_CARD_WAIT
+
+        return quick_tap(
+            self.adb,
+            y=self.adb.center_y(),
+            times=OPENING_CARD_QUICK_TAP_TIMES,
+            wait=wait,
+        )
 
     def _handle_pack_opening_select(self, page_info: dict) -> ActionResult:
         """点击选择要开的扩充包"""
@@ -530,10 +592,182 @@ class PackOpeningTaskBase(Task):
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页：识别卡牌并点击继续"""
         if not self._result_recognized:
-            self._recognize_cards()
+            if self._pack_result_mode == PACK_RESULT_MODE_TEN:
+                if not self._recognize_multi_pack_results():
+                    return ActionResult.ok(wait=1.0)
+            else:
+                self._recognize_cards()
+        if not self._result_recognized:
+            return ActionResult.ok(wait=1.0)
         return tap_opening_continue(
             self.adb, page_info.get("ocr_results", []), wait=1.5
         )
+
+    def _set_pack_result_mode(self, batch_size: int = 1) -> None:
+        """设置当前开包结果模式。"""
+        resolved_batch_size = max(1, batch_size)
+        self._pack_result_batch_size = resolved_batch_size
+        self._pack_result_mode = (
+            PACK_RESULT_MODE_TEN if resolved_batch_size > 1 else PACK_RESULT_MODE_SINGLE
+        )
+        self._pack_result_rows = []
+        self._multi_pack_swipe_counted = False
+        self._opening_card_tap_count = 0
+
+    def _reset_pack_result_mode(self) -> None:
+        """重置当前开包结果模式为单包默认值。"""
+        self._set_pack_result_mode()
+
+    def _group_result_rows(self, cards: list[DetectedCard]) -> list[list[dict]]:
+        """将单屏识别结果转换为按行分组的卡牌列表。"""
+        mapped_cards = self._get_pack_result_mapper().map_detected_cards(
+            cards=cards,
+            fixed_set_code=self._resolve_scan_set_code(),
+        )
+        row_threshold = self.adb.scaled_y(self.card_recognizer.BASE_ROW_THRESHOLD)
+        return group_rows(mapped_cards, row_threshold=row_threshold)
+
+    @staticmethod
+    def _resolve_log_card_name(card: dict) -> str:
+        """解析日志中的卡牌名称，优先中文，缺失时回退现有名称。"""
+        card_obj = card.get("card_obj")
+        raw_data = getattr(card_obj, "data", None) if card_obj else None
+        if raw_data:
+            try:
+                payload = (
+                    json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+                )
+                localized = (
+                    payload.get("localized_name") if isinstance(payload, dict) else None
+                )
+                zh_name = localized.get("zh") if isinstance(localized, dict) else None
+                if zh_name:
+                    return str(zh_name)
+            except Exception:
+                pass
+        fallback_name = card.get("card_name")
+        if fallback_name:
+            return str(fallback_name)
+        signature = build_row_signature([card])
+        return signature[0] if signature else "Unknown"
+
+    @staticmethod
+    def _format_result_row(row: list[dict] | None) -> str:
+        """格式化结果行日志。"""
+        if not row:
+            return "[]"
+        names = [PackOpeningTaskBase._resolve_log_card_name(card) for card in row]
+        return "[" + ", ".join(names) + "]"
+
+    def _log_multi_pack_rows_snapshot(self) -> None:
+        """打印当前已收集的全部结果行，便于调试分组问题。"""
+        logger.debug(
+            "10包结果页当前逻辑行快照: 共 %s/%s 行",
+            len(self._pack_result_rows),
+            self._pack_result_batch_size * PACK_RESULT_ROWS_PER_PACK,
+        )
+        for index, row in enumerate(self._pack_result_rows, start=1):
+            logger.debug(
+                "  行%02d (%s张): %s",
+                index,
+                len(row),
+                self._format_result_row(row),
+            )
+
+    def _collect_multi_pack_rows(self) -> bool:
+        """滚动结果页并收集 10 包的全部逻辑行。"""
+        expected_rows = self._pack_result_batch_size * PACK_RESULT_ROWS_PER_PACK
+        previous_screen_signature: list[tuple[str, ...]] | None = None
+
+        while True:
+            cards = self._scan_cards_with_retry(
+                self._resolve_scan_set_code(),
+                max_retries=3,
+            )
+            incoming_rows = self._group_result_rows(cards)
+            current_screen_signature = [
+                tuple(build_row_signature(row)) for row in incoming_rows
+            ]
+            stats = merge_or_append_rows(
+                self._pack_result_rows,
+                incoming_rows,
+                x_tolerance=self.adb.scaled_x(BASE_COMMON_CARD_X_TOLERANCE),
+            )
+            for decision in stats.get("decisions", []):
+                logger.debug(
+                    "  -> 结果行策略=%s incoming=%s matched=%s result=%s",
+                    decision["action"],
+                    self._format_result_row(decision.get("incoming_row")),
+                    self._format_result_row(decision.get("matched_row")),
+                    self._format_result_row(decision.get("result_row")),
+                )
+
+            is_complete = (
+                len(self._pack_result_rows) >= expected_rows
+                and not has_incomplete_rows(self._pack_result_rows)
+            )
+            if is_complete:
+                break
+
+            if current_screen_signature == previous_screen_signature:
+                break
+            previous_screen_signature = current_screen_signature
+
+            start, end = scroll_points(
+                self.adb,
+                base_distance_y=BASE_PACK_RESULT_SCROLL_DISTANCE_Y,
+                direction="up",
+            )
+            swipe(
+                self.adb,
+                start,
+                end,
+                steps=PACK_RESULT_SCROLL_SWIPE_STEPS,
+                wait=0.0,
+            )
+            time.sleep(1.0)
+
+        return (
+            len(self._pack_result_rows) == expected_rows
+            and not has_incomplete_rows(self._pack_result_rows)
+        )
+
+    def _recognize_multi_pack_results(self) -> bool:
+        """识别 10 包结果页并拆成多条独立开包记录。"""
+        self._init_repositories()
+
+        try:
+            collected = self._collect_multi_pack_rows()
+            self._log_multi_pack_rows_snapshot()
+            if not collected:
+                logger.warning(
+                    "10包结果页收集不完整: 期望 %s 行，实际 %s 行",
+                    self._pack_result_batch_size * PACK_RESULT_ROWS_PER_PACK,
+                    len(self._pack_result_rows),
+                )
+                return False
+
+            pack_groups = build_pack_groups(
+                self._pack_result_rows,
+                rows_per_pack=PACK_RESULT_ROWS_PER_PACK,
+            )
+            if len(pack_groups) != self._pack_result_batch_size:
+                logger.warning(
+                    "10包结果页分组失败: 期望 %s 包，实际 %s 包",
+                    self._pack_result_batch_size,
+                    len(pack_groups),
+                )
+                return False
+
+            for rows in pack_groups:
+                self._save_pack_record(rows)
+                if self._account_card_repo and self.account.id:
+                    self._save_high_rarity_cards(rows)
+
+            self._result_recognized = True
+            return True
+        finally:
+            self._reset_pack_result_mode()
 
     # ============================================================
     # 通用开包 Handler 自动分发
@@ -553,6 +787,7 @@ class PackOpeningTaskBase(Task):
             "pack_opening_swipe": self._handle_opening_swipe,
             "pack_opening_select": self._handle_pack_opening_select,
             "pack_opening_card": self._handle_opening_card,
+            "pack_opening_multi_result": self._handle_pack_opening_result,
             "pack_card_register": self._handle_card_register,
             "pack_opening_result": self._handle_pack_opening_result,
             "speed_up_button": self._handle_speed_up,

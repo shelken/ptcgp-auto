@@ -41,6 +41,7 @@
 - **识别查询去重原则**：同一批识别结果的卡牌详情只查一次并复用（入库与通知共用）
 - **高稀有度保存与通知同入口原则**：稀有度通知必须绑定在 `high_rarity_saver.py` 保存流程内触发
 - **识别映射统一结构原则**：`DetectedCard` 映射统一走 `pack_result_mapper.py::map_detected_cards`
+- **结果行归并分层原则**：结果页行签名、归并、分包统一放 `pack_result_rows.py`，不要继续塞回 mapper
 - **通知配置归 Notifier 原则**：task 层不做通知过滤，由 `Notifier.notify_rare_card` 内部配置决定
 - **稀有卡事件来源标记原则**：调用 `save_high_rarity_cards` 时必须传入中文来源消息（如"开包获得稀有卡牌"）
 

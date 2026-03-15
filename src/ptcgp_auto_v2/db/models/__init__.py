@@ -21,7 +21,7 @@ from .exchange_card_request import ExchangeCardRequest
 from .base import TimestampMixin
 from .notification import Notification
 from .notification_config import NotificationConfig
-from .pack_record import PackRecord
+from .pack_record import PackRecord, PackRecordType
 from .pack_card import PackCard
 from .task_instance import TaskInstance
 from .task_plan import TaskPlan
@@ -42,6 +42,7 @@ __all__ = [
     "ExchangeCardRequest",
     "TaskInstance",
     "PackRecord",
+    "PackRecordType",
     "PackCard",
     "AccountPackConfig",
     "AccountPackPoint",

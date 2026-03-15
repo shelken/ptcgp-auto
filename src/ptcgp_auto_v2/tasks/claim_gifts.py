@@ -17,6 +17,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.db.models import PackRecordType
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.pack_opening_task_base import (
     PackOpeningTaskBase,
@@ -110,7 +111,7 @@ class ClaimGiftsTask(PackOpeningTaskBase):
 
     def get_pack_record_type(self) -> str:
         """返回 pack 记录类型：礼物盒"""
-        return "gift_box"
+        return PackRecordType.GIFT_BOX
 
     def get_rare_card_notify_message(self) -> str:
         """返回稀有卡通知消息：礼物盒领取"""
