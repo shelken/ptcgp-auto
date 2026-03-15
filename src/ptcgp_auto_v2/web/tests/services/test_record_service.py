@@ -153,6 +153,8 @@ def test_build_records_list_context_should_translate_ten_pack(
         set_code="A1",
         pack_type=PackRecordType.TEN_PACK,
         pack_name="Mewtwo",
+        batch_id=None,  # 无批次ID时按单包处理
+        batch_index=None,
         opened_at=SimpleNamespace(
             isoformat=lambda timespec=None: "2026-03-01T00:00:00"
         ),

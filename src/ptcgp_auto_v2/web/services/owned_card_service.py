@@ -18,7 +18,9 @@ def _resolve_card_display_name(card: Card) -> str:
 
 def _normalize_ownership_scope(ownership_scope: str) -> str:
     """标准化拥有范围参数。"""
-    return ownership_scope if ownership_scope in {"owned", "missing", "all"} else "owned"
+    return (
+        ownership_scope if ownership_scope in {"owned", "missing", "all"} else "owned"
+    )
 
 
 def build_owned_cards_list_context(
@@ -145,7 +147,7 @@ def build_owned_card_modal_context(
         sort_by="account_id",
         sort_order="asc",
     )
-    exchange_blocked = card.rarity in ExchangeCardService.NON_EXCHANGEABLE_RARITIES
+    exchange_blocked = not ExchangeCardService.is_exchangeable(card.rarity)
     return {
         "card": card,
         "card_display_name": _resolve_card_display_name(card),
@@ -184,7 +186,7 @@ def _build_exchange_action(card: Card, item: dict[str, Any]) -> dict[str, Any]:
 
     disabled_reason_text: str | None = None
     disabled_reason_key: str | None = None
-    if card.rarity in ExchangeCardService.NON_EXCHANGEABLE_RARITIES:
+    if not ExchangeCardService.is_exchangeable(card.rarity):
         disabled_reason_key = "blocked_rarity"
         disabled_reason_text = (
             t.get("exchange_entry_blocked_rarity") or "该稀有度不可交换"
@@ -287,8 +289,7 @@ def build_owned_card_exchange_accounts_context(
     return {
         "card": card,
         "accounts": paged_items,
-        "exchange_blocked": card.rarity
-        in ExchangeCardService.NON_EXCHANGEABLE_RARITIES,
+        "exchange_blocked": not ExchangeCardService.is_exchangeable(card.rarity),
         "total_items": total_items,
         "total_count": int(data.get("total_count") or 0),
         "page": normalized_page,
