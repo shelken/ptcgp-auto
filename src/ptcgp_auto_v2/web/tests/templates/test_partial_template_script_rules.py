@@ -15,3 +15,15 @@ def test_owned_card_partials_do_not_embed_script_tags():
     for path in targets:
         html = path.read_text(encoding="utf-8")
         assert "<script" not in html, f"{path} 不应包含内嵌 script"
+
+
+def test_record_list_partial_does_not_embed_inline_click_handlers():
+    """record_list 模板不应再使用内联点击事件，并改用 data-action 本地切换。"""
+    html = Path("src/ptcgp_auto_v2/web/templates/partials/record_list.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "onclick=" not in html
+    assert 'id="batch-content-{{ item.batch_id }}"' in html
+    assert 'data-action="show-batch-pack-detail"' in html
+    assert 'data-action="show-batch-overview"' in html
