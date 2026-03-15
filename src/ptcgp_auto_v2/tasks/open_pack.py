@@ -9,7 +9,7 @@
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 from ptcgp_auto_v2.config.constants import (
     PACK_AUTO_EXCLUDE_SET_CODES,
@@ -142,24 +142,46 @@ class OpenPackTask(PackOpeningTaskBase):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-        # 任务状态
-        self._home_check_count = 0  # 主页无免费包检查次数
-        self._completed = False  # 任务完成标志
-        self._skipped = False  # 任务跳过标志
-        self._fail_reason: Optional[str] = None  # 失败原因
-
-        # 目标卡包配置：set_code 表示系列代码，booster_name 表示子包名
-        self._target_pack: dict[str, str] | None = None
-
         # 数据仓储（基类已初始化，此处仅用于类型提示）
         self._pack_config_repo = None
         self._account_stat_repo = None
 
-        # 任务开始时读取一次，后续页面处理复用缓存值
-        self._pack_hourglass_count: int | None = None
+    @property
+    def _home_check_count(self) -> int:
+        return int(self.state.data.get("home_check_count", 0))
 
-        # 任务级状态缓存：只放跨页面持久状态，不参与页面 action_cache 重置
-        self._state_cache: dict[str, dict[str, bool]] = {}
+    @_home_check_count.setter
+    def _home_check_count(self, value: int):
+        self.state.data["home_check_count"] = value
+
+    @property
+    def _target_pack(self) -> dict[str, str] | None:
+        return cast(dict[str, str] | None, self.state.data.get("target_pack"))
+
+    @_target_pack.setter
+    def _target_pack(self, value: dict[str, str] | None):
+        self.state.data["target_pack"] = value
+
+    @property
+    def _pack_hourglass_count(self) -> int | None:
+        return cast(int | None, self.state.data.get("pack_hourglass_count"))
+
+    @_pack_hourglass_count.setter
+    def _pack_hourglass_count(self, value: int | None):
+        self.state.data["pack_hourglass_count"] = value
+
+    @property
+    def _state_cache(self) -> dict[str, dict[str, bool]]:
+        state_cache = self.state.data.get("state_cache")
+        if isinstance(state_cache, dict):
+            return state_cache
+        state_cache = {}
+        self.state.data["state_cache"] = state_cache
+        return state_cache
+
+    @_state_cache.setter
+    def _state_cache(self, value: dict[str, dict[str, bool]]):
+        self.state.data["state_cache"] = value
 
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
@@ -198,13 +220,10 @@ class OpenPackTask(PackOpeningTaskBase):
         self._pack_config_repo = AccountPackConfigRepository()
         self._account_stat_repo = AccountStatRepository()
 
-        self._action_cache.clear()
+        self.state.reset()
         self._state_cache.clear()
         self._home_check_count = 0
         self._packs_opened_count = 0
-        self._completed = False
-        self._skipped = False
-        self._failed = False  # 任务失败标志
         self._result_recognized = False
         self._base_pack_points = None  # 重置基础开包点数
         self._pack_hourglass_count = None
@@ -213,7 +232,7 @@ class OpenPackTask(PackOpeningTaskBase):
         # 检查账号 ID
         if self.account.id is None:
             logger.error(f"账号 {self.account.display_name} ID 为空")
-            self._skipped = True
+            self.skip("账号ID为空")
             return
 
         self._pack_hourglass_count = self._load_pack_hourglass_count()
@@ -241,7 +260,7 @@ class OpenPackTask(PackOpeningTaskBase):
                 logger.info(
                     f"账号 {self.account.display_name} 无法找到可用的开包目标，任务跳过"
                 )
-                self._skipped = True
+                self.skip("无法找到可用的开包目标")
                 return
 
             self._target_pack = {
@@ -266,8 +285,7 @@ class OpenPackTask(PackOpeningTaskBase):
         if self.should_prepare_pack_resources():
             if not self._prepare_image_resources():
                 logger.error("准备卡包图片资源失败")
-                self._failed = True
-                self._fail_reason = "准备卡包图片资源失败"
+                self.fail("准备卡包图片资源失败")
                 return
 
         # 预加载目标系列 Hash
@@ -318,37 +336,13 @@ class OpenPackTask(PackOpeningTaskBase):
 
         return True
 
-    def is_completed(self) -> bool:
-        """判断任务是否已完成或失败"""
-        return self._completed or self._skipped or self._failed
-
-    def was_skipped(self) -> bool:
-        """判断任务是否被跳过"""
-        return self._skipped
-
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """处理识别到的页面"""
-        if self._failed:
-            return ActionResult.fail(self._fail_reason or "准备卡包图片资源失败")
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
+        if self.state.lifecycle.failed:
+            return ActionResult.fail(
+                self.state.lifecycle.error or "准备卡包图片资源失败"
+            )
 
         logger.debug(f"处理页面: {page_name}")
-
-        # 任务特定页面处理器（优先于通用处理器）
-        specific_handlers = {
-            "game_home_main": self._handle_home,
-            "pack_series_select": self._handle_pack_series_select,
-            "pack_list": self._handle_pack_list,
-            "pack_detail": self._handle_pack_detail,
-            "pack_paid": self._handle_pack_paid,
-            "pack_paid_modal": self._handle_pack_paid_modal,
-        }
-        # 合并：特定处理器优先覆盖通用处理器
-        handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
-
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
 
@@ -374,9 +368,9 @@ class OpenPackTask(PackOpeningTaskBase):
     # 页面处理方法（任务特定）
     # ============================================================
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """处理主页：核心决策点，检查免费包"""
-        self._reset_action_cache()
+        self.reset_action_cache()
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
         if not screenshot:
@@ -396,12 +390,12 @@ class OpenPackTask(PackOpeningTaskBase):
 
         if self._has_completed_10_pack_this_task():
             logger.debug("  -> 十包流程已完成，任务结束")
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
         if self._should_exit_pack_flow_after_free_packs():
             logger.debug("  -> 免费包已开完且无需十包，任务结束")
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
         if self._can_open_10_pack() and not self._has_started_10_pack_this_task():
@@ -417,7 +411,7 @@ class OpenPackTask(PackOpeningTaskBase):
 
         if self._home_check_count >= HOME_CHECK_THRESHOLD:
             logger.debug("  -> 确认无免费包，任务完成")
-            self._completed = True
+            self.complete()
 
         return ActionResult.ok(wait=1.0)
 
@@ -467,18 +461,18 @@ class OpenPackTask(PackOpeningTaskBase):
         )
         if result:
             logger.debug("  -> 找到目标扩充包，点击进入")
-            self._reset_action_cache()
+            self.reset_action_cache()
             return result
 
         # 2. 尝试切换到目标系列
         target_series = self._get_target_series()
-        if target_series and not self._is_action_done("series_clicked"):
+        if target_series and not self.is_action_done("series_clicked"):
             series_patterns = get_config_value("series")
             if isinstance(series_patterns, dict) and target_series in series_patterns:
                 patterns = series_patterns[target_series]
                 result = tap_text_exact(self.adb, ocr_results, patterns, wait=1.0)
                 if result:
-                    self._mark_action_done("series_clicked")
+                    self.mark_action_done("series_clicked")
                     logger.info(f"  -> 点击切换到 {target_series} 系列")
                     return result
 
@@ -548,7 +542,7 @@ class OpenPackTask(PackOpeningTaskBase):
 
         # 点击进入详情
         logger.debug("  -> 找到目标子包，点击进入详情")
-        self._reset_action_cache()
+        self.reset_action_cache()
         return tap_box(self.adb, match.box, wait=1.0)
 
     def _extract_pack_points(self, ocr_results: list[dict]) -> None:

@@ -21,10 +21,10 @@ from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.repositories import (
     AccountBattleProgressRepository,
     BattleTaskConfigRepository,
@@ -303,7 +303,7 @@ def _build_battle_pages() -> list[dict[str, object]]:
 
 
 @TaskRegistry.register("battle")
-class BattleTask(Task):
+class BattleTask(StatefulTask):
     """
     对战任务 - 刷经验获取沙漏
 
@@ -357,6 +357,7 @@ class BattleTask(Task):
     def on_start(self):
         """加载停止条件和目标配置"""
         logger.info("[BattleTask] 任务开始")
+        self.state.reset()
 
         # 从 task_instance 获取账号和任务实例ID
         task_instance = getattr(self, "task_instance", None)
@@ -496,14 +497,6 @@ class BattleTask(Task):
                 return True
 
         return False
-
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """处理页面 - 分发到对应处理方法"""
-        handler = getattr(self, f"_handle_{page_name}", None)
-        if handler:
-            return handler(page_info)
-        logger.warning(f"[BattleTask] 未找到页面处理器: {page_name}")
-        return ActionResult.ok(wait=1.0)
 
     # ==================== 对战流程中断 (11-20) ====================
 

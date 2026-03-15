@@ -9,9 +9,10 @@
 """
 
 import logging
-from typing import Optional
+from typing import Optional, cast
 
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
     AccountRepository,
@@ -154,7 +155,7 @@ def _build_send_card_pages() -> list[dict]:
 
 
 @TaskRegistry.register("send_card_daily")
-class SendCardDailyTask(Task):
+class SendCardDailyTask(StatefulTask):
     """每日送卡任务。"""
 
     task_type = "send_card_daily"
@@ -171,13 +172,6 @@ class SendCardDailyTask(Task):
             model_manager=get_model_manager(),
             hash_manager=get_card_hash_manager(),
         )
-        self._action_cache: dict[str, bool] = {}
-        self._last_page_name: Optional[str] = None
-        self._prev_page_name: Optional[str] = None
-
-        self._completed = False
-        self._complete_reason: Optional[str] = None
-        self._skip_reason: Optional[str] = None
 
         self._target_friend_id: Optional[str] = None
         self._target_account_id: Optional[int] = None
@@ -196,6 +190,55 @@ class SendCardDailyTask(Task):
 
         self._friend_flow = FriendSelectionFlow()
         self._friend_helper: Optional[FriendSelectionHelper] = None
+
+    @property
+    def _action_cache(self) -> dict[str, bool]:
+        cache = self.state.data.get("action_cache")
+        if isinstance(cache, dict):
+            return cast(dict[str, bool], cache)
+        cache = {}
+        self.state.data["action_cache"] = cache
+        return cast(dict[str, bool], cache)
+
+    @property
+    def _last_page_name(self) -> Optional[str]:
+        return self.state.page.current
+
+    @_last_page_name.setter
+    def _last_page_name(self, value: Optional[str]):
+        self.state.page.current = value
+
+    @property
+    def _prev_page_name(self) -> Optional[str]:
+        return self.state.page.previous
+
+    @_prev_page_name.setter
+    def _prev_page_name(self, value: Optional[str]):
+        self.state.page.previous = value
+
+    @property
+    def _completed(self) -> bool:
+        return self.state.lifecycle.completed
+
+    @_completed.setter
+    def _completed(self, value: bool):
+        self.state.lifecycle.completed = value
+
+    @property
+    def _complete_reason(self) -> Optional[str]:
+        return self.state.lifecycle.complete_reason
+
+    @_complete_reason.setter
+    def _complete_reason(self, value: Optional[str]):
+        self.state.lifecycle.complete_reason = value
+
+    @property
+    def _skip_reason(self) -> Optional[str]:
+        return self.state.lifecycle.skip_reason
+
+    @_skip_reason.setter
+    def _skip_reason(self, value: Optional[str]):
+        self.state.lifecycle.skip_reason = value
 
     def was_skipped(self) -> bool:
         """任务是否被跳过（不更新 last_completed_at）。"""
@@ -234,6 +277,7 @@ class SendCardDailyTask(Task):
 
     def on_start(self):
         """任务启动初始化。"""
+        self.state.reset()
         self._completed = False
         self._complete_reason = None
         self._skip_reason = None
@@ -352,10 +396,6 @@ class SendCardDailyTask(Task):
             error_code="TARGET_NOT_FOUND",
         )
 
-    def is_completed(self) -> bool:
-        """任务是否完成。"""
-        return self._completed
-
     def get_pre_hooks(self) -> list:
         """前置 Hook：确保好友关系存在。"""
         if self._completed or not self._target_friend_id:
@@ -372,40 +412,54 @@ class SendCardDailyTask(Task):
         """后置 Hook：送卡成功后尝试唤醒目标账号回送。"""
         return [SendCardWakeTargetPostHook()]
 
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """页面分发处理。"""
-        previous_page_name = self._last_page_name
-        if page_name != self._last_page_name:
-            self._prev_page_name = previous_page_name
-            self._last_page_name = page_name
-            self._reset_action_cache()
-
+    def on_page_changed(
+        self,
+        previous_page_name: str | None,
+        page_name: str,
+        page_info: dict,
+    ):
+        """页面切换时统一清空动作缓存并同步筛选状态。"""
+        self._reset_action_cache()
         if (
             page_name == "gift_select_card"
-            and self._prev_page_name == "gift_filter_modal"
+            and previous_page_name == "gift_filter_modal"
             and self._filter_opened
         ):
             self._filter_applied = True
             self._filter_modal_stay_rounds = 0
 
-        handlers = {
-            "home_with_community_icon": self._handle_home,
-            "game_home_main": self._handle_home,
-            "community_page": self._handle_community,
-            "exchange_locked_popup": self._handle_exchange_locked_popup,
-            "gift_page_main": self._handle_gift_page_main,
-            "gift_choose_friend": self._handle_choose_friend,
-            "gift_select_card": self._handle_select_card,
-            "gift_filter_modal": self._handle_filter_modal,
-            "gift_target_page": self._handle_target_page,
-            "gift_confirm_popup": self._handle_confirm_popup,
-            "gift_confirm_last_popup": self._handle_confirm_popup,
-            "gift_swipe_page": self._handle_swipe_page,
-        }
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         return ActionResult.wait(0.8)
+
+    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
+        return self._handle_home(page_info)
+
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
+        return self._handle_home(page_info)
+
+    def _handle_community_page(self, page_info: dict) -> ActionResult:
+        return self._handle_community(page_info)
+
+    def _handle_gift_choose_friend(self, page_info: dict) -> ActionResult:
+        return self._handle_choose_friend(page_info)
+
+    def _handle_gift_select_card(self, page_info: dict) -> ActionResult:
+        return self._handle_select_card(page_info)
+
+    def _handle_gift_filter_modal(self, page_info: dict) -> ActionResult:
+        return self._handle_filter_modal(page_info)
+
+    def _handle_gift_target_page(self, page_info: dict) -> ActionResult:
+        return self._handle_target_page(page_info)
+
+    def _handle_gift_confirm_popup(self, page_info: dict) -> ActionResult:
+        return self._handle_confirm_popup(page_info)
+
+    def _handle_gift_confirm_last_popup(self, page_info: dict) -> ActionResult:
+        return self._handle_confirm_popup(page_info)
+
+    def _handle_gift_swipe_page(self, page_info: dict) -> ActionResult:
+        return self._handle_swipe_page(page_info)
 
     def _complete_without_send(
         self,
