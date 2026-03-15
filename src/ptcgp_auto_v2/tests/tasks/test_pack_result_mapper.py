@@ -137,6 +137,38 @@ def test_merge_or_append_rows_should_not_merge_one_card_overlap_row() -> None:
     assert build_row_signature(logical_rows[1]) == ["id:13", "id:11", "id:12"]
 
 
+def test_merge_or_append_rows_should_match_overlap_row_after_two_new_rows() -> None:
+    logical_rows = [
+        [make_card(1, 120, 100), make_card(2, 320, 100)],
+        [make_card(3, 120, 200), make_card(4, 320, 200)],
+        [make_card(5, 120, 300), make_card(6, 320, 300)],
+    ]
+    first_screen_rows = [
+        [make_card(7, 120, 400), make_card(8, 320, 400)],
+        [make_card(9, 120, 500), make_card(10, 320, 500)],
+    ]
+    second_screen_rows = [
+        [make_card(5, 122, 600), make_card(6, 322, 600)],
+    ]
+
+    first_stats = merge_or_append_rows(
+        logical_rows,
+        first_screen_rows,
+        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
+    )
+    second_stats = merge_or_append_rows(
+        logical_rows,
+        second_screen_rows,
+        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
+    )
+
+    assert first_stats["appended"] == 2
+    assert second_stats["appended"] == 0
+    assert second_stats["skipped"] == 1
+    assert len(logical_rows) == 5
+    assert build_row_signature(logical_rows[-1]) == ["id:9", "id:10"]
+
+
 def test_is_same_row_should_reject_same_length_single_card_overlap() -> None:
     existing = [make_card(1, 248, 100), make_card(2, 472, 100)]
     incoming = [make_card(3, 248, 102), make_card(2, 472, 102)]

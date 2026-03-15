@@ -124,9 +124,7 @@ def is_same_row(
     return (
         _is_ordered_subsequence(common, existing)
         and _is_ordered_subsequence(common, incoming)
-        and _has_aligned_common_card_x(
-            existing_row, incoming_row, common, x_tolerance
-        )
+        and _has_aligned_common_card_x(existing_row, incoming_row, common, x_tolerance)
     )
 
 
@@ -134,7 +132,7 @@ def merge_or_append_rows(
     logical_rows: list[list[dict]],
     incoming_rows: list[list[dict]],
     x_tolerance: float,
-    tail_size: int = 2,
+    tail_size: int = 3,
 ) -> dict[str, int]:
     """将新扫描行归并到逻辑行列表中。"""
     stats = {"appended": 0, "replaced": 0, "skipped": 0, "decisions": []}
@@ -260,7 +258,9 @@ def group_rows(cards: list[dict], row_threshold: int) -> list[list[dict]]:
     return rows
 
 
-def build_pack_groups(rows: list[list[dict]], rows_per_pack: int = 2) -> list[list[dict]]:
+def build_pack_groups(
+    rows: list[list[dict]], rows_per_pack: int = 2
+) -> list[list[dict]]:
     """按固定行数将逻辑行切分为多包结果，并重建包内 position。"""
     if rows_per_pack <= 0 or len(rows) % rows_per_pack != 0:
         return []
