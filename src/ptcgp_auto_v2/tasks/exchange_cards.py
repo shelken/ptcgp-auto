@@ -736,7 +736,7 @@ class ExchangeCardsTask(StatefulTask):
 
         return result
 
-    def _handle_target_confirm_page(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_target_confirm_page(self, page_info: dict) -> ActionResult:
         """送卡确认页面：校验目标昵称后点击 OK。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
@@ -781,7 +781,7 @@ class ExchangeCardsTask(StatefulTask):
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
         return result if result else ActionResult.wait(0.6)
 
-    def _handle_proposed_done_popup(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_proposed_done_popup(self, page_info: dict) -> ActionResult:
         """提议完成弹窗：确认后写入 sended，并在当前任务内进入等待窗口。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
@@ -798,7 +798,7 @@ class ExchangeCardsTask(StatefulTask):
         logger.info("交换已送出，进入 5 分钟等待窗口内持续检查")
         return ActionResult.ok(wait=1.0)
 
-    def _handle_waiting_page(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_waiting_page(self, page_info: dict) -> ActionResult:
         """等待对方回应页面：窗口内持续轮询，超时后走取消链路。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
@@ -863,7 +863,7 @@ class ExchangeCardsTask(StatefulTask):
             return refresh_result
         return ActionResult.wait(1.0)
 
-    def _handle_receive_confirm_page(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_receive_confirm_page(self, page_info: dict) -> ActionResult:
         """对方已回应页面：确认交换或拒绝。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
@@ -891,7 +891,7 @@ class ExchangeCardsTask(StatefulTask):
         )
         return exchange_result if exchange_result else ActionResult.wait(0.6)
 
-    def _handle_receive_start_popup(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_receive_start_popup(self, page_info: dict) -> ActionResult:
         """开始交换确认弹窗：点击 OK 后进入滑卡完成页。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
@@ -944,7 +944,7 @@ class ExchangeCardsTask(StatefulTask):
             hash_similarity=getattr(row, "hash_similarity", None),
         )
 
-    def _handle_canceled_done_popup(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_canceled_done_popup(self, page_info: dict) -> ActionResult:
         """取消完成弹窗：点击 OK 并落库 canceled。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
