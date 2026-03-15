@@ -615,8 +615,9 @@ class ManageFriendshipTask(StatefulTask):
             self._save_request(req, "sended")
             if req.to_account_id:
                 self._wake_account_ids.add(req.to_account_id)
-            # 外部好友不创建 FriendshipRepository，等待对方接受后再确认
-            self._refresh_requests()
+            # 发送成功后本轮不再立刻重查同一请求，避免连续两次搜索同一 friend_id。
+            # 外部好友保持 sended，等待后续任务再次确认是否已接受。
+            self._defer_current_request(req, "defer_add_sent")
             return self._close_modal(wait=0.8)
 
         if self._is_pending_reply_by_icons():

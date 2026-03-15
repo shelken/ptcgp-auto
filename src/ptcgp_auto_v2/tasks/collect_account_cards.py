@@ -179,9 +179,7 @@ class CollectAccountCardsTask(StatefulTask):
 
     def _handle_card_filter_panel(self, page_info: dict) -> ActionResult:
         # 使用统一的 action 状态，与 handle_filter_panel 内部共用同一套缓存
-        action_cache = cast(
-            dict[str, bool], self.state_get("filter_action_cache", {})
-        )
+        action_cache = cast(dict[str, bool], self.state_get("filter_action_cache", {}))
         result = handle_filter_panel(
             adb=self.adb,
             page_detector=self.page_detector,
@@ -194,9 +192,7 @@ class CollectAccountCardsTask(StatefulTask):
         # 将 action_cache 的变更同步回 state
         self.state_set("filter_action_cache", action_cache)
 
-        if action_cache.get("filter_selected") and action_cache.get(
-            "filter_ok_scrolled"
-        ):
+        if action_cache.get("filter_applied"):
             no_target_box = self._find_text_box(
                 page_info.get("ocr_results", []),
                 get_text_patterns("card_filter_no_target"),
