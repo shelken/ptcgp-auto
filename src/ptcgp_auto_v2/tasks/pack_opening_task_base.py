@@ -21,10 +21,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from ptcgp_auto_v2.config.settings import get_settings
-from ptcgp_auto_v2.core.task_base import (
-    ActionResult,
-    Task,
-)
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
+from ptcgp_auto_v2.utils.action_result import ActionResult
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.notifier import get_notifier
@@ -148,7 +146,7 @@ def build_pack_opening_pages() -> list[dict]:
 # ============================================================
 
 
-class PackOpeningTaskBase(Task):
+class PackOpeningTaskBase(StatefulTask):
     """统一开包流程基类
 
     提供开包页面处理、卡牌识别、记录保存的统一实现。
@@ -164,9 +162,6 @@ class PackOpeningTaskBase(Task):
             model_manager=get_model_manager(),
             hash_manager=get_card_hash_manager(),
         )
-
-        # 页面内操作缓存
-        self._action_cache: dict[str, bool] = {}
 
         # 开包状态
         self._packs_opened_count = 0  # 本次任务已开包数量
@@ -244,18 +239,6 @@ class PackOpeningTaskBase(Task):
     # ============================================================
     # 内部方法
     # ============================================================
-
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return self._action_cache.get(key, False)
-
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        """重置操作缓存（进入新页面时调用）"""
-        self._action_cache.clear()
 
     def _init_repositories(self):
         """初始化数据仓储（如未初始化）"""
@@ -380,7 +363,9 @@ class PackOpeningTaskBase(Task):
             self._save_high_rarity_cards(rows)
         self._result_recognized = True
 
-    def _save_pack_record(self, rows: list[dict], batch_index: int | None = None) -> None:
+    def _save_pack_record(
+        self, rows: list[dict], batch_index: int | None = None
+    ) -> None:
         """保存本次开包记录到数据库，并根据开包数量累加开包点数
 
         Args:
@@ -492,13 +477,13 @@ class PackOpeningTaskBase(Task):
     # 通用页面处理器
     # ============================================================
 
-    def _handle_speed_up(self, page_info: dict) -> ActionResult:
+    def _handle_speed_up_button(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
         return tap_matched_element(self.adb, page_info, 0.5) or ActionResult.ok(
             wait=0.5
         )
 
-    def _handle_opening_swipe(self, page_info: dict) -> ActionResult:
+    def _handle_pack_opening_swipe(self, page_info: dict) -> ActionResult:
         """滑动开包。"""
         if self._pack_result_mode == PACK_RESULT_MODE_TEN:
             if not self._multi_pack_swipe_counted:
@@ -570,7 +555,7 @@ class PackOpeningTaskBase(Task):
             "source": "template",
         }
 
-    def _handle_opening_card(self, page_info: dict) -> ActionResult:
+    def _handle_pack_opening_card(self, page_info: dict) -> ActionResult:
         """长按跳过卡牌展示"""
         wait = OPENING_CARD_WAIT
         if self._pack_result_mode == PACK_RESULT_MODE_TEN:
@@ -592,10 +577,14 @@ class PackOpeningTaskBase(Task):
         logger.info("  -> 点击屏幕中心选择扩充包")
         return tap_center(self.adb, wait=1.0)
 
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
+    def _handle_pack_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴"""
         logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         return swipe_card_register(self.adb)
+
+    def _handle_pack_opening_multi_result(self, page_info: dict) -> ActionResult:
+        """10包总览结果页沿用开包结果处理逻辑。"""
+        return self._handle_pack_opening_result(page_info)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页：识别卡牌并点击继续"""
@@ -723,10 +712,9 @@ class PackOpeningTaskBase(Task):
                     self._format_result_row(decision.get("result_row")),
                 )
 
-            is_complete = (
-                len(self._pack_result_rows) >= expected_rows
-                and not has_incomplete_rows(self._pack_result_rows)
-            )
+            is_complete = len(
+                self._pack_result_rows
+            ) >= expected_rows and not has_incomplete_rows(self._pack_result_rows)
             if is_complete:
                 break
 
@@ -748,9 +736,8 @@ class PackOpeningTaskBase(Task):
             )
             time.sleep(1.0)
 
-        return (
-            len(self._pack_result_rows) == expected_rows
-            and not has_incomplete_rows(self._pack_result_rows)
+        return len(self._pack_result_rows) == expected_rows and not has_incomplete_rows(
+            self._pack_result_rows
         )
 
     def _recognize_multi_pack_results(self) -> bool:
@@ -789,30 +776,6 @@ class PackOpeningTaskBase(Task):
             return True
         finally:
             self._reset_pack_result_mode()
-
-    # ============================================================
-    # 通用开包 Handler 自动分发
-    # ============================================================
-
-    def build_pack_opening_handlers(self) -> dict[str, Callable]:
-        """构建通用开包页面处理器映射
-
-        返回通用开包流程中所有页面的处理器字典。
-        子类可在 handle_page 中通过以下方式合并：
-            handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
-
-        Returns:
-            dict: 页面名 -> 处理器方法的映射
-        """
-        return {
-            "pack_opening_swipe": self._handle_opening_swipe,
-            "pack_opening_select": self._handle_pack_opening_select,
-            "pack_opening_card": self._handle_opening_card,
-            "pack_opening_multi_result": self._handle_pack_opening_result,
-            "pack_card_register": self._handle_card_register,
-            "pack_opening_result": self._handle_pack_opening_result,
-            "speed_up_button": self._handle_speed_up,
-        }
 
     def finalize_pack_session(self):
         """开包会话结束时的清理钩子

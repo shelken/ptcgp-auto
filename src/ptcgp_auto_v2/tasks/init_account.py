@@ -17,7 +17,7 @@
 import logging
 from datetime import datetime
 from enum import Enum, auto
-from typing import Callable
+from typing import Callable, cast
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
@@ -231,8 +231,32 @@ class InitAccountTask(PackOpeningTaskBase):
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
-        self._phase = InitAccountPhase.INIT
-        self._action_cache: dict[str, bool | int] = {}
+
+    @property
+    def _action_cache(self) -> dict[str, bool | int]:
+        cache = self.state.data.get("action_cache")
+        if isinstance(cache, dict):
+            return cast(dict[str, bool | int], cache)
+        cache = {}
+        self.state.data["action_cache"] = cache
+        return cast(dict[str, bool | int], cache)
+
+    def is_action_done(self, key: str) -> bool:
+        return bool(self._action_cache.get(key, False))
+
+    def mark_action_done(self, key: str, value: object = True):
+        self._action_cache[key] = value
+
+    def reset_action_cache(self):
+        self._action_cache.clear()
+
+    @property
+    def _phase(self) -> InitAccountPhase:
+        return cast(InitAccountPhase, self.state.flow.phase or InitAccountPhase.INIT)
+
+    @_phase.setter
+    def _phase(self, value: InitAccountPhase):
+        self.state.flow.phase = value
 
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
@@ -257,59 +281,36 @@ class InitAccountTask(PackOpeningTaskBase):
     def on_start(self):
         """任务开始前的初始化"""
         logger.info("开始新账号初始化任务")
+        self.state.reset()
         self._phase = InitAccountPhase.INIT
 
         # 初始化基类的仓储和数据
         self._init_repositories()
-        self._action_cache.clear()
+        self.reset_action_cache()
         self._packs_opened_count = 0
         self._result_recognized = False
 
     def is_completed(self) -> bool:
-        """判断任务是否已完成"""
-        return self._phase == InitAccountPhase.COMPLETED
+        """判断任务是否已完成。"""
+        return self._phase == InitAccountPhase.COMPLETED or super().is_completed()
 
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """处理识别到的页面"""
-        logger.debug(f"处理页面: {page_name}, 当前阶段: {self._phase.name}")
-
-        # 仅在"连续主页"场景累计计数；一旦离开主页立即重置
+    def on_page_changed(
+        self,
+        previous_page_name: str | None,
+        page_name: str,
+        page_info: dict,
+    ):
+        """页面切换时同步重置主页连续计数。"""
         if page_name != "game_home_main":
             self._action_cache.pop("home_consecutive_count", None)
 
-        # 初始化任务特定页面处理器（优先于通用处理器）
-        specific_handlers = {
-            "speed_up_button": self._handle_speed_up,
-            "init_select_country": self._handle_select_country,
-            "init_terms_privacy": self._handle_terms_privacy,
-            "init_data_use": self._handle_data_use,
-            "init_create_save": self._handle_create_save,
-            "init_account_link": self._handle_account_link,
-            "init_set_nickname": self._handle_set_nickname,
-            "init_nickname_input": self._handle_set_nickname,
-            "init_confirm_settings": self._handle_confirm_settings,
-            "init_select_pack": self._handle_select_pack,
-            "init_decide": self._build_exact_text_handler("init_decide", "決定"),
-            "init_next_step": self._build_exact_text_handler(
-                "init_next_step", "下一步"
-            ),
-            "init_open_pack": self._build_exact_text_handler("init_open_pack", "開封"),
-            "init_tap_to_flip": self._handle_tap_to_flip,
-            "init_select_favorite_card": self._handle_select_favorite_card,
-            "init_enjoy": self._handle_enjoy,
-            "game_home_main": self._handle_game_home_main,
-        }
-        # 合并：特定处理器优先覆盖通用处理器
-        handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
-
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
+        """未映射页面兜底。"""
+        logger.debug(f"处理页面: {page_name}, 当前阶段: {self._phase.name}")
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
 
-    def _handle_speed_up(self, page_info: dict) -> ActionResult:
+    def _handle_speed_up_button(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
         return self._result_or_ok(
             tap_matched_element(self.adb, page_info, 0.5), wait=0.5
@@ -342,6 +343,66 @@ class InitAccountTask(PackOpeningTaskBase):
         if result:
             logger.info(f"  -> 点击「{log_msg}」")
         return self._result_or_ok(result, wait=1.0)
+
+    def _handle_init_decide(self, page_info: dict) -> ActionResult:
+        """处理决定按钮。"""
+        return self._tap_text_exact(page_info, "init_decide", "決定")
+
+    def _handle_init_next_step(self, page_info: dict) -> ActionResult:
+        """处理下一步按钮。"""
+        return self._tap_text_exact(page_info, "init_next_step", "下一步")
+
+    def _handle_init_open_pack(self, page_info: dict) -> ActionResult:
+        """处理开封按钮。"""
+        return self._tap_text_exact(page_info, "init_open_pack", "開封")
+
+    def _handle_init_select_country(self, page_info: dict) -> ActionResult:
+        """国家选择页沿用原处理逻辑。"""
+        return self._handle_select_country(page_info)
+
+    def _handle_init_terms_privacy(self, page_info: dict) -> ActionResult:
+        """条款页沿用原处理逻辑。"""
+        return self._handle_terms_privacy(page_info)
+
+    def _handle_init_data_use(self, page_info: dict) -> ActionResult:
+        """资料使用页沿用原处理逻辑。"""
+        return self._handle_data_use(page_info)
+
+    def _handle_init_create_save(self, page_info: dict) -> ActionResult:
+        """创建存档页沿用原处理逻辑。"""
+        return self._handle_create_save(page_info)
+
+    def _handle_init_account_link(self, page_info: dict) -> ActionResult:
+        """账号连结页沿用原处理逻辑。"""
+        return self._handle_account_link(page_info)
+
+    def _handle_init_set_nickname(self, page_info: dict) -> ActionResult:
+        """昵称设置页沿用原处理逻辑。"""
+        return self._handle_set_nickname(page_info)
+
+    def _handle_init_nickname_input(self, page_info: dict) -> ActionResult:
+        """昵称输入页沿用原处理逻辑。"""
+        return self._handle_set_nickname(page_info)
+
+    def _handle_init_confirm_settings(self, page_info: dict) -> ActionResult:
+        """确认设定页沿用原处理逻辑。"""
+        return self._handle_confirm_settings(page_info)
+
+    def _handle_init_select_pack(self, page_info: dict) -> ActionResult:
+        """选择初始包页沿用原处理逻辑。"""
+        return self._handle_select_pack(page_info)
+
+    def _handle_init_tap_to_flip(self, page_info: dict) -> ActionResult:
+        """翻卡页沿用原处理逻辑。"""
+        return self._handle_tap_to_flip(page_info)
+
+    def _handle_init_select_favorite_card(self, page_info: dict) -> ActionResult:
+        """选择喜欢卡牌页沿用原处理逻辑。"""
+        return self._handle_select_favorite_card(page_info)
+
+    def _handle_init_enjoy(self, page_info: dict) -> ActionResult:
+        """完成引导页沿用原处理逻辑。"""
+        return self._handle_enjoy(page_info)
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
@@ -443,7 +504,7 @@ class InitAccountTask(PackOpeningTaskBase):
         self, ocr_results: list[dict], is_country_form_ready: bool
     ) -> ActionResult | None:
         """在主表单中按需打开国家列表。"""
-        if self._is_action_done("select_country_list_opened") or is_country_form_ready:
+        if self.is_action_done("select_country_list_opened") or is_country_form_ready:
             return None
 
         result = tap_text_exact(
@@ -454,24 +515,24 @@ class InitAccountTask(PackOpeningTaskBase):
         )
         if result:
             logger.info("  -> 点击「國家/地區」打开列表")
-            self._mark_action_done("select_country_list_opened")
+            self.mark_action_done("select_country_list_opened")
             return result
 
         logger.info("  -> OCR 未识别到按钮，使用兜底坐标点击")
         tap_y = self.adb.scaled_y(BASE_COUNTRY_BTN_Y)
         result = tap(self.adb, self.adb.center_x(), tap_y, wait=1.0)
-        self._mark_action_done("select_country_list_opened")
+        self.mark_action_done("select_country_list_opened")
         return result
 
     def _select_country_if_needed(
         self, ocr_results: list[dict], is_country_form_ready: bool
     ) -> ActionResult | None:
         """在主表单阶段按需确认国家已选择。"""
-        if self._is_action_done("select_country_country_clicked"):
+        if self.is_action_done("select_country_country_clicked"):
             return None
 
         if is_country_form_ready:
-            self._mark_action_done("select_country_country_clicked")
+            self.mark_action_done("select_country_country_clicked")
             return None
 
         matched_country = self._find_allowed_country(ocr_results)
@@ -479,7 +540,7 @@ class InitAccountTask(PackOpeningTaskBase):
             logger.info(f"  -> 找到允许的国家 {matched_country}，点击选择")
             result = tap_text_exact(self.adb, ocr_results, [matched_country], wait=0.5)
             if result:
-                self._mark_action_done("select_country_country_clicked")
+                self.mark_action_done("select_country_country_clicked")
                 return result
             return None
 
@@ -490,7 +551,7 @@ class InitAccountTask(PackOpeningTaskBase):
         self, ocr_results: list[dict]
     ) -> ActionResult | None:
         """按需选择出生年份。"""
-        if not self._is_action_done("select_country_year_clicked"):
+        if not self.is_action_done("select_country_year_clicked"):
             if is_text_visible(ocr_results, get_text_patterns("init_year_btn")):
                 result = tap_text_exact(
                     self.adb,
@@ -500,11 +561,11 @@ class InitAccountTask(PackOpeningTaskBase):
                 )
                 if result:
                     logger.info("  -> 点击「年」打开年份选择")
-                    self._mark_action_done("select_country_year_clicked")
+                    self.mark_action_done("select_country_year_clicked")
                     return result
             return None
 
-        if self._is_action_done("select_country_year_selected"):
+        if self.is_action_done("select_country_year_selected"):
             return None
 
         target_year = str(datetime.now().year - self.BIRTH_YEAR_OFFSET)
@@ -512,7 +573,7 @@ class InitAccountTask(PackOpeningTaskBase):
             logger.info(f"  -> 找到年份 {target_year}，点击选择")
             result = tap_text_exact(self.adb, ocr_results, [target_year], wait=0.5)
             if result:
-                self._mark_action_done("select_country_year_selected")
+                self.mark_action_done("select_country_year_selected")
                 return result
             return None
 
@@ -531,7 +592,7 @@ class InitAccountTask(PackOpeningTaskBase):
         self, ocr_results: list[dict]
     ) -> ActionResult | None:
         """按需选择出生月份。"""
-        if not self._is_action_done("select_country_month_clicked"):
+        if not self.is_action_done("select_country_month_clicked"):
             if is_text_visible(ocr_results, get_text_patterns("init_month_btn")):
                 result = tap_text_exact(
                     self.adb,
@@ -541,11 +602,11 @@ class InitAccountTask(PackOpeningTaskBase):
                 )
                 if result:
                     logger.info("  -> 点击「月」打开月份选择")
-                    self._mark_action_done("select_country_month_clicked")
+                    self.mark_action_done("select_country_month_clicked")
                     return result
             return None
 
-        if self._is_action_done("select_country_month_selected"):
+        if self.is_action_done("select_country_month_selected"):
             return None
 
         result = tap_text_exact(
@@ -556,7 +617,7 @@ class InitAccountTask(PackOpeningTaskBase):
         )
         if result:
             logger.info("  -> 选择月份 2")
-            self._mark_action_done("select_country_month_selected")
+            self.mark_action_done("select_country_month_selected")
             return result
         return None
 
@@ -656,14 +717,14 @@ class InitAccountTask(PackOpeningTaskBase):
         label: str,
     ) -> ActionResult | None:
         """条款页面通用步骤点击。"""
-        if self._is_action_done(action_key):
+        if self.is_action_done(action_key):
             return None
         result = tap_text_exact(
             self.adb, ocr_results, get_text_patterns(pattern_key), wait=3
         )
         if result:
             logger.info(f"  -> 点击「{label}」")
-            self._mark_action_done(action_key)
+            self.mark_action_done(action_key)
             return result
         return None
 
@@ -752,7 +813,7 @@ class InitAccountTask(PackOpeningTaskBase):
         logger.info("  -> 选择喜欢的卡牌")
         result = tap_favorite_card(self.adb, wait=1.0)
         if result and result.success:
-            self._mark_action_done("after_favorite_card")
+            self.mark_action_done("after_favorite_card")
         return result
 
     def _handle_enjoy(self, page_info: dict) -> ActionResult:
@@ -765,7 +826,7 @@ class InitAccountTask(PackOpeningTaskBase):
         """处理游戏主页兜底：仅在后期里程碑达成后，连续主页超时才判定完成。"""
         tap_result = self._quick_tap_home_like_fallback()
 
-        if not self._is_action_done("after_favorite_card"):
+        if not self.is_action_done("after_favorite_card"):
             logger.info("  -> 已在主页，先点击推进提示；未到最终引导阶段，继续等待")
             return self._result_or_ok(tap_result, wait=1.0)
 
