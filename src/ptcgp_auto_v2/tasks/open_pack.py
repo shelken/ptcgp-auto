@@ -93,10 +93,10 @@ def _build_open_pack_pages() -> list[dict]:
             "priority": 99,
             "exact_match": True,
         },
-        # 要使用道具縮短等待時間
+        # 付费包检测（開封1包）
         {
-            "name": "pack_hourglass_popup",
-            "identifiers": get_text_patterns("pack_hourglass_popup"),
+            "name": "pack_paid",
+            "identifiers": get_text_patterns("open_pack_1"),
             "priority": 99,
         },
         # 商店 / 得卡挑戰
@@ -307,7 +307,7 @@ class OpenPackTask(PackOpeningTaskBase):
             "pack_series_select": self._handle_pack_series_select,
             "pack_list": self._handle_pack_list,
             "pack_detail": self._handle_pack_detail,
-            "pack_hourglass_popup": self._handle_hourglass_popup,
+            "pack_paid": self._handle_pack_detail,
         }
         # 合并：特定处理器优先覆盖通用处理器
         handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
@@ -434,9 +434,7 @@ class OpenPackTask(PackOpeningTaskBase):
             return result
 
         # 未找到，返回上一页
-        return navigate_back(
-            self.adb, self.page_detector, ocr_results, get_text_patterns("back_button")
-        )
+        return navigate_back(self.adb, self.page_detector, ocr_results)
 
     def _handle_pack_list(self, page_info: dict) -> ActionResult:
         """选择子包"""
@@ -476,12 +474,7 @@ class OpenPackTask(PackOpeningTaskBase):
 
             if not match:
                 logger.debug("  -> 循环切换子包未找到目标，返回上一页")
-                return navigate_back(
-                    self.adb,
-                    self.page_detector,
-                    ocr_results,
-                    get_text_patterns("back_button"),
-                )
+                return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 匹配成功，提取基础点数（延迟更新，等保存记录时再累加）
         self._extract_pack_points(ocr_results)
@@ -542,12 +535,7 @@ class OpenPackTask(PackOpeningTaskBase):
             )
             if not match:
                 logger.info(f"  -> 当前卡包不是目标卡包 ({template_name})，返回")
-                return navigate_back(
-                    self.adb,
-                    self.page_detector,
-                    ocr_results,
-                    get_text_patterns("back_button"),
-                )
+                return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 检查是否是付费包
         paid_patterns = get_text_patterns("open_pack_1")
@@ -555,12 +543,7 @@ class OpenPackTask(PackOpeningTaskBase):
             pattern in item["text"] for pattern in paid_patterns for item in ocr_results
         ):
             logger.info("  -> 检测到付费包，返回上一页")
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                ocr_results,
-                get_text_patterns("back_button"),
-            )
+            return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 点击"開封"按钮
         open_pack_patterns = get_text_patterns("open_pack")
@@ -578,19 +561,6 @@ class OpenPackTask(PackOpeningTaskBase):
 
         logger.warning("  -> 未找到开包按钮")
         return ActionResult.ok(wait=1.0)
-
-    def _handle_hourglass_popup(self, page_info: dict) -> ActionResult:
-        """处理沙漏弹窗"""
-        ocr_results = page_info.get("ocr_results", [])
-        close_patterns = get_text_patterns("close_button")
-
-        result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
-        if result:
-            logger.info("  -> 点击关闭弹窗")
-            return result
-
-        logger.info("  -> 点击屏幕底部关闭弹窗")
-        return tap_bottom_close(self.adb, BASE_POPUP_CLOSE_TAP_Y, wait=1.0)
 
     # ============================================================
     # 辅助方法

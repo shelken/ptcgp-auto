@@ -219,7 +219,6 @@ class FetchAccountInfoTask(Task):
             self.adb,
             self.page_detector,
             page_info.get("ocr_results", []),
-            get_text_patterns("back_button"),
         )
 
     # ============================================================
@@ -284,20 +283,13 @@ class FetchAccountInfoTask(Task):
 
         self._mark_action_done("profile_fetched")
         logger.debug("  -> 资料获取完成，返回")
-        return navigate_back(
-            self.adb, self.page_detector, ocr, get_text_patterns("back_button")
-        )
+        return navigate_back(self.adb, self.page_detector, ocr)
 
     def _handle_more_menu_modal(self, page_info: dict) -> ActionResult:
         """更多菜单：精确点击「持有物」进入资源列表。"""
         ocr = page_info.get("ocr_results", [])
         if self._is_action_done("holdings_fetched"):
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                ocr,
-                get_text_patterns("back_button"),
-            )
+            return navigate_back(self.adb, self.page_detector, ocr)
 
         result = tap_text(
             self.adb,
@@ -332,12 +324,7 @@ class FetchAccountInfoTask(Task):
                 self._exchange_points,
                 self._pack_hourglass_count,
             )
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                ocr,
-                get_text_patterns("back_button"),
-            )
+            return navigate_back(self.adb, self.page_detector, ocr)
 
         self._holdings_scan_rounds += 1
         if self._holdings_scan_rounds <= MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL:
@@ -351,12 +338,7 @@ class FetchAccountInfoTask(Task):
         if self._holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
             logger.warning("  -> 持有物页面滑动到上限，仍未提取到完整资源")
             self._mark_action_done("holdings_fetched")
-            return navigate_back(
-                self.adb,
-                self.page_detector,
-                ocr,
-                get_text_patterns("back_button"),
-            )
+            return navigate_back(self.adb, self.page_detector, ocr)
 
         self._holdings_scroll_rounds += 1
         start, end = scroll_points(
