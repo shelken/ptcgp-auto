@@ -235,10 +235,7 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         if self._claim_attempt_count >= MAX_EMPTY_CHECK_ATTEMPTS:
             logger.debug("  -> 礼物领取完成，返回主页")
             self._reset_action_cache()
-            back_patterns = get_text_patterns("back_button")
-            return navigate_back(
-                self.adb, self.page_detector, ocr_results, back_patterns
-            )
+            return navigate_back(self.adb, self.page_detector, ocr_results)
 
         return ActionResult.ok(wait=1.0)
 
