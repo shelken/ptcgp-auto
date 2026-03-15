@@ -77,6 +77,8 @@ class PackRecordRepository:
         cards: list[dict[str, Any]] | None = None,
         set_code: Optional[str] = None,
         pack_name: Optional[str] = None,
+        batch_id: Optional[str] = None,
+        batch_index: Optional[int] = None,
     ) -> PackRecord:
         """
         为账号创建开包记录
@@ -87,6 +89,8 @@ class PackRecordRepository:
             cards: 包含卡牌信息的字典列表
             set_code: 系列代码 (A1)
             pack_name: 卡包名称 (Charizard)
+            batch_id: 批次ID，同一批十连包共享此ID
+            batch_index: 批次内序号，十连包为1-10
         """
         with Session(get_engine()) as session:
             # 1. 创建 PackRecord
@@ -95,6 +99,8 @@ class PackRecordRepository:
                 pack_type=pack_type,
                 pack_code=set_code,
                 pack_name=pack_name,
+                batch_id=batch_id,
+                batch_index=batch_index,
             )
             session.add(record)
             # 使用 flush 而不是 commit，确保在同一个事务中
