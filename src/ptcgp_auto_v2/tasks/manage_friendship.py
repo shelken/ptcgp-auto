@@ -10,9 +10,10 @@
 
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     ExchangeCardRequestRepository,
@@ -104,7 +105,7 @@ MAX_WAIT_ROUNDS_DELETE = 6
 
 
 @TaskRegistry.register("manage_friendship")
-class ManageFriendshipTask(Task):
+class ManageFriendshipTask(StatefulTask):
     """好友请求统一处理任务。"""
 
     task_type = "manage_friendship"
@@ -117,11 +118,8 @@ class ManageFriendshipTask(Task):
         super().__init__(adb, recognizer, page_detector)
         self.current_request: Optional["AccountFriendRequest"] = None
         self.requests_to_process: list["AccountFriendRequest"] = []
-        self._action_cache: dict[str, bool] = {}
-        self._last_page_name: Optional[str] = None
         self._active_request_id: Optional[int] = None
         self._submitted_request_id: Optional[int] = None
-        self._completed = False
         self._wake_account_ids: set[int] = set()
 
         self._add_apply_wait_rounds = 0
@@ -143,6 +141,7 @@ class ManageFriendshipTask(Task):
 
     def on_start(self):
         """任务开始前加载请求。"""
+        self.state.reset()
         self._reset_action_cache()
         self._last_page_name = None
         self._active_request_id = None
@@ -196,35 +195,38 @@ class ManageFriendshipTask(Task):
                 changed = True
         return changed
 
-    def is_completed(self) -> bool:
-        """返回任务是否完成。"""
-        return self._completed
-
     def get_post_hooks(self) -> list["Hook"]:
         """任务结束后统一唤醒被影响账号的 manage_friendship。"""
         from ptcgp_auto_v2.hooks import ManageFriendshipWakePostHook
 
         return [ManageFriendshipWakePostHook()]
 
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """按页面分发处理。"""
-        if page_name != self._last_page_name:
-            self._reset_action_cache()
-            self._last_page_name = page_name
+    def on_page_changed(
+        self,
+        previous_page_name: str | None,
+        page_name: str,
+        page_info: dict,
+    ):
+        """页面切换时重置页面动作缓存。"""
+        self.reset_action_cache()
 
-        handlers = {
-            "home_with_community_icon": self._handle_home,
-            "game_home_main": self._handle_home,
-            "community_page": self._handle_community,
-            "friend_list": self._handle_friend_list,
-            "friend_search_modal": self._handle_search_modal,
-            "friend_search_result_modal": self._handle_search_result,
-            "friend_remove_confirm": self._handle_remove_confirm,
-        }
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         return ActionResult.wait(0.8)
+
+    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
+        return self._handle_home(page_info)
+
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
+        return self._handle_home(page_info)
+
+    def _handle_community_page(self, page_info: dict) -> ActionResult:
+        return self._handle_community(page_info)
+
+    def _handle_friend_search_modal(self, page_info: dict) -> ActionResult:
+        return self._handle_search_modal(page_info)
+
+    def _handle_friend_search_result_modal(self, page_info: dict) -> ActionResult:
+        return self._handle_search_result(page_info)
 
     def _get_pending_requests(self) -> list["AccountFriendRequest"]:
         """读取当前账号待处理请求，并严格按创建时间升序排序。"""
@@ -863,3 +865,23 @@ class ManageFriendshipTask(Task):
                 sender.id, self.account.friend_id, current_account_id
             )
         self._refresh_requests()
+
+    @property
+    def _action_cache(self) -> dict[str, bool]:
+        return cast(dict[str, bool], self.state.page.action_cache)
+
+    @property
+    def _last_page_name(self) -> Optional[str]:
+        return self.state.page.current
+
+    @_last_page_name.setter
+    def _last_page_name(self, value: Optional[str]):
+        self.state.page.current = value
+
+    @property
+    def _completed(self) -> bool:
+        return self.state.lifecycle.completed
+
+    @_completed.setter
+    def _completed(self, value: bool):
+        self.state.lifecycle.completed = value

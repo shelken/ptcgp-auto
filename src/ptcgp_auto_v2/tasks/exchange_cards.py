@@ -10,9 +10,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, cast
 
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.models import ExchangeCardRequest
 from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
@@ -243,7 +244,7 @@ def _build_exchange_pages() -> list[dict]:
 
 
 @TaskRegistry.register("exchange_cards")
-class ExchangeCardsTask(Task):
+class ExchangeCardsTask(StatefulTask):
     """交换卡牌任务。"""
 
     task_type = "exchange_cards"
@@ -267,18 +268,40 @@ class ExchangeCardsTask(Task):
         )
         self._card_stable_rounds = 0
         self._last_card_signature: Optional[str] = None
-        self._action_cache: dict[str, bool] = {}
         self._filter_state = FilterPanelState()
         self._friend_helper: Optional[FriendSelectionHelper] = None
-        self._skipped = False
-        self._skip_reason: Optional[str] = None
+
+    @property
+    def _action_cache(self) -> dict[str, bool]:
+        cache = self.state.data.get("action_cache")
+        if isinstance(cache, dict):
+            return cast(dict[str, bool], cache)
+        cache = {}
+        self.state.data["action_cache"] = cache
+        return cast(dict[str, bool], cache)
+
+    @property
+    def _skipped(self) -> bool:
+        return self.state.lifecycle.skipped
+
+    @_skipped.setter
+    def _skipped(self, value: bool):
+        self.state.lifecycle.skipped = value
+
+    @property
+    def _skip_reason(self) -> Optional[str]:
+        return self.state.lifecycle.skip_reason
+
+    @_skip_reason.setter
+    def _skip_reason(self, value: Optional[str]):
+        self.state.lifecycle.skip_reason = value
 
     def on_start(self):
         """加载请求并执行前置校验。"""
+        self.state.reset()
         self._ctx.reset()
         self._card_stable_rounds = 0
         self._last_card_signature = None
-        self._action_cache = {}
         self._filter_state = FilterPanelState()
         self._skipped = False
         self._skip_reason = None
@@ -468,10 +491,6 @@ class ExchangeCardsTask(Task):
         """任务是否收敛。"""
         return self._ctx.runtime.completed
 
-    def was_skipped(self) -> bool:
-        """任务是否以跳过态收敛。"""
-        return self._skipped
-
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """按页面分发处理（页面优先，状态判断下沉到各 handler）。"""
         if self._ctx.runtime.current_request is None:
@@ -486,38 +505,37 @@ class ExchangeCardsTask(Task):
         ):
             self._ctx.runtime.recover_before_send = False
             logger.info("已退出取消完成页面，进入重发流程")
+        return super().handle_page(page_name, page_info)
 
-        # 所有页面 handler 平级注册，不按 status 拦截
-        handlers = {
-            # 通用入口
-            "exchange_locked_popup": self._handle_exchange_locked_popup,
-            "home_with_community_icon": self._handle_home,
-            "game_home_main": self._handle_home,
-            "community_page": self._handle_community,
-            "exchange_page_main": self._handle_exchange_page_main,
-            # sending 流程页面
-            "exchange_choose_friend": self._handle_choose_friend,
-            "exchange_select_card": self._handle_select_card,
-            "exchange_filter_modal": self._handle_filter_modal,
-            "exchange_target_confirm_page": self._handle_target_confirm_page,
-            "exchange_confirm_send_popup": self._tap_ok_popup,
-            "exchange_confirm_last_popup": self._tap_ok_popup,
-            "exchange_proposed_done_popup": self._handle_proposed_done_popup,
-            # sended/取消/接受流程页面（全部放开，不限状态）
-            "exchange_waiting_page": self._handle_waiting_page,
-            "exchange_receive_confirm_page": self._handle_receive_confirm_page,
-            "exchange_receive_start_popup": self._handle_receive_start_popup,
-            "exchange_swipe_page": self._handle_exchange_swipe_page,
-            "exchange_cancel_confirm_popup": self._tap_ok_popup,
-            "exchange_canceled_done_popup": self._handle_canceled_done_popup,
-        }
-
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-
-        # 未知页面等待
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         return ActionResult.wait(0.6)
+
+    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
+        return self._handle_home(page_info)
+
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
+        return self._handle_home(page_info)
+
+    def _handle_community_page(self, page_info: dict) -> ActionResult:
+        return self._handle_community(page_info)
+
+    def _handle_exchange_choose_friend(self, page_info: dict) -> ActionResult:
+        return self._handle_choose_friend(page_info)
+
+    def _handle_exchange_select_card(self, page_info: dict) -> ActionResult:
+        return self._handle_select_card(page_info)
+
+    def _handle_exchange_filter_modal(self, page_info: dict) -> ActionResult:
+        return self._handle_filter_modal(page_info)
+
+    def _handle_exchange_confirm_send_popup(self, page_info: dict) -> ActionResult:
+        return self._tap_ok_popup(page_info)
+
+    def _handle_exchange_confirm_last_popup(self, page_info: dict) -> ActionResult:
+        return self._tap_ok_popup(page_info)
+
+    def _handle_exchange_cancel_confirm_popup(self, page_info: dict) -> ActionResult:
+        return self._tap_ok_popup(page_info)
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页进入社群。"""
