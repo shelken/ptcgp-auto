@@ -531,9 +531,19 @@ def navigate_back(
     adb: AdbController,
     page_detector,
     ocr_results: list[dict],
-    patterns: list[str],
+    patterns: list[str] | None = None,
 ) -> ActionResult:
-    """按返回按钮优先级返回"""
+    """按返回按钮优先级返回
+
+    Args:
+        adb: ADB控制器
+        page_detector: 页面检测器
+        ocr_results: OCR识别结果
+        patterns: 返回按钮文本模式，默认为 None（使用 "back_button" 模式）
+    """
+    if patterns is None:
+        patterns = get_text_patterns("back_button")
+
     result = tap_by_priority(
         adb,
         page_detector,
