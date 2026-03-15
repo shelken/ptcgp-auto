@@ -399,6 +399,11 @@ class OpenPackTask(PackOpeningTaskBase):
             self._completed = True
             return ActionResult.ok(wait=1.0)
 
+        if self._should_exit_pack_flow_after_free_packs():
+            logger.debug("  -> 免费包已开完且无需十包，任务结束")
+            self._completed = True
+            return ActionResult.ok(wait=1.0)
+
         if self._can_open_10_pack() and not self._has_started_10_pack_this_task():
             logger.debug("  -> 无免费包但满足10包条件，进入开包流程")
             self._home_check_count = 0
@@ -428,7 +433,10 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def _should_exit_pack_flow(self) -> bool:
         """十包完成后退出选包链路，避免在列表和详情页之间反复往返。"""
-        return self._has_completed_10_pack_this_task()
+        return (
+            self._has_completed_10_pack_this_task()
+            or self._should_exit_pack_flow_after_free_packs()
+        )
 
     def _is_open_10_pack_enabled(self) -> bool:
         """是否启用十包开封模式。"""
@@ -623,10 +631,12 @@ class OpenPackTask(PackOpeningTaskBase):
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
         if not self._is_open_10_pack_enabled():
+            self._set_state_flag("pack_flow", "exit_after_paid")
             logger.debug("  -> 已关闭開封10包模式，返回上一页")
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
         if not self._can_open_10_pack():
+            self._set_state_flag("pack_flow", "exit_after_paid")
             logger.info(
                 "  -> 沙漏数量 %s < %s，不满足开10包条件",
                 self._pack_hourglass_count,
@@ -661,7 +671,7 @@ class OpenPackTask(PackOpeningTaskBase):
         if self._should_confirm_10_pack_modal():
             result = tap_ok(self.adb, ocr_results, wait=2.0)
             if result:
-                self._mark_10_pack_state("confirmed")
+                self._set_state_flag("ten_pack", "confirmed")
                 self._set_pack_result_mode(OPEN_10_PACK_BATCH_SIZE)
                 self._consume_pack_hourglasses(OPEN_10_PACK_HOURGLASS_COST)
                 logger.info("  -> 点击OK确认使用沙漏开10包")
@@ -685,24 +695,25 @@ class OpenPackTask(PackOpeningTaskBase):
         result = super()._handle_pack_opening_result(page_info)
 
         if is_ten_pack_result and self._result_recognized:
-            self._mark_10_pack_state("completed")
+            self._set_state_flag("ten_pack", "completed")
 
         return result
 
-    def _get_10_pack_state(self) -> dict[str, bool]:
-        """获取10包流程状态缓存。"""
-        state = self._state_cache.get("ten_pack")
+    def _get_state_group(self, group: str) -> dict[str, bool]:
+        """获取任务状态分组缓存。"""
+        state = self._state_cache.get(group)
         if state is None:
-            state = {
-                "confirmed": False,
-                "completed": False,
-            }
-            self._state_cache["ten_pack"] = state
+            state = {}
+            self._state_cache[group] = state
         return state
 
-    def _mark_10_pack_state(self, key: str) -> None:
-        """标记10包流程状态。"""
-        self._get_10_pack_state()[key] = True
+    def _set_state_flag(self, group: str, key: str, value: bool = True) -> None:
+        """设置任务状态标记。"""
+        self._get_state_group(group)[key] = value
+
+    def _get_state_flag(self, group: str, key: str) -> bool:
+        """读取任务状态标记。"""
+        return self._get_state_group(group).get(key, False)
 
     def _load_pack_hourglass_count(self) -> int | None:
         """任务开始时读取一次当前账号沙漏数量。"""
@@ -749,12 +760,17 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def _has_started_10_pack_this_task(self) -> bool:
         """判断本次任务是否已经发起过一次10包。"""
-        state = self._get_10_pack_state()
-        return state.get("confirmed", False) or state.get("completed", False)
+        return self._get_state_flag("ten_pack", "confirmed") or self._get_state_flag(
+            "ten_pack", "completed"
+        )
 
     def _has_completed_10_pack_this_task(self) -> bool:
         """判断本次任务是否已经完整处理完一次10包。"""
-        return self._get_10_pack_state().get("completed", False)
+        return self._get_state_flag("ten_pack", "completed")
+
+    def _should_exit_pack_flow_after_free_packs(self) -> bool:
+        """免费包开完且不进入十包时，退出整条选包链路。"""
+        return self._get_state_flag("pack_flow", "exit_after_paid")
 
     def _should_confirm_10_pack_modal(self) -> bool:
         """判断当前 modal 是否应该确认 10 包开封。"""
