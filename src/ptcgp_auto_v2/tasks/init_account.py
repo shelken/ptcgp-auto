@@ -232,32 +232,6 @@ class InitAccountTask(PackOpeningTaskBase):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-    @property
-    def _action_cache(self) -> dict[str, bool | int]:
-        cache = self.state.data.get("action_cache")
-        if isinstance(cache, dict):
-            return cast(dict[str, bool | int], cache)
-        cache = {}
-        self.state.data["action_cache"] = cache
-        return cast(dict[str, bool | int], cache)
-
-    def is_action_done(self, key: str) -> bool:
-        return bool(self._action_cache.get(key, False))
-
-    def mark_action_done(self, key: str, value: object = True):
-        self._action_cache[key] = value
-
-    def reset_action_cache(self):
-        self._action_cache.clear()
-
-    @property
-    def _phase(self) -> InitAccountPhase:
-        return cast(InitAccountPhase, self.state.flow.phase or InitAccountPhase.INIT)
-
-    @_phase.setter
-    def _phase(self, value: InitAccountPhase):
-        self.state.flow.phase = value
-
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
     # ============================================================
@@ -282,7 +256,7 @@ class InitAccountTask(PackOpeningTaskBase):
         """任务开始前的初始化"""
         logger.info("开始新账号初始化任务")
         self.state.reset()
-        self._phase = InitAccountPhase.INIT
+        self.state_set("phase", InitAccountPhase.INIT)
 
         # 初始化基类的仓储和数据
         self._init_repositories()
@@ -292,7 +266,10 @@ class InitAccountTask(PackOpeningTaskBase):
 
     def is_completed(self) -> bool:
         """判断任务是否已完成。"""
-        return self._phase == InitAccountPhase.COMPLETED or super().is_completed()
+        return (
+            self.state_get("phase") == InitAccountPhase.COMPLETED
+            or super().is_completed()
+        )
 
     def on_page_changed(
         self,
@@ -302,11 +279,12 @@ class InitAccountTask(PackOpeningTaskBase):
     ):
         """页面切换时同步重置主页连续计数。"""
         if page_name != "game_home_main":
-            self._action_cache.pop("home_consecutive_count", None)
+            self.state_del("action.home_consecutive_count")
 
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         """未映射页面兜底。"""
-        logger.debug(f"处理页面: {page_name}, 当前阶段: {self._phase.name}")
+        phase = cast(InitAccountPhase, self.state_get("phase", InitAccountPhase.INIT))
+        logger.debug(f"处理页面: {page_name}, 当前阶段: {phase.name}")
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
 
@@ -428,7 +406,7 @@ class InitAccountTask(PackOpeningTaskBase):
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
         logger.info(
-            f"初始化任务完成，阶段: {self._phase.name}, "
+            f"初始化任务完成，阶段: {cast(InitAccountPhase, self.state_get('phase', InitAccountPhase.INIT)).name}, "
             f"结果: {'成功' if result.success else '失败'}"
         )
 
@@ -819,7 +797,7 @@ class InitAccountTask(PackOpeningTaskBase):
     def _handle_enjoy(self, page_info: dict) -> ActionResult:
         """处理完成页面"""
         logger.info("  -> 初始化完成，点击继续")
-        self._phase = InitAccountPhase.COMPLETED
+        self.state_set("phase", InitAccountPhase.COMPLETED)
         return tap_center(self.adb, wait=2.0)
 
     def _handle_game_home_main(self, page_info: dict) -> ActionResult:
@@ -830,14 +808,14 @@ class InitAccountTask(PackOpeningTaskBase):
             logger.info("  -> 已在主页，先点击推进提示；未到最终引导阶段，继续等待")
             return self._result_or_ok(tap_result, wait=1.0)
 
-        home_count = int(self._action_cache.get("home_consecutive_count", 0)) + 1
-        self._action_cache["home_consecutive_count"] = home_count
+        home_count = int(self.state_get("action.home_consecutive_count", 0)) + 1
+        self.state_set("action.home_consecutive_count", home_count)
 
         if home_count >= HOME_FALLBACK_THRESHOLD:
             logger.warning(
                 "  -> 已完成选喜欢卡牌且连续主页达到阈值，触发初始化完成兜底"
             )
-            self._phase = InitAccountPhase.COMPLETED
+            self.state_set("phase", InitAccountPhase.COMPLETED)
             return self._result_or_ok(tap_result, wait=0.5)
 
         logger.info(

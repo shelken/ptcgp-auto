@@ -135,39 +135,11 @@ class ClaimRewardsTask(StatefulTask):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-    @property
-    def _action_cache(self) -> dict[str, bool]:
-        cache = self.state.data.get("action_cache")
-        if isinstance(cache, dict):
-            return cache
-        cache = {}
-        self.state.data["action_cache"] = cache
-        return cache
-
-    def is_action_done(self, key: str) -> bool:
-        return bool(self._action_cache.get(key, False))
-
-    def mark_action_done(self, key: str, value: object = True):
-        self._action_cache[key] = value
-
-    def reset_action_cache(self):
-        self._action_cache.clear()
-
-    @property
-    def _home_check_count(self) -> int:
-        """主页无奖励检查次数。"""
-        return int(self.state.data.get("home_check_count", 0))
-
-    @_home_check_count.setter
-    def _home_check_count(self, value: int):
-        """设置主页无奖励检查次数。"""
-        self.state.data["home_check_count"] = value
-
     def on_start(self):
         """任务开始前的初始化"""
         logger.info("任务奖励领取任务开始")
         self.state.reset()
-        self._home_check_count = 0
+        self.state_set("home_check_count", 0)
 
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         logger.debug(f"处理页面: {page_name}")
@@ -188,7 +160,7 @@ class ClaimRewardsTask(StatefulTask):
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
         logger.info(
-            f"任务完成，主页检测次数: {self._home_check_count}, "
+            f"任务完成，主页检测次数: {int(self.state_get('home_check_count', 0))}, "
             f"结果: {'成功' if result.success else '失败'}"
         )
 
@@ -218,7 +190,7 @@ class ClaimRewardsTask(StatefulTask):
 
             if reward_icon:
                 logger.debug("  -> 检测到奖励图标，进入任务页面")
-                self._home_check_count = 0  # 重置检测计数器
+                self.state_set("home_check_count", 0)
                 return tap_box(self.adb, reward_icon.box, wait=3.0)
 
             logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/{rounds})")
@@ -226,10 +198,11 @@ class ClaimRewardsTask(StatefulTask):
                 time.sleep(interval)
 
         # 多次检查无奖励，累计检查次数
-        self._home_check_count += 1
-        logger.debug(f"  -> 确认无奖励图标（第 {self._home_check_count} 轮检查）")
+        home_check_count = int(self.state_get("home_check_count", 0)) + 1
+        self.state_set("home_check_count", home_check_count)
+        logger.debug(f"  -> 确认无奖励图标（第 {home_check_count} 轮检查）")
 
-        if self._home_check_count >= rounds:
+        if home_check_count >= rounds:
             logger.debug("  -> 确认无奖励，任务完成")
             self.complete()
 

@@ -120,95 +120,6 @@ class CollectAccountCardsTask(StatefulTask):
         self._account_card_repo = None
         self._card_repo = None
 
-    @property
-    def _action_cache(self) -> dict[str, bool]:
-        cache = self.state.data.get("action_cache")
-        if isinstance(cache, dict):
-            return cache
-        cache = {}
-        self.state.data["action_cache"] = cache
-        return cache
-
-    def is_action_done(self, key: str) -> bool:
-        return bool(self._action_cache.get(key, False))
-
-    def mark_action_done(self, key: str, value: object = True):
-        self._action_cache[key] = value
-
-    def reset_action_cache(self):
-        self._action_cache.clear()
-
-    @property
-    def _filter_state(self) -> FilterPanelState:
-        state = self.state.data.get("filter_state")
-        if isinstance(state, FilterPanelState):
-            return state
-        state = FilterPanelState()
-        self.state.data["filter_state"] = state
-        return state
-
-    @_filter_state.setter
-    def _filter_state(self, value: FilterPanelState):
-        self.state.data["filter_state"] = value
-
-    @property
-    def _phase(self) -> CollectPhase:
-        return cast(CollectPhase, self.state.flow.phase or CollectPhase.ENTER)
-
-    @_phase.setter
-    def _phase(self, value: CollectPhase):
-        self.state.flow.phase = value
-
-    @property
-    def _last_signature(self) -> Optional[str]:
-        return cast(Optional[str], self.state.data.get("last_signature"))
-
-    @_last_signature.setter
-    def _last_signature(self, value: Optional[str]):
-        self.state.data["last_signature"] = value
-
-    @property
-    def _last_detect_signature(self) -> Optional[str]:
-        return cast(Optional[str], self.state.data.get("last_detect_signature"))
-
-    @_last_detect_signature.setter
-    def _last_detect_signature(self, value: Optional[str]):
-        self.state.data["last_detect_signature"] = value
-
-    @property
-    def _pending_cards(self) -> dict[int, tuple[float, float]]:
-        cards = self.state.data.get("pending_cards")
-        if isinstance(cards, dict):
-            return cards
-        cards = {}
-        self.state.data["pending_cards"] = cards
-        return cards
-
-    @_pending_cards.setter
-    def _pending_cards(self, value: dict[int, tuple[float, float]]):
-        self.state.data["pending_cards"] = value
-
-    @property
-    def _pending_order(self) -> list[int]:
-        order = self.state.data.get("pending_order")
-        if isinstance(order, list):
-            return order
-        order = []
-        self.state.data["pending_order"] = order
-        return order
-
-    @_pending_order.setter
-    def _pending_order(self, value: list[int]):
-        self.state.data["pending_order"] = value
-
-    @property
-    def _consecutive_all_owned(self) -> int:
-        return int(self.state.data.get("consecutive_all_owned", 0))
-
-    @_consecutive_all_owned.setter
-    def _consecutive_all_owned(self, value: int):
-        self.state.data["consecutive_all_owned"] = value
-
     def on_start(self):
         from ptcgp_auto_v2.db.repositories import AccountCardRepository, CardRepository
 
@@ -216,13 +127,18 @@ class CollectAccountCardsTask(StatefulTask):
         self._card_repo = CardRepository()
 
         self.state.reset()
-        self._filter_state = FilterPanelState()
-        self._phase = CollectPhase.ENTER
-        self._last_signature = None
-        self._last_detect_signature = None
-        self._pending_cards = {}
-        self._pending_order = []
-        self._consecutive_all_owned = 0
+        self.state_update(
+            {
+                "filter_state": FilterPanelState(),
+                "phase": CollectPhase.ENTER,
+                "last_signature": None,
+                "last_detect_signature": None,
+                "pending_cards": {},
+                "pending_order": [],
+                "consecutive_all_owned": 0,
+                "filter_action_cache": {},
+            }
+        )
 
         if self.account.id is None:
             logger.error("账号 ID 为空，无法执行收集任务")
@@ -242,9 +158,10 @@ class CollectAccountCardsTask(StatefulTask):
         return result or ActionResult.ok(wait=1.0)
 
     def _handle_card_page_own(self, page_info: dict) -> ActionResult:
-        logger.info("进入卡牌页处理，当前阶段: %s", self._phase.name)
+        phase = cast(CollectPhase, self.state_get("phase", CollectPhase.ENTER))
+        logger.info("进入卡牌页处理，当前阶段: %s", phase.name)
         if not self.is_action_done("filter_applied"):
-            self._phase = CollectPhase.FILTER
+            self.state_set("phase", CollectPhase.FILTER)
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
             if result:
                 return result
@@ -254,10 +171,10 @@ class CollectAccountCardsTask(StatefulTask):
             return ActionResult.ok(wait=1.0)
 
         if not self.is_action_done("sort_ready"):
-            self._phase = CollectPhase.SORT
+            self.state_set("phase", CollectPhase.SORT)
             return self._tap_sort_button()
 
-        self._phase = CollectPhase.SCAN
+        self.state_set("phase", CollectPhase.SCAN)
         return self._scan_and_scroll(page_info)
 
     def _handle_filter_panel(self, page_info: dict) -> ActionResult:
@@ -267,8 +184,10 @@ class CollectAccountCardsTask(StatefulTask):
             icon_detector=self.icon_detector,
             page_info=page_info,
             rarity_codes=HIGH_RARITY_TARGETS,
-            state=self._filter_state,
-            action_cache=self._action_cache,
+            state=cast(FilterPanelState, self.state_get("filter_state")),
+            action_cache=cast(
+                dict[str, bool], self.state_get("filter_action_cache", {})
+            ),
         )
 
         if self.is_action_done("filter_selected") and self.is_action_done(
@@ -339,25 +258,24 @@ class CollectAccountCardsTask(StatefulTask):
     def _scan_and_scroll(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])
         signature = self._build_signature(ocr_results)
-        if self._last_signature is None:
-            self._last_signature = signature
+        if self.state_get("last_signature") is None:
+            self.state_set("last_signature", signature)
 
         detect_signature = self._scan_current_page()
-        if self._consecutive_all_owned >= 3:
+        if int(self.state_get("consecutive_all_owned", 0)) >= 3:
             logger.info("连续三次识别卡牌均已入库，提前结束扫描")
             self._flush_pending_cards()
             self.complete()
             return ActionResult.ok(wait=1.0)
         if detect_signature:
-            if (
-                self._last_detect_signature
-                and detect_signature == self._last_detect_signature
-            ):
+            if self.state_get(
+                "last_detect_signature"
+            ) and detect_signature == self.state_get("last_detect_signature"):
                 logger.info("检测结果未变化，认为到达列表底部")
                 self._flush_pending_cards()
                 self.complete()
                 return ActionResult.ok(wait=1.0)
-            self._last_detect_signature = detect_signature
+            self.state_set("last_detect_signature", detect_signature)
         start, end = scroll_points(
             self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
         )
@@ -365,13 +283,13 @@ class CollectAccountCardsTask(StatefulTask):
         _, next_ocr = self.page_detector.capture()
         next_signature = self._build_signature(next_ocr)
 
-        if next_signature == self._last_signature:
+        if next_signature == self.state_get("last_signature"):
             logger.info("已到达列表底部，切换下一个稀有度")
             self._flush_pending_cards()
             self.complete()
             return ActionResult.ok(wait=1.0)
 
-        self._last_signature = next_signature
+        self.state_set("last_signature", next_signature)
         return ActionResult.ok(wait=0.5)
 
     def _scan_current_page(self) -> Optional[str]:
@@ -386,7 +304,7 @@ class CollectAccountCardsTask(StatefulTask):
             ),
         )
         if not detected:
-            self._consecutive_all_owned = 0
+            self.state_set("consecutive_all_owned", 0)
             return None
 
         written = 0
@@ -395,6 +313,10 @@ class CollectAccountCardsTask(StatefulTask):
         skipped_no_set = 0
         signature_items = []
         all_in_db = True
+        pending_cards = cast(
+            dict[int, tuple[float, float]], self.state_get("pending_cards", {})
+        )
+        pending_order = cast(list[int], self.state_get("pending_order", []))
         for item in detected:
             if not item.set_code:
                 skipped_no_set += 1
@@ -419,21 +341,27 @@ class CollectAccountCardsTask(StatefulTask):
                 all_in_db = False
             conf = float(item.confidence)
             sim = float(item.similarity)
-            if card.id not in self._pending_cards:
-                self._pending_order.append(card.id)
-                self._pending_cards[card.id] = (conf, sim)
+            if card.id not in pending_cards:
+                pending_order.append(card.id)
+                pending_cards[card.id] = (conf, sim)
             else:
-                prev_conf, prev_sim = self._pending_cards[card.id]
+                prev_conf, prev_sim = pending_cards[card.id]
                 # 以最高相似度为准，同时保留对应置信度
                 if sim > prev_sim:
-                    self._pending_cards[card.id] = (conf, sim)
+                    pending_cards[card.id] = (conf, sim)
             written += 1
+
+        self.state_set("pending_cards", pending_cards)
+        self.state_set("pending_order", pending_order)
 
         # 注意：该逻辑依赖“按获得顺序最新到旧”的排序，若变更排序需重新评估
         if all_in_db:
-            self._consecutive_all_owned += 1
+            self.state_set(
+                "consecutive_all_owned",
+                int(self.state_get("consecutive_all_owned", 0)) + 1,
+            )
         else:
-            self._consecutive_all_owned = 0
+            self.state_set("consecutive_all_owned", 0)
 
         logger.info("已写入高稀有度卡牌: %s 张", written)
         logger.info(
@@ -451,12 +379,16 @@ class CollectAccountCardsTask(StatefulTask):
             return
         if self.account.id is None:
             return
-        if not self._pending_cards:
+        pending_cards = cast(
+            dict[int, tuple[float, float]], self.state_get("pending_cards", {})
+        )
+        pending_order = cast(list[int], self.state_get("pending_order", []))
+        if not pending_cards:
             return
 
-        logger.info("开始批量写入卡牌，共 %s 张", len(self._pending_cards))
-        for card_id in reversed(self._pending_order):
-            conf, sim = self._pending_cards[card_id]
+        logger.info("开始批量写入卡牌，共 %s 张", len(pending_cards))
+        for card_id in reversed(pending_order):
+            conf, sim = pending_cards[card_id]
             existing = self._account_card_repo.get(self.account.id, card_id)
             # 收集任务只用于“建立拥有关系”，不应覆盖真实库存数量：
             # - 新纪录：count=1
@@ -473,10 +405,14 @@ class CollectAccountCardsTask(StatefulTask):
 
     def _mark_filter_applied(self, result: ActionResult) -> ActionResult:
         self.mark_action_done("filter_applied")
-        self._action_cache.pop("filter_scrolled", None)
-        self._action_cache.pop("filter_cleared", None)
-        self._action_cache.pop("filter_selected", None)
-        self._action_cache.pop("filter_ok_scrolled", None)
+        filter_action_cache = cast(
+            dict[str, bool], self.state_get("filter_action_cache", {})
+        )
+        filter_action_cache.pop("filter_scrolled", None)
+        filter_action_cache.pop("filter_cleared", None)
+        filter_action_cache.pop("filter_selected", None)
+        filter_action_cache.pop("filter_ok_scrolled", None)
+        self.state_set("filter_action_cache", filter_action_cache)
         return result
 
     @staticmethod
