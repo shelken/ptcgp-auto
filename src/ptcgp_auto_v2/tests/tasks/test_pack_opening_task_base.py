@@ -153,5 +153,309 @@ class TestRealFinalizePackSession:
         task._clear_pack_inference_session.assert_called_once()
 
 
+class TestRealMultiPackBehavior:
+    """测试真实基类的 10 包结果行为。"""
+
+    @staticmethod
+    def _make_result_card(card_id: int, x: float, y: float) -> dict:
+        """构造结果页测试卡牌。"""
+        return {
+            "card_id": card_id,
+            "set_code": "A1",
+            "card_number": card_id,
+            "center_x": x,
+            "center_y": y,
+            "position": 1,
+            "confidence": 0.9,
+        }
+
+    def test_build_pack_opening_pages_includes_multi_pack_result(
+        self, pack_opening_base
+    ):
+        from ptcgp_auto_v2.tasks.pack_opening_task_base import build_pack_opening_pages
+
+        pages = build_pack_opening_pages()
+
+        assert any(page["name"] == "pack_opening_multi_result" for page in pages)
+
+    def test_handle_opening_swipe_counts_ten_pack_once(self, pack_opening_base):
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+            def get_target_pack_context(self):
+                return {"set_code": "A1", "booster_name": "Mewtwo"}
+
+        from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+
+        task = TestTask(FakeAdb(), recognizer=None, page_detector=Mock())
+        task._set_pack_result_mode(10)
+
+        task._handle_opening_swipe({})
+        task._handle_opening_swipe({})
+
+        assert task._packs_opened_count == 10
+
+    def test_collect_multi_pack_rows_should_continue_after_single_row_reaches_twenty(
+        self, pack_opening_base
+    ):
+        from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+        task = object.__new__(TestTask)
+        task.adb = FakeAdb()
+        task._pack_result_batch_size = 10
+        task._pack_result_rows = [
+            [
+                self._make_result_card(index * 10 + 1, 248.0, float(index * 40)),
+                self._make_result_card(index * 10 + 2, 470.0, float(index * 40)),
+            ]
+            for index in range(19)
+        ]
+        task._resolve_scan_set_code = Mock(return_value="A1")
+        task._scan_cards_with_retry = Mock(side_effect=[[{"frame": 1}], [{"frame": 2}]])
+        task._group_result_rows = Mock(
+            side_effect=[
+                [[self._make_result_card(999, 470.0, 999.0)]],
+                [
+                    [
+                        self._make_result_card(998, 248.0, 999.0),
+                        self._make_result_card(999, 470.0, 999.0),
+                    ]
+                ],
+            ]
+        )
+
+        result = task._collect_multi_pack_rows()
+
+        assert result is True
+        assert task._scan_cards_with_retry.call_count == 2
+        assert len(task._pack_result_rows) == 20
+        assert [card["card_id"] for card in task._pack_result_rows[-1]] == [998, 999]
+
+    def test_collect_multi_pack_rows_should_stop_after_same_screen_repeats(
+        self, pack_opening_base
+    ):
+        from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+        task = object.__new__(TestTask)
+        task.adb = FakeAdb()
+        task._pack_result_batch_size = 10
+        task._pack_result_rows = [
+            [
+                self._make_result_card(index * 10 + 1, 248.0, float(index * 40)),
+                self._make_result_card(index * 10 + 2, 470.0, float(index * 40)),
+            ]
+            for index in range(19)
+        ]
+        single_row = [[self._make_result_card(999, 470.0, 999.0)]]
+        task._resolve_scan_set_code = Mock(return_value="A1")
+        task._scan_cards_with_retry = Mock(side_effect=[[{"frame": 1}], [{"frame": 2}]])
+        task._group_result_rows = Mock(side_effect=[single_row, single_row])
+
+        result = task._collect_multi_pack_rows()
+
+        assert result is False
+        assert task._scan_cards_with_retry.call_count == 2
+        assert len(task._pack_result_rows) == 20
+        assert [card["card_id"] for card in task._pack_result_rows[-1]] == [999]
+
+    def test_recognize_multi_pack_results_saves_ten_records(self, pack_opening_base):
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+        task = object.__new__(TestTask)
+        task._init_repositories = Mock()
+        task._collect_multi_pack_rows = Mock(return_value=True)
+        task._reset_pack_result_mode = Mock()
+        task._save_pack_record = Mock()
+        task._save_high_rarity_cards = Mock()
+        task._account_card_repo = Mock()
+        task._account = Mock()
+        task._account.id = 1
+        task._pack_result_batch_size = 10
+        task._pack_result_rows = []
+        task._result_recognized = False
+
+        for pack_index in range(10):
+            base_card_id = pack_index * 10
+            base_y = float(pack_index * 100)
+            task._pack_result_rows.append(
+                [
+                    {
+                        "card_id": base_card_id + 1,
+                        "center_x": 100.0,
+                        "center_y": base_y,
+                        "position": 1,
+                        "confidence": 0.9,
+                    },
+                    {
+                        "card_id": base_card_id + 2,
+                        "center_x": 300.0,
+                        "center_y": base_y,
+                        "position": 2,
+                        "confidence": 0.9,
+                    },
+                    {
+                        "card_id": base_card_id + 3,
+                        "center_x": 500.0,
+                        "center_y": base_y,
+                        "position": 3,
+                        "confidence": 0.9,
+                    },
+                ]
+            )
+            task._pack_result_rows.append(
+                [
+                    {
+                        "card_id": base_card_id + 4,
+                        "center_x": 200.0,
+                        "center_y": base_y + 40.0,
+                        "position": 1,
+                        "confidence": 0.9,
+                    },
+                    {
+                        "card_id": base_card_id + 5,
+                        "center_x": 400.0,
+                        "center_y": base_y + 40.0,
+                        "position": 2,
+                        "confidence": 0.9,
+                    },
+                ]
+            )
+
+        result = task._recognize_multi_pack_results()
+
+        assert result is True
+        assert task._save_pack_record.call_count == 10
+        assert task._save_high_rarity_cards.call_count == 10
+        assert task._result_recognized is True
+        task._reset_pack_result_mode.assert_called_once()
+
+    def test_handle_pack_opening_result_should_not_tap_continue_when_ten_pack_scan_fails(
+        self, pack_opening_base
+    ):
+        from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+        task = TestTask(FakeAdb(), recognizer=None, page_detector=Mock())
+        task._set_pack_result_mode(10)
+        task._recognize_multi_pack_results = Mock(return_value=False)
+
+        result = task._handle_pack_opening_result({"ocr_results": [{"text": "繼續"}]})
+
+        assert result.success is True
+        assert task.adb.tap_points == []
+        task._recognize_multi_pack_results.assert_called_once()
+
+    def test_handle_opening_card_should_wait_three_seconds_in_single_mode(
+        self, pack_opening_base
+    ):
+        from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+        task = TestTask(FakeAdb(), recognizer=None, page_detector=Mock())
+
+        result = task._handle_opening_card({})
+
+        assert result.should_wait == 3.0
+        assert len(task.adb.tap_points) == 6
+
+    def test_handle_opening_card_should_wait_three_seconds_after_ten_fast_taps_in_ten_mode(
+        self, pack_opening_base
+    ):
+        from ptcgp_auto_v2.tests.fake_adb import FakeAdb
+
+        class TestTask(pack_opening_base):
+            def get_pack_record_type(self):
+                return "test"
+
+            def get_rare_card_notify_message(self):
+                return "测试"
+
+            def is_completed(self):
+                return False
+
+            def handle_page(self, page_name, page_info):
+                return None
+
+        task = TestTask(FakeAdb(), recognizer=None, page_detector=Mock())
+        task._set_pack_result_mode(10)
+
+        waits = [task._handle_opening_card({}).should_wait for _ in range(11)]
+
+        assert waits[:10] == [0.0] * 10
+        assert waits[10] == 3.0
+
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

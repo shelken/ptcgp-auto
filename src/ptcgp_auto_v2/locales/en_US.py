@@ -17,6 +17,7 @@ TEXT_PATTERNS = {
     "use_item_confirm": ["要使用道具"],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
+    "pack_opening_multi_result": ["第1包"],
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
     "pack_card_register": ["向上輕滑卡牌"],
     "profile_page": ["朋友ID"],
