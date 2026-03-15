@@ -8,15 +8,15 @@
 import logging
 import time
 from enum import Enum, auto
-from typing import Optional
+from typing import Optional, cast
 
 from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS, SWIPE_STEPS_SCROLL
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
 )
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
@@ -96,7 +96,7 @@ def _build_collect_pages() -> list[dict]:
 
 
 @TaskRegistry.register("collect_account_cards")
-class CollectAccountCardsTask(Task):
+class CollectAccountCardsTask(StatefulTask):
     """收集当前账号高稀有度卡牌信息"""
 
     task_type = "collect_account_cards"
@@ -117,29 +117,8 @@ class CollectAccountCardsTask(Task):
             template_matcher=page_detector.template_matcher
         )
 
-        self._action_cache: dict[str, bool] = {}
-        self._filter_state = FilterPanelState()
-        self._completed = False
-        self._skipped = False
-        self._skip_reason: Optional[str] = None
-        self._phase = CollectPhase.ENTER
-        self._last_signature: Optional[str] = None
-        self._last_detect_signature: Optional[str] = None
-        self._pending_cards: dict[int, tuple[float, float]] = {}
-        self._pending_order: list[int] = []
-        self._consecutive_all_owned = 0
-
         self._account_card_repo = None
         self._card_repo = None
-
-    def _is_action_done(self, key: str) -> bool:
-        return self._action_cache.get(key, False)
-
-    def _mark_action_done(self, key: str):
-        self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        self._action_cache.clear()
 
     def on_start(self):
         from ptcgp_auto_v2.db.repositories import AccountCardRepository, CardRepository
@@ -147,60 +126,42 @@ class CollectAccountCardsTask(Task):
         self._account_card_repo = AccountCardRepository()
         self._card_repo = CardRepository()
 
-        self._action_cache.clear()
-        self._filter_state = FilterPanelState()
-        self._completed = False
-        self._skipped = False
-        self._skip_reason = None
-        self._phase = CollectPhase.ENTER
-        self._last_signature = None
-        self._last_detect_signature = None
-        self._pending_cards = {}
-        self._pending_order = []
-        self._consecutive_all_owned = 0
+        self.state.reset()
+        self.state_update(
+            {
+                "filter_state": FilterPanelState(),
+                "phase": CollectPhase.ENTER,
+                "last_signature": None,
+                "last_detect_signature": None,
+                "pending_cards": {},
+                "pending_order": [],
+                "consecutive_all_owned": 0,
+                "filter_action_cache": {},
+            }
+        )
 
         if self.account.id is None:
             logger.error("账号 ID 为空，无法执行收集任务")
-            self._skipped = True
-            self._skip_reason = "账号 ID 为空"
-            self._completed = True
-
-    def is_completed(self) -> bool:
-        return self._completed or self._skipped
-
-    def was_skipped(self) -> bool:
-        return self._skipped
-
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        handlers = {
-            "game_home_main": self._handle_home,
-            "card_entry_icon": self._handle_card_entry,
-            "card_page_own": self._handle_card_page,
-            "card_filter_panel": self._handle_filter_panel,
-            "card_sort_panel": self._handle_sort_panel,
-        }
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-        return ActionResult.ok(wait=1.0)
+            self.skip("账号 ID 为空")
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         logger.debug("未知页面，等待后重试")
         return ActionResult.wait(0.5)
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
-        return self._handle_card_entry(page_info)
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
+        return self._handle_card_entry_icon(page_info)
 
-    def _handle_card_entry(self, page_info: dict) -> ActionResult:
+    def _handle_card_entry_icon(self, page_info: dict) -> ActionResult:
         result = tap_template(
             self.adb, self.page_detector, "icon_bottom_card", wait=1.0
         )
         return result or ActionResult.ok(wait=1.0)
 
-    def _handle_card_page(self, page_info: dict) -> ActionResult:
-        logger.info("进入卡牌页处理，当前阶段: %s", self._phase.name)
-        if not self._is_action_done("filter_applied"):
-            self._phase = CollectPhase.FILTER
+    def _handle_card_page_own(self, page_info: dict) -> ActionResult:
+        phase = cast(CollectPhase, self.state_get("phase", CollectPhase.ENTER))
+        logger.info("进入卡牌页处理，当前阶段: %s", phase.name)
+        if not self.is_action_done("filter_applied"):
+            self.state_set("phase", CollectPhase.FILTER)
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
             if result:
                 return result
@@ -209,27 +170,29 @@ class CollectAccountCardsTask(Task):
                 return tap_box(self.adb, fallback, wait=1.0)
             return ActionResult.ok(wait=1.0)
 
-        if not self._is_action_done("sort_ready"):
-            self._phase = CollectPhase.SORT
+        if not self.is_action_done("sort_ready"):
+            self.state_set("phase", CollectPhase.SORT)
             return self._tap_sort_button()
 
-        self._phase = CollectPhase.SCAN
+        self.state_set("phase", CollectPhase.SCAN)
         return self._scan_and_scroll(page_info)
 
-    def _handle_filter_panel(self, page_info: dict) -> ActionResult:
+    def _handle_card_filter_panel(self, page_info: dict) -> ActionResult:
+        # 使用统一的 action 状态，与 handle_filter_panel 内部共用同一套缓存
+        action_cache = cast(dict[str, bool], self.state_get("filter_action_cache", {}))
         result = handle_filter_panel(
             adb=self.adb,
             page_detector=self.page_detector,
             icon_detector=self.icon_detector,
             page_info=page_info,
             rarity_codes=HIGH_RARITY_TARGETS,
-            state=self._filter_state,
-            action_cache=self._action_cache,
+            state=cast(FilterPanelState, self.state_get("filter_state")),
+            action_cache=action_cache,
         )
+        # 将 action_cache 的变更同步回 state
+        self.state_set("filter_action_cache", action_cache)
 
-        if self._is_action_done("filter_selected") and self._is_action_done(
-            "filter_ok_scrolled"
-        ):
+        if action_cache.get("filter_applied"):
             no_target_box = self._find_text_box(
                 page_info.get("ocr_results", []),
                 get_text_patterns("card_filter_no_target"),
@@ -237,13 +200,13 @@ class CollectAccountCardsTask(Task):
             )
             if no_target_box:
                 logger.info("筛选界面提示无对象卡牌，任务直接结束")
-                self._completed = True
+                self.complete()
                 return ActionResult.ok(wait=0.5)
             return self._mark_filter_applied(result)
 
         return result
 
-    def _handle_sort_panel(self, page_info: dict) -> ActionResult:
+    def _handle_card_sort_panel(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])
         target_box = self._find_text_box(
             ocr_results, get_text_patterns("card_sort_by_acquired"), exact=False
@@ -251,7 +214,7 @@ class CollectAccountCardsTask(Task):
 
         arrow_up = self.page_detector.find_template("icon_arrow_up", threshold=0.8)
         if target_box and arrow_up and self._is_arrow_up_for_sort(target_box, arrow_up):
-            self._mark_action_done("sort_ready")
+            self.mark_action_done("sort_ready")
             close_result = click_close(
                 self.adb,
                 self.page_detector,
@@ -271,7 +234,7 @@ class CollectAccountCardsTask(Task):
         if arrow_up and not self._is_arrow_up_for_sort(target_box, arrow_up):
             logger.debug("当前排序箭头不在目标行，尝试切换排序")
 
-        if not self._is_action_done("sort_clicked"):
+        if not self.is_action_done("sort_clicked"):
             result = tap_text(
                 self.adb,
                 ocr_results,
@@ -280,7 +243,7 @@ class CollectAccountCardsTask(Task):
                 wait=1.0,
             )
             if result:
-                self._mark_action_done("sort_clicked")
+                self.mark_action_done("sort_clicked")
                 return result
             logger.debug("未找到排序文本，等待重试")
             return ActionResult.ok(wait=0.5)
@@ -295,25 +258,24 @@ class CollectAccountCardsTask(Task):
     def _scan_and_scroll(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])
         signature = self._build_signature(ocr_results)
-        if self._last_signature is None:
-            self._last_signature = signature
+        if self.state_get("last_signature") is None:
+            self.state_set("last_signature", signature)
 
         detect_signature = self._scan_current_page()
-        if self._consecutive_all_owned >= 3:
+        if int(self.state_get("consecutive_all_owned", 0)) >= 3:
             logger.info("连续三次识别卡牌均已入库，提前结束扫描")
             self._flush_pending_cards()
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
         if detect_signature:
-            if (
-                self._last_detect_signature
-                and detect_signature == self._last_detect_signature
-            ):
+            if self.state_get(
+                "last_detect_signature"
+            ) and detect_signature == self.state_get("last_detect_signature"):
                 logger.info("检测结果未变化，认为到达列表底部")
                 self._flush_pending_cards()
-                self._completed = True
+                self.complete()
                 return ActionResult.ok(wait=1.0)
-            self._last_detect_signature = detect_signature
+            self.state_set("last_detect_signature", detect_signature)
         start, end = scroll_points(
             self.adb, base_distance_y=BASE_SCAN_SCROLL_DISTANCE_Y, direction="up"
         )
@@ -321,13 +283,13 @@ class CollectAccountCardsTask(Task):
         _, next_ocr = self.page_detector.capture()
         next_signature = self._build_signature(next_ocr)
 
-        if next_signature == self._last_signature:
+        if next_signature == self.state_get("last_signature"):
             logger.info("已到达列表底部，切换下一个稀有度")
             self._flush_pending_cards()
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
-        self._last_signature = next_signature
+        self.state_set("last_signature", next_signature)
         return ActionResult.ok(wait=0.5)
 
     def _scan_current_page(self) -> Optional[str]:
@@ -342,7 +304,7 @@ class CollectAccountCardsTask(Task):
             ),
         )
         if not detected:
-            self._consecutive_all_owned = 0
+            self.state_set("consecutive_all_owned", 0)
             return None
 
         written = 0
@@ -351,6 +313,10 @@ class CollectAccountCardsTask(Task):
         skipped_no_set = 0
         signature_items = []
         all_in_db = True
+        pending_cards = cast(
+            dict[int, tuple[float, float]], self.state_get("pending_cards", {})
+        )
+        pending_order = cast(list[int], self.state_get("pending_order", []))
         for item in detected:
             if not item.set_code:
                 skipped_no_set += 1
@@ -375,21 +341,27 @@ class CollectAccountCardsTask(Task):
                 all_in_db = False
             conf = float(item.confidence)
             sim = float(item.similarity)
-            if card.id not in self._pending_cards:
-                self._pending_order.append(card.id)
-                self._pending_cards[card.id] = (conf, sim)
+            if card.id not in pending_cards:
+                pending_order.append(card.id)
+                pending_cards[card.id] = (conf, sim)
             else:
-                prev_conf, prev_sim = self._pending_cards[card.id]
+                prev_conf, prev_sim = pending_cards[card.id]
                 # 以最高相似度为准，同时保留对应置信度
                 if sim > prev_sim:
-                    self._pending_cards[card.id] = (conf, sim)
+                    pending_cards[card.id] = (conf, sim)
             written += 1
+
+        self.state_set("pending_cards", pending_cards)
+        self.state_set("pending_order", pending_order)
 
         # 注意：该逻辑依赖“按获得顺序最新到旧”的排序，若变更排序需重新评估
         if all_in_db:
-            self._consecutive_all_owned += 1
+            self.state_set(
+                "consecutive_all_owned",
+                int(self.state_get("consecutive_all_owned", 0)) + 1,
+            )
         else:
-            self._consecutive_all_owned = 0
+            self.state_set("consecutive_all_owned", 0)
 
         logger.info("已写入高稀有度卡牌: %s 张", written)
         logger.info(
@@ -407,12 +379,16 @@ class CollectAccountCardsTask(Task):
             return
         if self.account.id is None:
             return
-        if not self._pending_cards:
+        pending_cards = cast(
+            dict[int, tuple[float, float]], self.state_get("pending_cards", {})
+        )
+        pending_order = cast(list[int], self.state_get("pending_order", []))
+        if not pending_cards:
             return
 
-        logger.info("开始批量写入卡牌，共 %s 张", len(self._pending_cards))
-        for card_id in reversed(self._pending_order):
-            conf, sim = self._pending_cards[card_id]
+        logger.info("开始批量写入卡牌，共 %s 张", len(pending_cards))
+        for card_id in reversed(pending_order):
+            conf, sim = pending_cards[card_id]
             existing = self._account_card_repo.get(self.account.id, card_id)
             # 收集任务只用于“建立拥有关系”，不应覆盖真实库存数量：
             # - 新纪录：count=1
@@ -428,11 +404,15 @@ class CollectAccountCardsTask(Task):
         logger.info("批量写入完成")
 
     def _mark_filter_applied(self, result: ActionResult) -> ActionResult:
-        self._mark_action_done("filter_applied")
-        self._action_cache.pop("filter_scrolled", None)
-        self._action_cache.pop("filter_cleared", None)
-        self._action_cache.pop("filter_selected", None)
-        self._action_cache.pop("filter_ok_scrolled", None)
+        self.mark_action_done("filter_applied")
+        filter_action_cache = cast(
+            dict[str, bool], self.state_get("filter_action_cache", {})
+        )
+        filter_action_cache.pop("filter_scrolled", None)
+        filter_action_cache.pop("filter_cleared", None)
+        filter_action_cache.pop("filter_selected", None)
+        filter_action_cache.pop("filter_ok_scrolled", None)
+        self.state_set("filter_action_cache", filter_action_cache)
         return result
 
     @staticmethod
