@@ -105,12 +105,14 @@ def _build_open_pack_pages() -> list[dict]:
             "name": "pack_paid",
             "identifiers": get_text_patterns("open_pack_1"),
             "priority": 99,
+            "exact_match": True,
         },
         # 付费包确认弹窗（要使用道具）
         {
             "name": "pack_paid_modal",
             "identifiers": get_text_patterns("use_item_confirm"),
             "priority": 99,
+            "exact_match": True,
         },
         # 商店 / 得卡挑戰
         {
