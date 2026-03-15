@@ -413,7 +413,7 @@ class WonderPickTask(StatefulTask):
             return result
         return ActionResult.ok(wait=0.5)
 
-    def _handle_select_favorite_card(self, page_info: dict) -> ActionResult:
+    def _handle_init_select_favorite_card(self, page_info: dict) -> ActionResult:
         """随机选取卡牌。"""
         position = self._pick_random_card_position()
         if position:

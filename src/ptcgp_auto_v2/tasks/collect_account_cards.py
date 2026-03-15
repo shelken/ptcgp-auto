@@ -177,7 +177,11 @@ class CollectAccountCardsTask(StatefulTask):
         self.state_set("phase", CollectPhase.SCAN)
         return self._scan_and_scroll(page_info)
 
-    def _handle_filter_panel(self, page_info: dict) -> ActionResult:
+    def _handle_card_filter_panel(self, page_info: dict) -> ActionResult:
+        # 使用统一的 action 状态，与 handle_filter_panel 内部共用同一套缓存
+        action_cache = cast(
+            dict[str, bool], self.state_get("filter_action_cache", {})
+        )
         result = handle_filter_panel(
             adb=self.adb,
             page_detector=self.page_detector,
@@ -185,12 +189,12 @@ class CollectAccountCardsTask(StatefulTask):
             page_info=page_info,
             rarity_codes=HIGH_RARITY_TARGETS,
             state=cast(FilterPanelState, self.state_get("filter_state")),
-            action_cache=cast(
-                dict[str, bool], self.state_get("filter_action_cache", {})
-            ),
+            action_cache=action_cache,
         )
+        # 将 action_cache 的变更同步回 state
+        self.state_set("filter_action_cache", action_cache)
 
-        if self.is_action_done("filter_selected") and self.is_action_done(
+        if action_cache.get("filter_selected") and action_cache.get(
             "filter_ok_scrolled"
         ):
             no_target_box = self._find_text_box(
@@ -206,7 +210,7 @@ class CollectAccountCardsTask(StatefulTask):
 
         return result
 
-    def _handle_sort_panel(self, page_info: dict) -> ActionResult:
+    def _handle_card_sort_panel(self, page_info: dict) -> ActionResult:
         ocr_results = page_info.get("ocr_results", [])
         target_box = self._find_text_box(
             ocr_results, get_text_patterns("card_sort_by_acquired"), exact=False
