@@ -271,31 +271,6 @@ class ExchangeCardsTask(StatefulTask):
         self._filter_state = FilterPanelState()
         self._friend_helper: Optional[FriendSelectionHelper] = None
 
-    @property
-    def _action_cache(self) -> dict[str, bool]:
-        cache = self.state.data.get("action_cache")
-        if isinstance(cache, dict):
-            return cast(dict[str, bool], cache)
-        cache = {}
-        self.state.data["action_cache"] = cache
-        return cast(dict[str, bool], cache)
-
-    @property
-    def _skipped(self) -> bool:
-        return self.state.lifecycle.skipped
-
-    @_skipped.setter
-    def _skipped(self, value: bool):
-        self.state.lifecycle.skipped = value
-
-    @property
-    def _skip_reason(self) -> Optional[str]:
-        return self.state.lifecycle.skip_reason
-
-    @_skip_reason.setter
-    def _skip_reason(self, value: Optional[str]):
-        self.state.lifecycle.skip_reason = value
-
     def on_start(self):
         """加载请求并执行前置校验。"""
         self.state.reset()
@@ -303,8 +278,7 @@ class ExchangeCardsTask(StatefulTask):
         self._card_stable_rounds = 0
         self._last_card_signature = None
         self._filter_state = FilterPanelState()
-        self._skipped = False
-        self._skip_reason = None
+        self.state_set("filter_action_cache", {})
 
         if self.account.id is None:
             self.mark_completed_without_timestamp("账号ID为空")
@@ -346,7 +320,9 @@ class ExchangeCardsTask(StatefulTask):
 
         if not is_account_past_days(self.account.created_at, 14):
             if is_account_pending_same_day_cooldown(self.account.created_at, 14):
-                self._mark_skipped("账号未过14天冷冻期（同日待到期）")
+                self.skip("账号未过14天冷冻期（同日待到期）")
+                self._ctx.runtime.completed = True
+                self._ctx.runtime.complete_reason = "账号未过14天冷冻期（同日待到期）"
                 return
             self._fail_request("账号未过14天冷静期", preserve_last_completed_at=True)
             return
@@ -500,7 +476,7 @@ class ExchangeCardsTask(StatefulTask):
         # 恢复重发流程：只有离开“取消完成”页面后才清除恢复标记。
         if (
             self._ctx.runtime.recover_before_send
-            and self._is_action_done("recover_cancel_done_clicked")
+            and self.is_action_done("recover_cancel_done_clicked")
             and page_name != "exchange_canceled_done_popup"
         ):
             self._ctx.runtime.recover_before_send = False
@@ -675,7 +651,7 @@ class ExchangeCardsTask(StatefulTask):
             return ActionResult.wait(0.6)
         ocr_results = page_info.get("ocr_results", [])
 
-        if self._is_action_done("target_card_tapped"):
+        if self.is_action_done("target_card_tapped"):
             if is_text_visible(
                 ocr_results,
                 get_text_patterns("exchange_insufficient_points"),
@@ -686,15 +662,15 @@ class ExchangeCardsTask(StatefulTask):
             ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
             return ok_result if ok_result else ActionResult.wait(0.5)
 
-        if not self._is_action_done("open_filter_clicked"):
+        if not self.is_action_done("open_filter_clicked"):
             tap_result = tap_template(
                 self.adb, self.page_detector, "icon_search", wait=1.0
             )
             if tap_result:
-                self._mark_action_done("open_filter_clicked")
+                self.mark_action_done("open_filter_clicked")
                 return tap_result
 
-        if not self._is_action_done("filter_applied"):
+        if not self.is_action_done("filter_applied"):
             return ActionResult.wait(0.6)
 
         detected = self._card_recognizer.scan(
@@ -704,7 +680,7 @@ class ExchangeCardsTask(StatefulTask):
         if tap_result:
             self._card_stable_rounds = 0
             self._last_card_signature = None
-            self._mark_action_done("target_card_tapped")
+            self.mark_action_done("target_card_tapped")
             logger.info(
                 "点击目标卡牌: set_code=%s, number=%s",
                 self._ctx.card.set_code,
@@ -747,13 +723,16 @@ class ExchangeCardsTask(StatefulTask):
             page_info=page_info,
             rarity_codes=rarity_codes,
             state=self._filter_state,
-            action_cache=self._action_cache,
+            action_cache=cast(
+                dict[str, bool],
+                self.state_get("filter_action_cache", {}),
+            ),
         )
 
-        if self._is_action_done("filter_selected") and self._is_action_done(
+        if self.is_action_done("filter_selected") and self.is_action_done(
             "filter_ok_scrolled"
         ):
-            self._mark_action_done("filter_applied")
+            self.mark_action_done("filter_applied")
 
         return result
 
@@ -833,10 +812,10 @@ class ExchangeCardsTask(StatefulTask):
             cancel_mode,
             self._ctx.runtime.recover_before_send,
             cancel_reason,
-            self._is_action_done("waiting_cancel_clicked"),
+            self.is_action_done("waiting_cancel_clicked"),
         )
         if cancel_mode:
-            if not self._is_action_done("waiting_cancel_clicked"):
+            if not self.is_action_done("waiting_cancel_clicked"):
                 cancel_result = tap_text_exact(
                     self.adb,
                     page_info.get("ocr_results", []),
@@ -845,17 +824,17 @@ class ExchangeCardsTask(StatefulTask):
                 )
                 logger.info("[waiting_page] 点击取消结果: %s", bool(cancel_result))
                 if cancel_result:
-                    self._mark_action_done("waiting_cancel_clicked")
+                    self.mark_action_done("waiting_cancel_clicked")
                     return cancel_result
                 else:
                     logger.warning("[waiting_page] 取消模式但点击失败，继续等待")
             return ActionResult.wait(0.6)
 
-        if not self._is_action_done("waiting_window_started"):
+        if not self.is_action_done("waiting_window_started"):
             request.expire_at = now + timedelta(seconds=EXCHANGE_WINDOW_SECONDS)
             request.updated_at = now
             self._request_repo.update(request)
-            self._mark_action_done("waiting_window_started")
+            self.mark_action_done("waiting_window_started")
             logger.info(
                 "进入等待页，启动5分钟交换窗口: request_id=%s, expire_at=%s",
                 request.id,
@@ -925,14 +904,14 @@ class ExchangeCardsTask(StatefulTask):
         """交换完成滑卡页：上滑后再落库 completed。"""
         if self._ctx.runtime.current_request is None:
             return ActionResult.wait(0.6)
-        if self._is_action_done("exchange_swiped"):
+        if self.is_action_done("exchange_swiped"):
             return ActionResult.ok(wait=0.5)
 
         swipe_result = swipe_card_register(self.adb, wait=1.0)
         if not swipe_result.success:
             return swipe_result
 
-        self._mark_action_done("exchange_swiped")
+        self.mark_action_done("exchange_swiped")
         self._finalize_exchange_success()
         self._ctx.runtime.completed = True
         self._ctx.runtime.complete_reason = "交换完成"
@@ -974,13 +953,13 @@ class ExchangeCardsTask(StatefulTask):
             return ActionResult.wait(0.6)
 
         if self._ctx.runtime.recover_before_send:
-            if not self._is_action_done("recover_cancel_done_clicked"):
+            if not self.is_action_done("recover_cancel_done_clicked"):
                 self._ctx.runtime.current_request.cancel_reason = None
                 self._ctx.runtime.current_request.expire_at = None
                 self._ctx.runtime.current_request.next_check_at = None
                 self._ctx.runtime.current_request.updated_at = datetime.now()
                 self._request_repo.update(self._ctx.runtime.current_request)
-                self._mark_action_done("recover_cancel_done_clicked")
+                self.mark_action_done("recover_cancel_done_clicked")
                 logger.info("旧提议已取消，等待页面退出后继续重发")
             else:
                 logger.info("取消完成页仍停留，继续点击 OK 等待退出")
@@ -998,19 +977,14 @@ class ExchangeCardsTask(StatefulTask):
         self._ctx.runtime.completed = True
         return result
 
-    def _mark_skipped(self, reason: str):
-        """将当前任务标记为跳过并结束。"""
-        self._skipped = True
-        self._skip_reason = reason
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = reason
-
     def _handle_exchange_locked_popup(self, page_info: dict) -> ActionResult:
         """交换功能未解锁弹窗：点击 OK 并跳过。"""
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
         if not result:
             return ActionResult.wait(0.6)
-        self._mark_skipped("交换功能未解锁（14天冷冻期未到）")
+        self.skip("交换功能未解锁（14天冷冻期未到）")
+        self._ctx.runtime.completed = True
+        self._ctx.runtime.complete_reason = "交换功能未解锁（14天冷冻期未到）"
         return result
 
     def _fail_request(self, reason: str, preserve_last_completed_at: bool = False):
@@ -1026,14 +1000,6 @@ class ExchangeCardsTask(StatefulTask):
         """失败收敛快捷入口。"""
         self._fail_request(reason)
         return ActionResult.ok(wait=0.3)
-
-    def _mark_action_done(self, action_name: str):
-        """标记页面动作已完成。"""
-        self._action_cache[action_name] = True
-
-    def _is_action_done(self, action_name: str) -> bool:
-        """查询页面动作是否完成。"""
-        return self._action_cache.get(action_name, False)
 
     def _tap_target_card_by_scan(self, detected) -> Optional[ActionResult]:
         """通过 YOLO+Hash 扫描定位目标卡牌。"""

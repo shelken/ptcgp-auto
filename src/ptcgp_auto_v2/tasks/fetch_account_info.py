@@ -119,80 +119,6 @@ class FetchAccountInfoTask(StatefulTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @property
-    def _action_cache(self) -> dict[str, bool]:
-        cache = self.state.data.get("action_cache")
-        if isinstance(cache, dict):
-            return cache
-        cache = {}
-        self.state.data["action_cache"] = cache
-        return cache
-
-    def is_action_done(self, key: str) -> bool:
-        return bool(self._action_cache.get(key, False))
-
-    def mark_action_done(self, key: str, value: object = True):
-        self._action_cache[key] = value
-
-    def reset_action_cache(self):
-        self._action_cache.clear()
-
-    @property
-    def _friend_id(self) -> Optional[str]:
-        return cast(Optional[str], self.state.data.get("friend_id"))
-
-    @_friend_id.setter
-    def _friend_id(self, value: Optional[str]):
-        self.state.data["friend_id"] = value
-
-    @property
-    def _nickname(self) -> Optional[str]:
-        return cast(Optional[str], self.state.data.get("nickname"))
-
-    @_nickname.setter
-    def _nickname(self, value: Optional[str]):
-        self.state.data["nickname"] = value
-
-    @property
-    def _level(self) -> Optional[int]:
-        return cast(Optional[int], self.state.data.get("level"))
-
-    @_level.setter
-    def _level(self, value: Optional[int]):
-        self.state.data["level"] = value
-
-    @property
-    def _exchange_points(self) -> Optional[int]:
-        return cast(Optional[int], self.state.data.get("exchange_points"))
-
-    @_exchange_points.setter
-    def _exchange_points(self, value: Optional[int]):
-        self.state.data["exchange_points"] = value
-
-    @property
-    def _pack_hourglass_count(self) -> Optional[int]:
-        return cast(Optional[int], self.state.data.get("pack_hourglass_count"))
-
-    @_pack_hourglass_count.setter
-    def _pack_hourglass_count(self, value: Optional[int]):
-        self.state.data["pack_hourglass_count"] = value
-
-    @property
-    def _holdings_scroll_rounds(self) -> int:
-        return int(self.state.data.get("holdings_scroll_rounds", 0))
-
-    @_holdings_scroll_rounds.setter
-    def _holdings_scroll_rounds(self, value: int):
-        self.state.data["holdings_scroll_rounds"] = value
-
-    @property
-    def _holdings_scan_rounds(self) -> int:
-        return int(self.state.data.get("holdings_scan_rounds", 0))
-
-    @_holdings_scan_rounds.setter
-    def _holdings_scan_rounds(self, value: int):
-        self.state.data["holdings_scan_rounds"] = value
-
     @staticmethod
     def needs_fetch(account, tasks) -> bool:
         """检查是否需要获取账号信息"""
@@ -231,15 +157,33 @@ class FetchAccountInfoTask(StatefulTask):
     def on_start(self):
         """初始化任务运行状态。"""
         self.state.reset()
+        self.state_update(
+            {
+                "friend_id": None,
+                "nickname": None,
+                "level": None,
+                "exchange_points": None,
+                "pack_hourglass_count": None,
+                "holdings_scroll_rounds": 0,
+                "holdings_scan_rounds": 0,
+            }
+        )
 
     def check_completion(self) -> Optional[TaskResult]:
         """检查任务完成状态"""
         if self.is_completed():
-            if self._friend_id or self._nickname or self._exchange_points is not None:
+            friend_id = cast(Optional[str], self.state_get("friend_id"))
+            nickname = cast(Optional[str], self.state_get("nickname"))
+            level = cast(Optional[int], self.state_get("level"))
+            exchange_points = cast(Optional[int], self.state_get("exchange_points"))
+            pack_hourglass_count = cast(
+                Optional[int], self.state_get("pack_hourglass_count")
+            )
+            if friend_id or nickname or exchange_points is not None:
                 return TaskResult.ok(
-                    message=f"获取完成: friend_id={self._friend_id}, nickname={self._nickname}, "
-                    f"level={self._level}, exchange_points={self._exchange_points}, "
-                    f"pack_hourglass_count={self._pack_hourglass_count}"
+                    message=f"获取完成: friend_id={friend_id}, nickname={nickname}, "
+                    f"level={level}, exchange_points={exchange_points}, "
+                    f"pack_hourglass_count={pack_hourglass_count}"
                 )
             return TaskResult.fail("未能获取账号信息")
         return None
@@ -300,21 +244,24 @@ class FetchAccountInfoTask(StatefulTask):
         # 提取信息
         for item in ocr:
             text = item["text"]
-            if not self._friend_id:
+            friend_id = cast(Optional[str], self.state_get("friend_id"))
+            if not friend_id:
                 extracted_friend_id = extract_friend_id_from_text(text)
                 if extracted_friend_id:
-                    self._friend_id = extracted_friend_id
-                    logger.debug(f"  -> friend_id: {self._friend_id}")
-            if not self._level:
+                    self.state_set("friend_id", extracted_friend_id)
+                    logger.debug(f"  -> friend_id: {extracted_friend_id}")
+            if not cast(Optional[int], self.state_get("level")):
                 m = LEVEL_PATTERN.search(text)
                 if m:
-                    self._level = int(m.group(1))
-                    logger.debug(f"  -> level: {self._level}")
+                    level = int(m.group(1))
+                    self.state_set("level", level)
+                    logger.debug(f"  -> level: {level}")
 
-        if not self._nickname:
-            self._nickname = self._extract_nickname(ocr)
-            if self._nickname:
-                logger.debug(f"  -> nickname: {self._nickname}")
+        if not cast(Optional[str], self.state_get("nickname")):
+            nickname = self._extract_nickname(ocr)
+            self.state_set("nickname", nickname)
+            if nickname:
+                logger.debug(f"  -> nickname: {nickname}")
 
         self.mark_action_done("profile_fetched")
         logger.debug("  -> 资料获取完成，返回")
@@ -335,8 +282,8 @@ class FetchAccountInfoTask(StatefulTask):
         )
         if result:
             self.mark_action_done("holdings_entered")
-            self._holdings_scroll_rounds = 0
-            self._holdings_scan_rounds = 0
+            self.state_set("holdings_scroll_rounds", 0)
+            self.state_set("holdings_scan_rounds", 0)
             logger.info("  -> 点击持有物")
             return result
         return ActionResult.wait(0.8)
@@ -346,36 +293,41 @@ class FetchAccountInfoTask(StatefulTask):
         ocr = page_info.get("ocr_results", [])
         exchange_points, pack_hourglass_count = self._extract_holdings_values(ocr)
         if exchange_points is not None:
-            self._exchange_points = exchange_points
+            self.state_set("exchange_points", exchange_points)
             logger.debug("  -> 识别閃亮沙子: %s", exchange_points)
         if pack_hourglass_count is not None:
-            self._pack_hourglass_count = pack_hourglass_count
+            self.state_set("pack_hourglass_count", pack_hourglass_count)
             logger.debug("  -> 识别開包沙漏: %s", pack_hourglass_count)
 
-        if self._exchange_points is not None and self._pack_hourglass_count is not None:
+        if (
+            self.state_get("exchange_points") is not None
+            and self.state_get("pack_hourglass_count") is not None
+        ):
             self.mark_action_done("holdings_fetched")
             logger.info(
                 "  -> 获取持有物完成: exchange_points=%s, pack_hourglass_count=%s",
-                self._exchange_points,
-                self._pack_hourglass_count,
+                self.state_get("exchange_points"),
+                self.state_get("pack_hourglass_count"),
             )
             return navigate_back(self.adb, self.page_detector, ocr)
 
-        self._holdings_scan_rounds += 1
-        if self._holdings_scan_rounds <= MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL:
+        holdings_scan_rounds = int(self.state_get("holdings_scan_rounds", 0)) + 1
+        self.state_set("holdings_scan_rounds", holdings_scan_rounds)
+        if holdings_scan_rounds <= MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL:
             logger.debug(
                 "  -> 持有物页面先扫描后滑动 (%s/%s)",
-                self._holdings_scan_rounds,
+                holdings_scan_rounds,
                 MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL,
             )
             return ActionResult.wait(0.8)
 
-        if self._holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
+        holdings_scroll_rounds = int(self.state_get("holdings_scroll_rounds", 0))
+        if holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
             logger.warning("  -> 持有物页面滑动到上限，仍未提取到完整资源")
             self.mark_action_done("holdings_fetched")
             return navigate_back(self.adb, self.page_detector, ocr)
 
-        self._holdings_scroll_rounds += 1
+        self.state_set("holdings_scroll_rounds", holdings_scroll_rounds + 1)
         start, end = scroll_points(
             self.adb,
             base_distance_y=BASE_HOLDINGS_SCROLL_DISTANCE_Y,
@@ -542,15 +494,18 @@ class FetchAccountInfoTask(StatefulTask):
         if not self.account:
             return
 
+        friend_id = cast(Optional[str], self.state_get("friend_id"))
+        nickname = cast(Optional[str], self.state_get("nickname"))
+        level = cast(Optional[int], self.state_get("level"))
         changed = False
-        if self._friend_id and self.account.friend_id != self._friend_id:
-            self.account.friend_id = self._friend_id
+        if friend_id and self.account.friend_id != friend_id:
+            self.account.friend_id = friend_id
             changed = True
-        if self._nickname and self.account.nickname != self._nickname:
-            self.account.nickname = self._nickname
+        if nickname and self.account.nickname != nickname:
+            self.account.nickname = nickname
             changed = True
-        if self._level and self.account.level != self._level:
-            self.account.level = self._level
+        if level and self.account.level != level:
+            self.account.level = level
             changed = True
         if changed:
             AccountRepository().update(self.account)
@@ -561,13 +516,13 @@ class FetchAccountInfoTask(StatefulTask):
         stat_repo = AccountStatRepository()
         existing_stat = stat_repo.get_by_account_id(int(self.account.id))
         exchange_points = (
-            self._exchange_points
-            if self._exchange_points is not None
+            cast(Optional[int], self.state_get("exchange_points"))
+            if self.state_get("exchange_points") is not None
             else (existing_stat.exchange_points if existing_stat else None)
         )
         pack_hourglass_count = (
-            self._pack_hourglass_count
-            if self._pack_hourglass_count is not None
+            cast(Optional[int], self.state_get("pack_hourglass_count"))
+            if self.state_get("pack_hourglass_count") is not None
             else (existing_stat.pack_hourglass_count if existing_stat else None)
         )
 

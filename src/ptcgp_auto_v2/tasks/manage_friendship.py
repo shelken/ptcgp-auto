@@ -127,23 +127,11 @@ class ManageFriendshipTask(StatefulTask):
         self._accept_wait_rounds = 0
         self._delete_wait_rounds = 0
 
-    def _is_action_done(self, key: str) -> bool:
-        """检查动作标记。"""
-        return self._action_cache.get(key, False)
-
-    def _mark_action_done(self, key: str):
-        """记录动作标记。"""
-        self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        """清空页面内动作标记。"""
-        self._action_cache.clear()
-
     def on_start(self):
         """任务开始前加载请求。"""
         self.state.reset()
-        self._reset_action_cache()
-        self._last_page_name = None
+        self.reset_action_cache()
+        self.state_set("page.current", None)
         self._active_request_id = None
         self._submitted_request_id = None
         self._add_apply_wait_rounds = 0
@@ -182,7 +170,7 @@ class ManageFriendshipTask(StatefulTask):
         )
         if not self.requests_to_process:
             self.mark_completed_without_timestamp("没有待处理的好友请求")
-            self._completed = True
+            self.complete()
             logger.info("没有待处理的好友请求，任务完成")
 
     def _expire_stale_add_requests(self) -> bool:
@@ -275,7 +263,7 @@ class ManageFriendshipTask(StatefulTask):
         self._active_request_id = None
         self._submitted_request_id = None
         if not self.requests_to_process:
-            self._completed = True
+            self.complete()
 
     def _defer_current_request(self, req, stage: str):
         """本轮暂缓当前请求，避免同一轮重复查询同一请求。"""
@@ -289,14 +277,14 @@ class ManageFriendshipTask(StatefulTask):
         self.current_request = None
         self._active_request_id = None
         self._submitted_request_id = None
-        self._reset_action_cache()
+        self.reset_action_cache()
         self._add_apply_wait_rounds = 0
         self._cancel_wait_rounds = 0
         self._accept_wait_rounds = 0
         self._delete_wait_rounds = 0
         self._log_pending_request_order(stage)
         if not self.requests_to_process:
-            self._completed = True
+            self.complete()
 
     def _log_pending_request_order(self, stage: str):
         """输出当前待处理请求顺序，便于排查是否按创建时间执行。"""
@@ -501,7 +489,7 @@ class ManageFriendshipTask(StatefulTask):
 
     def _handle_home(self, page_info: dict) -> ActionResult:
         """主页点击社群。"""
-        if self._completed:
+        if self.is_completed():
             return ActionResult.ok(wait=0.5)
         return tap_community_icon(self.adb, self.page_detector)
 
@@ -517,11 +505,11 @@ class ManageFriendshipTask(StatefulTask):
 
     def _handle_friend_list(self, page_info: dict) -> ActionResult:
         """好友列表页统一进入搜索入口。"""
-        if self._completed:
+        if self.is_completed():
             return ActionResult.ok(wait=0.5)
         req = self._pick_current_request()
         if req is None:
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=0.5)
         return tap_template_or_fallback(
             self.adb,
@@ -547,7 +535,7 @@ class ManageFriendshipTask(StatefulTask):
         if request_id != self._active_request_id:
             self._active_request_id = request_id
             self._submitted_request_id = None
-            self._reset_action_cache()
+            self.reset_action_cache()
             self._add_apply_wait_rounds = 0
             self._cancel_wait_rounds = 0
             self._accept_wait_rounds = 0
@@ -557,25 +545,25 @@ class ManageFriendshipTask(StatefulTask):
         if focus_point is None:
             return ActionResult.wait(0.5)
 
-        if not self._is_action_done("search_cleared"):
+        if not self.is_action_done("search_cleared"):
             logger.debug("请求 %s: 强制清空输入框", request_id)
             clear_text(self.adb, focus_point[0], focus_point[1], max_chars=24, wait=0.2)
-            self._mark_action_done("search_cleared")
+            self.mark_action_done("search_cleared")
             return ActionResult.wait(0.4)
 
-        if not self._is_action_done("search_input_done"):
+        if not self.is_action_done("search_input_done"):
             logger.debug(
                 "请求 %s: 强制输入目标friend_id=%s", request_id, target_friend_id
             )
             input_text(self.adb, target_friend_id, wait=0.3)
-            self._mark_action_done("search_input_done")
+            self.mark_action_done("search_input_done")
             return ActionResult.wait(0.6)
 
-        if not self._is_action_done("search_submitted"):
+        if not self.is_action_done("search_submitted"):
             logger.info("请求 %s: 点击icon_search执行查询", request_id)
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=0.9)
             if result:
-                self._mark_action_done("search_submitted")
+                self.mark_action_done("search_submitted")
                 self._submitted_request_id = request_id
                 return result
             return ActionResult.wait(0.8)
@@ -592,7 +580,7 @@ class ManageFriendshipTask(StatefulTask):
         if req.id != self._active_request_id:
             self._active_request_id = req.id
             self._submitted_request_id = None
-            self._reset_action_cache()
+            self.reset_action_cache()
             self._add_apply_wait_rounds = 0
             self._cancel_wait_rounds = 0
             self._accept_wait_rounds = 0
@@ -653,11 +641,11 @@ class ManageFriendshipTask(StatefulTask):
         )
         if apply_result:
             logger.info("请求 %s 检测到申请按钮，执行申请点击", req.id)
-            self._mark_action_done("add_apply_clicked")
+            self.mark_action_done("add_apply_clicked")
             self._add_apply_wait_rounds = 0
             return apply_result
 
-        if not self._is_action_done("add_apply_clicked"):
+        if not self.is_action_done("add_apply_clicked"):
             # 尚未进入发送态，且当前未识别到申请按钮，继续等待刷新。
             return ActionResult.wait(0.6)
 
@@ -707,13 +695,13 @@ class ManageFriendshipTask(StatefulTask):
             return self._handle_external_sended_result(req, page_info)
 
         # 系统内好友：接受对方发来的请求
-        if not self._is_action_done("accept_green_clicked"):
+        if not self.is_action_done("accept_green_clicked"):
             green_click_result = self._tap_green_yes(wait=0.8)
             if green_click_result:
-                self._mark_action_done("accept_green_clicked")
+                self.mark_action_done("accept_green_clicked")
                 return green_click_result
 
-        if self._is_action_done("accept_green_clicked"):
+        if self.is_action_done("accept_green_clicked"):
             close_result = self._close_modal(wait=0.8)
             if close_result.success:
                 self._complete_add_sended_request(req)
@@ -816,13 +804,13 @@ class ManageFriendshipTask(StatefulTask):
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
-        if not self._is_action_done("delete_green_clicked"):
+        if not self.is_action_done("delete_green_clicked"):
             green_click_result = self._tap_green_yes(wait=0.8)
             if green_click_result:
-                self._mark_action_done("delete_green_clicked")
+                self.mark_action_done("delete_green_clicked")
                 return green_click_result
 
-        if self._is_action_done("delete_green_clicked"):
+        if self.is_action_done("delete_green_clicked"):
             return ActionResult.wait(0.6)
 
         self._delete_wait_rounds += 1
@@ -865,23 +853,3 @@ class ManageFriendshipTask(StatefulTask):
                 sender.id, self.account.friend_id, current_account_id
             )
         self._refresh_requests()
-
-    @property
-    def _action_cache(self) -> dict[str, bool]:
-        return cast(dict[str, bool], self.state.page.action_cache)
-
-    @property
-    def _last_page_name(self) -> Optional[str]:
-        return self.state.page.current
-
-    @_last_page_name.setter
-    def _last_page_name(self, value: Optional[str]):
-        self.state.page.current = value
-
-    @property
-    def _completed(self) -> bool:
-        return self.state.lifecycle.completed
-
-    @_completed.setter
-    def _completed(self, value: bool):
-        self.state.lifecycle.completed = value
