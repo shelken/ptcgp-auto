@@ -69,10 +69,6 @@ OPEN_10_PACK_HOURGLASS_COST = 120
 # 開封10包的实际包数
 OPEN_10_PACK_BATCH_SIZE = 10
 
-# action_cache 临时桥接：modal 已确认，但 10 包结果尚未累计到 _packs_opened_count
-ACTION_KEY_10_PACK_CONFIRMED = "pack_10_confirmed"
-
-
 # ============================================================
 # 页面识别规则
 # ============================================================
@@ -162,6 +158,9 @@ class OpenPackTask(PackOpeningTaskBase):
         # 任务开始时读取一次，后续页面处理复用缓存值
         self._pack_hourglass_count: int | None = None
 
+        # 任务级状态缓存：只放跨页面持久状态，不参与页面 action_cache 重置
+        self._state_cache: dict[str, dict[str, bool]] = {}
+
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
     # ============================================================
@@ -200,6 +199,7 @@ class OpenPackTask(PackOpeningTaskBase):
         self._account_stat_repo = AccountStatRepository()
 
         self._action_cache.clear()
+        self._state_cache.clear()
         self._home_check_count = 0
         self._packs_opened_count = 0
         self._completed = False
@@ -394,7 +394,12 @@ class OpenPackTask(PackOpeningTaskBase):
             self._home_check_count = 0
             return self._tap_pack_open_icon(screenshot)
 
-        if self._can_open_10_pack() and not self._has_opened_10_pack_this_task():
+        if self._has_completed_10_pack_this_task():
+            logger.debug("  -> 十包流程已完成，任务结束")
+            self._completed = True
+            return ActionResult.ok(wait=1.0)
+
+        if self._can_open_10_pack() and not self._has_started_10_pack_this_task():
             logger.debug("  -> 无免费包但满足10包条件，进入开包流程")
             self._home_check_count = 0
             return self._tap_pack_open_icon(screenshot)
@@ -423,7 +428,7 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def _should_exit_pack_flow(self) -> bool:
         """十包完成后退出选包链路，避免在列表和详情页之间反复往返。"""
-        return self._has_opened_10_pack_this_task() or not self._is_open_10_pack_enabled()
+        return self._has_completed_10_pack_this_task()
 
     def _is_open_10_pack_enabled(self) -> bool:
         """是否启用十包开封模式。"""
@@ -463,9 +468,7 @@ class OpenPackTask(PackOpeningTaskBase):
             series_patterns = get_config_value("series")
             if isinstance(series_patterns, dict) and target_series in series_patterns:
                 patterns = series_patterns[target_series]
-                result = tap_text_exact(
-                    self.adb, ocr_results, patterns, wait=1.0
-                )
+                result = tap_text_exact(self.adb, ocr_results, patterns, wait=1.0)
                 if result:
                     self._mark_action_done("series_clicked")
                     logger.info(f"  -> 点击切换到 {target_series} 系列")
@@ -615,7 +618,7 @@ class OpenPackTask(PackOpeningTaskBase):
         """处理付费包页面（開封1包）- 检查沙漏数量决定是否开10包"""
         ocr_results = page_info.get("ocr_results", [])
 
-        if self._has_opened_10_pack_this_task():
+        if self._has_started_10_pack_this_task():
             logger.debug("  -> 已使用过開封10包，返回上一页")
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
@@ -658,7 +661,7 @@ class OpenPackTask(PackOpeningTaskBase):
         if self._should_confirm_10_pack_modal():
             result = tap_ok(self.adb, ocr_results, wait=2.0)
             if result:
-                self._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+                self._mark_10_pack_state("confirmed")
                 self._set_pack_result_mode(OPEN_10_PACK_BATCH_SIZE)
                 self._consume_pack_hourglasses(OPEN_10_PACK_HOURGLASS_COST)
                 logger.info("  -> 点击OK确认使用沙漏开10包")
@@ -675,6 +678,31 @@ class OpenPackTask(PackOpeningTaskBase):
             return result
 
         return ActionResult.ok(wait=1.0)
+
+    def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
+        """处理开包结果页，并在十包完整结束后标记任务可退出。"""
+        is_ten_pack_result = self._pack_result_mode == PACK_RESULT_MODE_TEN
+        result = super()._handle_pack_opening_result(page_info)
+
+        if is_ten_pack_result and self._result_recognized:
+            self._mark_10_pack_state("completed")
+
+        return result
+
+    def _get_10_pack_state(self) -> dict[str, bool]:
+        """获取10包流程状态缓存。"""
+        state = self._state_cache.get("ten_pack")
+        if state is None:
+            state = {
+                "confirmed": False,
+                "completed": False,
+            }
+            self._state_cache["ten_pack"] = state
+        return state
+
+    def _mark_10_pack_state(self, key: str) -> None:
+        """标记10包流程状态。"""
+        self._get_10_pack_state()[key] = True
 
     def _load_pack_hourglass_count(self) -> int | None:
         """任务开始时读取一次当前账号沙漏数量。"""
@@ -719,15 +747,18 @@ class OpenPackTask(PackOpeningTaskBase):
             return False
         return self._pack_hourglass_count >= OPEN_10_PACK_HOURGLASS_COST
 
-    def _has_opened_10_pack_this_task(self) -> bool:
-        """判断本次任务是否已经开过一次10包。"""
-        return self._is_action_done(ACTION_KEY_10_PACK_CONFIRMED) or (
-            self._packs_opened_count >= 10
-        )
+    def _has_started_10_pack_this_task(self) -> bool:
+        """判断本次任务是否已经发起过一次10包。"""
+        state = self._get_10_pack_state()
+        return state.get("confirmed", False) or state.get("completed", False)
+
+    def _has_completed_10_pack_this_task(self) -> bool:
+        """判断本次任务是否已经完整处理完一次10包。"""
+        return self._get_10_pack_state().get("completed", False)
 
     def _should_confirm_10_pack_modal(self) -> bool:
         """判断当前 modal 是否应该确认 10 包开封。"""
-        return self._can_open_10_pack() and not self._has_opened_10_pack_this_task()
+        return self._can_open_10_pack() and not self._has_started_10_pack_this_task()
 
     # ============================================================
     # 辅助方法
