@@ -13,6 +13,7 @@ from ptcgp_auto_v2.web.services.exchange_card_service import (
     cancel_exchange_request,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
@@ -74,8 +75,7 @@ async def post_cancel_exchange_request(
         page_size=page_size,
         session=session,
     )
-    context = build_exchange_card_context(session=session)
-    t = context["t"]
+    _, t = get_current_i18n()
     message = (
         t.get("msg_exchange_request_cancelled")
         if cancelled

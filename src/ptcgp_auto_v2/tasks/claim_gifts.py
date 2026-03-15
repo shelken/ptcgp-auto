@@ -10,6 +10,7 @@
 
 import logging
 import time
+from typing import cast
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
@@ -101,10 +102,6 @@ class ClaimGiftsTask(PackOpeningTaskBase):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-        # 任务状态
-        self._claim_attempt_count = 0  # 连续无可领取次数
-        self._completed = False  # 任务完成标志
-
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
     # ============================================================
@@ -130,34 +127,13 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         logger.info("礼物盒领取任务开始")
 
         self._init_repositories()
-        self._action_cache.clear()
-        self._claim_attempt_count = 0
-        self._completed = False
+        self.state.reset()
+        self.state_set("claim_attempt_count", 0)
         self._packs_opened_count = 0
         self._result_recognized = False
 
-    def is_completed(self) -> bool:
-        """判断任务是否已完成"""
-        return self._completed
-
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """处理识别到的页面"""
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         logger.debug(f"处理页面: {page_name}")
-
-        # 礼物盒特定页面处理器（优先于通用处理器）
-        specific_handlers = {
-            "gift_box_empty": self._handle_gift_box_empty,
-            "game_home_main": self._handle_home,
-            "popup_send_thanks": self._handle_send_thanks,
-            "gift_box_page": self._handle_gift_box,
-        }
-        # 合并：特定处理器优先覆盖通用处理器
-        handlers = {**self.build_pack_opening_handlers(), **specific_handlers}
-
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
 
@@ -179,12 +155,12 @@ class ClaimGiftsTask(PackOpeningTaskBase):
     def _handle_gift_box_empty(self, page_info: dict) -> ActionResult:
         """处理礼物盒空页面"""
         logger.info("  -> 检测到「沒有可領取的道具」，任务完成")
-        self._completed = True
+        self.complete()
         return ActionResult.ok(wait=0.5)
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """处理主页：检测礼物图标"""
-        self._reset_action_cache()
+        self.reset_action_cache()
 
         screenshot, _ = self.page_detector.capture()
         if not screenshot:
@@ -204,10 +180,10 @@ class ClaimGiftsTask(PackOpeningTaskBase):
 
         # 未找到礼物图标，任务完成
         logger.debug("  -> 未检测到礼物图标，任务完成")
-        self._completed = True
+        self.complete()
         return ActionResult.ok(wait=1.0)
 
-    def _handle_send_thanks(self, page_info: dict) -> ActionResult:
+    def _handle_popup_send_thanks(self, page_info: dict) -> ActionResult:
         """处理送出谢谢弹窗：点击"謝謝！"按钮"""
         ocr_results = page_info.get("ocr_results", [])
         thanks_patterns = get_text_patterns("thanks_button")
@@ -221,21 +197,22 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         logger.debug("  -> 未找到「謝謝！」按钮")
         return ActionResult.ok(wait=1.0)
 
-    def _handle_gift_box(self, page_info: dict) -> ActionResult:
+    def _handle_gift_box_page(self, page_info: dict) -> ActionResult:
         """处理礼物盒页面：领取礼物"""
         ocr_results = page_info.get("ocr_results", [])
 
         # 尝试点击领取按钮
         result = self._try_claim_buttons(ocr_results)
         if result:
-            self._claim_attempt_count = 0
+            self.state_set("claim_attempt_count", 0)
             return result
 
         # 无可领取，检查是否真的没有礼物
-        self._claim_attempt_count += 1
-        if self._claim_attempt_count >= MAX_EMPTY_CHECK_ATTEMPTS:
+        claim_attempt_count = int(self.state_get("claim_attempt_count", 0)) + 1
+        self.state_set("claim_attempt_count", claim_attempt_count)
+        if claim_attempt_count >= MAX_EMPTY_CHECK_ATTEMPTS:
             logger.debug("  -> 礼物领取完成，返回主页")
-            self._reset_action_cache()
+            self.reset_action_cache()
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
         return ActionResult.ok(wait=1.0)

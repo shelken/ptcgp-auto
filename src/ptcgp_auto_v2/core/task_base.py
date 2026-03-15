@@ -205,6 +205,18 @@ class Task(ABC):
         """是否保留上次完成时间。"""
         return self._preserve_last_completed_at
 
+    def get_complete_reason(self) -> str | None:
+        """获取任务完成原因。"""
+        return getattr(self, "_complete_reason", None)
+
+    def get_skip_reason(self) -> str | None:
+        """获取任务跳过原因。"""
+        return getattr(self, "_skip_reason", None)
+
+    def get_error(self) -> str | None:
+        """获取任务失败原因。"""
+        return getattr(self, "_error", None)
+
     def on_complete(self, result: TaskResult):
         """
         任务完成后的钩子方法
@@ -350,12 +362,17 @@ class Task(ABC):
                 # 检查是否是跳过的情况
                 was_skipped = getattr(self, "was_skipped", None)  # type: ignore[attr-defined]
                 if callable(was_skipped) and was_skipped():
-                    skip_reason = getattr(self, "_skip_reason", None)
+                    skip_reason = self.get_skip_reason()
                     result = TaskResult.skip(
                         reason=skip_reason or "未知原因", iterations=iteration
                     )
+                elif getattr(self, "is_failed", lambda: False)():
+                    result = TaskResult.fail(
+                        error=self.get_error() or "任务执行失败",
+                        iterations=iteration,
+                    )
                 else:
-                    complete_reason = getattr(self, "_complete_reason", None)
+                    complete_reason = self.get_complete_reason()
                     preserve_last_completed_at = (
                         self.should_preserve_last_completed_at()
                     )
