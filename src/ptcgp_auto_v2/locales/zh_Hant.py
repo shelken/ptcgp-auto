@@ -19,8 +19,12 @@ TEXT_PATTERNS = {
     "pack_list_exclude": ["開封", "開封10包"],
     "open_pack": ["開封"],
     "open_pack_exclude": ["橫向滑動來開封"],
+    "open_pack_1": ["開封1包"],
+    "open_pack_10": ["開封10包"],
+    "use_item_confirm": ["要使用道具"],
     "pack_opening_select": ["點擊想開封的擴充包"],
     "pack_opening_swipe": ["橫向滑動來開封"],
+    "pack_opening_multi_result": ["第1包"],
     "pack_opening_result": ["開封結果", "開包點數", "閃亮沙子"],
     "pack_card_register": ["向上輕滑卡牌"],
     "profile_page": ["朋友ID"],
@@ -140,7 +144,6 @@ TEXT_PATTERNS = {
     "back_button": ["返回", "返回上一頁", "返回上一页", "Back"],
     "close_button": ["×"],
     "long_press": ["長按", "長按以跳過", "長按開封"],
-    "open_pack_1": ["開封1包"],
     # ============================================================
     # 任务奖励领取相关
     # ============================================================

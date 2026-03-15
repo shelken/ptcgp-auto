@@ -25,6 +25,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.db.models import PackRecordType
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.pack_opening_task_base import (
     PackOpeningTaskBase,
@@ -239,7 +240,7 @@ class InitAccountTask(PackOpeningTaskBase):
 
     def get_pack_record_type(self) -> str:
         """返回 pack 记录类型：教程初始包"""
-        return "init_tutorial"
+        return PackRecordType.INIT_TUTORIAL
 
     def get_rare_card_notify_message(self) -> str:
         """返回稀有卡通知消息：新手初始化"""

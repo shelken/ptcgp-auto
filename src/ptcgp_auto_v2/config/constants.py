@@ -126,8 +126,8 @@ SCALE_BATTLE_HOURGLASS = 0.85
 
 
 # ========== YOLO + 感知哈希识别配置 ==========
-# YOLO检测置信度阈值（来自 test_massive_matching.py 实测验证）
-YOLO_OBB_THRESHOLD = 0.55
+# YOLO检测置信度阈值（提高到 0.75，减少低置信度检测误入）
+YOLO_OBB_THRESHOLD = 0.75
 # Hash匹配相似度阈值（来自 test_massive_matching.py 实测验证）
 HASH_SIMILARITY_THRESHOLD = 0.75
 # Hash匹配相似度最小差距（用于排除相近候选，低于此值拒绝模糊匹配）
