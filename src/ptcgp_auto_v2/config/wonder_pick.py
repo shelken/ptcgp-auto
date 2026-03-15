@@ -3,18 +3,16 @@
 得卡挑战配置
 """
 
-# 稀有度优先级（高 -> 低）
+# 稀有度优先级（高 -> 低）- 独立定义，业务特定
 WONDER_PICK_RARITY_PRIORITY = ["SAR", "SR", "AR", "RR", "R", "U", "C"]
 
-# 稀有度对应挑战力消耗
+# 稀有度对应挑战力消耗 - 从 RARITY_META 获取（单一数据源）
+from ptcgp_auto_v2.config.rarity_icons import RARITY_META
+
 WONDER_PICK_RARITY_COSTS = {
-    "C": 1,
-    "U": 1,
-    "R": 2,
-    "RR": 3,
-    "AR": 3,
-    "SR": 4,
-    "SAR": 4,
+    code: meta["wonder_pick_cost"]
+    for code, meta in RARITY_META.items()
+    if "wonder_pick_cost" in meta
 }
 
 # 选卡位置索引 -> 可点击位置索引列表

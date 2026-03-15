@@ -237,7 +237,7 @@
                 </div>
 
                 <form id="filter-form"
-                      hx-get="/api/records?page=0&lang={{ current_lang }}"
+                      hx-get="/api/records?page=0"
                       hx-target="#records-container"
                       hx-swap="innerHTML"
                       class="space-y-4"
@@ -251,7 +251,7 @@
                             {% for r in rarities %}
                             <div>
                                 <input type="checkbox" id="rarity-{{ r }}" name="rarity" value="{{ r }}" class="sr-only filter-checkbox"
-                                       hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
+                                       hx-get="/api/records?page=0" hx-target="#records-container" hx-include="#filter-form">
                                 <label for="rarity-{{ r }}" class="filter-label brutal-btn">{{ t['rarity_' + r] or r }}</label>
                             </div>
                             {% endfor %}
@@ -265,7 +265,7 @@
                             {% for type in card_types %}
                             <div>
                                 <input type="checkbox" id="type-{{ type }}" name="card_type" value="{{ type }}" class="sr-only filter-checkbox"
-                                       hx-get="/api/records?page=0&lang={{ current_lang }}" hx-target="#records-container" hx-include="#filter-form">
+                                       hx-get="/api/records?page=0" hx-target="#records-container" hx-include="#filter-form">
                                 <label for="type-{{ type }}" class="filter-label brutal-btn uppercase">{{ t['type_' + type] or type }}</label>
                             </div>
                             {% endfor %}
@@ -284,8 +284,8 @@
                  class="space-y-12"
                  aria-live="polite"
                  data-loaded="false"
-                 data-url="/api/records?page=0&lang={{ current_lang }}"
-                 data-base-url="/api/records?page=0&lang={{ current_lang }}"
+                 data-url="/api/records?page=0"
+                 data-base-url="/api/records?page=0"
                  data-auto-refresh="/api/records"
                  data-refresh-include="#filter-form"
                  data-relative-locale="{{ current_lang }}"
@@ -814,6 +814,6 @@
     </footer>
 
     <!-- Custom JS -->
-    <script type="module" src="/static/js/main.js?v=5.16"></script>
+    <script type="module" src="/static/js/main.js?v=5.18"></script>
 </body>
 </html>
