@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional, cast
 
@@ -47,7 +46,6 @@ from ptcgp_auto_v2.utils.account_cooldown import (
     is_account_past_days,
     is_account_pending_same_day_cooldown,
 )
-from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
     scroll_points,
@@ -62,57 +60,12 @@ from ptcgp_auto_v2.utils.gesture import (
 
 logger = logging.getLogger(__name__)
 
+# 交换等待窗口秒数：送出提议后最多等待 5 分钟。
 EXCHANGE_WINDOW_SECONDS = 300
 
 
-@dataclass
-class ExchangeRuntimeState:
-    """任务运行态。"""
-
-    current_request: Optional[ExchangeCardRequest] = None
-    completed: bool = False
-    complete_reason: Optional[str] = None
-    recover_before_send: bool = False
-
-
-@dataclass
-class ExchangeCardState:
-    """目标卡牌状态。"""
-
-    name: Optional[str] = None
-    set_code: Optional[str] = None
-    number: Optional[int] = None
-
-
-@dataclass
-class ExchangeTaskContext:
-    """交换任务上下文。"""
-
-    runtime: ExchangeRuntimeState = field(default_factory=ExchangeRuntimeState)
-    card: ExchangeCardState = field(default_factory=ExchangeCardState)
-    friend_flow: FriendSelectionFlow = field(default_factory=FriendSelectionFlow)
-
-    def reset(self):
-        """重置任务上下文。"""
-        self.runtime = ExchangeRuntimeState()
-        self.card = ExchangeCardState()
-        self.friend_flow = FriendSelectionFlow()
-
-
 def _build_exchange_pages() -> list[dict]:
-    """构建交换任务页面识别规则。
-
-    页面流转顺序（priority 越小越先匹配）：
-
-    sending 流程：
-      主页(10/20) → 社群(30) → 交换主页(40) → 选择好友(50) → 好友详情(55) →
-      选卡(60) → 筛选(65) → 确认页(70) → 发送弹窗(75) → 仅剩弹窗(76) → 提议完成(77)
-
-    sended 流程：
-      主页(10/20) → 社群(30) → 交换主页sended(41) → 点击確認 →
-        对方已送：receive_confirm(81) → receive_start(82)
-        对方未送：waiting_page(80) → cancel_confirm(83) → canceled_done(84)
-    """
+    """构建交换任务页面识别规则。"""
     return [
         # 開放條件 / 距離開放還剩
         {
@@ -163,7 +116,6 @@ def _build_exchange_pages() -> list[dict]:
             "match_all": True,
             "priority": 7,
         },
-        # ===== 通用入口页面 =====
         # 社群图标
         {
             "name": "home_with_community_icon",
@@ -184,7 +136,6 @@ def _build_exchange_pages() -> list[dict]:
             "match_all": True,
             "priority": 30,
         },
-        # ===== sending 流程 =====
         # 紀錄
         {
             "name": "exchange_page_main",
@@ -225,7 +176,6 @@ def _build_exchange_pages() -> list[dict]:
             "identifiers": get_text_patterns("exchange_target_confirm_page"),
             "priority": 70,
         },
-        # ===== sended 流程 =====
         # 正在等待對方回應
         {
             "name": "exchange_waiting_page",
@@ -256,7 +206,6 @@ class ExchangeCardsTask(StatefulTask):
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
-        self._ctx = ExchangeTaskContext()
         self._request_repo = ExchangeCardRequestRepository()
         self._account_card_repo = AccountCardRepository()
         self._card_repo = CardRepository()
@@ -271,28 +220,38 @@ class ExchangeCardsTask(StatefulTask):
         self._filter_state = FilterPanelState()
         self._friend_helper: Optional[FriendSelectionHelper] = None
 
+    def _req(self) -> Optional[ExchangeCardRequest]:
+        """获取当前请求。"""
+        return cast(Optional[ExchangeCardRequest], self.state_get("request"))
+
+    def _friend_flow(self) -> FriendSelectionFlow:
+        """获取好友选择流程状态。"""
+        return cast(FriendSelectionFlow, self.state_get("friend_flow"))
+
+    def _done(self, reason: str = "", skip: bool = False):
+        """按原语义收敛任务。"""
+        if skip:
+            self.skip(reason)
+        else:
+            self.complete(reason)
+
     def on_start(self):
         """加载请求并执行前置校验。"""
         self.state.reset()
-        self._ctx.reset()
         self._card_stable_rounds = 0
         self._last_card_signature = None
         self._filter_state = FilterPanelState()
-        self.state_set("filter_action_cache", {})
 
         if self.account.id is None:
             self.mark_completed_without_timestamp("账号ID为空")
-            self._ctx.runtime.completed = True
-            self._ctx.runtime.complete_reason = "账号ID为空"
+            self._done("账号ID为空")
             return
 
         request = self._request_repo.get_active_by_account(self.account.id)
         if request is None:
             self.mark_completed_without_timestamp("无活跃交换请求")
-            self._ctx.runtime.completed = True
-            self._ctx.runtime.complete_reason = "无活跃交换请求"
+            self._done("无活跃交换请求")
             return
-        self._ctx.runtime.current_request = request
 
         now = datetime.now()
         if request.expire_at and now >= request.expire_at:
@@ -301,79 +260,89 @@ class ExchangeCardsTask(StatefulTask):
                     request, reason="交换请求已过期（未送出）"
                 )
                 self.mark_completed_without_timestamp("交换请求已过期（未送出）")
-                self._ctx.runtime.completed = True
-                self._ctx.runtime.complete_reason = "交换请求已过期（未送出）"
+                self._done("交换请求已过期（未送出）")
                 return
             if request.status == "sended" and not request.cancel_reason:
                 request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
                 request.updated_at = now
                 self._request_repo.update(request)
 
-        cancel_reason = getattr(request, "cancel_reason", None)
-        if cancel_reason:
+        if request.cancel_reason:
             logger.debug(
-                "on_start 检测到取消意图: request_id=%s, status=%s, reason=%s",
+                "on_start 检测到取消意图: request_id=%s, status=%s",
                 request.id,
                 request.status,
-                cancel_reason,
             )
 
         if not is_account_past_days(self.account.created_at, 14):
             if is_account_pending_same_day_cooldown(self.account.created_at, 14):
-                self.skip("账号未过14天冷冻期（同日待到期）")
-                self._ctx.runtime.completed = True
-                self._ctx.runtime.complete_reason = "账号未过14天冷冻期（同日待到期）"
-                return
-            self._fail_request("账号未过14天冷静期", preserve_last_completed_at=True)
-            return
+                return self._done("账号未过14天冷冻期（同日待到期）", skip=True)
+            return self._fail("账号未过14天冷静期", preserve_last_completed_at=True)
 
         if request.status == "sending":
             account_card = self._account_card_repo.get(
                 self.account.id, request.target_card_id
             )
             if account_card is None or account_card.count < 1:
-                self._fail_request("目标卡牌库存不足", preserve_last_completed_at=True)
-                return
-
-        request_nickname = getattr(request, "to_nickname", None)
-        if request_nickname:
-            self._ctx.friend_flow.nickname = request_nickname
-        else:
-            friendship = FriendshipRepository().get_friendship(
-                account_id=self.account.id,
-                friend_id=request.to_friend_id,
-            )
-            if friendship and friendship.friend_nickname:
-                self._ctx.friend_flow.nickname = friendship.friend_nickname
-                logger.info(
-                    "从好友关系读取昵称: %s -> %s",
-                    request.to_friend_id,
-                    friendship.friend_nickname,
-                )
+                return self._fail("目标卡牌库存不足", preserve_last_completed_at=True)
 
         card = self._card_repo.get_by_id(request.target_card_id)
-        if card is not None:
-            self._ctx.card.name = resolve_card_name(
-                self._card_repo,
-                card.set_code,
-                card.number,
+        rarity_code = (request.target_card_rarity or "").upper()
+
+        if request.status not in {"sending", "sended"}:
+            return self._fail(
+                f"请求状态非法: {request.status}", preserve_last_completed_at=True
             )
-            self._ctx.card.set_code = card.set_code
-            self._ctx.card.number = card.number
+        if not ExchangeCardService.is_exchangeable(rarity_code):
+            return self._fail("目标稀有度不可交换", preserve_last_completed_at=True)
+        if ExchangeCardService.get_required_exchange_points(rarity_code) is None:
+            return self._fail(
+                f"不支持的目标稀有度: {rarity_code}", preserve_last_completed_at=True
+            )
+        if card is None:
+            return self._fail(
+                "目标卡牌不存在，无法执行交换", preserve_last_completed_at=True
+            )
+        if request.status == "sending" and not card.name:
+            return self._fail(
+                "目标卡牌名称缺失，无法在确认页核验", preserve_last_completed_at=True
+            )
+
+        nickname = getattr(request, "to_nickname", None)
+        if not nickname:
+            friendship = FriendshipRepository().get_friendship(
+                self.account.id, request.to_friend_id
+            )
+            if friendship and friendship.friend_nickname:
+                nickname = friendship.friend_nickname
+                logger.info(
+                    "从好友关系读取昵称: %s -> %s", request.to_friend_id, nickname
+                )
+
+        self.state_update(
+            {
+                "request": request,
+                "recover": False,
+                "card_set_code": card.set_code,
+                "card_number": card.number,
+                "friend_nickname": nickname,
+                "friend_flow": FriendSelectionFlow(nickname=nickname),
+                "filter_action_cache": {},
+            }
+        )
 
         self._init_friend_helper()
-        self._preflight_validate()
 
     def _init_friend_helper(self):
         """初始化好友选择辅助类。"""
-        request = self._ctx.runtime.current_request
+        request = self._req()
         if request is None:
             return
 
         self._friend_helper = FriendSelectionHelper(
             adb=self.adb,
             page_detector=self.page_detector,
-            flow=self._ctx.friend_flow,
+            flow=self._friend_flow(),
             target_friend_id=request.to_friend_id or "",
             profile_page_name="profile_page",
             send_text_patterns=get_text_patterns("exchange_send_button"),
@@ -383,16 +352,17 @@ class ExchangeCardsTask(StatefulTask):
         )
 
     def _on_nickname_found(self, account_id: int, friend_id: str, nickname: str):
-        """发现 nickname 回调：持久化到好友关系。"""
+        """发现 nickname 回调：持久化并同步运行态。"""
         FriendshipRepository().update_nickname(
             account_id=account_id,
             friend_id=friend_id,
             nickname=nickname,
         )
+        self.state_set("friend_nickname", nickname)
 
     def _on_scroll_exhausted(self, reason: str) -> ActionResult:
         """滑动耗尽回调：删除好友关系后失败。"""
-        request = self._ctx.runtime.current_request
+        request = self._req()
         if request and self.account.id and request.to_friend_id:
             FriendshipRepository().delete(self.account.id, request.to_friend_id)
             logger.info(
@@ -400,619 +370,457 @@ class ExchangeCardsTask(StatefulTask):
                 self.account.id,
                 request.to_friend_id,
             )
-        return self._fail_and_complete(reason)
-
-    def _preflight_validate(self):
-        """任务启动时统一执行前置校验。"""
-        if self._ctx.runtime.current_request is None:
-            return
-
-        request = self._ctx.runtime.current_request
-        rarity_code = (request.target_card_rarity or "").upper()
-
-        if request.status not in {"sending", "sended"}:
-            self._fail_request(
-                f"请求状态非法: {request.status}",
-                preserve_last_completed_at=True,
-            )
-            return
-
-        if not ExchangeCardService.is_exchangeable(rarity_code):
-            self._fail_request("目标稀有度不可交换", preserve_last_completed_at=True)
-            return
-
-        if ExchangeCardService.get_required_exchange_points(rarity_code) is None:
-            self._fail_request(
-                f"不支持的目标稀有度: {rarity_code}",
-                preserve_last_completed_at=True,
-            )
-            return
-
-        if not self._ctx.card.set_code or self._ctx.card.number is None:
-            self._fail_request(
-                "目标卡牌不存在，无法执行交换",
-                preserve_last_completed_at=True,
-            )
-            return
-
-        if request.status == "sending" and not self._ctx.card.name:
-            self._fail_request(
-                "目标卡牌名称缺失，无法在确认页核验",
-                preserve_last_completed_at=True,
-            )
-            return
+        return self._fail(reason)
 
     def get_pre_hooks(self) -> list:
         """前置 Hook：确保好友关系。"""
-        if self._ctx.runtime.completed or self._ctx.runtime.current_request is None:
+        request = self._req()
+        if self.is_completed() or request is None:
             return []
-        target_friend_id = (
-            self._ctx.runtime.current_request.to_friend_id or ""
-        ).strip()
+        target_friend_id = (request.to_friend_id or "").strip()
         if not target_friend_id:
             return []
         return [
             FriendPreHook(
                 target_friend_id=target_friend_id,
-                target_account_id=self._ctx.runtime.current_request.to_account_id,
-                target_nickname=self._ctx.friend_flow.nickname,
+                target_account_id=request.to_account_id,
+                target_nickname=cast(Optional[str], self.state_get("friend_nickname")),
             )
         ]
 
     def get_post_hooks(self) -> list:
-        """后置 Hook：支持延时复查。"""
+        """返回交换任务后置 Hook。"""
         return [ExchangeDelayPostHook()]
 
     def is_completed(self) -> bool:
-        """任务是否收敛。"""
-        return self._ctx.runtime.completed
+        """判断任务是否已收敛。"""
+        return super().is_completed()
 
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """按页面分发处理（页面优先，状态判断下沉到各 handler）。"""
-        if self._ctx.runtime.current_request is None:
-            self._ctx.runtime.completed = True
+        """补充恢复状态切换后交给基类纯分发。"""
+        request = self._req()
+        if request is None:
+            self._done()
             return ActionResult.ok(wait=0.2)
 
-        # 恢复重发流程：只有离开“取消完成”页面后才清除恢复标记。
         if (
-            self._ctx.runtime.recover_before_send
-            and self.is_action_done("recover_cancel_done_clicked")
+            self.state_get("recover")
+            and self.is_action_done("recover_clicked")
             and page_name != "exchange_canceled_done_popup"
         ):
-            self._ctx.runtime.recover_before_send = False
+            self.state_set("recover", False)
             logger.info("已退出取消完成页面，进入重发流程")
+
         return super().handle_page(page_name, page_info)
 
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
+        """未映射页面统一等待。"""
         return ActionResult.wait(0.6)
 
-    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
-        return self._handle_home(page_info)
-
-    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
-        return self._handle_home(page_info)
-
-    def _handle_community_page(self, page_info: dict) -> ActionResult:
-        return self._handle_community(page_info)
-
-    def _handle_exchange_choose_friend(self, page_info: dict) -> ActionResult:
-        return self._handle_choose_friend(page_info)
-
-    def _handle_exchange_select_card(self, page_info: dict) -> ActionResult:
-        return self._handle_select_card(page_info)
-
-    def _handle_exchange_filter_modal(self, page_info: dict) -> ActionResult:
-        return self._handle_filter_modal(page_info)
-
-    def _handle_exchange_confirm_send_popup(self, page_info: dict) -> ActionResult:
-        return self._tap_ok_popup(page_info)
-
-    def _handle_exchange_confirm_last_popup(self, page_info: dict) -> ActionResult:
-        return self._tap_ok_popup(page_info)
-
-    def _handle_exchange_cancel_confirm_popup(self, page_info: dict) -> ActionResult:
-        return self._tap_ok_popup(page_info)
-
     def _handle_home(self, page_info: dict) -> ActionResult:
-        """主页进入社群。"""
+        """主页点击社群入口。"""
         return tap_community_icon(self.adb, self.page_detector)
 
-    def _handle_community(self, page_info: dict) -> ActionResult:
+    _handle_home_with_community_icon = _handle_home
+    _handle_game_home_main = _handle_home
+
+    def _handle_community_page(self, page_info: dict) -> ActionResult:
         """社群页面进入交换入口。"""
-        ocr_results = page_info.get("ocr_results", [])
         result = tap_text_exact(
             self.adb,
-            ocr_results,
+            page_info.get("ocr_results", []),
             get_text_patterns("community_exchange_btn"),
             wait=5,
         )
-        return result if result else ActionResult.wait(3)
+        return result or ActionResult.wait(3)
 
     def _handle_exchange_page_main(self, page_info: dict) -> ActionResult:
         """交换主页：sending 点击交换，sended 优先点确认，其次点交换进入详情。"""
-        if self._ctx.runtime.current_request is None:
+        request = self._req()
+        if request is None:
             return ActionResult.wait(0.6)
-        ocr_results = page_info.get("ocr_results", [])
-        request = self._ctx.runtime.current_request
+
+        ocr = page_info.get("ocr_results", [])
         has_confirm = is_text_visible(
-            ocr_results, get_text_patterns("exchange_confirm_button"), exact=False
+            ocr, get_text_patterns("exchange_confirm_button"), exact=False
         )
         has_waiting = is_text_visible(
-            ocr_results, get_text_patterns("exchange_waiting_page"), exact=False
+            ocr, get_text_patterns("exchange_waiting_page"), exact=False
         )
 
         if request.status == "sending" and (has_confirm or has_waiting):
-            self._ctx.runtime.recover_before_send = True
+            self.state_set("recover", True)
             logger.info("sending 阶段检测到已有提议，先走取消链路再重发")
             if has_confirm:
-                confirm_result = tap_text_exact(
+                return tap_text_exact(
                     self.adb,
-                    ocr_results,
+                    ocr,
                     get_text_patterns("exchange_confirm_button"),
                     wait=0.8,
-                )
-                return confirm_result if confirm_result else ActionResult.wait(0.6)
+                ) or ActionResult.wait(0.6)
             return ActionResult.wait(0.8)
 
         if request.status == "sending":
-            result = self._tap_exchange_main_button(ocr_results)
-            return result if result else ActionResult.wait(0.6)
+            return tap_text_exact(
+                self.adb,
+                ocr,
+                get_text_patterns("exchange_send_button"),
+                wait=0.8,
+                pick="last",
+            ) or ActionResult.wait(0.6)
 
         if request.status == "sended":
             if has_confirm:
-                result = tap_text_exact(
+                return tap_text_exact(
                     self.adb,
-                    ocr_results,
+                    ocr,
                     get_text_patterns("exchange_confirm_button"),
                     wait=0.8,
-                )
-                return result if result else ActionResult.wait(0.6)
-
-            open_result = self._tap_exchange_main_button(ocr_results)
-            if open_result:
-                return open_result
-
-            logger.debug("sended 状态暂未识别到入口，等待后重试（避免过早OCR误判）")
+                ) or ActionResult.wait(0.6)
+            result = tap_text_exact(
+                self.adb,
+                ocr,
+                get_text_patterns("exchange_send_button"),
+                wait=0.8,
+                pick="last",
+            )
+            if result:
+                return result
+            logger.debug("sended 状态暂未识别到入口，等待后重试")
             return ActionResult.wait(1.0)
 
-        logger.warning("请求状态不可处理: %s", request.status)
         return ActionResult.wait(0.6)
 
-    def _tap_exchange_main_button(
-        self, ocr_results: list[dict]
-    ) -> Optional[ActionResult]:
-        """交换主页点击最后一个交换文案，避开页头标题。"""
-        return tap_text_exact(
-            self.adb,
-            ocr_results,
-            get_text_patterns("exchange_send_button"),
-            wait=0.8,
-            pick="last",
-        )
-
-    def _handle_choose_friend(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_choose_friend(self, page_info: dict) -> ActionResult:
         """请选择朋友页面：先核验 friend_id，再点击对应交换。"""
-        if self._friend_helper is None or self._ctx.runtime.current_request is None:
+        request = self._req()
+        if self._friend_helper is None or request is None:
             return ActionResult.wait(0.6)
 
-        ocr_results = page_info.get("ocr_results", [])
+        ocr = page_info.get("ocr_results", [])
+        friend_flow = self._friend_flow()
 
         if is_text_visible(
-            ocr_results,
-            get_text_patterns("gift_choose_friend_empty"),
-            exact=False,
+            ocr, get_text_patterns("gift_choose_friend_empty"), exact=False
         ):
-            return self._fail_and_complete("好友列表为空，无法执行交换")
+            return self._fail("好友列表为空，无法执行交换")
 
-        if self._ctx.friend_flow.friend_verified:
-            logger.debug("[选择好友] 已验证，寻找发送按钮")
-            send_box = self._friend_helper.find_send_box_by_anchor(ocr_results)
+        if friend_flow.friend_verified:
+            send_box = self._friend_helper.find_send_box_by_anchor(ocr)
             if send_box:
                 return tap_box(self.adb, send_box, wait=1.0)
-            in_progress_box = self._friend_helper.find_box_by_anchor(
-                ocr_results,
-                get_text_patterns("exchange_in_progress"),
-            )
-            if in_progress_box:
-                return self._fail_and_complete("目标好友正在交换中，无法发起交换")
+            if self._friend_helper.find_box_by_anchor(
+                ocr, get_text_patterns("exchange_in_progress")
+            ):
+                return self._fail("目标好友正在交换中，无法发起交换")
             return self._friend_helper.scroll_or_fail()
 
-        if self._ctx.friend_flow.nickname:
-            logger.debug(
-                "[选择好友] 有昵称，寻找对应 plus: %s", self._ctx.friend_flow.nickname
-            )
-            plus_box = self._friend_helper.find_plus_for_nickname(
-                ocr_results, self._ctx.friend_flow.nickname
-            )
+        nickname = cast(Optional[str], self.state_get("friend_nickname"))
+        if nickname:
+            plus_box = self._friend_helper.find_plus_for_nickname(ocr, nickname)
             if plus_box:
                 return self._friend_helper.tap_plus_and_wait_profile(plus_box)
             return self._friend_helper.scroll_or_fail()
 
-        if self._ctx.friend_flow.is_in_probe_mode():
+        if friend_flow.is_in_probe_mode():
             if self._friend_helper.check_scroll_bottom():
-                return self._fail_and_complete("已滑到底部，未找到目标好友")
-            logger.debug(
-                "[选择好友] 探测模式，当前 probe_index=%d, probe_boxes=%d",
-                self._ctx.friend_flow.probe_index,
-                len(self._ctx.friend_flow.probe_boxes),
-            )
+                return self._fail("已滑到底部，未找到目标好友")
             probe_box = self._friend_helper.get_next_probe_box()
             if probe_box:
                 return self._friend_helper.tap_plus_and_wait_profile(probe_box)
-            logger.debug("[选择好友] 本页探测完成，准备滑动")
-            self._ctx.friend_flow.stable_rounds = 0
+            friend_flow.stable_rounds = 0
             return self._friend_helper.scroll_or_fail()
 
         return self._friend_helper.scroll_or_fail()
 
-    def _handle_select_card(self, page_info: dict) -> ActionResult:
+    def _handle_exchange_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：筛选稀有度，扫描目标卡并点击。"""
-        if self._ctx.runtime.current_request is None:
+        if self._req() is None:
             return ActionResult.wait(0.6)
-        ocr_results = page_info.get("ocr_results", [])
 
-        if self.is_action_done("target_card_tapped"):
+        ocr = page_info.get("ocr_results", [])
+
+        if self.is_action_done("card_tapped"):
             if is_text_visible(
-                ocr_results,
-                get_text_patterns("exchange_insufficient_points"),
-                exact=False,
+                ocr, get_text_patterns("exchange_insufficient_points"), exact=False
             ):
-                return self._fail_and_complete("点击目标卡后检测到交换点数不足")
-            logger.info("点击卡牌后点击 OK")
-            ok_result = tap_ok(self.adb, ocr_results, wait=1.0)
-            return ok_result if ok_result else ActionResult.wait(0.5)
+                return self._fail("点击目标卡后检测到交换点数不足")
+            return tap_ok(self.adb, ocr, wait=1.0) or ActionResult.wait(0.5)
 
-        if not self.is_action_done("open_filter_clicked"):
-            tap_result = tap_template(
-                self.adb, self.page_detector, "icon_search", wait=1.0
-            )
-            if tap_result:
-                self.mark_action_done("open_filter_clicked")
-                return tap_result
+        if not self.is_action_done("filter_opened"):
+            result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
+            if result:
+                self.mark_action_done("filter_opened")
+                return result
 
         if not self.is_action_done("filter_applied"):
             return ActionResult.wait(0.6)
 
-        detected = self._card_recognizer.scan(
-            set_code=self._ctx.card.set_code,
-        )
-        tap_result = self._tap_target_card_by_scan(detected)
+        set_code = cast(Optional[str], self.state_get("card_set_code"))
+        detected = self._card_recognizer.scan(set_code=set_code)
+        tap_result = self._tap_target_card(detected)
         if tap_result:
             self._card_stable_rounds = 0
             self._last_card_signature = None
-            self.mark_action_done("target_card_tapped")
-            logger.info(
-                "点击目标卡牌: set_code=%s, number=%s",
-                self._ctx.card.set_code,
-                self._ctx.card.number,
-            )
+            self.mark_action_done("card_tapped")
+            logger.info("点击目标卡牌: set_code=%s", set_code)
             return tap_result
 
-        card_signature = build_detect_signature(detected)
-        if card_signature == self._last_card_signature:
+        sig = build_detect_signature(detected)
+        if sig == self._last_card_signature:
             self._card_stable_rounds += 1
         else:
             self._card_stable_rounds = 0
-            self._last_card_signature = card_signature
+            self._last_card_signature = sig
 
         if self._card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
-            return self._fail_and_complete("连续三次扫描未找到目标卡牌")
+            return self._fail("连续三次扫描未找到目标卡牌")
 
         start, end = scroll_points(
-            self.adb,
-            base_distance_y=BASE_CARD_SCROLL_DISTANCE_Y,
-            direction="up",
+            self.adb, base_distance_y=BASE_CARD_SCROLL_DISTANCE_Y, direction="up"
         )
         swipe(self.adb, start, end, wait=0.8)
         return ActionResult.ok(wait=0.6)
 
-    def _handle_filter_modal(self, page_info: dict) -> ActionResult:
-        """筛选弹窗：按目标稀有度执行完整筛选流程。"""
-        if self._ctx.runtime.current_request is None:
+    def _handle_exchange_filter_modal(self, page_info: dict) -> ActionResult:
+        """筛选弹窗按目标稀有度执行筛选。"""
+        request = self._req()
+        if request is None:
             return ActionResult.wait(0.6)
 
-        rarity_code = (
-            self._ctx.runtime.current_request.target_card_rarity or ""
-        ).upper()
-        rarity_codes = [rarity_code] if rarity_code else []
-
+        rarity_code = (request.target_card_rarity or "").upper()
         result = handle_filter_panel(
             adb=self.adb,
             page_detector=self.page_detector,
             icon_detector=self._icon_detector,
             page_info=page_info,
-            rarity_codes=rarity_codes,
+            rarity_codes=[rarity_code] if rarity_code else [],
             state=self._filter_state,
             action_cache=cast(
-                dict[str, bool],
-                self.state_get("filter_action_cache", {}),
+                dict[str, bool], self.state_get("filter_action_cache", {})
             ),
         )
 
-        if self.is_action_done("filter_selected") and self.is_action_done(
+        filter_action_cache = cast(
+            dict[str, bool], self.state_get("filter_action_cache", {})
+        )
+        if filter_action_cache.get("filter_selected") and filter_action_cache.get(
             "filter_ok_scrolled"
         ):
             self.mark_action_done("filter_applied")
-
         return result
 
     def _handle_exchange_target_confirm_page(self, page_info: dict) -> ActionResult:
-        """送卡确认页面：校验目标昵称后点击 OK。"""
-        if self._ctx.runtime.current_request is None:
-            return ActionResult.wait(0.6)
-        ocr_results = page_info.get("ocr_results", [])
+        """确认页校验好友昵称和目标卡牌后点击确认。"""
+        ocr = page_info.get("ocr_results", [])
+        nickname = cast(Optional[str], self.state_get("friend_nickname"))
+        set_code = cast(Optional[str], self.state_get("card_set_code"))
+        number = cast(Optional[int], self.state_get("card_number"))
 
-        if self._ctx.friend_flow.nickname and not is_text_visible(
-            ocr_results,
-            [self._ctx.friend_flow.nickname],
-            exact=False,
-        ):
-            return self._fail_and_complete("确认页目标昵称不匹配")
+        if nickname and not is_text_visible(ocr, [nickname], exact=False):
+            return self._fail("确认页目标昵称不匹配")
 
-        if self._ctx.card.set_code and self._ctx.card.number:
-            detected = self._card_recognizer.scan(
-                set_code=self._ctx.card.set_code,
-            )
+        if set_code and number is not None:
+            detected = self._card_recognizer.scan(set_code=set_code)
             candidates = [
                 item
                 for item in detected
-                if item.set_code == self._ctx.card.set_code
-                and item.card_number == self._ctx.card.number
+                if item.set_code == set_code and item.card_number == number
             ]
             if not candidates:
                 logger.warning(
-                    "确认页扫描未匹配到目标卡牌: set_code=%s, number=%s",
-                    self._ctx.card.set_code,
-                    self._ctx.card.number,
+                    "确认页扫描未匹配: set_code=%s, number=%s", set_code, number
                 )
-                return self._fail_and_complete("确认页卡牌不匹配")
+                return self._fail("确认页卡牌不匹配")
             logger.info(
-                "确认页扫描匹配到目标卡牌: set_code=%s, number=%s, similarity=%.2f",
-                self._ctx.card.set_code,
-                self._ctx.card.number,
+                "确认页扫描匹配: set_code=%s, number=%s, sim=%.2f",
+                set_code,
+                number,
                 candidates[0].similarity,
             )
 
-        result = tap_ok(self.adb, ocr_results, wait=0.8)
-        return result if result else ActionResult.wait(0.6)
-
-    def _tap_ok_popup(self, page_info: dict) -> ActionResult:
-        """通用弹窗：点击 OK。"""
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        return result if result else ActionResult.wait(0.6)
+        return tap_ok(self.adb, ocr, wait=0.8) or ActionResult.wait(0.6)
 
     def _handle_exchange_proposed_done_popup(self, page_info: dict) -> ActionResult:
-        """提议完成弹窗：确认后写入 sended，并在当前任务内进入等待窗口。"""
-        if self._ctx.runtime.current_request is None:
+        request = self._req()
+        if request is None:
             return ActionResult.wait(0.6)
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        if not result:
-            return ActionResult.wait(0.6)
+        result = tap_ok(
+            self.adb, page_info.get("ocr_results", []), wait=0.8
+        ) or ActionResult.wait(0.6)
+        if not result.success:
+            return result
 
-        self._ctx.runtime.current_request.expire_at = None
-        self._ctx.runtime.current_request.cancel_reason = None
-        self._request_repo.mark_sended(
-            self._ctx.runtime.current_request,
-            next_check_at=None,
-        )
-        logger.info("交换已送出，进入 5 分钟等待窗口内持续检查")
+        request.expire_at = None
+        request.cancel_reason = None
+        self._request_repo.mark_sended(request, next_check_at=None)
+        self.state_set("request", request)
+        logger.info("交换已送出，进入 5 分钟等待窗口")
         return ActionResult.ok(wait=1.0)
 
     def _handle_exchange_waiting_page(self, page_info: dict) -> ActionResult:
-        """等待对方回应页面：窗口内持续轮询，超时后走取消链路。"""
-        if self._ctx.runtime.current_request is None:
+        request = self._req()
+        if request is None:
             return ActionResult.wait(0.6)
-        now = datetime.now()
 
-        request = self._ctx.runtime.current_request
+        now = datetime.now()
         cancel_reason = request.cancel_reason
-        cancel_mode = self._ctx.runtime.recover_before_send or bool(cancel_reason)
-        logger.debug(
-            "[waiting_page] cancel_mode=%s, recover=%s, cancel_reason=%s, action_done=%s",
-            cancel_mode,
-            self._ctx.runtime.recover_before_send,
-            cancel_reason,
-            self.is_action_done("waiting_cancel_clicked"),
-        )
+        recover = bool(self.state_get("recover"))
+        cancel_mode = recover or bool(cancel_reason)
+
         if cancel_mode:
             if not self.is_action_done("waiting_cancel_clicked"):
-                cancel_result = tap_text_exact(
+                result = tap_text_exact(
                     self.adb,
                     page_info.get("ocr_results", []),
                     get_text_patterns("exchange_cancel_button"),
                     wait=0.8,
                 )
-                logger.info("[waiting_page] 点击取消结果: %s", bool(cancel_result))
-                if cancel_result:
+                if result:
                     self.mark_action_done("waiting_cancel_clicked")
-                    return cancel_result
-                else:
-                    logger.warning("[waiting_page] 取消模式但点击失败，继续等待")
+                    return result
             return ActionResult.wait(0.6)
 
-        if not self.is_action_done("waiting_window_started"):
+        if not self.is_action_done("window_started"):
             request.expire_at = now + timedelta(seconds=EXCHANGE_WINDOW_SECONDS)
             request.updated_at = now
             self._request_repo.update(request)
-            self.mark_action_done("waiting_window_started")
-            logger.info(
-                "进入等待页，启动5分钟交换窗口: request_id=%s, expire_at=%s",
-                request.id,
-                request.expire_at,
-            )
+            self.mark_action_done("window_started")
+            logger.info("进入等待页，启动5分钟交换窗口: request_id=%s", request.id)
 
-        if (
-            not cancel_reason
-            and request.expire_at is not None
-            and now >= request.expire_at
-        ):
+        if not cancel_reason and request.expire_at and now >= request.expire_at:
             request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
             request.updated_at = now
             self._request_repo.update(request)
-            cancel_reason = request.cancel_reason
-            logger.info("等待窗口超时，开始取消交换: request_id=%s", request.id)
+            logger.info("等待窗口超时: request_id=%s", request.id)
 
-        if cancel_reason:
+        if request.cancel_reason:
             return ActionResult.wait(0.6)
 
-        refresh_result = tap_template(
-            self.adb, self.page_detector, "btn_close", wait=0.8
-        )
-        if refresh_result:
-            logger.info("等待窗口轮询：返回交换主页后重新点击确认刷新状态")
-            return refresh_result
-        return ActionResult.wait(1.0)
+        result = tap_template(self.adb, self.page_detector, "btn_close", wait=0.8)
+        return result or ActionResult.wait(1.0)
 
     def _handle_exchange_receive_confirm_page(self, page_info: dict) -> ActionResult:
-        """对方已回应页面：确认交换或拒绝。"""
-        if self._ctx.runtime.current_request is None:
-            return ActionResult.wait(0.6)
-        ocr_results = page_info.get("ocr_results", [])
-
-        if self._ctx.runtime.current_request.cancel_reason:
-            logger.debug(
-                "确认页执行拒绝分支: request_id=%s, reason=%s",
-                self._ctx.runtime.current_request.id,
-                self._ctx.runtime.current_request.cancel_reason,
-            )
-            reject_result = tap_text_exact(
-                self.adb,
-                ocr_results,
-                get_text_patterns("exchange_reject_button"),
-                wait=0.8,
-            )
-            return reject_result if reject_result else ActionResult.wait(0.6)
-
-        exchange_result = tap_text_exact(
-            self.adb,
-            ocr_results,
-            get_text_patterns("exchange_send_button"),
-            wait=0.8,
-        )
-        return exchange_result if exchange_result else ActionResult.wait(0.6)
-
-    def _handle_exchange_receive_start_popup(self, page_info: dict) -> ActionResult:
-        """开始交换确认弹窗：点击 OK 后进入滑卡完成页。"""
-        if self._ctx.runtime.current_request is None:
-            return ActionResult.wait(0.6)
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        if not result:
-            return ActionResult.wait(0.6)
-        return ActionResult.ok(wait=0.8)
-
-    def _handle_exchange_swipe_page(self, page_info: dict) -> ActionResult:
-        """交换完成滑卡页：上滑后再落库 completed。"""
-        if self._ctx.runtime.current_request is None:
-            return ActionResult.wait(0.6)
-        if self.is_action_done("exchange_swiped"):
-            return ActionResult.ok(wait=0.5)
-
-        swipe_result = swipe_card_register(self.adb, wait=1.0)
-        if not swipe_result.success:
-            return swipe_result
-
-        self.mark_action_done("exchange_swiped")
-        self._finalize_exchange_success()
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = "交换完成"
-        return ActionResult.ok(wait=0.8)
-
-    def _finalize_exchange_success(self):
-        """交换成功后同步请求状态与发送方库存。"""
-        request = self._ctx.runtime.current_request
+        request = self._req()
         if request is None:
-            return
+            return ActionResult.wait(0.6)
 
-        self._request_repo.mark_completed(request)
-
-        if self.account.id is None:
-            return
-        card_id = request.target_card_id
-        if card_id is None:
-            return
-
-        row = self._account_card_repo.get(self.account.id, card_id)
-        if row is None:
-            return
-
-        new_count = max(int(row.count) - 1, 0)
-        self._account_card_repo.upsert(
-            account_id=self.account.id,
-            card_id=card_id,
-            count=new_count,
-            yolo_conf=getattr(row, "yolo_conf", None),
-            hash_similarity=getattr(row, "hash_similarity", None),
-        )
+        ocr = page_info.get("ocr_results", [])
+        if request.cancel_reason:
+            return tap_text_exact(
+                self.adb, ocr, get_text_patterns("exchange_reject_button"), wait=0.8
+            ) or ActionResult.wait(0.6)
+        return tap_text_exact(
+            self.adb, ocr, get_text_patterns("exchange_send_button"), wait=0.8
+        ) or ActionResult.wait(0.6)
 
     def _handle_exchange_canceled_done_popup(self, page_info: dict) -> ActionResult:
-        """取消完成弹窗：点击 OK 并落库 canceled。"""
-        if self._ctx.runtime.current_request is None:
-            return ActionResult.wait(0.6)
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        if not result:
+        """取消完成弹窗按恢复或结束分支收敛任务。"""
+        request = self._req()
+        if request is None:
             return ActionResult.wait(0.6)
 
-        if self._ctx.runtime.recover_before_send:
-            if not self.is_action_done("recover_cancel_done_clicked"):
-                self._ctx.runtime.current_request.cancel_reason = None
-                self._ctx.runtime.current_request.expire_at = None
-                self._ctx.runtime.current_request.next_check_at = None
-                self._ctx.runtime.current_request.updated_at = datetime.now()
-                self._request_repo.update(self._ctx.runtime.current_request)
-                self.mark_action_done("recover_cancel_done_clicked")
+        result = tap_ok(
+            self.adb, page_info.get("ocr_results", []), wait=0.8
+        ) or ActionResult.wait(0.6)
+        if not result.success:
+            return result
+
+        if self.state_get("recover"):
+            if not self.is_action_done("recover_clicked"):
+                request.cancel_reason = None
+                request.expire_at = None
+                request.next_check_at = None
+                request.updated_at = datetime.now()
+                self._request_repo.update(request)
+                self.state_set("request", request)
+                self.mark_action_done("recover_clicked")
                 logger.info("旧提议已取消，等待页面退出后继续重发")
-            else:
-                logger.info("取消完成页仍停留，继续点击 OK 等待退出")
             return ActionResult.ok(wait=1.0)
 
-        reason = self._ctx.runtime.current_request.cancel_reason or "交换已取消"
+        reason = request.cancel_reason or "交换已取消"
         if "超时" in reason:
-            self._request_repo.mark_failed(self._ctx.runtime.current_request, reason)
-            self._ctx.runtime.complete_reason = "交换超时失败"
+            self._request_repo.mark_failed(request, reason)
         else:
-            self._request_repo.mark_canceled(
-                self._ctx.runtime.current_request, reason=reason
-            )
-            self._ctx.runtime.complete_reason = "交换已取消"
-        self._ctx.runtime.completed = True
+            self._request_repo.mark_canceled(request, reason=reason)
+        self._done("交换超时失败" if "超时" in reason else "交换已取消")
         return result
 
     def _handle_exchange_locked_popup(self, page_info: dict) -> ActionResult:
-        """交换功能未解锁弹窗：点击 OK 并跳过。"""
-        result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        if not result:
-            return ActionResult.wait(0.6)
-        self.skip("交换功能未解锁（14天冷冻期未到）")
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = "交换功能未解锁（14天冷冻期未到）"
+        """交换未解锁弹窗点击确认并跳过任务。"""
+        result = tap_ok(
+            self.adb, page_info.get("ocr_results", []), wait=0.8
+        ) or ActionResult.wait(0.6)
+        if result.success:
+            self._done("交换功能未解锁（14天冷冻期未到）", skip=True)
         return result
 
-    def _fail_request(self, reason: str, preserve_last_completed_at: bool = False):
-        """将当前请求标记失败并结束任务。"""
-        if self._ctx.runtime.current_request is not None:
-            self._request_repo.mark_failed(self._ctx.runtime.current_request, reason)
+    def _handle_exchange_swipe_page(self, page_info: dict) -> ActionResult:
+        if self._req() is None:
+            return ActionResult.wait(0.6)
+        if self.is_action_done("swiped"):
+            return ActionResult.ok(wait=0.5)
+
+        result = swipe_card_register(self.adb, wait=1.0)
+        if not result.success:
+            return result
+
+        self.mark_action_done("swiped")
+        self._finalize_success()
+        self._done("交换完成")
+        return ActionResult.ok(wait=0.8)
+
+    def _tap_ok_popup(self, page_info: dict) -> ActionResult:
+        """通用确认弹窗点击 OK。"""
+        return tap_ok(
+            self.adb, page_info.get("ocr_results", []), wait=0.8
+        ) or ActionResult.wait(0.6)
+
+    _handle_exchange_confirm_send_popup = _tap_ok_popup
+    _handle_exchange_confirm_last_popup = _tap_ok_popup
+    _handle_exchange_cancel_confirm_popup = _tap_ok_popup
+    _handle_exchange_receive_start_popup = _tap_ok_popup
+
+    def _finalize_success(self):
+        """交换成功后同步请求状态与发送方库存。"""
+        request = self._req()
+        if request is None or self.account.id is None:
+            return
+
+        self._request_repo.mark_completed(request)
+        row = self._account_card_repo.get(self.account.id, request.target_card_id)
+        if row:
+            self._account_card_repo.upsert(
+                account_id=self.account.id,
+                card_id=request.target_card_id,
+                count=max(int(row.count) - 1, 0),
+                yolo_conf=getattr(row, "yolo_conf", None),
+                hash_similarity=getattr(row, "hash_similarity", None),
+            )
+
+    def _fail(
+        self, reason: str, preserve_last_completed_at: bool = False
+    ) -> ActionResult:
+        """标记请求失败并结束任务。"""
+        request = self._req()
+        if request:
+            self._request_repo.mark_failed(request, reason)
         if preserve_last_completed_at:
             self.mark_completed_without_timestamp(reason)
-        self._ctx.runtime.completed = True
-        self._ctx.runtime.complete_reason = reason
-
-    def _fail_and_complete(self, reason: str) -> ActionResult:
-        """失败收敛快捷入口。"""
-        self._fail_request(reason)
+        self._done(reason)
         return ActionResult.ok(wait=0.3)
 
-    def _tap_target_card_by_scan(self, detected) -> Optional[ActionResult]:
-        """通过 YOLO+Hash 扫描定位目标卡牌。"""
-        if not detected:
-            return None
-        if self._ctx.card.set_code is None or self._ctx.card.number is None:
+    def _tap_target_card(self, detected) -> Optional[ActionResult]:
+        """通过扫描定位目标卡牌。"""
+        set_code = cast(Optional[str], self.state_get("card_set_code"))
+        number = cast(Optional[int], self.state_get("card_number"))
+        if set_code is None or number is None:
             return None
 
         candidates = [
             item
             for item in detected
-            if item.set_code == self._ctx.card.set_code
-            and item.card_number == self._ctx.card.number
+            if item.set_code == set_code and item.card_number == number
         ]
         if not candidates:
             return None
