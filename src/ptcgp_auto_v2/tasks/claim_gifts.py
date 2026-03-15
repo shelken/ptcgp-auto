@@ -102,14 +102,6 @@ class ClaimGiftsTask(PackOpeningTaskBase):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-    @property
-    def _claim_attempt_count(self) -> int:
-        return int(self.state.data.get("claim_attempt_count", 0))
-
-    @_claim_attempt_count.setter
-    def _claim_attempt_count(self, value: int):
-        self.state.data["claim_attempt_count"] = value
-
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
     # ============================================================
@@ -136,7 +128,7 @@ class ClaimGiftsTask(PackOpeningTaskBase):
 
         self._init_repositories()
         self.state.reset()
-        self._claim_attempt_count = 0
+        self.state_set("claim_attempt_count", 0)
         self._packs_opened_count = 0
         self._result_recognized = False
 
@@ -212,12 +204,13 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         # 尝试点击领取按钮
         result = self._try_claim_buttons(ocr_results)
         if result:
-            self._claim_attempt_count = 0
+            self.state_set("claim_attempt_count", 0)
             return result
 
         # 无可领取，检查是否真的没有礼物
-        self._claim_attempt_count += 1
-        if self._claim_attempt_count >= MAX_EMPTY_CHECK_ATTEMPTS:
+        claim_attempt_count = int(self.state_get("claim_attempt_count", 0)) + 1
+        self.state_set("claim_attempt_count", claim_attempt_count)
+        if claim_attempt_count >= MAX_EMPTY_CHECK_ATTEMPTS:
             logger.debug("  -> 礼物领取完成，返回主页")
             self.reset_action_cache()
             return navigate_back(self.adb, self.page_detector, ocr_results)
