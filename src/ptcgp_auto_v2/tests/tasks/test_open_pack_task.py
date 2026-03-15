@@ -3,9 +3,11 @@ from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 from ptcgp_auto_v2.core.task_base import ActionResult
+from ptcgp_auto_v2.db.models import PackRecordType
 from ptcgp_auto_v2.tasks.open_pack import (
     ACTION_KEY_10_PACK_CONFIRMED,
     HOME_CHECK_THRESHOLD,
+    OPEN_10_PACK_BATCH_SIZE,
     OpenPackTask,
 )
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard
@@ -122,6 +124,20 @@ class TestOpenPackHandleHome(unittest.TestCase):
         self.assertFalse(task._completed)
         self.assertEqual([pack_match.box], adb.taps)
 
+
+class TestOpenPackRecordType(unittest.TestCase):
+    def test_get_pack_record_type_should_use_daily_free_for_single_pack(self):
+        task = OpenPackTask(FakeAdb(), recognizer=None, page_detector=FakePageDetector())
+
+        self.assertEqual(task.get_pack_record_type(), PackRecordType.DAILY_FREE)
+
+    def test_get_pack_record_type_should_use_ten_pack_for_ten_pack(self):
+        task = OpenPackTask(FakeAdb(), recognizer=None, page_detector=FakePageDetector())
+
+        task._set_pack_result_mode(OPEN_10_PACK_BATCH_SIZE)
+
+        self.assertEqual(task.get_pack_record_type(), PackRecordType.TEN_PACK)
+
     def test_handle_home_free_pack_skips_free_pack_icon_when_no_open_icon(self):
         adb = FakeAdb()
         free_match = SimpleNamespace(box=(1, 2, 3, 4))
@@ -133,6 +149,42 @@ class TestOpenPackHandleHome(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(0, task._home_check_count)
+        self.assertFalse(task._completed)
+        self.assertEqual([], adb.taps)
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
+    def test_handle_home_without_free_pack_should_enter_when_can_open_ten(
+        self, mock_get_settings
+    ):
+        adb = FakeAdb()
+        pack_match = SimpleNamespace(box=(50, 60, 70, 80))
+        page_detector = FakePageDetector(free_match=None, pack_match=pack_match)
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+        task._pack_hourglass_count = 120
+        mock_get_settings.return_value = SimpleNamespace(enable_open_10_pack=True)
+
+        result = task._handle_home({})
+
+        self.assertTrue(result.success)
+        self.assertEqual(0, task._home_check_count)
+        self.assertFalse(task._completed)
+        self.assertEqual([pack_match.box], adb.taps)
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
+    def test_handle_home_should_not_enter_ten_pack_when_feature_disabled(
+        self, mock_get_settings
+    ):
+        adb = FakeAdb()
+        pack_match = SimpleNamespace(box=(50, 60, 70, 80))
+        page_detector = FakePageDetector(free_match=None, pack_match=pack_match)
+        task = OpenPackTask(adb, recognizer=None, page_detector=page_detector)
+        task._pack_hourglass_count = 120
+        mock_get_settings.return_value = SimpleNamespace(enable_open_10_pack=False)
+
+        result = task._handle_home({})
+
+        self.assertTrue(result.success)
+        self.assertEqual(1, task._home_check_count)
         self.assertFalse(task._completed)
         self.assertEqual([], adb.taps)
 
@@ -359,11 +411,13 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         )
         self.task.bind_account(SimpleNamespace(id=1, display_name="tester"))
 
+    @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
     @patch("ptcgp_auto_v2.tasks.open_pack.tap_text_exact")
     def test_handle_pack_paid_only_clicks_open_10_without_marking_opened(
-        self, mock_tap_text_exact
+        self, mock_tap_text_exact, mock_get_settings
     ):
         self.task._pack_hourglass_count = 120
+        mock_get_settings.return_value = SimpleNamespace(enable_open_10_pack=True)
         mock_tap_text_exact.return_value = ActionResult.ok(wait=1.5)
 
         result = self.task._handle_pack_paid({"ocr_results": [{"text": "開封10包"}]})
@@ -373,9 +427,17 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         self.assertFalse(self.task._is_action_done(ACTION_KEY_10_PACK_CONFIRMED))
         mock_tap_text_exact.assert_called_once()
 
+    @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
     @patch("ptcgp_auto_v2.tasks.open_pack.tap_ok")
-    def test_handle_pack_paid_modal_marks_opened_after_confirm(self, mock_tap_ok):
+    def test_handle_pack_paid_modal_marks_opened_after_confirm(
+        self, mock_tap_ok, mock_get_settings
+    ):
         self.task._pack_hourglass_count = 120
+        mock_get_settings.return_value = SimpleNamespace(enable_open_10_pack=True)
+        self.task._account_stat_repo = Mock()
+        self.task._account_stat_repo.decrease_pack_hourglass_count.return_value = (
+            SimpleNamespace(pack_hourglass_count=0)
+        )
         mock_tap_ok.return_value = ActionResult.ok(wait=2.0)
 
         result = self.task._handle_pack_paid_modal({"ocr_results": [{"text": "OK"}]})
@@ -383,6 +445,13 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertTrue(self.task._is_action_done(ACTION_KEY_10_PACK_CONFIRMED))
         self.assertTrue(self.task._has_opened_10_pack_this_task())
+        self.assertEqual("ten", self.task._pack_result_mode)
+        self.assertEqual(OPEN_10_PACK_BATCH_SIZE, self.task._pack_result_batch_size)
+        self.assertEqual(0, self.task._pack_hourglass_count)
+        self.task._account_stat_repo.decrease_pack_hourglass_count.assert_called_once_with(
+            1,
+            120,
+        )
         mock_tap_ok.assert_called_once()
 
     @patch("ptcgp_auto_v2.tasks.open_pack.navigate_back")
@@ -425,6 +494,53 @@ class TestOpenPackPaidFlow(unittest.TestCase):
 
         self.assertEqual(180, self.task._pack_hourglass_count)
         mock_account_stat_repo.get_by_account_id.assert_called_once_with(1)
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.navigate_back")
+    def test_handle_pack_list_should_exit_after_ten_pack_completed(
+        self, mock_navigate_back
+    ):
+        self.task._target_pack = {"set_code": "A1", "booster_name": "Test"}
+        self.task._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+        self.page_detector._last_screenshot = object()
+        self.page_detector._last_ocr_results = [{"text": "提供比例"}]
+        mock_navigate_back.return_value = ActionResult.ok(wait=1.0)
+
+        result = self.task._handle_pack_list({})
+
+        self.assertTrue(result.success)
+        mock_navigate_back.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
+    @patch("ptcgp_auto_v2.tasks.open_pack.navigate_back")
+    def test_handle_pack_list_should_exit_when_feature_disabled(
+        self, mock_navigate_back, mock_get_settings
+    ):
+        self.task._target_pack = {"set_code": "A1", "booster_name": "Test"}
+        mock_get_settings.return_value = SimpleNamespace(enable_open_10_pack=False)
+        self.page_detector._last_screenshot = object()
+        self.page_detector._last_ocr_results = [{"text": "提供比例"}]
+        mock_navigate_back.return_value = ActionResult.ok(wait=1.0)
+
+        result = self.task._handle_pack_list({})
+
+        self.assertTrue(result.success)
+        mock_navigate_back.assert_called_once()
+
+    @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
+    @patch("ptcgp_auto_v2.tasks.open_pack.navigate_back")
+    @patch("ptcgp_auto_v2.tasks.open_pack.tap_text_exact")
+    def test_handle_pack_paid_should_return_when_feature_disabled(
+        self, mock_tap_text_exact, mock_navigate_back, mock_get_settings
+    ):
+        self.task._pack_hourglass_count = 120
+        mock_get_settings.return_value = SimpleNamespace(enable_open_10_pack=False)
+        mock_navigate_back.return_value = ActionResult.ok(wait=1.0)
+
+        result = self.task._handle_pack_paid({"ocr_results": [{"text": "開封10包"}]})
+
+        self.assertTrue(result.success)
+        mock_navigate_back.assert_called_once()
+        mock_tap_text_exact.assert_not_called()
 
 
 if __name__ == "__main__":

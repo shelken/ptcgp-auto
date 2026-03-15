@@ -44,3 +44,22 @@ class AccountStatRepository:
             session.commit()
             session.refresh(row)
             return row
+
+    def decrease_pack_hourglass_count(
+        self, account_id: int, amount: int
+    ) -> Optional[AccountStat]:
+        """扣减开包沙漏数量，最少为 0。"""
+        if amount <= 0:
+            return self.get_by_account_id(account_id)
+
+        with Session(get_engine()) as session:
+            row = session.get(AccountStat, account_id)
+            if row is None or row.pack_hourglass_count is None:
+                return row
+
+            row.pack_hourglass_count = max(0, row.pack_hourglass_count - amount)
+            row.updated_at = datetime.now()
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row

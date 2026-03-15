@@ -15,6 +15,15 @@ if TYPE_CHECKING:
     from .pack_card import PackCard
 
 
+class PackRecordType:
+    """开包记录类型常量。"""
+
+    DAILY_FREE = "daily_free"
+    TEN_PACK = "ten_pack"
+    GIFT_BOX = "gift_box"
+    INIT_TUTORIAL = "init_tutorial"
+
+
 class PackRecord(SQLModel, table=True):
     """
     开包记录模型

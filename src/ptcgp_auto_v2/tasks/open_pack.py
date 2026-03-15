@@ -23,8 +23,10 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.db.models import PackRecordType
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.pack_opening_task_base import (
+    PACK_RESULT_MODE_TEN,
     PackOpeningTaskBase,
     build_pack_opening_pages,
 )
@@ -63,6 +65,9 @@ HOME_CHECK_THRESHOLD = 3
 
 # 開封10包需要消耗的沙漏数量
 OPEN_10_PACK_HOURGLASS_COST = 120
+
+# 開封10包的实际包数
+OPEN_10_PACK_BATCH_SIZE = 10
 
 # action_cache 临时桥接：modal 已确认，但 10 包结果尚未累计到 _packs_opened_count
 ACTION_KEY_10_PACK_CONFIRMED = "pack_10_confirmed"
@@ -162,8 +167,10 @@ class OpenPackTask(PackOpeningTaskBase):
     # ============================================================
 
     def get_pack_record_type(self) -> str:
-        """返回 pack 记录类型：每日免费包"""
-        return "daily_free"
+        """返回 pack 记录类型：免费单包或十连开包。"""
+        if self._pack_result_mode == PACK_RESULT_MODE_TEN:
+            return PackRecordType.TEN_PACK
+        return PackRecordType.DAILY_FREE
 
     def get_rare_card_notify_message(self) -> str:
         """返回稀有卡通知消息：每日开包"""
@@ -201,6 +208,7 @@ class OpenPackTask(PackOpeningTaskBase):
         self._result_recognized = False
         self._base_pack_points = None  # 重置基础开包点数
         self._pack_hourglass_count = None
+        self._reset_pack_result_mode()
 
         # 检查账号 ID
         if self.account.id is None:
@@ -209,6 +217,7 @@ class OpenPackTask(PackOpeningTaskBase):
             return
 
         self._pack_hourglass_count = self._load_pack_hourglass_count()
+        logger.info("当前开包沙漏数量: %s", self._pack_hourglass_count)
 
         # 加载开包配置
         config = self._pack_config_repo.get_by_account_and_type(
@@ -383,15 +392,12 @@ class OpenPackTask(PackOpeningTaskBase):
             # 有免费包，重置计数，进入开包流程
             logger.debug("  -> 检测到免费包，进入开包流程")
             self._home_check_count = 0
+            return self._tap_pack_open_icon(screenshot)
 
-            # 点击开包入口图标
-            pack_open_box = self.page_detector.find_template_with_scale(
-                "icon_pack_open", screenshot=screenshot
-            )
-            if pack_open_box:
-                return tap_box(self.adb, pack_open_box.box, wait=1.0)
-            logger.warning("  -> 未找到开包图标")
-            return ActionResult.ok(wait=1.0)
+        if self._can_open_10_pack() and not self._has_opened_10_pack_this_task():
+            logger.debug("  -> 无免费包但满足10包条件，进入开包流程")
+            self._home_check_count = 0
+            return self._tap_pack_open_icon(screenshot)
 
         # 无免费包，累计计数
         self._home_check_count += 1
@@ -405,12 +411,34 @@ class OpenPackTask(PackOpeningTaskBase):
 
         return ActionResult.ok(wait=1.0)
 
+    def _tap_pack_open_icon(self, screenshot) -> ActionResult:
+        """点击主页开包入口图标。"""
+        pack_open_box = self.page_detector.find_template_with_scale(
+            "icon_pack_open", screenshot=screenshot
+        )
+        if pack_open_box:
+            return tap_box(self.adb, pack_open_box.box, wait=1.0)
+        logger.warning("  -> 未找到开包图标")
+        return ActionResult.ok(wait=1.0)
+
+    def _should_exit_pack_flow(self) -> bool:
+        """十包完成后退出选包链路，避免在列表和详情页之间反复往返。"""
+        return self._has_opened_10_pack_this_task() or not self._is_open_10_pack_enabled()
+
+    def _is_open_10_pack_enabled(self) -> bool:
+        """是否启用十包开封模式。"""
+        return get_settings().enable_open_10_pack
+
     def _handle_pack_series_select(self, page_info: dict) -> ActionResult:
         """选择扩充包系列"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
         if not screenshot:
             return ActionResult.fail("截图失败")
+
+        if self._should_exit_pack_flow():
+            logger.debug("  -> 十包流程已完成，退出扩充包系列页")
+            return navigate_back(self.adb, self.page_detector, ocr_results)
 
         settings = get_settings()
         template_name = self._get_target_template_name()
@@ -466,6 +494,10 @@ class OpenPackTask(PackOpeningTaskBase):
 
         if not screenshot:
             return ActionResult.fail("截图失败")
+
+        if self._should_exit_pack_flow():
+            logger.debug("  -> 十包流程已完成，退出子包选择页")
+            return navigate_back(self.adb, self.page_detector, ocr_results)
 
         settings = get_settings()
         template_name = self._get_target_template_name()
@@ -544,6 +576,10 @@ class OpenPackTask(PackOpeningTaskBase):
         if not screenshot:
             return ActionResult.fail("截图失败")
 
+        if self._should_exit_pack_flow():
+            logger.debug("  -> 十包流程已完成，退出卡包详情页")
+            return navigate_back(self.adb, self.page_detector, ocr_results)
+
         # 检查当前卡包是否是目标卡包
         if self._target_pack:
             settings = get_settings()
@@ -583,6 +619,10 @@ class OpenPackTask(PackOpeningTaskBase):
             logger.debug("  -> 已使用过開封10包，返回上一页")
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
+        if not self._is_open_10_pack_enabled():
+            logger.debug("  -> 已关闭開封10包模式，返回上一页")
+            return navigate_back(self.adb, self.page_detector, ocr_results)
+
         if not self._can_open_10_pack():
             logger.info(
                 "  -> 沙漏数量 %s < %s，不满足开10包条件",
@@ -619,6 +659,8 @@ class OpenPackTask(PackOpeningTaskBase):
             result = tap_ok(self.adb, ocr_results, wait=2.0)
             if result:
                 self._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+                self._set_pack_result_mode(OPEN_10_PACK_BATCH_SIZE)
+                self._consume_pack_hourglasses(OPEN_10_PACK_HOURGLASS_COST)
                 logger.info("  -> 点击OK确认使用沙漏开10包")
                 return result
 
@@ -648,8 +690,31 @@ class OpenPackTask(PackOpeningTaskBase):
 
         return None
 
+    def _consume_pack_hourglasses(self, amount: int) -> None:
+        """扣减本地缓存和账号统计中的开包沙漏数量。"""
+        if amount <= 0:
+            return
+
+        if self._pack_hourglass_count is not None:
+            self._pack_hourglass_count = max(0, self._pack_hourglass_count - amount)
+
+        if not self.account.id or self._account_stat_repo is None:
+            return
+
+        try:
+            row = self._account_stat_repo.decrease_pack_hourglass_count(
+                self.account.id,
+                amount,
+            )
+            if row is not None and row.pack_hourglass_count is not None:
+                self._pack_hourglass_count = row.pack_hourglass_count
+        except Exception as e:
+            logger.warning(f"  -> 扣减开包沙漏失败: {e}")
+
     def _can_open_10_pack(self) -> bool:
         """判断当前缓存的沙漏数量是否满足開封10包。"""
+        if not self._is_open_10_pack_enabled():
+            return False
         if self._pack_hourglass_count is None:
             return False
         return self._pack_hourglass_count >= OPEN_10_PACK_HOURGLASS_COST
