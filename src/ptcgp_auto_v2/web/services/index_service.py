@@ -5,25 +5,15 @@ from ptcgp_auto_v2.db.repositories import CardRepository, NotificationRepository
 from ptcgp_auto_v2.web.utils.element_utils import normalize_elements
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
 from ptcgp_auto_v2.web.utils.i18n import resolve_label
+from ptcgp_auto_v2.config.rarity_icons import RARITY_META
 
 
 def build_index_context(session: Session) -> dict:
     """构建首页渲染所需上下文。"""
     rarities = session.exec(select(distinct(Card.rarity)).order_by(Card.rarity)).all()
     rarities = [item for item in rarities if item]
-    rarity_order = {
-        "C": 1,
-        "U": 2,
-        "R": 3,
-        "RR": 4,
-        "AR": 5,
-        "SR": 6,
-        "SAR": 7,
-        "UR": 8,
-        "IM": 9,
-        "S": 10,
-        "SSR": 11,
-    }
+    # 从 RARITY_META 动态构建排序权重（单一数据源）
+    rarity_order = {code: meta["priority"] for code, meta in RARITY_META.items()}
     rarities.sort(key=lambda item: rarity_order.get(item, 99))
 
     card_types = session.exec(select(distinct(Card.type)).order_by(Card.type)).all()

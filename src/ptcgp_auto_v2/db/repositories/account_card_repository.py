@@ -7,24 +7,14 @@ from sqlmodel import Session, col, select
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Account, AccountCard, AccountStat, Card, CardPack
 from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS
+from ptcgp_auto_v2.config.rarity_icons import RARITY_META
 
 
 class AccountCardRepository:
     """账号-卡牌关联数据访问层"""
 
-    _rarity_order_map = {
-        "C": 1,
-        "U": 2,
-        "R": 3,
-        "RR": 4,
-        "AR": 5,
-        "SR": 6,
-        "SAR": 7,
-        "UR": 8,
-        "IM": 9,
-        "S": 10,
-        "SSR": 11,
-    }
+    # 从 RARITY_META 动态构建（单一数据源）
+    _rarity_order_map = {code: meta["priority"] for code, meta in RARITY_META.items()}
 
     def _build_account_search_filters(self, account_query: str) -> list[Any]:
         """构建账号搜索条件，统一支持四字段查询。"""

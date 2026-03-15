@@ -418,11 +418,11 @@ class ExchangeCardsTask(Task):
             )
             return
 
-        if rarity_code in ExchangeCardService.NON_EXCHANGEABLE_RARITIES:
+        if not ExchangeCardService.is_exchangeable(rarity_code):
             self._fail_request("目标稀有度不可交换", preserve_last_completed_at=True)
             return
 
-        if rarity_code not in ExchangeCardService.EXCHANGE_POINT_COSTS:
+        if ExchangeCardService.get_required_exchange_points(rarity_code) is None:
             self._fail_request(
                 f"不支持的目标稀有度: {rarity_code}",
                 preserve_last_completed_at=True,

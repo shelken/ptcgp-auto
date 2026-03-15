@@ -13,30 +13,29 @@ from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     ExchangeCardRequestRepository,
 )
+from ptcgp_auto_v2.config.rarity_icons import RARITY_META
 
 
 class ExchangeCardService:
     """交换卡牌业务服务。"""
 
-    EXCHANGE_POINT_COSTS = {
-        "C": 0,
-        "U": 0,
-        "R": 1200,
-        "RR": 5000,
-        "AR": 4000,
-        "SR": 25000,
-        "SAR": 25000,
-        "S": 10000,
-        "SSR": 30000,
-    }
-    NON_EXCHANGEABLE_RARITIES = {"IM", "UR"}
     DEFAULT_EXPIRE_MINUTES = 5
 
     @classmethod
     def get_required_exchange_points(cls, rarity_code: str) -> Optional[int]:
-        """根据稀有度返回所需交换点数。"""
+        """根据稀有度返回所需交换点数（从 RARITY_META 获取）。"""
         normalized_rarity = (rarity_code or "").upper()
-        return cls.EXCHANGE_POINT_COSTS.get(normalized_rarity)
+        meta = RARITY_META.get(normalized_rarity)
+        if meta:
+            return meta.get("exchange_cost")
+        return None
+
+    @classmethod
+    def is_exchangeable(cls, rarity_code: str) -> bool:
+        """检查稀有度是否可交换（从 RARITY_META 获取）。"""
+        normalized_rarity = (rarity_code or "").upper()
+        meta = RARITY_META.get(normalized_rarity)
+        return meta.get("exchangeable", False) if meta else False
 
     @classmethod
     def create_request(
@@ -50,7 +49,7 @@ class ExchangeCardService:
     ) -> Optional[ExchangeCardRequest]:
         """创建交换请求；不允许 IM/UR 稀有度。"""
         normalized_rarity = (target_card_rarity or "").upper()
-        if normalized_rarity in cls.NON_EXCHANGEABLE_RARITIES:
+        if not cls.is_exchangeable(normalized_rarity):
             return None
 
         required_points = cls.get_required_exchange_points(normalized_rarity)
