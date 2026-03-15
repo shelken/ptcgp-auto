@@ -12,7 +12,8 @@ from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_RARITY_PRIORITY,
     WONDER_PICK_RULES,
 )
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, Task, TaskRegistry
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector, count_icons
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
@@ -101,7 +102,7 @@ def _build_challenge_pages() -> list[dict]:
 
 
 @TaskRegistry.register("wonder_pick")
-class WonderPickTask(Task):
+class WonderPickTask(StatefulTask):
     """得卡挑战任务。"""
 
     task_type = "wonder_pick"
@@ -121,8 +122,6 @@ class WonderPickTask(Task):
             hash_manager=get_card_hash_manager(),
         )
 
-        self._completed = False
-        self._skipped = False
         self._get_card_saved = False
         self._current_stamina: Optional[int] = None
         self._stamina_zero_count = 0
@@ -147,10 +146,9 @@ class WonderPickTask(Task):
         """初始化任务运行状态。"""
         from ptcgp_auto_v2.db.repositories import AccountCardRepository, CardRepository
 
+        self.state.reset()
         self._card_repo = CardRepository()
         self._account_card_repo = AccountCardRepository()
-        self._completed = False
-        self._skipped = False
         self._get_card_saved = False
         self._current_stamina = None
         self._stamina_zero_count = 0
@@ -163,30 +161,6 @@ class WonderPickTask(Task):
         self._last_signature = None
         self._same_signature_count = 0
         self._pending_after_challenge = False
-
-    def is_completed(self) -> bool:
-        """任务是否结束。"""
-        return self._completed or self._skipped
-
-    def was_skipped(self) -> bool:
-        """任务是否跳过。"""
-        return self._skipped
-
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """页面分发。"""
-        handlers = {
-            "game_home_main": self._handle_home,
-            "card_challenge_list": self._handle_list,
-            "card_challenge_popup": self._handle_popup,
-            "init_select_favorite_card": self._handle_select_favorite_card,
-            "pack_card_register": self._handle_card_register,
-            "card_challenge_get": self._handle_get_card,
-            "popup_send_thanks": self._handle_send_thanks,
-        }
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-        return ActionResult.ok(wait=1.0)
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """未知页面等待。"""
@@ -262,7 +236,7 @@ class WonderPickTask(Task):
                 self._active_group_index = index
                 return
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """主页读取挑战力并进入得卡挑战。"""
         if not self._target_rarities:
             self._skip("未配置目标稀有度")
@@ -284,7 +258,7 @@ class WonderPickTask(Task):
         self._current_stamina = stamina
         self._refresh_active_targets()
         if not self._active_targets:
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
         result = tap_text_exact(
@@ -295,7 +269,7 @@ class WonderPickTask(Task):
         )
         return result or ActionResult.ok(wait=1.0)
 
-    def _handle_list(self, page_info: dict) -> ActionResult:
+    def _handle_card_challenge_list(self, page_info: dict) -> ActionResult:
         """列表页：只扫当前挑战力组。"""
         if self._current_stamina is None:
             return navigate_back(
@@ -313,7 +287,7 @@ class WonderPickTask(Task):
             self._pending_after_challenge = False
 
         if not self._active_targets:
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
         detected = self._scan_cards()
@@ -383,11 +357,11 @@ class WonderPickTask(Task):
     def _advance_scan_group(self) -> ActionResult:
         """当前组结束后切换到已见的次优先级组；否则结束。"""
         if self._reverse_scan:
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
         if self._seen_lower_group_index is None:
-            self._completed = True
+            self.complete()
             return ActionResult.ok(wait=1.0)
 
         group = self._cost_groups[self._seen_lower_group_index]
@@ -419,7 +393,7 @@ class WonderPickTask(Task):
                     self._seen_lower_group_index = index
                 return
 
-    def _handle_popup(self, page_info: dict) -> ActionResult:
+    def _handle_card_challenge_popup(self, page_info: dict) -> ActionResult:
         """挑战确认弹窗。"""
         ocr_results = page_info.get("ocr_results", [])
         if is_text_visible(
@@ -439,7 +413,7 @@ class WonderPickTask(Task):
             return result
         return ActionResult.ok(wait=0.5)
 
-    def _handle_select_favorite_card(self, page_info: dict) -> ActionResult:
+    def _handle_init_select_favorite_card(self, page_info: dict) -> ActionResult:
         """随机选取卡牌。"""
         position = self._pick_random_card_position()
         if position:
@@ -447,11 +421,11 @@ class WonderPickTask(Task):
             return tap(self.adb, position[0], position[1], wait=1.0)
         return tap_favorite_card(self.adb, wait=1.0)
 
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
+    def _handle_pack_card_register(self, page_info: dict) -> ActionResult:
         """处理图鉴登录页。"""
         return swipe_card_register(self.adb)
 
-    def _handle_get_card(self, page_info: dict) -> ActionResult:
+    def _handle_card_challenge_get(self, page_info: dict) -> ActionResult:
         """GET/结果页保存高稀有度卡并继续推进。"""
         ocr_results = page_info.get("ocr_results", [])
         if not self._get_card_saved:
@@ -503,7 +477,7 @@ class WonderPickTask(Task):
         )
         return result or ActionResult.ok(wait=0.5)
 
-    def _handle_send_thanks(self, page_info: dict) -> ActionResult:
+    def _handle_popup_send_thanks(self, page_info: dict) -> ActionResult:
         """处理谢谢弹窗。"""
         result = tap_text_exact(
             self.adb,
@@ -628,5 +602,4 @@ class WonderPickTask(Task):
     def _skip(self, reason: str):
         """跳过并结束任务。"""
         logger.info("得卡挑战任务跳过: %s", reason)
-        self._skipped = True
-        self._completed = True
+        self.skip(reason)

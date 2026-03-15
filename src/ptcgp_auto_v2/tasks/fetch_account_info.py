@@ -9,15 +9,15 @@
 
 import logging
 import re
-from typing import Optional
+from typing import Optional, cast
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
@@ -108,7 +108,7 @@ def _build_fetch_pages() -> list[dict]:
 
 
 @TaskRegistry.register("fetch_account_info")
-class FetchAccountInfoTask(Task):
+class FetchAccountInfoTask(StatefulTask):
     """账号信息获取任务"""
 
     task_type = "fetch_account_info"
@@ -118,34 +118,6 @@ class FetchAccountInfoTask(Task):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # 页面内操作缓存
-        self._action_cache: dict[str, bool] = {}
-
-        # 提取的信息
-        self._friend_id: Optional[str] = None
-        self._nickname: Optional[str] = None
-        self._level: Optional[int] = None
-        self._exchange_points: Optional[int] = None
-        self._pack_hourglass_count: Optional[int] = None
-        self._holdings_scroll_rounds = 0
-        self._holdings_scan_rounds = 0
-
-        # 任务完成标志
-        self._completed = False
-        self._complete_reason: Optional[str] = None
-
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return self._action_cache.get(key, False)
-
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        """重置操作缓存"""
-        self._action_cache.clear()
 
     @staticmethod
     def needs_fetch(account, tasks) -> bool:
@@ -182,35 +154,42 @@ class FetchAccountInfoTask(Task):
     def cleanup(self):
         pass
 
-    def is_completed(self) -> bool:
-        return self._completed
+    def on_start(self):
+        """初始化任务运行状态。"""
+        self.state.reset()
+        self.state_update(
+            {
+                "friend_id": None,
+                "nickname": None,
+                "level": None,
+                "exchange_points": None,
+                "pack_hourglass_count": None,
+                "holdings_scroll_rounds": 0,
+                "holdings_scan_rounds": 0,
+            }
+        )
 
     def check_completion(self) -> Optional[TaskResult]:
         """检查任务完成状态"""
-        if self._completed:
-            if self._friend_id or self._nickname or self._exchange_points is not None:
+        if self.is_completed():
+            friend_id = cast(Optional[str], self.state_get("friend_id"))
+            nickname = cast(Optional[str], self.state_get("nickname"))
+            level = cast(Optional[int], self.state_get("level"))
+            exchange_points = cast(Optional[int], self.state_get("exchange_points"))
+            pack_hourglass_count = cast(
+                Optional[int], self.state_get("pack_hourglass_count")
+            )
+            if friend_id or nickname or exchange_points is not None:
                 return TaskResult.ok(
-                    message=f"获取完成: friend_id={self._friend_id}, nickname={self._nickname}, "
-                    f"level={self._level}, exchange_points={self._exchange_points}, "
-                    f"pack_hourglass_count={self._pack_hourglass_count}"
+                    message=f"获取完成: friend_id={friend_id}, nickname={nickname}, "
+                    f"level={level}, exchange_points={exchange_points}, "
+                    f"pack_hourglass_count={pack_hourglass_count}"
                 )
             return TaskResult.fail("未能获取账号信息")
         return None
 
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """按页面分发到处理函数"""
-        handlers = {
-            "game_home_main": self._handle_home,
-            "profile_page": self._handle_profile,
-            "more_menu_modal": self._handle_more_menu_modal,
-            "holdings_page": self._handle_holdings_page,
-            "holdings_page_scrolled": self._handle_holdings_page,
-        }
-
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
+        """未映射页面兜底。"""
         # 兜底：先尝试点主页图标，找不到再用返回
         result = tap_home_icon(self.adb, self.page_detector, wait=3)
         if result and result.success:
@@ -230,16 +209,16 @@ class FetchAccountInfoTask(Task):
         logger.debug("点击屏幕中心兜底")
         return quick_tap(self.adb, y=self.adb.center_y() + 50)
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """主页：根据进度决定下一步"""
         ocr = page_info.get("ocr_results", [])
 
-        if not self._is_action_done("profile_fetched"):
+        if not self.is_action_done("profile_fetched"):
             # 第一步：进入个人资料页
             return self._enter_profile(ocr)
 
-        if not self._is_action_done("holdings_fetched"):
-            if not self._is_action_done("more_menu_opened"):
+        if not self.is_action_done("holdings_fetched"):
+            if not self.is_action_done("more_menu_opened"):
                 result = tap_template(
                     self.adb,
                     self.page_detector,
@@ -247,48 +226,51 @@ class FetchAccountInfoTask(Task):
                     wait=1.0,
                 )
                 if result:
-                    self._mark_action_done("more_menu_opened")
+                    self.mark_action_done("more_menu_opened")
                     return result
                 return ActionResult.wait(0.8)
             return ActionResult.wait(0.8)
 
         # 都完成了
         self._update_account()
-        self._completed = True
+        self.complete()
         logger.debug("  -> 任务完成")
         return ActionResult.ok(wait=0.5)
 
-    def _handle_profile(self, page_info: dict) -> ActionResult:
+    def _handle_profile_page(self, page_info: dict) -> ActionResult:
         """个人资料页：提取信息后标记完成"""
         ocr = page_info.get("ocr_results", [])
 
         # 提取信息
         for item in ocr:
             text = item["text"]
-            if not self._friend_id:
+            friend_id = cast(Optional[str], self.state_get("friend_id"))
+            if not friend_id:
                 extracted_friend_id = extract_friend_id_from_text(text)
                 if extracted_friend_id:
-                    self._friend_id = extracted_friend_id
-                    logger.debug(f"  -> friend_id: {self._friend_id}")
-            if not self._level:
+                    self.state_set("friend_id", extracted_friend_id)
+                    logger.debug(f"  -> friend_id: {extracted_friend_id}")
+            if not cast(Optional[int], self.state_get("level")):
                 m = LEVEL_PATTERN.search(text)
                 if m:
-                    self._level = int(m.group(1))
-                    logger.debug(f"  -> level: {self._level}")
+                    level = int(m.group(1))
+                    self.state_set("level", level)
+                    logger.debug(f"  -> level: {level}")
 
-        if not self._nickname:
-            self._nickname = self._extract_nickname(ocr)
-            if self._nickname:
-                logger.debug(f"  -> nickname: {self._nickname}")
+        if not cast(Optional[str], self.state_get("nickname")):
+            nickname = self._extract_nickname(ocr)
+            self.state_set("nickname", nickname)
+            if nickname:
+                logger.debug(f"  -> nickname: {nickname}")
 
-        self._mark_action_done("profile_fetched")
+        self.mark_action_done("profile_fetched")
         logger.debug("  -> 资料获取完成，返回")
         return navigate_back(self.adb, self.page_detector, ocr)
 
     def _handle_more_menu_modal(self, page_info: dict) -> ActionResult:
         """更多菜单：精确点击「持有物」进入资源列表。"""
         ocr = page_info.get("ocr_results", [])
-        if self._is_action_done("holdings_fetched"):
+        if self.is_action_done("holdings_fetched"):
             return navigate_back(self.adb, self.page_detector, ocr)
 
         result = tap_text(
@@ -299,9 +281,9 @@ class FetchAccountInfoTask(Task):
             exact=False,
         )
         if result:
-            self._mark_action_done("holdings_entered")
-            self._holdings_scroll_rounds = 0
-            self._holdings_scan_rounds = 0
+            self.mark_action_done("holdings_entered")
+            self.state_set("holdings_scroll_rounds", 0)
+            self.state_set("holdings_scan_rounds", 0)
             logger.info("  -> 点击持有物")
             return result
         return ActionResult.wait(0.8)
@@ -311,36 +293,41 @@ class FetchAccountInfoTask(Task):
         ocr = page_info.get("ocr_results", [])
         exchange_points, pack_hourglass_count = self._extract_holdings_values(ocr)
         if exchange_points is not None:
-            self._exchange_points = exchange_points
+            self.state_set("exchange_points", exchange_points)
             logger.debug("  -> 识别閃亮沙子: %s", exchange_points)
         if pack_hourglass_count is not None:
-            self._pack_hourglass_count = pack_hourglass_count
+            self.state_set("pack_hourglass_count", pack_hourglass_count)
             logger.debug("  -> 识别開包沙漏: %s", pack_hourglass_count)
 
-        if self._exchange_points is not None and self._pack_hourglass_count is not None:
-            self._mark_action_done("holdings_fetched")
+        if (
+            self.state_get("exchange_points") is not None
+            and self.state_get("pack_hourglass_count") is not None
+        ):
+            self.mark_action_done("holdings_fetched")
             logger.info(
                 "  -> 获取持有物完成: exchange_points=%s, pack_hourglass_count=%s",
-                self._exchange_points,
-                self._pack_hourglass_count,
+                self.state_get("exchange_points"),
+                self.state_get("pack_hourglass_count"),
             )
             return navigate_back(self.adb, self.page_detector, ocr)
 
-        self._holdings_scan_rounds += 1
-        if self._holdings_scan_rounds <= MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL:
+        holdings_scan_rounds = int(self.state_get("holdings_scan_rounds", 0)) + 1
+        self.state_set("holdings_scan_rounds", holdings_scan_rounds)
+        if holdings_scan_rounds <= MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL:
             logger.debug(
                 "  -> 持有物页面先扫描后滑动 (%s/%s)",
-                self._holdings_scan_rounds,
+                holdings_scan_rounds,
                 MIN_HOLDINGS_SCAN_ROUNDS_BEFORE_SCROLL,
             )
             return ActionResult.wait(0.8)
 
-        if self._holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
+        holdings_scroll_rounds = int(self.state_get("holdings_scroll_rounds", 0))
+        if holdings_scroll_rounds >= MAX_HOLDINGS_SCROLL_ROUNDS:
             logger.warning("  -> 持有物页面滑动到上限，仍未提取到完整资源")
-            self._mark_action_done("holdings_fetched")
+            self.mark_action_done("holdings_fetched")
             return navigate_back(self.adb, self.page_detector, ocr)
 
-        self._holdings_scroll_rounds += 1
+        self.state_set("holdings_scroll_rounds", holdings_scroll_rounds + 1)
         start, end = scroll_points(
             self.adb,
             base_distance_y=BASE_HOLDINGS_SCROLL_DISTANCE_Y,
@@ -348,6 +335,10 @@ class FetchAccountInfoTask(Task):
         )
         swipe(self.adb, start, end, wait=HOLDINGS_SCROLL_SETTLE_WAIT)
         return ActionResult.ok(wait=HOLDINGS_SCROLL_SETTLE_WAIT)
+
+    def _handle_holdings_page_scrolled(self, page_info: dict) -> ActionResult:
+        """滚动后的持有物页面沿用同一处理逻辑。"""
+        return self._handle_holdings_page(page_info)
 
     def _enter_profile(self, ocr: list) -> ActionResult:
         """点击头像进入个人资料"""
@@ -503,15 +494,18 @@ class FetchAccountInfoTask(Task):
         if not self.account:
             return
 
+        friend_id = cast(Optional[str], self.state_get("friend_id"))
+        nickname = cast(Optional[str], self.state_get("nickname"))
+        level = cast(Optional[int], self.state_get("level"))
         changed = False
-        if self._friend_id and self.account.friend_id != self._friend_id:
-            self.account.friend_id = self._friend_id
+        if friend_id and self.account.friend_id != friend_id:
+            self.account.friend_id = friend_id
             changed = True
-        if self._nickname and self.account.nickname != self._nickname:
-            self.account.nickname = self._nickname
+        if nickname and self.account.nickname != nickname:
+            self.account.nickname = nickname
             changed = True
-        if self._level and self.account.level != self._level:
-            self.account.level = self._level
+        if level and self.account.level != level:
+            self.account.level = level
             changed = True
         if changed:
             AccountRepository().update(self.account)
@@ -522,13 +516,13 @@ class FetchAccountInfoTask(Task):
         stat_repo = AccountStatRepository()
         existing_stat = stat_repo.get_by_account_id(int(self.account.id))
         exchange_points = (
-            self._exchange_points
-            if self._exchange_points is not None
+            cast(Optional[int], self.state_get("exchange_points"))
+            if self.state_get("exchange_points") is not None
             else (existing_stat.exchange_points if existing_stat else None)
         )
         pack_hourglass_count = (
-            self._pack_hourglass_count
-            if self._pack_hourglass_count is not None
+            cast(Optional[int], self.state_get("pack_hourglass_count"))
+            if self.state_get("pack_hourglass_count") is not None
             else (existing_stat.pack_hourglass_count if existing_stat else None)
         )
 

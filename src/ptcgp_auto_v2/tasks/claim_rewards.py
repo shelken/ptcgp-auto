@@ -12,10 +12,10 @@ import time
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
-    Task,
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.color import is_button_clickable
@@ -114,7 +114,7 @@ def _build_claim_rewards_pages() -> list[dict]:
 
 
 @TaskRegistry.register("claim_rewards")
-class ClaimRewardsTask(Task):
+class ClaimRewardsTask(StatefulTask):
     """
     任务奖励领取任务（优化版）
 
@@ -135,58 +135,18 @@ class ClaimRewardsTask(Task):
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
 
-        # 页面内操作缓存
-        self._action_cache: dict[str, bool] = {}
-
-        # 任务状态
-        self._home_check_count = 0  # 主页无奖励检查次数
-        self._completed = False  # 任务完成标志
-
-    def _is_action_done(self, key: str) -> bool:
-        """检查操作是否已完成"""
-        return self._action_cache.get(key, False)
-
-    def _mark_action_done(self, key: str):
-        """标记操作已完成"""
-        self._action_cache[key] = True
-
-    def _reset_action_cache(self):
-        """重置操作缓存"""
-        self._action_cache.clear()
-
     def on_start(self):
         """任务开始前的初始化"""
         logger.info("任务奖励领取任务开始")
-        self._reset_action_cache()
-        self._home_check_count = 0
-        self._completed = False
+        self.state.reset()
+        self.state_set("home_check_count", 0)
 
-    def is_completed(self) -> bool:
-        """判断任务是否已完成"""
-        return self._completed
-
-    def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
-        """处理识别到的页面"""
+    def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         logger.debug(f"处理页面: {page_name}")
-
-        # 页面处理器映射
-        handlers = {
-            "game_home_main": self._handle_home,
-            "rewards_page": self._handle_rewards_page,
-            "reward_detail_page": self._handle_reward_detail,
-            "theme_collection_page": self._handle_theme_collection,
-            "pack_card_register": self._handle_card_register,
-            "speed_up_button": self._handle_speed_up,
-        }
-
-        handler = handlers.get(page_name)
-        if handler:
-            return handler(page_info)
-
         logger.warning(f"未处理的页面: {page_name}")
         return ActionResult.ok(wait=1.0)
 
-    def _handle_speed_up(self, page_info: dict) -> ActionResult:
+    def _handle_speed_up_button(self, page_info: dict) -> ActionResult:
         """处理快进按钮"""
         return tap_matched_element(self.adb, page_info, 0.3) or ActionResult.ok(
             wait=0.3
@@ -200,7 +160,7 @@ class ClaimRewardsTask(Task):
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
         logger.info(
-            f"任务完成，主页检测次数: {self._home_check_count}, "
+            f"任务完成，主页检测次数: {int(self.state_get('home_check_count', 0))}, "
             f"结果: {'成功' if result.success else '失败'}"
         )
 
@@ -208,9 +168,9 @@ class ClaimRewardsTask(Task):
     # 页面处理方法
     # ============================================================
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """处理主页：检测是否有奖励图标"""
-        self._reset_action_cache()
+        self.reset_action_cache()
 
         rounds = HOME_CHECK_ROUNDS
         interval = HOME_CHECK_INTERVAL
@@ -230,7 +190,7 @@ class ClaimRewardsTask(Task):
 
             if reward_icon:
                 logger.debug("  -> 检测到奖励图标，进入任务页面")
-                self._home_check_count = 0  # 重置检测计数器
+                self.state_set("home_check_count", 0)
                 return tap_box(self.adb, reward_icon.box, wait=3.0)
 
             logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/{rounds})")
@@ -238,12 +198,13 @@ class ClaimRewardsTask(Task):
                 time.sleep(interval)
 
         # 多次检查无奖励，累计检查次数
-        self._home_check_count += 1
-        logger.debug(f"  -> 确认无奖励图标（第 {self._home_check_count} 轮检查）")
+        home_check_count = int(self.state_get("home_check_count", 0)) + 1
+        self.state_set("home_check_count", home_check_count)
+        logger.debug(f"  -> 确认无奖励图标（第 {home_check_count} 轮检查）")
 
-        if self._home_check_count >= rounds:
+        if home_check_count >= rounds:
             logger.debug("  -> 确认无奖励，任务完成")
-            self._completed = True
+            self.complete()
 
         return ActionResult.ok(wait=1.0)
 
@@ -258,12 +219,12 @@ class ClaimRewardsTask(Task):
         result = self._try_claim_buttons(ocr_results, screenshot)
         if result:
             # 成功领取，标记 Tab 页面已领取过奖励
-            self._mark_action_done("tab_claimed")
+            self.mark_action_done("tab_claimed")
             return result
 
         # 2. 当前 Tab 无可领取，判断是否进入主题收藏
         # 如果 Tab 页面领取过奖励，直接返回主页（跳过主题收藏）
-        if self._is_action_done("tab_claimed"):
+        if self.is_action_done("tab_claimed"):
             logger.debug("  -> Tab 页面已领取过奖励，跳过主题收藏，直接返回主页")
             close_patterns = get_text_patterns("close_button")
             result = click_close(
@@ -274,16 +235,16 @@ class ClaimRewardsTask(Task):
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
         # 3. Tab 页面没有领取过奖励，需要检查主题收藏
-        if not self._is_action_done("theme_checked"):
+        if not self.is_action_done("theme_checked"):
             theme_patterns = get_text_patterns("theme_collection")
             result = tap_text(self.adb, ocr_results, theme_patterns, wait=2.0)
             if result:
                 logger.debug("  -> Tab 页面无奖励，进入主题收藏检查")
-                self._mark_action_done("theme_checked")
+                self.mark_action_done("theme_checked")
                 return result
             else:
                 logger.debug("  -> 未找到主题收藏入口，跳过")
-                self._mark_action_done("theme_checked")
+                self.mark_action_done("theme_checked")
 
         # 4. 已检查主题收藏（或没有入口），返回主页
         logger.debug("  -> 当前 Tab 和主题收藏都已处理，返回主页")
@@ -335,7 +296,7 @@ class ClaimRewardsTask(Task):
 
         return None
 
-    def _handle_theme_collection(self, page_info: dict) -> ActionResult:
+    def _handle_theme_collection_page(self, page_info: dict) -> ActionResult:
         """处理主题收藏页面：领取所有奖励后返回 Tab 页面"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
@@ -347,11 +308,11 @@ class ClaimRewardsTask(Task):
         logger.debug("  -> 主题收藏领取完成，返回 Tab 页面")
         return navigate_back(self.adb, self.page_detector, ocr_results)
 
-    def _handle_card_register(self, page_info: dict) -> ActionResult:
+    def _handle_pack_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（精英牌组奖励）"""
         return swipe_card_register(self.adb)
 
-    def _handle_reward_detail(self, page_info: dict) -> ActionResult:
+    def _handle_reward_detail_page(self, page_info: dict) -> ActionResult:
         """处理奖励详情页面：点击達成按钮"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
