@@ -822,7 +822,7 @@ class ManageFriendshipTask(StatefulTask):
             return self._close_modal(wait=0.8)
         return ActionResult.wait(0.8)
 
-    def _handle_remove_confirm(self, page_info: dict) -> ActionResult:
+    def _handle_friend_remove_confirm(self, page_info: dict) -> ActionResult:
         """删除确认弹窗点击 OK。"""
         req = self._pick_current_request()
         if req is None:
