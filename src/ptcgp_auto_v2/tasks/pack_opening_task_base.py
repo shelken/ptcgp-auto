@@ -178,6 +178,7 @@ class PackOpeningTaskBase(Task):
         self._multi_pack_swipe_counted = False
         self._opening_card_tap_count = 0
         self._pack_result_mapper: PackResultMapper | None = None
+        self._current_batch_id: str | None = None  # 当前十连包批次ID
 
         # 数据仓储（延迟初始化）
         self._pack_record_repo: "PackRecordRepository | None" = None
@@ -379,8 +380,13 @@ class PackOpeningTaskBase(Task):
             self._save_high_rarity_cards(rows)
         self._result_recognized = True
 
-    def _save_pack_record(self, rows: list[dict]) -> None:
-        """保存本次开包记录到数据库，并根据开包数量累加开包点数"""
+    def _save_pack_record(self, rows: list[dict], batch_index: int | None = None) -> None:
+        """保存本次开包记录到数据库，并根据开包数量累加开包点数
+
+        Args:
+            rows: 卡牌行数据
+            batch_index: 批次内序号，十连包为1-10
+        """
         self._init_repositories()
 
         if not (self._pack_record_repo and self.account.id):
@@ -397,6 +403,8 @@ class PackOpeningTaskBase(Task):
                 set_code=set_code,
                 pack_name=pack_name,
                 cards=rows,
+                batch_id=self._current_batch_id,
+                batch_index=batch_index,
             )
             card_names = [
                 f"{self._resolve_log_card_name(row)}({row['rarity']})" for row in rows
@@ -605,6 +613,8 @@ class PackOpeningTaskBase(Task):
 
     def _set_pack_result_mode(self, batch_size: int = 1) -> None:
         """设置当前开包结果模式。"""
+        import uuid
+
         resolved_batch_size = max(1, batch_size)
         self._pack_result_batch_size = resolved_batch_size
         self._pack_result_mode = (
@@ -613,10 +623,21 @@ class PackOpeningTaskBase(Task):
         self._pack_result_rows = []
         self._multi_pack_swipe_counted = False
         self._opening_card_tap_count = 0
+        # 多包模式下生成批次ID
+        if resolved_batch_size > 1:
+            # 测试环境下可能没有绑定账号，使用随机ID
+            try:
+                account_id = self.account.id if self.account else "test"
+            except RuntimeError:
+                account_id = "test"
+            self._current_batch_id = f"{account_id}_{uuid.uuid4().hex[:12]}"
+        else:
+            self._current_batch_id = None
 
     def _reset_pack_result_mode(self) -> None:
         """重置当前开包结果模式为单包默认值。"""
         self._set_pack_result_mode()
+        self._current_batch_id = None
 
     def _group_result_rows(self, cards: list[DetectedCard]) -> list[list[dict]]:
         """将单屏识别结果转换为按行分组的卡牌列表。"""
@@ -759,8 +780,8 @@ class PackOpeningTaskBase(Task):
                 )
                 return False
 
-            for rows in pack_groups:
-                self._save_pack_record(rows)
+            for idx, rows in enumerate(pack_groups, start=1):
+                self._save_pack_record(rows, batch_index=idx)
                 if self._account_card_repo and self.account.id:
                     self._save_high_rarity_cards(rows)
 

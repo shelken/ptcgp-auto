@@ -41,6 +41,14 @@ class PackRecord(SQLModel, table=True):
     pack_code: Optional[str] = Field(default=None, description="系列代码，如 A1")
     pack_name: Optional[str] = Field(default=None, description="卡包名称，如 Charizard")
 
+    # 批次字段：用于关联十连包
+    batch_id: Optional[str] = Field(
+        default=None, index=True, description="批次ID，同一批十连包共享此ID"
+    )
+    batch_index: Optional[int] = Field(
+        default=None, description="批次内序号，十连包为1-10"
+    )
+
     opened_at: datetime = Field(default_factory=datetime.now)
 
     # 关系
@@ -78,5 +86,7 @@ class PackRecord(SQLModel, table=True):
             "pack_type": self.pack_type,
             "set_code": self.set_code,
             "pack_name": self.pack_name,
+            "batch_id": self.batch_id,
+            "batch_index": self.batch_index,
             "opened_at": self.opened_at.isoformat() if self.opened_at else None,
         }
