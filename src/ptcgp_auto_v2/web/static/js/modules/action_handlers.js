@@ -15,7 +15,12 @@ import { switchTab, updateSidebarState } from './tabs.js';
 import { cycleThemeMode, setManualTheme } from './theme.js';
 import { showToast } from './utils.js';
 import { cancelExchangeForm, showExchangeForm } from './features/exchange_cards.js';
-import { setLang, setViewMode, toggleRecordFilterPanel } from './ui_preferences.js';
+import {
+    scheduleRecordsGridCompaction,
+    setLang,
+    setViewMode,
+    toggleRecordFilterPanel,
+} from './ui_preferences.js';
 import { getNotificationDrawer } from './features/notification_panel.js';
 import { selectTaskAccountOption } from './features/filters/tasks_remote_account.js';
 
@@ -64,6 +69,29 @@ function closeThemePopoverWhenOutsideClick(target) {
     if (!isInsidePopover && !isToggleBtn) {
         popover.classList.add('hidden');
     }
+}
+
+function switchBatchPanel(actionButton, panelType) {
+    const batchId = actionButton.dataset.batchId;
+    if (!batchId) return;
+
+    const batchContent = document.getElementById(`batch-content-${batchId}`);
+    if (!(batchContent instanceof HTMLElement)) return;
+
+    batchContent.querySelectorAll('[data-batch-panel]').forEach((panel) => {
+        if (panel instanceof HTMLElement) {
+            panel.classList.add('hidden');
+        }
+    });
+
+    const targetId = panelType === 'overview'
+        ? `batch-panel-${batchId}-overview`
+        : `batch-panel-${batchId}-pack-${actionButton.dataset.packIndex}`;
+    const targetPanel = document.getElementById(targetId);
+    if (!(targetPanel instanceof HTMLElement)) return;
+
+    targetPanel.classList.remove('hidden');
+    scheduleRecordsGridCompaction();
 }
 
 export function handleActionClick(event) {
@@ -192,6 +220,16 @@ export function handleActionClick(event) {
 
     if (action === 'open-card-preview') {
         openCardPreview(actionButton);
+        return;
+    }
+
+    if (action === 'show-batch-pack-detail') {
+        switchBatchPanel(actionButton, 'detail');
+        return;
+    }
+
+    if (action === 'show-batch-overview') {
+        switchBatchPanel(actionButton, 'overview');
         return;
     }
 

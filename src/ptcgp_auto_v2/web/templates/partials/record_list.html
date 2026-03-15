@@ -4,7 +4,177 @@
 {% set image_cdn_url = image_sources.cdn_base_url %}
 {% from "partials/macros/account.html" import account_primary_text %}
 
+{% macro render_pack_detail_grid(cards) %}
+{% set detail_layout = 'layout-3' %}
+{% if cards|length == 6 %}
+    {% set detail_layout = 'layout-6' %}
+{% elif cards|length == 5 %}
+    {% set detail_layout = 'layout-5' %}
+{% elif cards|length == 4 %}
+    {% set detail_layout = 'layout-4' %}
+{% endif %}
+<div class="pack-grid {{ detail_layout }}">
+    {% for card in cards %}
+    <div class="card-item relative group aspect-[2/3] overflow-hidden transition-all duration-200 brutal-card cursor-pointer"
+         data-action="open-card-preview"
+         data-card-name="{{ card.display_name or card.card_name }}"
+         data-card-rarity="{{ card.rarity|rarity_display(current_lang) }}"
+         data-card-set="{{ card.card.set_code if card.card else '' }}"
+         data-card-number="{{ card.card.number if card.card else '' }}"
+         data-card-image="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&output=png{% else %}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=={% endif %}"
+         data-card-image-webp="{% if card.card and card.card.image_url %}{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.webp&output=webp{% else %}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=={% endif %}"
+         data-card-image-hd="{% if card.card and card.card.image_url %}{{ image_cdn_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png{% else %}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=={% endif %}"
+         data-card-image-hd-webp="{% if card.card and card.card.image_url %}{{ image_cdn_url }}/{{ card.card.set_code }}/{{ card.card.number }}.webp{% else %}data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=={% endif %}">
+        {% if card.card and card.card.image_url %}
+        <img src="{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&w=400&output=png"
+             alt="{{ card.display_name or card.card_name }}"
+             class="w-full h-full object-cover"
+             width="400"
+             height="600"
+             loading="lazy"
+             decoding="async"
+             onerror="if(!this.dataset.webpTried){this.dataset.webpTried='1';this.src='{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.webp&w=400&output=webp';}else{this.onerror=null;this.src='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';}">
+        {% else %}
+        <div class="w-full h-full flex items-center justify-center font-bold rotate-45 border-dashed border-2 m-2" style="color: var(--text-color); border-color: var(--border-color);">{{ t.no_image|default('No Image') }}</div>
+        {% endif %}
+
+        <div class="absolute top-0 right-0 font-bold z-10 whitespace-nowrap tooltip-text"
+             data-tooltip="{{ card.rarity|rarity_display(current_lang) }}"
+             aria-label="{{ card.rarity|rarity_display(current_lang) }}"
+             style="background-color: var(--border-color); color: var(--bg-color); border-left: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); font-size: clamp(5px, 0.42vw, 8px); line-height: 1; padding: clamp(1px, 0.12vw, 2px) clamp(2px, 0.2vw, 4px);">{{ card.rarity }}</div>
+
+        {% if card.is_new %}
+        <div class="absolute top-0 left-0 text-[10px] px-2 py-1 font-bold z-10" style="background-color: var(--accent-color); color: var(--bg-color); border-right: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color); box-shadow: 2px 2px 0px var(--shadow-color);">{{ t.new_badge|default('NEW') }}</div>
+        {% endif %}
+
+        <div class="absolute bottom-0 left-0 right-0 text-xs py-2 px-2 text-center font-bold translate-y-full group-hover:translate-y-0 transition-transform duration-200 card-name-overlay tooltip-text"
+             data-tooltip="{{ card.display_name or card.card_name }}"
+             style="background-color: var(--border-color); color: var(--bg-color); border-top: 2px solid var(--border-color);">{{ card.display_name or card.card_name }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro render_batch_detail_panel(batch_id, pack_index, cards, hidden=true) %}
+<div id="batch-panel-{{ batch_id }}-pack-{{ pack_index }}"
+     class="w-full min-w-0 flex-1 p-2 cursor-pointer{% if hidden %} hidden{% endif %}"
+     data-batch-panel="detail"
+     data-batch-id="{{ batch_id }}"
+     data-action="show-batch-overview">
+    {{ render_pack_detail_grid(cards) }}
+</div>
+{% endmacro %}
+
+{% macro render_batch_overview_panel(batch_id, batch_packs, hidden=false) %}
+<div id="batch-panel-{{ batch_id }}-overview"
+     class="w-full min-w-0 flex-1{% if hidden %} hidden{% endif %}"
+     data-batch-panel="overview"
+     data-batch-id="{{ batch_id }}">
+    <div class="batch-overview-grid grid grid-cols-5 gap-2 md:gap-3">
+        {% for pack in batch_packs %}
+        <div class="batch-pack-item relative group cursor-pointer brutal-card aspect-[2/3] overflow-hidden tooltip-text"
+             data-pack-index="{{ pack.batch_index }}"
+             data-batch-id="{{ batch_id }}"
+             data-action="show-batch-pack-detail"
+             data-tooltip="{{ t.pack_number|default('第') }}{{ pack.batch_index }}{{ t.pack_suffix|default('包') }}">
+            {% set card = pack.cover_card %}
+            {% if card and card.card and card.card.image_url %}
+            <img src="{{ image_base_url }}/{{ card.card.set_code }}/{{ card.card.number }}.png&w=400&output=png"
+                 alt="{{ card.display_name or card.card_name }}"
+                 class="w-full h-full object-cover"
+                 width="400"
+                 height="600"
+                 loading="lazy"
+                 decoding="async">
+            {% else %}
+            <div class="w-full h-full flex items-center justify-center font-bold" style="background-color: var(--bg-subtle); color: var(--text-color);">{{ pack.max_rarity or '☆' }}</div>
+            {% endif %}
+
+            <div class="absolute top-0 right-0 font-bold z-10 whitespace-nowrap"
+                 style="background-color: var(--border-color); color: var(--bg-color); border-left: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); font-size: clamp(5px, 0.42vw, 8px); line-height: 1; padding: clamp(1px, 0.12vw, 2px) clamp(2px, 0.2vw, 4px);">#{{ pack.batch_index }}</div>
+
+            {% if pack.has_new %}
+            <div class="absolute top-0 left-0 text-[8px] md:text-[9px] px-1.5 py-0.5 font-bold z-10"
+                 style="background-color: var(--accent-color); color: var(--bg-color); border-right: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color);">{{ t.new_badge|default('NEW') }}</div>
+            {% endif %}
+
+            <div class="absolute bottom-0 right-0 font-bold z-10 whitespace-nowrap"
+                 style="background-color: var(--border-color); color: var(--bg-color); border-left: 1px solid var(--border-color); border-top: 1px solid var(--border-color); font-size: clamp(5px, 0.42vw, 8px); line-height: 1; padding: clamp(1px, 0.12vw, 2px) clamp(2px, 0.2vw, 4px);">{{ pack.max_rarity }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endmacro %}
+
+{% macro render_batch_panels(batch_id, batch_packs) %}
+{{ render_batch_overview_panel(batch_id, batch_packs) }}
+{% for pack in batch_packs %}
+{{ render_batch_detail_panel(batch_id, pack.batch_index, pack.cards) }}
+{% endfor %}
+{% endmacro %}
+
 {% for item in items %}
+{% if item.is_batch %}
+<!-- 十连包批次卡片 -->
+<div class="brutal-card p-6 md:p-8 flex flex-col md:flex-row md:items-start gap-4 md:gap-5" data-batch-id="{{ item.batch_id }}">
+    <!-- Left: Compact Meta Rail -->
+    <aside class="w-full md:w-[9.5rem] md:shrink-0 flex flex-col gap-3 md:gap-2.5 md:pr-4 pb-4 md:pb-0 border-b-4 md:border-b-0 md:border-r-4"
+           style="border-color: var(--border-color);">
+        <div class="flex flex-wrap items-center gap-2">
+            {% if item.record.set_code %}
+            <span class="inline-flex items-center min-h-[1.6rem] px-2 py-0.5 border-2 text-[11px] font-black tracking-[0.14em] uppercase shadow-[3px_3px_0px_var(--shadow-color)]"
+                  style="border-color: var(--border-color); background-color: var(--active-color); color: var(--bg-color);">
+                {{ item.record.set_code }}
+            </span>
+            {% endif %}
+            <span class="text-[11px] font-extrabold tracking-[0.14em] uppercase text-muted">
+                {{ item.pack_type_display }}
+            </span>
+        </div>
+
+        <h2 class="m-0 text-[1.05rem] md:text-[1.15rem] font-black leading-none uppercase break-words">
+            {% if item.record.set_code %}
+                {{ item.pack_name_display }}
+            {% else %}
+                {{ item.pack_type_display }}
+            {% endif %}
+        </h2>
+
+        <div class="text-[11px] md:text-[12px] font-bold leading-[1.35] text-muted break-words">
+            {{ t.col_account or 'Account' }} · {{ account_primary_text(item.record.account_id, item.account_name) }}
+        </div>
+
+        <div class="w-full border-t-2" style="border-color: var(--border-color);" aria-hidden="true"></div>
+
+        <div class="flex flex-col gap-2">
+            <div class="tooltip-text relative-time text-[12px] md:text-[13px] font-black leading-tight"
+                 data-iso="{{ item.opened_at.isoformat(timespec='seconds') }}"
+                 data-tooltip="{{ item.opened_at|datetime }}">
+                {{ item.opened_at|datetime }}
+            </div>
+
+            <div class="flex flex-wrap gap-1.5">
+                <span class="inline-flex items-center min-h-[1.5rem] px-2 py-0.5 border-2 text-[10px] font-extrabold leading-tight"
+                      style="border-color: var(--border-color); background-color: var(--bg-subtle);">
+                    {{ item.total_cards }} {{ t.cards_count_suffix }}
+                </span>
+            {% if item.current_points is not none %}
+                <span class="inline-flex items-center min-h-[1.5rem] px-2 py-0.5 border-2 text-[10px] font-extrabold leading-tight"
+                      style="border-color: var(--border-color); background-color: var(--accent-color); color: var(--bg-color);">
+                    PT {{ item.current_points }}
+                </span>
+            {% endif %}
+            </div>
+        </div>
+    </aside>
+
+    <!-- Right: Batch Pack Overview -->
+    <div class="w-full min-w-0 flex-1" id="batch-content-{{ item.batch_id }}" style="align-self: flex-start;">
+        {{ render_batch_panels(item.batch_id, item.batch_packs) }}
+    </div>
+</div>
+{% else %}
+<!-- 单包卡片（原有结构） -->
 <div class="brutal-card p-6 md:p-8 flex flex-col md:flex-row gap-4 md:gap-5">
     <!-- Left: Compact Meta Rail -->
     <aside class="w-full md:w-[9.5rem] md:shrink-0 flex flex-col gap-3 md:gap-2.5 md:pr-4 pb-4 md:pb-0 border-b-4 md:border-b-0 md:border-r-4"
@@ -116,11 +286,12 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endfor %}
 
 <!-- HTMX Infinite Scroll Trigger -->
 {% if has_next %}
-<div hx-get="/api/records?page={{ page + 1 }}&lang={{ current_lang }}"
+<div hx-get="/api/records?page={{ page + 1 }}"
      hx-include="#filter-form"
      hx-trigger="revealed"
      hx-swap="outerHTML"
