@@ -1,8 +1,9 @@
 from typing import Any
 
-from sqlmodel import Session
+from sqlmodel import Session, select, col
 
 from ptcgp_auto_v2.db.repositories import CardRepository
+from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
 from ptcgp_auto_v2.web.queries.record_queries import (
     fetch_records,
     fetch_pack_points_map,
@@ -34,6 +35,150 @@ def _build_record_card_view(pack_card: Any) -> dict[str, Any]:
         "is_new": bool(getattr(pack_card, "is_new", False)),
         "position": int(getattr(pack_card, "position", 0) or 0),
         "card": getattr(pack_card, "card", None),
+    }
+
+
+def _fetch_batch_records(
+    session: Session,
+    batch_id: str,
+) -> list[PackRecord]:
+    """查询同一批次的所有开包记录（用于十连包展示）。"""
+    from ptcgp_auto_v2.db.models.pack_card import PackCard
+    from sqlalchemy.orm import selectinload
+
+    stmt = (
+        select(PackRecord)
+        .where(col(PackRecord.batch_id) == batch_id)
+        .options(
+            selectinload(PackRecord.cards).selectinload(PackCard.card),
+            selectinload(PackRecord.account),
+        )
+        .order_by(col(PackRecord.batch_index))
+    )
+    return list(session.exec(stmt).all())
+
+
+def _get_rarity_weight(rarity: str) -> int:
+    """获取稀有度权重，基于 RARITY_META 的 priority（单一数据源）。"""
+    from ptcgp_auto_v2.config.rarity_icons import RARITY_META
+
+    meta = RARITY_META.get(rarity)
+    return meta["priority"] if meta else -1
+
+
+def _build_batch_pack_view(
+    record: PackRecord,
+    card_views: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """构建十连包中单个包的视图（用于概览展示）。"""
+    # 找出最高稀有度的卡牌作为封面
+    cover_card = None
+    max_rarity = ""
+    max_weight = -1
+    has_new = False
+
+    for card in card_views:
+        rarity = card.get("rarity", "")
+        weight = _get_rarity_weight(rarity)
+        if weight > max_weight:
+            max_weight = weight
+            max_rarity = rarity
+            cover_card = card
+        if card.get("is_new"):
+            has_new = True
+
+    # 如果没有找到封面（空包），取第一张
+    if cover_card is None and card_views:
+        cover_card = card_views[0]
+        max_rarity = cover_card.get("rarity", "")
+
+    return {
+        "record": record,
+        "batch_index": record.batch_index,
+        "cards": card_views,
+        "cover_card": cover_card,
+        "max_rarity": max_rarity,
+        "has_new": has_new,
+        "card_count": len(card_views),
+    }
+
+
+def _build_record_item_view(
+    record: PackRecord,
+    card_views: list[dict[str, Any]],
+    layout_type: str,
+    account_name: str,
+    opened_at,
+    current_points: int | None,
+    series_code: str,
+    set_name_display: str,
+    pack_name_display: str,
+    pack_type_display: str,
+) -> dict[str, Any]:
+    """构建单包记录视图模型。"""
+    return {
+        "is_batch": False,
+        "record": record,
+        "cards": card_views,
+        "layout": layout_type,
+        "account_name": account_name,
+        "opened_at": opened_at,
+        "current_points": current_points,
+        "series": series_code,
+        "set_name_display": set_name_display,
+        "pack_name_display": pack_name_display,
+        "pack_type_display": pack_type_display,
+    }
+
+
+def _build_batch_item_view(
+    batch_id: str,
+    batch_records: list[PackRecord],
+    points_map: dict[tuple[int, str], int],
+    sets_map: dict[str, dict[str, Any]],
+    packs_map: dict[str, dict[str, Any]],
+    translations: dict[str, Any],
+) -> dict[str, Any]:
+    """构建十连批次整卡视图模型。"""
+    batch_packs = []
+    total_cards = 0
+    for pack in batch_records:
+        sorted_cards = sorted(pack.cards, key=lambda c: c.position)
+        card_views = [_build_record_card_view(c) for c in sorted_cards]
+        batch_packs.append(_build_batch_pack_view(pack, card_views))
+        total_cards += len(card_views)
+
+    first_pack = batch_records[0]
+    series_code = first_pack.set_code or ""
+    current_points = None
+    if series_code:
+        current_points = points_map.get((first_pack.account_id, series_code))
+
+    set_name_display = series_code
+    if series_code in sets_map:
+        set_name_display = resolve_label(sets_map[series_code], fallback=series_code)
+
+    pack_name_display = first_pack.pack_name or ""
+    if first_pack.pack_name in packs_map:
+        pack_name_display = resolve_label(
+            packs_map[first_pack.pack_name], fallback=first_pack.pack_name
+        )
+
+    return {
+        "is_batch": True,
+        "batch_id": batch_id,
+        "batch_packs": batch_packs,
+        "total_cards": total_cards,
+        "record": first_pack,
+        "account_name": first_pack.account.nickname
+        if first_pack.account
+        else "Unknown",
+        "opened_at": first_pack.opened_at,
+        "current_points": current_points,
+        "series": series_code,
+        "set_name_display": set_name_display,
+        "pack_name_display": pack_name_display,
+        "pack_type_display": str(translations.get(PackRecordType.TEN_PACK, "十连开包")),
     }
 
 
@@ -70,7 +215,37 @@ def build_records_list_context(
     items = []
     _, translations = get_current_i18n()
 
+    # 用于追踪已处理的批次，避免重复展示
+    processed_batches: set[str] = set()
+
     for record in results:
+        # 十连包批次处理：只处理每批的第一条记录，聚合整批
+        if (
+            record.pack_type == PackRecordType.TEN_PACK
+            and record.batch_id
+            and record.batch_id not in processed_batches
+        ):
+            processed_batches.add(record.batch_id)
+
+            # 查询该批次全部记录
+            batch_records = _fetch_batch_records(session, record.batch_id)
+            items.append(
+                _build_batch_item_view(
+                    batch_id=record.batch_id,
+                    batch_records=batch_records,
+                    points_map=points_map,
+                    sets_map=sets_map,
+                    packs_map=packs_map,
+                    translations=translations,
+                )
+            )
+            continue
+
+        # 十连包的后续记录（同一批次的非第一条）跳过
+        if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
+            continue
+
+        # 单包处理（保持原有逻辑）
         sorted_cards = sorted(record.cards, key=lambda card: card.position)
         card_views = [_build_record_card_view(card) for card in sorted_cards]
         card_count = len(card_views)
@@ -89,9 +264,11 @@ def build_records_list_context(
             current_points = points_map.get((record.account_id, record.set_code))
             series_code = record.set_code
         elif record.pack_type and "/" in record.pack_type:
-            series = record.pack_type.split("/")[0]
-            current_points = points_map.get((record.account_id, series))
-            series_code = series
+            parts = record.pack_type.split("/")
+            if parts:
+                series = parts[0]
+                current_points = points_map.get((record.account_id, series))
+                series_code = series
 
         set_name_display = series_code
         if series_code in sets_map:
@@ -109,20 +286,18 @@ def build_records_list_context(
         )
 
         items.append(
-            {
-                "record": record,
-                "cards": card_views,
-                "layout": layout_type,
-                "account_name": record.account.nickname
-                if record.account
-                else "Unknown",
-                "opened_at": record.opened_at,
-                "current_points": current_points,
-                "series": series_code,
-                "set_name_display": set_name_display,
-                "pack_name_display": pack_name_display,
-                "pack_type_display": pack_type_display,
-            }
+            _build_record_item_view(
+                record=record,
+                card_views=card_views,
+                layout_type=layout_type,
+                account_name=record.account.nickname if record.account else "Unknown",
+                opened_at=record.opened_at,
+                current_points=current_points,
+                series_code=series_code,
+                set_name_display=set_name_display,
+                pack_name_display=pack_name_display,
+                pack_type_display=pack_type_display,
+            )
         )
 
     return {

@@ -11,12 +11,6 @@ export function buildAutoRefreshUrl(container) {
     const parsedUrl = new URL(baseUrl, window.location.origin);
     const overrides = { page: '0' };
 
-    if (!parsedUrl.searchParams.has('lang')) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const lang = urlParams.get('lang') || 'en';
-        overrides.lang = lang;
-    }
-
     const includeSelector = container.dataset.refreshInclude;
     return buildUrlWithSelectorFilters(
         `${parsedUrl.pathname}${parsedUrl.search}`,

@@ -2,6 +2,118 @@ const STORAGE_KEY_LANG = 'ptcgp_lang';
 const STORAGE_KEY_VIEW_MODE = 'ptcgp_view_mode';
 const STORAGE_KEY_RECORD_FILTER_PANEL = 'ptcgp_records_filter_panel_open';
 
+// 记录页双列布局的桌面断点，需与 CSS `md` 断点保持一致。
+const RECORDS_GRID_DESKTOP_MIN_WIDTH = 768;
+
+let recordsGridObserver = null;
+let recordsGridCompactionFrame = 0;
+let recordsGridResizeBound = false;
+let recordsGridLoadBound = false;
+
+/** 清理记录页网格压缩产生的内联偏移。 */
+function resetRecordsGridCompaction(container) {
+    if (!container) return;
+
+    container.style.marginBottom = '';
+    for (const item of container.children) {
+        item.style.position = '';
+        item.style.top = '';
+    }
+}
+
+/**
+ * 压缩 records 双列网格中较短列后续卡片的占位，避免批次详情展开后出现整块空白。
+ */
+function applyRecordsGridCompaction() {
+    const container = document.getElementById('records-container');
+    if (!container) return;
+
+    resetRecordsGridCompaction(container);
+
+    if (!container.classList.contains('view-grid-layout') || window.innerWidth < RECORDS_GRID_DESKTOP_MIN_WIDTH) {
+        return;
+    }
+
+    const items = Array.from(container.children);
+    if (items.length < 3) return;
+
+    let leftOffset = 0;
+    let rightOffset = 0;
+
+    for (let index = 0; index < items.length; index += 2) {
+        const leftItem = items[index];
+        const rightItem = items[index + 1] || null;
+
+        if (leftOffset > 0.5) {
+            leftItem.style.position = 'relative';
+            leftItem.style.top = `-${leftOffset}px`;
+        }
+
+        if (rightItem && rightOffset > 0.5) {
+            rightItem.style.position = 'relative';
+            rightItem.style.top = `-${rightOffset}px`;
+        }
+
+        if (!rightItem) {
+            continue;
+        }
+
+        const leftHeight = leftItem.getBoundingClientRect().height;
+        const rightHeight = rightItem.getBoundingClientRect().height;
+        const rowGap = leftHeight - rightHeight;
+
+        if (rowGap > 0.5) {
+            rightOffset += rowGap;
+        } else if (rowGap < -0.5) {
+            leftOffset += -rowGap;
+        }
+    }
+
+    const maxOffset = Math.max(leftOffset, rightOffset);
+    if (maxOffset > 0.5) {
+        container.style.marginBottom = `-${maxOffset}px`;
+    }
+}
+
+/** 在布局稳定后统一重算记录页双列网格偏移。 */
+export function scheduleRecordsGridCompaction() {
+    if (recordsGridCompactionFrame) {
+        cancelAnimationFrame(recordsGridCompactionFrame);
+    }
+
+    recordsGridCompactionFrame = requestAnimationFrame(() => {
+        recordsGridCompactionFrame = requestAnimationFrame(() => {
+            recordsGridCompactionFrame = 0;
+            applyRecordsGridCompaction();
+        });
+    });
+}
+
+/** 初始化记录页双列网格压缩观察器。 */
+function initRecordsGridCompaction() {
+    const container = document.getElementById('records-container');
+    if (!container) return;
+
+    if (!(recordsGridObserver instanceof MutationObserver)) {
+        recordsGridObserver = new MutationObserver(() => {
+            scheduleRecordsGridCompaction();
+        });
+        recordsGridObserver.observe(container, { childList: true, subtree: true });
+    }
+
+    if (!recordsGridResizeBound) {
+        window.addEventListener('resize', scheduleRecordsGridCompaction);
+        recordsGridResizeBound = true;
+    }
+
+    if (!recordsGridLoadBound) {
+        container.addEventListener('load', scheduleRecordsGridCompaction, true);
+        recordsGridLoadBound = true;
+    }
+
+    scheduleRecordsGridCompaction();
+}
+
 // --- 语言持久化 ---
 export function setLang(lang) {
     localStorage.setItem(STORAGE_KEY_LANG, lang);
@@ -50,10 +162,12 @@ export function setViewMode(mode) {
     }
 
     localStorage.setItem(STORAGE_KEY_VIEW_MODE, mode);
+    scheduleRecordsGridCompaction();
 }
 
 // --- 恢复视图模式 ---
 export function restoreViewMode() {
+    initRecordsGridCompaction();
     const mode = localStorage.getItem(STORAGE_KEY_VIEW_MODE) || 'grid';
     setViewMode(mode);
 }
