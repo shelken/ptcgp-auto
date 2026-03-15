@@ -13,6 +13,7 @@ from ptcgp_auto_v2.web.services.friendship_service import (
     create_delete_request,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int, safe_get_string
+from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 from ptcgp_auto_v2.web.utils.response_utils import render_template
 
 
@@ -98,8 +99,7 @@ async def post_add_friend_request(
         session=session,
     )
 
-    context = build_friendship_context(session=session)
-    t = context["t"]
+    _, t = get_current_i18n()
     message = (
         t.get("msg_add_request_created")
         if create_ok
@@ -162,8 +162,7 @@ async def post_delete_friend_request(
         session=session,
     )
 
-    context = build_friendship_context(session=session)
-    t = context["t"]
+    _, t = get_current_i18n()
     message = (
         t.get("msg_delete_request_created")
         if create_ok
@@ -204,8 +203,7 @@ async def post_cancel_friend_request(
         session=session,
     )
 
-    context = build_friendship_context(session=session)
-    t = context["t"]
+    _, t = get_current_i18n()
     message = (
         t.get("msg_request_cancelled")
         if cancelled
