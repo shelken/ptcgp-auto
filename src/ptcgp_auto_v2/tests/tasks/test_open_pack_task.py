@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.db.models import PackRecordType
 from ptcgp_auto_v2.tasks.open_pack import (
-    ACTION_KEY_10_PACK_CONFIRMED,
     HOME_CHECK_THRESHOLD,
     OPEN_10_PACK_BATCH_SIZE,
     OpenPackTask,
@@ -127,12 +126,16 @@ class TestOpenPackHandleHome(unittest.TestCase):
 
 class TestOpenPackRecordType(unittest.TestCase):
     def test_get_pack_record_type_should_use_daily_free_for_single_pack(self):
-        task = OpenPackTask(FakeAdb(), recognizer=None, page_detector=FakePageDetector())
+        task = OpenPackTask(
+            FakeAdb(), recognizer=None, page_detector=FakePageDetector()
+        )
 
         self.assertEqual(task.get_pack_record_type(), PackRecordType.DAILY_FREE)
 
     def test_get_pack_record_type_should_use_ten_pack_for_ten_pack(self):
-        task = OpenPackTask(FakeAdb(), recognizer=None, page_detector=FakePageDetector())
+        task = OpenPackTask(
+            FakeAdb(), recognizer=None, page_detector=FakePageDetector()
+        )
 
         task._set_pack_result_mode(OPEN_10_PACK_BATCH_SIZE)
 
@@ -423,8 +426,7 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         result = self.task._handle_pack_paid({"ocr_results": [{"text": "開封10包"}]})
 
         self.assertTrue(result.success)
-        self.assertFalse(self.task._has_opened_10_pack_this_task())
-        self.assertFalse(self.task._is_action_done(ACTION_KEY_10_PACK_CONFIRMED))
+        self.assertFalse(self.task._has_started_10_pack_this_task())
         mock_tap_text_exact.assert_called_once()
 
     @patch("ptcgp_auto_v2.tasks.open_pack.get_settings")
@@ -443,8 +445,7 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         result = self.task._handle_pack_paid_modal({"ocr_results": [{"text": "OK"}]})
 
         self.assertTrue(result.success)
-        self.assertTrue(self.task._is_action_done(ACTION_KEY_10_PACK_CONFIRMED))
-        self.assertTrue(self.task._has_opened_10_pack_this_task())
+        self.assertTrue(self.task._has_started_10_pack_this_task())
         self.assertEqual("ten", self.task._pack_result_mode)
         self.assertEqual(OPEN_10_PACK_BATCH_SIZE, self.task._pack_result_batch_size)
         self.assertEqual(0, self.task._pack_hourglass_count)
@@ -460,7 +461,7 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         self, mock_tap_text_exact, mock_navigate_back
     ):
         self.task._pack_hourglass_count = 120
-        self.task._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+        self.task._mark_10_pack_state("confirmed")
         mock_navigate_back.return_value = ActionResult.ok(wait=1.0)
 
         result = self.task._handle_pack_paid({"ocr_results": []})
@@ -500,7 +501,7 @@ class TestOpenPackPaidFlow(unittest.TestCase):
         self, mock_navigate_back
     ):
         self.task._target_pack = {"set_code": "A1", "booster_name": "Test"}
-        self.task._mark_action_done(ACTION_KEY_10_PACK_CONFIRMED)
+        self.task._mark_10_pack_state("completed")
         self.page_detector._last_screenshot = object()
         self.page_detector._last_ocr_results = [{"text": "提供比例"}]
         mock_navigate_back.return_value = ActionResult.ok(wait=1.0)
