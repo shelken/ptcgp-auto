@@ -4,8 +4,9 @@
 
 ### 运行
 
-- 如果在工作目录出错后，使用direnv exec运行,任何python命令，使用uv跑
-- 如果没有数据测试，尝试`cp -r ~/Code/MyRepo/ptcgp-auto/data ./`, 启动`./scripts/web_dev.sh`，然后使用`devtools`自己测试web变更。
+- 从现在开始，修复bug时不要写任何测试，直接修改代码。
+- 如果在工作目录出错后，使用direnv exec运行（目录无法执行时先`direnv allow`）,任何python命令，使用uv跑
+- 如果没有数据测试，尝试`cp -r ~/Code/MyRepo/ptcgp-auto/data ./`, 没有启动web时启动`./scripts/web_dev.sh`，然后使用`devtools`自己测试web变更。
 
 ### 对话规则
 
