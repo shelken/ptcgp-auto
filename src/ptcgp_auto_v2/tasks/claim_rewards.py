@@ -9,13 +9,13 @@
 import logging
 import time
 
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.color import is_button_clickable
@@ -266,7 +266,7 @@ class ClaimRewardsTask(StatefulTask):
         # 需要颜色检查的模式（全部領取的多语言版本）
         color_check_patterns = get_text_patterns("reward_claim_all")
 
-        wait = 1.2
+        wait = 1.8
         for pattern in claim_patterns:
             for item in ocr_results:
                 text = "".join(item["text"].lower().split())
