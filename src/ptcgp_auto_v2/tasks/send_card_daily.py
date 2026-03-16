@@ -592,7 +592,7 @@ class SendCardDailyTask(StatefulTask):
             return None
 
         best = max(candidates, key=lambda item: (item.similarity, item.confidence))
-        return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=2.5)
+        return tap(self.adb, int(best.center[0]), int(best.center[1]), wait=3.5)
 
     def _handle_filter_modal(self, page_info: dict) -> ActionResult:
         """筛选弹窗：清空 -> 输入关键字 -> 确认。"""
