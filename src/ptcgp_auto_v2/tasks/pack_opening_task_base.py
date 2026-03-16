@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, cast
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
-from ptcgp_auto_v2.utils.action_result import ActionResult
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.notifier import get_notifier
@@ -55,6 +54,7 @@ from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (
     PackTemplateMatcher,
     build_pack_template_matcher,
 )
+from ptcgp_auto_v2.utils.action_result import ActionResult
 from ptcgp_auto_v2.utils.gesture import (
     quick_tap,
     scroll_points,
@@ -561,7 +561,7 @@ class PackOpeningTaskBase(StatefulTask):
         if self._pack_result_mode == PACK_RESULT_MODE_TEN:
             self._opening_card_tap_count += 1
             if self._opening_card_tap_count <= OPENING_CARD_TEN_FAST_TAP_LIMIT:
-                wait = 0.0
+                wait = 0.5
             else:
                 wait = OPENING_CARD_WAIT
 
