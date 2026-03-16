@@ -116,6 +116,7 @@ TEXT_PATTERNS = {
     "card_sort_by_acquired": ["按卡牌獲得順序"],
     "card_challenge_title": ["得卡挑戰"],
     "card_challenge_get": ["GET!"],
+    "card_challenge_get_exclude": ["升級"],
     "card_challenge_remaining_plays": ["剩餘遊玩次數"],
     "card_challenge_recover": ["恢復"],
     "card_challenge_end_already": ["已挑戰"],
