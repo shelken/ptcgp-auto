@@ -337,8 +337,11 @@ class TaskInstanceRepository:
                     (TaskInstance.status == "running")
                     & (TaskInstance.updated_at < stale_threshold)
                 )
-                # failed 直接重试
-                | (TaskInstance.status == "failed")
+                # failed 按 skipped 超时重试
+                | (
+                    (TaskInstance.status == "failed")
+                    & (TaskInstance.updated_at < skipped_threshold)
+                )
                 # blocked 超时
                 | (
                     (TaskInstance.status == "blocked")
