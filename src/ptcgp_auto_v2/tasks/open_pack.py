@@ -534,9 +534,15 @@ class OpenPackTask(PackOpeningTaskBase):
 
             for item in ocr_results:
                 text = item.get("text", "")
-                match = re.search(r"([\d,]+)\s*pt", text, re.IGNORECASE)
+                match = re.search(r"([0-9Oo,]+)\s*pt", text, re.IGNORECASE)
                 if match:
-                    points_str = match.group(1).replace(",", "")
+                    # OCR 常见误读：O/o -> 0（如 Opt -> 0pt）
+                    points_str = (
+                        match.group(1)
+                        .replace(",", "")
+                        .replace("O", "0")
+                        .replace("o", "0")
+                    )
                     points = int(points_str)
                     # 保存到基类变量，延迟到保存记录时更新
                     self._base_pack_points = points
