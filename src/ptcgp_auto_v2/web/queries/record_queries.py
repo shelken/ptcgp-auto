@@ -1,12 +1,28 @@
 from typing import Iterable
 
 from sqlmodel import Session, select, desc, col
+from sqlalchemy import func, literal, union_all, String, cast, Integer
 from sqlalchemy.orm import selectinload
 
-from ptcgp_auto_v2.db.models.pack_record import PackRecord
+from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
 from ptcgp_auto_v2.db.models.pack_card import PackCard
 from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.models.account_pack_point import AccountPackPoint
+
+# 展示实体类型标识（用于记录分页的实体键类型）
+DISPLAY_ENTITY_TYPE_TEN_PACK = "ten_pack"
+DISPLAY_ENTITY_TYPE_SINGLE = "single"
+
+
+def _apply_pack_record_filters(query, rarity: list[str], card_type: list[str]):
+    """按稀有度与类型追加筛选条件。"""
+    if rarity or card_type:
+        query = query.join(PackRecord.cards).join(PackCard.card)
+        if rarity:
+            query = query.where(col(Card.rarity).in_(rarity))
+        if card_type:
+            query = query.where(col(Card.type).in_(card_type))
+    return query
 
 
 def fetch_records(
@@ -27,12 +43,7 @@ def fetch_records(
         .order_by(desc(PackRecord.opened_at))
     )
 
-    if rarity or card_type:
-        query = query.join(PackRecord.cards).join(PackCard.card)
-        if rarity:
-            query = query.where(col(Card.rarity).in_(rarity))
-        if card_type:
-            query = query.where(col(Card.type).in_(card_type))
+    query = _apply_pack_record_filters(query, rarity, card_type)
 
     offset = page * page_size
     query = query.offset(offset).limit(page_size + 1)
@@ -41,6 +52,115 @@ def fetch_records(
     if has_next:
         rows = rows[:page_size]
     return rows, has_next
+
+
+def fetch_display_entity_records(
+    session: Session,
+    page: int,
+    page_size: int,
+    rarity: list[str],
+    card_type: list[str],
+) -> tuple[list[PackRecord], bool]:
+    """按展示实体分页查询开包记录（十连包按批次聚合）。"""
+    # 处理流程：按展示实体键分页 -> 回查代表记录 -> 按实体顺序重建结果列表
+    ten_pack_stmt = (
+        select(
+            literal(DISPLAY_ENTITY_TYPE_TEN_PACK).label("entity_type"),
+            cast(col(PackRecord.batch_id), String).label("entity_key"),
+            func.max(col(PackRecord.opened_at)).label("sort_time"),
+            cast(literal(None), Integer).label("sort_id"),
+        )
+        .where(col(PackRecord.pack_type) == PackRecordType.TEN_PACK)
+        .where(col(PackRecord.batch_id).is_not(None))
+    )
+    ten_pack_stmt = _apply_pack_record_filters(ten_pack_stmt, rarity, card_type)
+    ten_pack_stmt = ten_pack_stmt.group_by(col(PackRecord.batch_id))
+
+    single_stmt = select(
+        literal(DISPLAY_ENTITY_TYPE_SINGLE).label("entity_type"),
+        cast(col(PackRecord.id), String).label("entity_key"),
+        col(PackRecord.opened_at).label("sort_time"),
+        col(PackRecord.id).label("sort_id"),
+    ).where(col(PackRecord.pack_type) != PackRecordType.TEN_PACK)
+    single_stmt = _apply_pack_record_filters(single_stmt, rarity, card_type)
+    single_stmt = single_stmt.group_by(col(PackRecord.id), col(PackRecord.opened_at))
+
+    entity_stmt = union_all(ten_pack_stmt, single_stmt).subquery()
+
+    offset = page * page_size
+    page_stmt = (
+        select(
+            entity_stmt.c.entity_type,
+            entity_stmt.c.entity_key,
+            entity_stmt.c.sort_time,
+            entity_stmt.c.sort_id,
+        )
+        .order_by(desc(entity_stmt.c.sort_time), desc(entity_stmt.c.sort_id))
+        .offset(offset)
+        .limit(page_size + 1)
+    )
+    rows = list(session.exec(page_stmt).all())
+    has_next = len(rows) > page_size
+    if has_next:
+        rows = rows[:page_size]
+    if not rows:
+        return [], False
+
+    entity_order: list[tuple[str, str]] = [(row[0], row[1]) for row in rows]
+    single_ids = [int(row[1]) for row in rows if row[0] == DISPLAY_ENTITY_TYPE_SINGLE]
+    ten_batch_ids = [row[1] for row in rows if row[0] == DISPLAY_ENTITY_TYPE_TEN_PACK]
+    record_ids: list[int] = list(single_ids)
+
+    if ten_batch_ids:
+        ten_records_stmt = (
+            select(
+                col(PackRecord.id).label("record_id"),
+                col(PackRecord.batch_id).label("batch_id"),
+                func.row_number()
+                .over(
+                    partition_by=col(PackRecord.batch_id),
+                    order_by=(
+                        desc(col(PackRecord.opened_at)),
+                        desc(col(PackRecord.id)),
+                    ),
+                )
+                .label("row_num"),
+            )
+            .where(col(PackRecord.pack_type) == PackRecordType.TEN_PACK)
+            .where(col(PackRecord.batch_id).in_(ten_batch_ids))
+        )
+        ten_records_stmt = _apply_pack_record_filters(
+            ten_records_stmt, rarity, card_type
+        )
+        ten_records_subquery = ten_records_stmt.subquery()
+        ten_ids_stmt = select(ten_records_subquery.c.record_id).where(
+            ten_records_subquery.c.row_num == 1
+        )
+        record_ids.extend(session.exec(ten_ids_stmt).all())
+
+    if not record_ids:
+        return [], False
+
+    records_stmt = (
+        select(PackRecord)
+        .options(
+            selectinload(PackRecord.cards).selectinload(PackCard.card),
+            selectinload(PackRecord.account),
+        )
+        .where(col(PackRecord.id).in_(record_ids))
+    )
+    records = list(session.exec(records_stmt).all())
+
+    records_map: dict[tuple[str, str], PackRecord] = {}
+    for record in records:
+        if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
+            key = (DISPLAY_ENTITY_TYPE_TEN_PACK, record.batch_id)
+        else:
+            key = (DISPLAY_ENTITY_TYPE_SINGLE, str(record.id))
+        records_map[key] = record
+
+    ordered_records = [records_map[key] for key in entity_order if key in records_map]
+    return ordered_records, has_next
 
 
 def fetch_pack_points_map(
