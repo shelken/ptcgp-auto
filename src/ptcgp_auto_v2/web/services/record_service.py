@@ -5,7 +5,7 @@ from sqlmodel import Session, select, col
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
 from ptcgp_auto_v2.web.queries.record_queries import (
-    fetch_records,
+    fetch_display_entity_records,
     fetch_pack_points_map,
 )
 from ptcgp_auto_v2.web.utils.form_utils import parse_json_label
@@ -196,7 +196,7 @@ def build_records_list_context(
     rarity = rarity or []
     card_type = card_type or []
 
-    results, has_next = fetch_records(
+    results, has_next = fetch_display_entity_records(
         session,
         normalized_page,
         normalized_page_size,
