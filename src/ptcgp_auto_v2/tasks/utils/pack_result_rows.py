@@ -1,156 +1,202 @@
 # -*- coding: utf-8 -*-
-"""开包结果页逻辑行归并与分组工具。"""
+"""开包结果页行归并工具。"""
 
 from __future__ import annotations
 
 
-# 重叠卡横向槽位容忍值（基于 1080 宽度基准像素）。
-# 运行态必须经 adb.scaled_x() 缩放后使用，禁止直接拿基准值参与判断。
-BASE_COMMON_CARD_X_TOLERANCE = 60
-
-
-def _build_card_key(card: dict) -> str | None:
-    """构建单张卡的稳定键，优先使用 card_id。"""
+def _card_key(card: dict) -> str | None:
     card_id = card.get("card_id")
     if card_id is not None:
         return f"id:{card_id}"
-
     set_code = card.get("set_code")
     card_number = card.get("card_number")
     if set_code and card_number is not None:
         return f"{set_code}:{card_number}"
-
     return None
 
 
 def build_row_signature(row: list[dict]) -> list[str]:
-    """按从左到右构建一行的稳定签名。"""
     ordered = sorted(row, key=lambda item: float(item.get("center_x") or 0.0))
-    signature: list[str] = []
-    for card in ordered:
-        card_key = _build_card_key(card)
-        if card_key:
-            signature.append(card_key)
-    return signature
+    return [key for card in ordered if (key := _card_key(card))]
 
 
-def _is_ordered_subsequence(shorter: list[str], longer: list[str]) -> bool:
-    """判断 shorter 是否为 longer 的有序子序列。"""
-    if not shorter:
-        return False
-
-    index = 0
-    for item in longer:
-        if item == shorter[index]:
-            index += 1
-            if index == len(shorter):
-                return True
-    return False
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
-def _has_aligned_common_card_x(
-    existing_row: list[dict],
-    incoming_row: list[dict],
-    common: list[str],
-    x_tolerance: float,
-) -> bool:
-    """判断所有重叠卡是否都落在接近的 x 槽位上。"""
-    if not common:
-        return False
-
-    for card_key in common:
-        existing_x_values = [
-            float(card.get("center_x") or 0.0)
-            for card in existing_row
-            if _build_card_key(card) == card_key
+def _build_model(rows: list[list[dict]]) -> dict[str, dict[str, float]]:
+    three_rows = [
+        sorted(row, key=lambda item: float(item.get("center_x") or 0.0))
+        for row in rows
+        if len(row) == 3
+    ]
+    if three_rows:
+        left = _median([float(row[0].get("center_x") or 0.0) for row in three_rows])
+        middle = _median([float(row[1].get("center_x") or 0.0) for row in three_rows])
+        right = _median([float(row[2].get("center_x") or 0.0) for row in three_rows])
+    else:
+        two_rows = [
+            sorted(row, key=lambda item: float(item.get("center_x") or 0.0))
+            for row in rows
+            if len(row) == 2
         ]
-        incoming_x_values = [
-            float(card.get("center_x") or 0.0)
-            for card in incoming_row
-            if _build_card_key(card) == card_key
-        ]
-        for existing_x in existing_x_values:
-            for incoming_x in incoming_x_values:
-                if abs(existing_x - incoming_x) <= x_tolerance:
-                    break
-            else:
-                continue
-            break
-        else:
-            return False
-    return True
+        left_two = _median([float(row[0].get("center_x") or 0.0) for row in two_rows])
+        right_two = _median([float(row[1].get("center_x") or 0.0) for row in two_rows])
+        if left_two is None or right_two is None:
+            return {}
+        middle = (left_two + right_two) / 2.0
+        left = 2 * left_two - middle
+        right = 2 * right_two - middle
+    if left is None or middle is None or right is None:
+        return {}
+    return {
+        "three": {"left": left, "middle": middle, "right": right},
+        "two": {
+            "left": (left + middle) / 2.0,
+            "right": (middle + right) / 2.0,
+        },
+    }
 
 
-def is_same_row(
-    existing_row: list[dict],
-    incoming_row: list[dict],
-    x_tolerance: float,
+def _distance(
+    xs: list[float], centers: dict[str, float], slots: tuple[str, ...]
+) -> float:
+    return sum(abs(x - centers[slot]) for x, slot in zip(xs, slots, strict=True))
+
+
+def _classify_row(row: list[dict], rows_context: list[list[dict]]) -> dict | None:
+    model = _build_model(rows_context)
+    if not model:
+        return None
+    ordered = sorted(row, key=lambda item: float(item.get("center_x") or 0.0))
+    xs = [float(card.get("center_x") or 0.0) for card in ordered]
+    keys = [_card_key(card) for card in ordered]
+    if not xs or any(key is None for key in keys):
+        return None
+
+    candidates: list[dict] = []
+    if len(xs) == 3:
+        candidates.append(
+            {
+                "layout": "three",
+                "slots": ("left", "middle", "right"),
+                "keys": tuple(keys),
+                "complete": True,
+                "distance": _distance(xs, model["three"], ("left", "middle", "right")),
+            }
+        )
+    elif len(xs) == 2:
+        candidates.append(
+            {
+                "layout": "two",
+                "slots": ("left", "right"),
+                "keys": tuple(keys),
+                "complete": True,
+                "distance": _distance(xs, model["two"], ("left", "right")),
+            }
+        )
+        for slots in (("left", "middle"), ("left", "right"), ("middle", "right")):
+            candidates.append(
+                {
+                    "layout": "three",
+                    "slots": slots,
+                    "keys": tuple(keys),
+                    "complete": False,
+                    "distance": _distance(xs, model["three"], slots),
+                }
+            )
+    elif len(xs) == 1:
+        for layout, slots in (
+            ("two", (("left",), ("right",))),
+            ("three", (("left",), ("middle",), ("right",))),
+        ):
+            for slot in slots:
+                candidates.append(
+                    {
+                        "layout": layout,
+                        "slots": slot,
+                        "keys": tuple(keys),
+                        "complete": False,
+                        "distance": _distance(xs, model[layout], slot),
+                    }
+                )
+    else:
+        return None
+
+    return min(
+        candidates,
+        key=lambda item: (
+            item["distance"],
+            0 if item["layout"] == "three" else 1,
+            0 if not item["complete"] else 1,
+        ),
+    )
+
+
+def build_row_slot_signature(row: list[dict]) -> tuple[str, ...]:
+    classified = _classify_row(row, [row])
+    if classified is None:
+        return ()
+    return tuple(
+        f"{classified['layout']}:{slot}:{key}"
+        for slot, key in zip(classified["slots"], classified["keys"], strict=True)
+    )
+
+
+def is_complete_row(row: list[dict]) -> bool:
+    classified = _classify_row(row, [row])
+    return bool(classified and classified["complete"])
+
+
+def _same_row(
+    existing_row: list[dict], incoming_row: list[dict], rows_context: list[list[dict]]
 ) -> bool:
-    """判断两行是否属于同一逻辑行。"""
-    existing = build_row_signature(existing_row)
-    incoming = build_row_signature(incoming_row)
-
-    if not existing or not incoming:
+    existing = _classify_row(existing_row, rows_context)
+    incoming = _classify_row(incoming_row, rows_context)
+    if existing is None or incoming is None or existing["layout"] != incoming["layout"]:
         return False
+    existing_slots = dict(zip(existing["slots"], existing["keys"], strict=True))
+    incoming_slots = dict(zip(incoming["slots"], incoming["keys"], strict=True))
+    overlap = set(existing_slots) & set(incoming_slots)
+    return bool(overlap) and all(
+        existing_slots[slot] == incoming_slots[slot] for slot in overlap
+    )
 
-    if existing == incoming:
-        return True
 
-    common = [item for item in existing if item in incoming]
+def is_same_row(existing_row: list[dict], incoming_row: list[dict]) -> bool:
+    return _same_row(existing_row, incoming_row, [existing_row, incoming_row])
 
-    if _is_ordered_subsequence(incoming, existing) or _is_ordered_subsequence(
-        existing, incoming
-    ):
-        return _has_aligned_common_card_x(
-            existing_row, incoming_row, common, x_tolerance
-        )
 
-    # 10 包结果页允许 2 卡或 3 卡一行；只有 1 张重叠时，仅允许不同长度行做边缘补全。
-    # 同长度行只重叠 1 张，实际日志里已证明会把相邻两行错并。
-    if len(common) == 1:
-        if len(existing) == len(incoming):
-            return False
-        return _has_aligned_common_card_x(
-            existing_row, incoming_row, common, x_tolerance
-        )
-
-    if len(common) < 2:
-        return False
-
-    overlap_ratio = len(common) / min(len(existing), len(incoming))
-    if overlap_ratio < 0.66:
-        return False
-
+def _merge_row(
+    existing_row: list[dict], incoming_row: list[dict], rows_context: list[list[dict]]
+) -> list[dict]:
+    existing = _classify_row(existing_row, rows_context)
+    incoming = _classify_row(incoming_row, rows_context)
+    if existing is None:
+        return incoming_row
+    if incoming is None:
+        return existing_row
     return (
-        _is_ordered_subsequence(common, existing)
-        and _is_ordered_subsequence(common, incoming)
-        and _has_aligned_common_card_x(existing_row, incoming_row, common, x_tolerance)
+        incoming_row
+        if len(incoming["slots"]) > len(existing["slots"])
+        else existing_row
     )
 
 
 def merge_or_append_rows(
-    logical_rows: list[list[dict]],
-    incoming_rows: list[list[dict]],
-    x_tolerance: float,
-    tail_size: int = 3,
-) -> dict[str, int]:
-    """将新扫描行归并到逻辑行列表中。"""
+    logical_rows: list[list[dict]], incoming_rows: list[list[dict]], tail_size: int = 3
+) -> dict[str, object]:
     stats = {"appended": 0, "replaced": 0, "skipped": 0, "decisions": []}
-    original_rows = list(logical_rows)
-    matched_indices: list[int | None] = []
-
     for incoming_row in incoming_rows:
-        matched_index: int | None = None
-        start_index = max(0, len(original_rows) - tail_size)
-        for index in range(len(original_rows) - 1, start_index - 1, -1):
-            if is_same_row(original_rows[index], incoming_row, x_tolerance=x_tolerance):
-                matched_index = index
-                break
-        matched_indices.append(matched_index)
-
-    for row_index, incoming_row in enumerate(incoming_rows):
-        incoming_signature = build_row_signature(incoming_row)
-        if not incoming_signature:
+        rows_context = logical_rows + incoming_rows
+        incoming = _classify_row(incoming_row, rows_context)
+        if incoming is None:
             stats["skipped"] += 1
             stats["decisions"].append(
                 {
@@ -161,10 +207,14 @@ def merge_or_append_rows(
                 }
             )
             continue
-
-        matched_index = matched_indices[row_index]
-
-        if matched_index is None:
+        matched_indices = [
+            index
+            for index in range(
+                len(logical_rows) - 1, max(-1, len(logical_rows) - tail_size - 1), -1
+            )
+            if _same_row(logical_rows[index], incoming_row, rows_context)
+        ]
+        if not matched_indices:
             logical_rows.append(incoming_row)
             stats["appended"] += 1
             stats["decisions"].append(
@@ -177,60 +227,61 @@ def merge_or_append_rows(
             )
             continue
 
-        previous_row = logical_rows[matched_index]
-        previous_signature = build_row_signature(previous_row)
-
-        if previous_signature == incoming_signature or _is_ordered_subsequence(
-            incoming_signature, previous_signature
+        matched_indices.sort()
+        base_index = matched_indices[-1]
+        merged_row = incoming_row
+        matched_rows = [logical_rows[index] for index in matched_indices]
+        for matched_row in matched_rows:
+            merged_row = _merge_row(matched_row, merged_row, rows_context)
+        if build_row_signature(merged_row) == build_row_signature(
+            logical_rows[base_index]
         ):
             stats["skipped"] += 1
             stats["decisions"].append(
                 {
                     "action": "skip",
                     "incoming_row": incoming_row,
-                    "matched_row": previous_row,
-                    "result_row": previous_row,
+                    "matched_row": logical_rows[base_index],
+                    "result_row": logical_rows[base_index],
                 }
             )
             continue
-
-        if _is_ordered_subsequence(previous_signature, incoming_signature):
-            logical_rows[matched_index] = incoming_row
-            stats["replaced"] += 1
-            stats["decisions"].append(
-                {
-                    "action": "replace",
-                    "incoming_row": incoming_row,
-                    "matched_row": previous_row,
-                    "result_row": incoming_row,
-                }
-            )
-            continue
-
-        stats["skipped"] += 1
+        for index in reversed(matched_indices):
+            if index != base_index:
+                del logical_rows[index]
+        logical_rows[base_index if base_index < len(logical_rows) else -1] = merged_row
+        stats["replaced"] += 1
         stats["decisions"].append(
             {
-                "action": "skip",
+                "action": "replace",
                 "incoming_row": incoming_row,
-                "matched_row": previous_row,
-                "result_row": previous_row,
+                "matched_row": matched_rows[0],
+                "result_row": merged_row,
             }
         )
-        continue
-
     return stats
 
 
 def has_incomplete_rows(rows: list[list[dict]]) -> bool:
-    """判断当前逻辑行里是否还存在未补全的残行。"""
     return any(len(build_row_signature(row)) < 2 for row in rows)
 
 
+def get_missing_slots(row: list[dict], rows_context: list[list[dict]]) -> list[str]:
+    classified = _classify_row(row, rows_context)
+    if classified is None or classified["complete"]:
+        return []
+    expected_slots = (
+        ["left", "right"]
+        if classified["layout"] == "two"
+        else ["left", "middle", "right"]
+    )
+    current_slots = set(classified["slots"])
+    return [slot for slot in expected_slots if slot not in current_slots]
+
+
 def group_rows(cards: list[dict], row_threshold: int) -> list[list[dict]]:
-    """按阅读顺序中的行信息分组。"""
     if not cards:
         return []
-
     sorted_cards = sorted(
         cards,
         key=lambda item: (
@@ -238,44 +289,42 @@ def group_rows(cards: list[dict], row_threshold: int) -> list[list[dict]]:
             float(item.get("center_x") or 0.0),
         ),
     )
-
     rows: list[list[dict]] = []
     current_row = [sorted_cards[0]]
-
     for card in sorted_cards[1:]:
-        current_y = float(card.get("center_y") or 0.0)
-        row_y = float(current_row[0].get("center_y") or 0.0)
-        if abs(current_y - row_y) < row_threshold:
+        if (
+            abs(
+                float(card.get("center_y") or 0.0)
+                - float(current_row[0].get("center_y") or 0.0)
+            )
+            < row_threshold
+        ):
             current_row.append(card)
             continue
-
-        current_row.sort(key=lambda item: float(item.get("center_x") or 0.0))
-        rows.append(current_row)
+        rows.append(
+            sorted(current_row, key=lambda item: float(item.get("center_x") or 0.0))
+        )
         current_row = [card]
-
-    current_row.sort(key=lambda item: float(item.get("center_x") or 0.0))
-    rows.append(current_row)
+    rows.append(
+        sorted(current_row, key=lambda item: float(item.get("center_x") or 0.0))
+    )
     return rows
 
 
 def build_pack_groups(
     rows: list[list[dict]], rows_per_pack: int = 2
 ) -> list[list[dict]]:
-    """按固定行数将逻辑行切分为多包结果，并重建包内 position。"""
     if rows_per_pack <= 0 or len(rows) % rows_per_pack != 0:
         return []
-
     groups: list[list[dict]] = []
     for index in range(0, len(rows), rows_per_pack):
-        pack_rows = rows[index : index + rows_per_pack]
         pack_cards: list[dict] = []
-        for row in pack_rows:
+        for row in rows[index : index + rows_per_pack]:
             pack_cards.extend(row)
-
-        normalized_cards: list[dict] = []
-        for position, card in enumerate(pack_cards, start=1):
-            normalized = dict(card)
-            normalized["position"] = position
-            normalized_cards.append(normalized)
-        groups.append(normalized_cards)
+        groups.append(
+            [
+                {**card, "position": position}
+                for position, card in enumerate(pack_cards, start=1)
+            ]
+        )
     return groups
