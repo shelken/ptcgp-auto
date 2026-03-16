@@ -575,8 +575,7 @@ class SendCardDailyTask(StatefulTask):
             base_distance_y=BASE_CARD_SCROLL_DISTANCE_Y,
             direction="up",
         )
-        swipe(self.adb, start, end, wait=0.8)
-        return ActionResult.ok(wait=0.6)
+        return swipe(self.adb, start, end, wait=1.4)
 
     def _tap_target_card_by_scan(self, detected) -> Optional[ActionResult]:
         """通过 YOLO+Hash 扫描定位目标卡牌并点击。"""
