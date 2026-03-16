@@ -11,12 +11,12 @@ from enum import Enum, auto
 from typing import Optional, cast
 
 from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS, SWIPE_STEPS_SCROLL
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
     TaskRegistry,
 )
-from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
@@ -299,6 +299,7 @@ class CollectAccountCardsTask(StatefulTask):
             return None
 
         detected = self.card_recognizer.scan(
+            obb_threshold=0.75,
             resolve_name=lambda set_code, card_number: resolve_card_name(
                 self._card_repo, set_code, card_number
             ),
