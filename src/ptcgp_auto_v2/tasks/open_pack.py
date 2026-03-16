@@ -664,6 +664,11 @@ class OpenPackTask(PackOpeningTaskBase):
 
         if is_ten_pack_result and self._result_recognized:
             self._set_state_flag("ten_pack", "completed")
+        elif is_ten_pack_result:
+            # 十包结果识别失败时，仍然按“十包流程结束”处理，允许各页面
+            # 通过既有退出链路逐层返回，而不是在结果页直接结束任务。
+            self._set_state_flag("ten_pack", "completed")
+            self._set_state_flag("pack_flow", "exit_after_paid")
 
         return result
 

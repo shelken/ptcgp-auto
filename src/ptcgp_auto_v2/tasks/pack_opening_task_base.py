@@ -18,7 +18,7 @@ import threading
 import time
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
@@ -43,9 +43,9 @@ from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
 )
 from ptcgp_auto_v2.tasks.utils.pack_result_mapper import PackResultMapper
 from ptcgp_auto_v2.tasks.utils.pack_result_rows import (
-    BASE_COMMON_CARD_X_TOLERANCE,
     build_pack_groups,
     build_row_signature,
+    get_missing_slots,
     group_rows,
     has_incomplete_rows,
     merge_or_append_rows,
@@ -677,17 +677,22 @@ class PackOpeningTaskBase(StatefulTask):
             self._pack_result_batch_size * PACK_RESULT_ROWS_PER_PACK,
         )
         for index, row in enumerate(self._pack_result_rows, start=1):
+            missing_slots = get_missing_slots(row, self._pack_result_rows)
+            missing_text = f" 缺槽={','.join(missing_slots)}" if missing_slots else ""
             logger.debug(
-                "  行%02d (%s张): %s",
+                "  行%02d (%s张): %s%s",
                 index,
                 len(row),
                 self._format_result_row(row),
+                missing_text,
             )
 
     def _collect_multi_pack_rows(self) -> bool:
         """滚动结果页并收集 10 包的全部逻辑行。"""
         expected_rows = self._pack_result_batch_size * PACK_RESULT_ROWS_PER_PACK
         previous_screen_signature: list[tuple[str, ...]] | None = None
+        previous_logical_signature: list[tuple[str, ...]] | None = None
+        converged = False
 
         while True:
             cards = self._scan_cards_with_retry(
@@ -701,9 +706,11 @@ class PackOpeningTaskBase(StatefulTask):
             stats = merge_or_append_rows(
                 self._pack_result_rows,
                 incoming_rows,
-                x_tolerance=self.adb.scaled_x(BASE_COMMON_CARD_X_TOLERANCE),
             )
-            for decision in stats.get("decisions", []):
+            current_logical_signature = [
+                tuple(build_row_signature(row)) for row in self._pack_result_rows
+            ]
+            for decision in cast(list[dict[str, object]], stats.get("decisions", [])):
                 logger.debug(
                     "  -> 结果行策略=%s incoming=%s matched=%s result=%s",
                     decision["action"],
@@ -712,15 +719,29 @@ class PackOpeningTaskBase(StatefulTask):
                     self._format_result_row(decision.get("result_row")),
                 )
 
-            is_complete = len(
-                self._pack_result_rows
-            ) >= expected_rows and not has_incomplete_rows(self._pack_result_rows)
-            if is_complete:
-                break
+            current_row_count = len(self._pack_result_rows)
+            if current_row_count > expected_rows:
+                logger.warning(
+                    "10包结果页收集溢出: 期望 %s 行，实际 %s 行",
+                    expected_rows,
+                    current_row_count,
+                )
+                logger.debug("10包结果页暂不停止，继续向下扫描以等待结果收敛")
+
+            if current_row_count == expected_rows:
+                if current_logical_signature == previous_logical_signature:
+                    converged = True
+                    logger.debug("10包结果页已收敛: 20 行结果连续两轮未变化")
+                    break
+                logger.debug("10包结果页达到 20 行，继续扫描确认是否收敛")
 
             if current_screen_signature == previous_screen_signature:
+                if current_row_count == expected_rows:
+                    converged = True
+                    logger.debug("10包结果页屏幕内容重复，按 20 行结果收敛处理")
                 break
             previous_screen_signature = current_screen_signature
+            previous_logical_signature = current_logical_signature
 
             start, end = scroll_points(
                 self.adb,
@@ -736,9 +757,7 @@ class PackOpeningTaskBase(StatefulTask):
             )
             time.sleep(1.0)
 
-        return len(self._pack_result_rows) == expected_rows and not has_incomplete_rows(
-            self._pack_result_rows
-        )
+        return len(self._pack_result_rows) == expected_rows and converged
 
     def _recognize_multi_pack_results(self) -> bool:
         """识别 10 包结果页并拆成多条独立开包记录。"""
