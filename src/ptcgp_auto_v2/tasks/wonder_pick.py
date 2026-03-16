@@ -12,8 +12,8 @@ from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_RARITY_PRIORITY,
     WONDER_PICK_RULES,
 )
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector, count_icons
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
@@ -83,6 +83,7 @@ def _build_challenge_pages() -> list[dict]:
             "name": "card_challenge_get",
             "identifiers": get_text_patterns("tap_to_continue"),
             "priority": 40,
+            "exclude_identifiers": get_text_patterns("card_challenge_get_exclude"),
         },
         # 商店 / 得卡挑戰
         {
