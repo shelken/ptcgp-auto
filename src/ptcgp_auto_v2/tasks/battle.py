@@ -11,7 +11,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Protocol
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_base import (
@@ -47,6 +47,15 @@ logger = logging.getLogger(__name__)
 # 等级选择页面：判断等级文字与进度/COMPLETE标记是否在同一行的Y轴容差
 BASE_BATTLE_LEVEL_ROW_THRESHOLD_Y = 100  # 等级行内元素判断阈值（基准像素）
 
+
+class BattleTaskLike(Protocol):
+    """停止条件所需的 BattleTask 最小接口。"""
+
+    _start_time: Optional[datetime]
+    _battle_count: int
+    _account_id: int
+    _progress_repo: AccountBattleProgressRepository
+
 # ============================================================
 # 停止条件类
 # ============================================================
@@ -58,7 +67,7 @@ class StopCondition:
     def __init__(self, config: dict):
         self.config = config
 
-    def check(self, task: "BattleTask") -> bool:
+    def check(self, task: BattleTaskLike) -> bool:
         """检查是否满足停止条件，子类实现"""
         return False
 
@@ -69,7 +78,7 @@ class TimeLimitCondition(StopCondition):
     配置示例: {"type": "time", "value": 30}
     """
 
-    def check(self, task: "BattleTask") -> bool:
+    def check(self, task: BattleTaskLike) -> bool:
         if not task._start_time:
             return False
         minutes = self.config.get("value", 0)
@@ -83,7 +92,7 @@ class BattleCountCondition(StopCondition):
     配置示例: {"type": "count", "value": 10}
     """
 
-    def check(self, task: "BattleTask") -> bool:
+    def check(self, task: BattleTaskLike) -> bool:
         count = self.config.get("value", 0)
         return task._battle_count >= count
 
@@ -94,7 +103,7 @@ class HourglassCondition(StopCondition):
     配置示例: {"type": "hourglass", "value": 3}
     """
 
-    def check(self, task: "BattleTask") -> bool:
+    def check(self, task: BattleTaskLike) -> bool:
         # TODO: 实现沙漏数量检查
         return False
 
@@ -105,7 +114,7 @@ class LevelCompleteCondition(StopCondition):
     配置示例: {"type": "level_complete", "set_code": "A1", "level": "精英"}
     """
 
-    def check(self, task: "BattleTask") -> bool:
+    def check(self, task: BattleTaskLike) -> bool:
         set_code = self.config.get("set_code")
         level = self.config.get("level")
         if not set_code or not level:
@@ -119,7 +128,7 @@ class NoRewardCondition(StopCondition):
     配置示例: {"type": "no_reward"}
     """
 
-    def check(self, task: "BattleTask") -> bool:
+    def check(self, task: BattleTaskLike) -> bool:
         # TODO: 实现无奖励检测
         return False
 
@@ -389,20 +398,18 @@ class BattleTask(StatefulTask):
 
         try:
             # 获取该系列下的所有子包
-            packs = self._card_repo.get_packs_by_set_code(target_set_code)
-            if not packs:
+            pack_names = self._card_repo.get_pack_names_by_set(
+                target_set_code, exclude_promo=True
+            )
+            if not pack_names:
                 logger.warning(f"[BattleTask] 未找到系列 {target_set_code} 的子包")
                 return
 
-            # 过滤 PROMO 子包，缓存模板名
+            # 直接使用正式仓库接口返回的子包名称，避免脚本/任务各写一套查询
             self._series_pack_candidates = []
-            for p in packs:
-                if not getattr(p, "name", None) or not getattr(p, "set_code", None):
-                    continue
-                if (p.set_code or "").upper().startswith("PROMO"):
-                    continue
+            for pack_name in pack_names:
                 self._series_pack_candidates.append(
-                    PackCandidate(set_code=str(p.set_code), booster_name=str(p.name))
+                    PackCandidate(set_code=target_set_code, booster_name=pack_name)
                 )
 
             if not self._series_pack_candidates:
@@ -524,6 +531,8 @@ class BattleTask(StatefulTask):
         Returns:
             沙漏图标边界框 (x1, y1, x2, y2)，未找到返回 None
         """
+        if not self.recognizer:
+            return None
         _, template_matcher = self.recognizer
         settings = get_settings()
 
