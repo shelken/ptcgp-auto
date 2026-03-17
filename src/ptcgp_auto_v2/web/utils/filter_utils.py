@@ -19,20 +19,6 @@ def normalize_query_text(q: str | object | None) -> str:
     return ""
 
 
-def validate_sort_field(sort_by: str, allowed_fields: set[str], default: str) -> str:
-    """验证排序字段是否在白名单中。
-
-    Args:
-        sort_by: 请求的排序字段
-        allowed_fields: 允许的排序字段集合
-        default: 默认排序字段
-
-    Returns:
-        验证后的排序字段
-    """
-    return sort_by if sort_by in allowed_fields else default
-
-
 def normalize_sort_order(sort_order: str) -> str:
     """归一化排序方向为 asc 或 desc。
 

@@ -3,8 +3,6 @@
 调度器自动扩缩容单元测试
 """
 
-from datetime import datetime, timedelta
-
 import ptcgp_auto_v2.core.scheduler as scheduler_module
 from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
 
@@ -19,9 +17,6 @@ def test_auto_scale_evaluate_expansion(monkeypatch):
         auto_scale_min_idle_devices=1,
     )
     scheduler = Scheduler(["127.0.0.1:5555"], config=config)
-    device = scheduler.device_pool.get_device("127.0.0.1:5555")
-    assert device is not None
-    device.mark_busy()
 
     calls: list[str] = []
 
@@ -60,19 +55,6 @@ def test_auto_scale_evaluate_scale_down_by_target_device_count(monkeypatch):
         ["127.0.0.1:5555", "127.0.0.1:5556", "127.0.0.1:5557"],
         config=config,
     )
-    now = datetime.now()
-    device_5555 = scheduler.device_pool.get_device("127.0.0.1:5555")
-    device_5556 = scheduler.device_pool.get_device("127.0.0.1:5556")
-    device_5557 = scheduler.device_pool.get_device("127.0.0.1:5557")
-    assert device_5555 is not None
-    assert device_5556 is not None
-    assert device_5557 is not None
-    device_5555.mark_busy()
-    device_5556.mark_available()
-    device_5556.became_idle_at = now - timedelta(seconds=200)
-    device_5557.mark_available()
-    device_5557.became_idle_at = now - timedelta(seconds=200)
-
     removed: list[str] = []
     stop_calls: list[str] = []
 
@@ -121,15 +103,6 @@ def test_auto_scale_evaluate_should_not_stop_last_running_device_when_pool_stale
     )
     scheduler = Scheduler(["127.0.0.1:5555", "127.0.0.1:5775"], config=config)
 
-    # 5775 视为陈旧设备（实际已不在 discover 列表）
-    running_device = scheduler.device_pool.get_device("127.0.0.1:5555")
-    assert running_device is not None
-    running_device.mark_available()
-
-    stale_device = scheduler.device_pool.get_device("127.0.0.1:5775")
-    assert stale_device is not None
-    stale_device.mark_available()
-
     stop_calls: list[str] = []
 
     monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)
@@ -163,9 +136,6 @@ def test_auto_scale_evaluate_should_not_add_extra_capacity_when_pending_below_st
         auto_scale_min_idle_devices=1,
     )
     scheduler = Scheduler(["127.0.0.1:5555"], config=config)
-    device = scheduler.device_pool.get_device("127.0.0.1:5555")
-    assert device is not None
-    device.mark_busy()
 
     calls: list[str] = []
 
@@ -202,17 +172,6 @@ def test_auto_scale_evaluate_should_not_stop_non_auto_idle_device(monkeypatch):
         auto_scale_idle_seconds=0,
     )
     scheduler = Scheduler(["127.0.0.1:5555", "127.0.0.1:5556"], config=config)
-    now = datetime.now()
-
-    fixed_device = scheduler.device_pool.get_device("127.0.0.1:5555")
-    auto_device = scheduler.device_pool.get_device("127.0.0.1:5556")
-    assert fixed_device is not None
-    assert auto_device is not None
-    fixed_device.mark_available()
-    fixed_device.became_idle_at = now - timedelta(seconds=200)
-    auto_device.mark_available()
-    auto_device.became_idle_at = now - timedelta(seconds=200)
-
     stop_calls: list[str] = []
 
     monkeypatch.setattr(scheduler, "_count_pending_tasks", lambda: 0)

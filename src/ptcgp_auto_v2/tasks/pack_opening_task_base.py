@@ -46,7 +46,6 @@ from ptcgp_auto_v2.tasks.utils.pack_result_rows import (
     build_row_signature,
     get_missing_slots,
     group_rows,
-    has_incomplete_rows,
     merge_or_append_rows,
 )
 from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (

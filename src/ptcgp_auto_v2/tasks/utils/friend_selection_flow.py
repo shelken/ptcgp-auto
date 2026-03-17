@@ -167,14 +167,6 @@ class FriendSelectionHelper:
         """检查是否滑到底部。基于已探测 friend_id 判断。"""
         return self.flow.scroll_stable_rounds >= 2
 
-    def mark_scroll_bottom_detected(self):
-        """标记检测到底部。"""
-        self.flow.scroll_stable_rounds += 1
-        logger.debug(
-            "[到底检测] 本页好友均已探测，scroll_stable_rounds=%d",
-            self.flow.scroll_stable_rounds,
-        )
-
     def get_next_probe_box(self) -> Optional[tuple[int, int, int, int]]:
         """获取下一个探测用的 plus box（过滤已失败的行）。"""
         if not self.flow.probe_boxes:

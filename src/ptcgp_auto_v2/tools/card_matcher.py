@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Optional, Tuple
+
     from PIL import Image
+
     from ptcgp_auto_v2.infra.template import TemplateMatcher
 
 
@@ -130,7 +132,3 @@ def scan_best_scale_with_matcher(
         scale += step
 
     return best_scale, best_confidence
-
-
-# 向后兼容的别名（用于 pack_tester.py）
-scan_best_scale = scan_best_scale_with_matcher

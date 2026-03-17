@@ -2,11 +2,9 @@
 """开包结果映射与归并测试。"""
 
 from ptcgp_auto_v2.tasks.utils.pack_result_rows import (
-    BASE_COMMON_CARD_X_TOLERANCE,
     build_pack_groups,
     build_row_signature,
     group_rows,
-    is_same_row,
     merge_or_append_rows,
 )
 
@@ -45,26 +43,6 @@ def test_group_rows_should_split_by_center_y() -> None:
     assert build_row_signature(rows[1]) == ["id:4", "id:5"]
 
 
-def test_is_same_row_should_accept_ordered_subset() -> None:
-    existing = [make_card(1, 120, 100), make_card(2, 320, 100), make_card(3, 520, 100)]
-    incoming = [make_card(2, 318, 105), make_card(3, 518, 105)]
-
-    assert (
-        is_same_row(existing, incoming, x_tolerance=BASE_COMMON_CARD_X_TOLERANCE)
-        is True
-    )
-
-
-def test_is_same_row_should_reject_single_card_overlap() -> None:
-    existing = [make_card(1, 248, 100), make_card(2, 472, 100)]
-    incoming = [make_card(2, 360, 102), make_card(3, 576, 102), make_card(4, 142, 102)]
-
-    assert (
-        is_same_row(existing, incoming, x_tolerance=BASE_COMMON_CARD_X_TOLERANCE)
-        is False
-    )
-
-
 def test_merge_or_append_rows_should_replace_with_more_complete_row() -> None:
     logical_rows = [[make_card(2, 320, 100), make_card(3, 520, 100)]]
     incoming_rows = [
@@ -74,7 +52,6 @@ def test_merge_or_append_rows_should_replace_with_more_complete_row() -> None:
     stats = merge_or_append_rows(
         logical_rows,
         incoming_rows,
-        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
     )
 
     assert stats["appended"] == 0
@@ -92,7 +69,6 @@ def test_merge_or_append_rows_should_merge_partial_overlap_row() -> None:
     stats = merge_or_append_rows(
         logical_rows,
         incoming_rows,
-        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
     )
 
     assert stats["appended"] == 0
@@ -108,7 +84,6 @@ def test_merge_or_append_rows_should_keep_single_card_fragment() -> None:
     stats = merge_or_append_rows(
         logical_rows,
         incoming_rows,
-        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
     )
 
     assert stats["appended"] == 1
@@ -126,7 +101,6 @@ def test_merge_or_append_rows_should_not_merge_one_card_overlap_row() -> None:
     stats = merge_or_append_rows(
         logical_rows,
         incoming_rows,
-        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
     )
 
     assert stats["appended"] == 1
@@ -154,12 +128,10 @@ def test_merge_or_append_rows_should_match_overlap_row_after_two_new_rows() -> N
     first_stats = merge_or_append_rows(
         logical_rows,
         first_screen_rows,
-        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
     )
     second_stats = merge_or_append_rows(
         logical_rows,
         second_screen_rows,
-        x_tolerance=BASE_COMMON_CARD_X_TOLERANCE,
     )
 
     assert first_stats["appended"] == 2
@@ -167,16 +139,6 @@ def test_merge_or_append_rows_should_match_overlap_row_after_two_new_rows() -> N
     assert second_stats["skipped"] == 1
     assert len(logical_rows) == 5
     assert build_row_signature(logical_rows[-1]) == ["id:9", "id:10"]
-
-
-def test_is_same_row_should_reject_same_length_single_card_overlap() -> None:
-    existing = [make_card(1, 248, 100), make_card(2, 472, 100)]
-    incoming = [make_card(3, 248, 102), make_card(2, 472, 102)]
-
-    assert (
-        is_same_row(existing, incoming, x_tolerance=BASE_COMMON_CARD_X_TOLERANCE)
-        is False
-    )
 
 
 def test_build_pack_groups_should_reindex_positions_per_pack() -> None:

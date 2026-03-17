@@ -6,11 +6,11 @@
 下载源使用 shelken/ptcgp-assets 仓库。
 """
 
-import logging
 import concurrent.futures
-from pathlib import Path
-from typing import List, Optional, Dict
+import logging
 from io import BytesIO
+from pathlib import Path
+from typing import Dict, List, Optional
 
 import requests
 from PIL import Image
@@ -18,9 +18,9 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.config.assets import build_card_image_bases
 from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, TASK_LOCALE_TO_WEB_LANG
+from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
-from ptcgp_auto_v2.db.engine import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -160,22 +160,6 @@ class ImageResourceManager:
                     logger.error(f"下载卡牌 {set_code}/{card_num:03d} 出错: {e}")
 
         return results
-
-    def ensure_card_ready(self, card_id: int) -> bool:
-        """确保单张卡牌资源就绪"""
-        with Session(get_engine()) as session:
-            card = session.get(Card, card_id)
-            if not card:
-                logger.error(f"Card {card_id} not found")
-                return False
-            return self._process_single_card(card)
-
-    def process_cards(self, cards: List[Card], max_workers: int = 5):
-        """
-        并发处理指定的卡牌列表
-        公开方法，用于外部传入已过滤的卡牌列表
-        """
-        self._process_cards_parallel(cards, max_workers)
 
     def _process_cards_parallel(self, cards: List[Card], max_workers: int):
         """并发处理卡牌列表"""

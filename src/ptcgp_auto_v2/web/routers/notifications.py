@@ -14,7 +14,6 @@ from ptcgp_auto_v2.web.services.notification_service import (
     TASK_STATUS_OPTIONS,
     build_config_view,
     build_notification_card_selector_context,
-    build_notification_image_payload,
     build_notification_panel_context,
     build_notifications_context,
     build_recent_notifications_context,

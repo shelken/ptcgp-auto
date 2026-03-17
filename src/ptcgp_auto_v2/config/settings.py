@@ -38,7 +38,6 @@ from ptcgp_auto_v2.config.constants import (
     SCALE_PACK_LIST,
     SCALE_PACK_OPENING_SWIPE,
     SCALE_PACK_SERIES_SELECT,
-    TEMPLATE_BASE_WIDTH,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,7 +153,6 @@ class Settings:
     # 基准分辨率：用于坐标比例计算的参考值（模板图片基于此分辨率截取）
     base_screen_width: int = BASE_SCREEN_WIDTH
     base_screen_height: int = BASE_SCREEN_HEIGHT
-    template_base_width: int = TEMPLATE_BASE_WIDTH
 
     # 识别配置
     ocr_languages: List[str] = field(default_factory=lambda: DEFAULT_OCR_LANGUAGES)

@@ -12,23 +12,23 @@ import math
 import threading
 from bisect import bisect_left
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Optional, cast
 
 from ptcgp_auto_v2.config.constants import (
+    PACK_AUTO_HASH_VIRTUAL_NODES,
     PACK_AUTO_HRW_AGGRESSIVENESS,
     PACK_AUTO_HRW_EFFECTIVE_EPSILON_MAX,
     PACK_AUTO_HRW_EFFECTIVE_SCALE_MAX,
     PACK_AUTO_HRW_SEED,
     PACK_AUTO_HRW_SEED_SCAN_COUNT,
     PACK_AUTO_HRW_TARGET_RARITIES,
-    PACK_AUTO_HASH_VIRTUAL_NODES,
     PACK_AUTO_STRATEGIES,
     PACK_SERIES_CODES,
 )
 from ptcgp_auto_v2.utils.game_time import get_game_biz_date_str
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account, Pack, CardSet
+    from ptcgp_auto_v2.db.models import Account, CardSet, Pack
     from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
 
 
@@ -202,28 +202,14 @@ def _select_by_weighted_hrw(
     return snapshot["pack_map"].get(selected_pack_key), int(snapshot["candidate_count"])
 
 
-def get_hrw_distribution_snapshot(
-    card_repo: "CardRepository",
-    exclude_set_codes: list[str],
-    force_rebuild: bool = False,
-) -> Optional[dict]:
-    """获取 HRW 分配快照（供调试脚本复用正式逻辑）。"""
-    cache_key = _build_weekly_cache_key(exclude_set_codes)
-    return _get_or_build_weekly_snapshot(
-        cache_key=cache_key,
-        card_repo=card_repo,
-        exclude_set_codes=exclude_set_codes,
-        current_account_key="",
-        force_rebuild=force_rebuild,
-    )
-
-
 def _build_weekly_cache_key(exclude_set_codes: list[str]) -> str:
     """构建日级快照缓存键（seed 仍按周）。"""
     biz_date = get_game_biz_date_str()
     week_key = _build_week_seed_suffix(biz_date)
     excludes = ",".join(sorted(code for code in exclude_set_codes if code))
-    effective_scale, effective_weight_max, effective_epsilon = _build_hrw_effective_params()
+    effective_scale, effective_weight_max, effective_epsilon = (
+        _build_hrw_effective_params()
+    )
     return (
         f"{biz_date}|{week_key}|{excludes}|{PACK_AUTO_HRW_AGGRESSIVENESS}|"
         f"{effective_scale}|{effective_weight_max}|{effective_epsilon}|"
@@ -275,7 +261,9 @@ def _build_weekly_snapshot(
     if not candidates:
         return None
 
-    effective_scale, effective_weight_max, effective_epsilon = _build_hrw_effective_params()
+    effective_scale, effective_weight_max, effective_epsilon = (
+        _build_hrw_effective_params()
+    )
     pack_weights, progress_stats, progress_map = _build_pack_weights(
         candidates,
         card_repo,
@@ -345,9 +333,7 @@ def _build_hrw_effective_params() -> tuple[float, float, float]:
     """根据公开激进度参数派生 HRW 内部参数。"""
     aggressiveness = PACK_AUTO_HRW_AGGRESSIVENESS
     if aggressiveness < 0.0 or aggressiveness > 1.0:
-        raise ValueError(
-            "PACK_AUTO_HRW_AGGRESSIVENESS 必须位于 0.0 到 1.0 之间"
-        )
+        raise ValueError("PACK_AUTO_HRW_AGGRESSIVENESS 必须位于 0.0 到 1.0 之间")
 
     squared = aggressiveness * aggressiveness
     effective_scale = PACK_AUTO_HRW_EFFECTIVE_SCALE_MAX * squared
