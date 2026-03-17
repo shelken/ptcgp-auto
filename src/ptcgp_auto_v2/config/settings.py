@@ -18,11 +18,9 @@ from ptcgp_auto_v2.config.constants import (
     BASE_SCREEN_WIDTH,
     DEFAULT_ADB_ADDRESS,
     DEFAULT_DB_NAME,
-    DEFAULT_LOCALE,
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_SCROLL_ATTEMPTS,
     DEFAULT_MAX_WORKERS,
-    DEFAULT_OCR_LANGUAGES,
     DEFAULT_OCR_LEVEL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_RETRY_DELAY,
@@ -39,6 +37,7 @@ from ptcgp_auto_v2.config.constants import (
     SCALE_PACK_OPENING_SWIPE,
     SCALE_PACK_SERIES_SELECT,
 )
+from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, DEFAULT_OCR_LANGUAGES
 
 logger = logging.getLogger(__name__)
 
