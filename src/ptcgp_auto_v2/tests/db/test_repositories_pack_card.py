@@ -7,6 +7,9 @@ from ptcgp_auto_v2.db.models import Account, Card, CardSet, PackRecord, PackCard
 from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
 
 
+pytestmark = pytest.mark.usefixtures("mock_get_engine")
+
+
 # Create a fresh in-memory database for each test
 @pytest.fixture(name="engine")
 def engine_fixture():
@@ -64,7 +67,7 @@ def seed_data(engine):
 
 
 class TestCardRepository:
-    def test_get_card_by_template_name_valid_format(self, engine, mock_get_engine):
+    def test_get_card_by_template_name_valid_format(self, engine):
         seed_data(engine)
         repo = CardRepository()
 
@@ -74,7 +77,7 @@ class TestCardRepository:
         assert card.number == 1
         assert card.name == "Bulbasaur"
 
-    def test_get_card_by_template_name_simple_number(self, engine, mock_get_engine):
+    def test_get_card_by_template_name_simple_number(self, engine):
         seed_data(engine)
         repo = CardRepository()
 
@@ -84,7 +87,7 @@ class TestCardRepository:
         assert card.number == 25
         assert card.name == "Pikachu"
 
-    def test_get_card_by_template_name_invalid_format(self, engine, mock_get_engine):
+    def test_get_card_by_template_name_invalid_format(self, engine):
         seed_data(engine)
         repo = CardRepository()
 
@@ -98,7 +101,7 @@ class TestCardRepository:
 
 
 class TestPackRecordRepository:
-    def test_get_today_should_use_game_day_window(self, engine, mock_get_engine):
+    def test_get_today_should_use_game_day_window(self, engine):
         account_id = seed_data(engine)
         assert account_id is not None
         repo = PackRecordRepository()
@@ -132,7 +135,7 @@ class TestPackRecordRepository:
         assert record is not None
         assert record.opened_at == datetime(2026, 2, 15, 14, 30, 0)
 
-    def test_has_opened_today_should_use_game_day_window(self, engine, mock_get_engine):
+    def test_has_opened_today_should_use_game_day_window(self, engine):
         account_id = seed_data(engine)
         assert account_id is not None
         repo = PackRecordRepository()
@@ -156,14 +159,16 @@ class TestPackRecordRepository:
         ):
             assert repo.has_opened_today(account_id) is True
 
-    def test_create_for_account_with_cards(self, engine, mock_get_engine):
+    def test_create_for_account_with_cards(self, engine):
         account_id = seed_data(engine)
         repo = PackRecordRepository()
 
         # Get actual card ID from DB
         with Session(engine) as s:
             real_card = s.query(Card).filter(Card.number == 1).first()
+            assert real_card is not None
             real_card_id = real_card.id
+            assert real_card_id is not None
 
         # Prepare card data
         cards_data = [
@@ -198,6 +203,7 @@ class TestPackRecordRepository:
         with Session(engine) as session:
             # Re-fetch record with relationship loaded
             saved_record = session.get(PackRecord, record.id)
+            assert saved_record is not None
             assert len(saved_record.cards) == 2
 
             # Check first card

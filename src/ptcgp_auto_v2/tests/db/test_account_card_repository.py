@@ -10,6 +10,9 @@ from ptcgp_auto_v2.db.repositories.account_card_repository import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("mock_get_engine")
+
+
 @pytest.fixture(name="engine")
 def engine_fixture():
     engine = create_engine("sqlite:///:memory:")
@@ -85,7 +88,7 @@ def seed_account_cards(engine):
         return account1.id, account2.id
 
 
-def test_list_owned_cards_with_account_filter(engine, mock_get_engine):
+def test_list_owned_cards_with_account_filter(engine):
     seed_account_cards(engine)
     repo = AccountCardRepository()
 
@@ -114,7 +117,7 @@ def test_list_owned_cards_with_account_filter(engine, mock_get_engine):
     ],
 )
 def test_list_owned_cards_supports_account_search_fields(
-    engine, mock_get_engine, account_query, expected_numbers
+    engine, account_query, expected_numbers
 ):
     """拥有卡牌查询应支持账号 ID 之外的四字段搜索。"""
     seed_account_cards(engine)
