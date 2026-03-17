@@ -78,7 +78,7 @@ def match_with_visualization(
     print(f"\n✅ 截图: {screenshot.width}x{screenshot.height}")
 
     # 正式识别流程
-    print(f"\n🚀 开始正式识别流程")
+    print("\n🚀 开始正式识别流程")
     print(f"   YOLO置信度阈值: {obb_threshold}")
     start_time = time.perf_counter()
     matched, total_detected, unmatched = _run_formal_scan_with_screenshot(
@@ -189,7 +189,7 @@ def match_with_visualization(
     print(f"   匹配率: {len(matches) / total_detected * 100:.1f}%")
 
     if matches:
-        print(f"\n   ✅ 匹配详情:")
+        print("\n   ✅ 匹配详情:")
         avg_sim = sum(m["similarity"] for m in matches) / len(matches)
         print(f"      平均相似度: {avg_sim:.4f}")
         sorted_matches = sorted(matches, key=lambda x: x["similarity"], reverse=True)
@@ -290,7 +290,7 @@ def main() -> None:
     )
 
     if args.out:
-        print(f"\n📸 生成检测结果可视化...")
+        print("\n📸 生成检测结果可视化...")
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(out_path), vis_img)

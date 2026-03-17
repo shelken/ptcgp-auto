@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from .account_stat import AccountStat
     from .pack_record import PackRecord
     from .task_instance import TaskInstance
-    from .task_plan import TaskPlan
     from .account_task_plan import AccountTaskPlan
 
 

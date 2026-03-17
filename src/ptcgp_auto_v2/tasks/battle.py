@@ -22,7 +22,6 @@ from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
     TaskRegistry,
-    TaskResult,
 )
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.repositories import (
@@ -35,7 +34,6 @@ from ptcgp_auto_v2.utils.gesture import (
     press_back,
     swipe_up,
     tap_box,
-    tap_text,
     tap_text_exact,
 )
 from ptcgp_auto_v2.tasks.utils.pack_template_matcher import (

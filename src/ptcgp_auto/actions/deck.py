@@ -8,7 +8,7 @@ from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
-from .utils import go_back, find_text_by_variants, close_popup, detect_and_close_popup
+from .utils import go_back, find_text_by_variants, detect_and_close_popup
 
 
 class DeckActions:

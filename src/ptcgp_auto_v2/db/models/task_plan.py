@@ -9,10 +9,10 @@ import json
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, SQLModel
 
 if TYPE_CHECKING:
-    from .account import Account
+    pass
 
 
 class TaskPlan(SQLModel, table=True):

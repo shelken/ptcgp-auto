@@ -31,7 +31,6 @@ from ptcgp_auto_v2.web.routers import (
 )
 
 # 导入任务模块以触发注册
-import ptcgp_auto_v2.tasks
 
 
 app = FastAPI(title="PTCGP Auto Web")

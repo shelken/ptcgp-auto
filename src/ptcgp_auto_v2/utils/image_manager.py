@@ -8,12 +8,10 @@
 
 import concurrent.futures
 import logging
-from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
-from PIL import Image
 from sqlmodel import Session
 
 from ptcgp_auto_v2.config.assets import build_card_image_bases

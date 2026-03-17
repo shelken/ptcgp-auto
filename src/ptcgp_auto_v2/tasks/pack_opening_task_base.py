@@ -17,7 +17,6 @@ import logging
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 from ptcgp_auto_v2.config.settings import get_settings
@@ -61,7 +60,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_center,
     tap_matched_element,
 )
-from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.repositories import (

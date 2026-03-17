@@ -5,7 +5,6 @@ Card 相关模型
 包含 CardSet, Card, CardPack 三个模型，用于存储游戏静态数据。
 """
 
-from datetime import datetime
 from typing import Optional, List
 
 from sqlmodel import Field, Relationship, SQLModel

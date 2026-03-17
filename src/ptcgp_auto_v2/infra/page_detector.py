@@ -7,13 +7,13 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.infra.adb import AdbController
-from ptcgp_auto_v2.infra.ocr import OcrEngine, OcrResult
+from ptcgp_auto_v2.infra.ocr import OcrEngine
 from ptcgp_auto_v2.infra.template import TemplateMatcher, TemplateMatch
 
 logger = logging.getLogger(__name__)

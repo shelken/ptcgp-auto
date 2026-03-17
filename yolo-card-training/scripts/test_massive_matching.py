@@ -463,7 +463,7 @@ def run_matching_test_with_db(
     print(f"   匹配率: {len(matches) / len(cropped_cards) * 100:.1f}%")
 
     if matches:
-        print(f"\n   ✅ 匹配详情:")
+        print("\n   ✅ 匹配详情:")
         avg_sim = sum(m.similarity for m in matches) / len(matches)
         print(f"      平均相似度: {avg_sim:.4f}")
         sorted_matches = sorted(matches, key=lambda x: x.similarity, reverse=True)
@@ -495,7 +495,7 @@ def run_matching_test_with_db(
     print("=" * 70)
 
     # 保存可视化
-    print(f"\n📸 生成检测结果可视化...")
+    print("\n📸 生成检测结果可视化...")
     vis_path = Path("output/detection_result.jpg")
     vis_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(vis_path), vis_img)
@@ -503,7 +503,7 @@ def run_matching_test_with_db(
 
     time.sleep(0.1)
     if preview_image_inline(vis_path):
-        print(f"✅ 可视化已显示在终端")
+        print("✅ 可视化已显示在终端")
     else:
         print(f"⚠️  终端显示失败，请直接查看文件: {vis_path}")
 
@@ -651,7 +651,7 @@ def main():
         hash_db_path = cards_dir / args.set / "hash_database.json"
         print(f"📂 使用系列: {args.set}")
         if not hash_db_path.exists():
-            print(f"⚠️  哈希数据库不存在，尝试自动生成...")
+            print("⚠️  哈希数据库不存在，尝试自动生成...")
             result = subprocess.run(
                 [sys.executable, "scripts/generate_hash_db.py", "--set", args.set],
                 capture_output=True,

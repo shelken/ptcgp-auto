@@ -10,7 +10,6 @@
 
 import logging
 import time
-from typing import cast
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
