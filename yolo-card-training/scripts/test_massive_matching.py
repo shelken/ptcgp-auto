@@ -39,7 +39,9 @@ from test_yolo_hash_match import (
 # 引入终端预览工具
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 try:
-    from ptcgp_auto_v2.utils.terminal_preview import preview_image_inline  # type: ignore
+    from ptcgp_auto_v2.utils.terminal_preview import (
+        preview_image_inline,  # type: ignore
+    )
 except ImportError:
 
     def preview_image_inline(image, **kwargs):
@@ -170,7 +172,6 @@ def detect_cards(
     if not ULTRALYTICS_AVAILABLE or YOLO is None:
         raise ImportError("ultralytics not installed")
 
-    t0 = time.perf_counter()
     model = YOLO(model_path, task="obb")
 
     img_array = np.array(pil_image)
@@ -288,8 +289,6 @@ def match_against_database(
     print(f"   阈值: {HASH_SIMILARITY_THRESHOLD}, 最小差值: {HASH_SIMILARITY_GAP_MIN}")
     print("-" * 70)
 
-    start_time = time.perf_counter()
-
     for card in cropped_cards:
         base_hash = compute_hash_from_bgr(card["cropped"])
         if base_hash is None:
@@ -400,7 +399,6 @@ def match_against_database(
                 f"      ⚠️ 差值不足，放弃匹配: gap={similarity_gap:.4f} < {HASH_SIMILARITY_GAP_MIN:.4f}"
             )
 
-    elapsed = time.perf_counter() - start_time
     return matches, total_checked, above_threshold_count, vis_img
 
 

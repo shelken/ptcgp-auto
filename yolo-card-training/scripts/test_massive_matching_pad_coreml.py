@@ -140,7 +140,6 @@ def detect_cards(
             continue
 
         conf_text = f"{conf:.2f}"
-        text_size = cv2.getTextSize(conf_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
         text_x = x1
         text_y = y1 - 5 if y1 > 20 else y1 + 20
         cv2.putText(

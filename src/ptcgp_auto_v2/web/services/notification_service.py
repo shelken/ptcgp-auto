@@ -304,8 +304,6 @@ def build_notification_panel_context(
     """
     from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 
-    notification_repo = NotificationRepository()
-
     normalized_page = max(page, 0)
     normalized_page_size = min(max(page_size, 1), 50)
 

@@ -12,8 +12,8 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     ExchangeCardRequestRepository,
@@ -689,8 +689,6 @@ class ManageFriendshipTask(StatefulTask):
 
     def _handle_add_sended_result(self, req, page_info: dict) -> ActionResult:
         """处理接受好友请求结果（系统内）或确认外部好友是否已接受。"""
-        ocr_results = page_info.get("ocr_results", [])
-
         # 外部好友：to_account_id 为 null，检查是否已是好友
         if req.to_account_id is None:
             return self._handle_external_sended_result(req, page_info)

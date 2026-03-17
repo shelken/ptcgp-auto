@@ -5,8 +5,9 @@ YOLO 模型性能对比测试
 
 import time
 from pathlib import Path
-from PIL import Image
+
 import numpy as np
+from PIL import Image
 
 
 def benchmark_model(model_path: str, image_path: str, runs: int = 10):
@@ -29,7 +30,6 @@ def benchmark_model(model_path: str, image_path: str, runs: int = 10):
     times = []
     for i in range(runs):
         start = time.perf_counter()
-        results = model(img_array, verbose=False)
         end = time.perf_counter()
         times.append((end - start) * 1000)  # 转换为毫秒
 

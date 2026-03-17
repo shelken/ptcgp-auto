@@ -7,13 +7,14 @@ YOLO + 哈希匹配测试脚本
 __test__ = False
 
 import io
-import sys
 import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
 import cv2
 import numpy as np
-from pathlib import Path
 from PIL import Image
-from dataclasses import dataclass
 
 # ============ 哈希工具实现 (来自 yolo-hash 分支) ============
 
@@ -447,11 +448,7 @@ def test_recognition(
 
         # ===== 版本 1: 原始慢版本（四重循环）=====
         t1 = time.perf_counter()
-        dct_r_slow = _compute_dct_slow(color_pixels.r)
-        dct_g_slow = _compute_dct_slow(color_pixels.g)
-        dct_b_slow = _compute_dct_slow(color_pixels.b)
         # 计算哈希值（简化版，只用于对比）
-        hash_slow = np.array(dct_r_slow[:3] + dct_g_slow[:3] + dct_b_slow[:3])
         t2 = time.perf_counter()
         time_slow = (t2 - t1) * 1000
 

@@ -138,8 +138,6 @@ def test_match(
     matcher = TemplateMatcher()
     if screenshot.width > 0:
         matcher.set_screen_width(screenshot.width)
-
-    pack_path = manager.get_pack_path(booster_name)
     template_name = manager.get_template_name(booster_name)
 
     # 加载模板（使用标准 load_template，与正式代码一致，会进行预缩放）
@@ -745,7 +743,6 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
     if screenshot.width > 0:
         matcher.set_screen_width(screenshot.width)
 
-    pack_path = manager.get_pack_path(booster_name)
     template_name = manager.get_template_name(booster_name)
 
     # 加载模板（使用标准 load_template，与正式代码一致，会进行预缩放）
