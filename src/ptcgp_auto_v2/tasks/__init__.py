@@ -21,4 +21,17 @@ from ptcgp_auto_v2.tasks import battle
 # 导出任务注册表
 from ptcgp_auto_v2.core.task_base import TaskRegistry
 
-__all__ = ["TaskRegistry"]
+__all__ = [
+    "TaskRegistry",
+    "open_pack",
+    "fetch_account_info",
+    "claim_rewards",
+    "claim_gifts",
+    "init_account",
+    "collect_account_cards",
+    "wonder_pick",
+    "manage_friendship",
+    "send_card_daily",
+    "exchange_cards",
+    "battle",
+]

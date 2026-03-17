@@ -3,10 +3,8 @@
 from typing import Dict
 
 from ptcgp_auto import config
-from ptcgp_auto.logger import get_logger
-
-logger = get_logger(__name__)
 from ptcgp_auto.adb_controller import AdbController
+from ptcgp_auto.logger import get_logger
 from ptcgp_auto.recognizer import Recognizer
 from ptcgp_auto.state_manager import StateManager
 from .base import BaseActions
@@ -18,6 +16,8 @@ from .level import LevelActions
 from .pack import PackActions
 from .tutorial import TutorialActions
 from .user import UserActions
+
+logger = get_logger(__name__)
 
 
 class ActionHandler:

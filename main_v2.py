@@ -17,7 +17,7 @@ from pathlib import Path
 src_dir = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_dir))
 
-from ptcgp_auto_v2.main import main
+from ptcgp_auto_v2.main import main  # noqa: E402  # 入口脚本需要先调整 sys.path
 
 if __name__ == "__main__":
     sys.exit(main())

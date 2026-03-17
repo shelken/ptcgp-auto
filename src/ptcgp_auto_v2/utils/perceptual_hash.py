@@ -118,10 +118,10 @@ def calculate_perceptual_hash(color_pixels: ColorPixels) -> np.ndarray:
     arr = np.zeros(buffer_len, dtype=np.uint32)
 
     j = 0
-    for dct in (dct_r, dct_g, dct_b):
-        avg = float(np.mean(dct[1:]))
-        for i in range(1, len(dct)):
-            if dct[i] > avg + 1e-15:
+    for channel_dct in (dct_r, dct_g, dct_b):
+        avg = float(np.mean(channel_dct[1:]))
+        for i in range(1, len(channel_dct)):
+            if channel_dct[i] > avg + 1e-15:
                 idx = j // 32
                 bit = j % 32
                 arr[idx] |= np.uint32(1 << bit)
