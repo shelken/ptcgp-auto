@@ -202,6 +202,22 @@ def _select_by_weighted_hrw(
     return snapshot["pack_map"].get(selected_pack_key), int(snapshot["candidate_count"])
 
 
+def get_hrw_distribution_snapshot(
+    card_repo: "CardRepository",
+    exclude_set_codes: list[str],
+    force_rebuild: bool = False,
+) -> Optional[dict]:
+    """获取 HRW 分配快照，供调试脚本复用正式策略逻辑。"""
+    cache_key = _build_weekly_cache_key(exclude_set_codes)
+    return _get_or_build_weekly_snapshot(
+        cache_key=cache_key,
+        card_repo=card_repo,
+        exclude_set_codes=exclude_set_codes,
+        current_account_key="",
+        force_rebuild=force_rebuild,
+    )
+
+
 def _build_weekly_cache_key(exclude_set_codes: list[str]) -> str:
     """构建日级快照缓存键（seed 仍按周）。"""
     biz_date = get_game_biz_date_str()
