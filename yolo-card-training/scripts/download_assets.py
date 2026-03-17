@@ -263,7 +263,6 @@ def main():
         print(f"并发线程数: {args.max_workers}")
         print()
 
-        total_downloaded = 0
         for i, set_name in enumerate(sets, 1):
             print(f"\n{'=' * 50}")
             print(f"[{i}/{len(sets)}] 下载系列: {set_name}")

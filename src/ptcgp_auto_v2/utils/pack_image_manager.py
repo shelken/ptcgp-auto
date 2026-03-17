@@ -90,7 +90,6 @@ class PackImageManager:
         Returns:
             True 表示资源就绪，False 表示失败
         """
-        pack_path = self.get_pack_path(booster_name)
         if self.is_pack_ready(booster_name):
             return True
 

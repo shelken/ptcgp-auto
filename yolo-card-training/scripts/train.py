@@ -102,7 +102,6 @@ def main():
         sys.exit(1)
 
     # 训练
-    results = train_model(args.data, args.epochs, args.batch, args.device)
 
     # 显示结果
     print("\n" + "=" * 50)
