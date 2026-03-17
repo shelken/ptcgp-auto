@@ -11,8 +11,8 @@
 import logging
 from typing import Optional, cast
 
-from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
+from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
     AccountRepository,

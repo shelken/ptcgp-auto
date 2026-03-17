@@ -136,6 +136,7 @@ class OpenPackTask(PackOpeningTaskBase):
     reset_type = ResetType.DAILY
     # 实测 66 左右 , 一次十连包 + 2免费包 105 左右
     max_iterations = 180
+    max_same_page_rounds = 25
     pages = _build_open_pack_pages()
 
     def __init__(self, adb, recognizer, page_detector):
