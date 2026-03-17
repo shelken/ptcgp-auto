@@ -348,10 +348,12 @@ def list_accounts():
 
 
 def reset_running_tasks():
-    """将所有运行中的任务重置为待执行"""
+    """将所有异常状态的任务重置为待执行"""
     repo = TaskInstanceRepository()
-    count = repo.reset_all_pending()
-    print(f"已重置 {count} 个运行中的任务为待执行状态")
+    count = repo.reset_stale_tasks(
+        force_all=True,
+    )
+    print(f"已重置 {count} 个异常状态任务为待执行状态")
 
 
 def sync_account(device_address: str):

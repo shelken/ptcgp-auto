@@ -151,11 +151,6 @@ class Scheduler:
         self._task_instance_repo = TaskInstanceRepository()
         self._account_repo = AccountRepository()
 
-        # 启动时自动重置异常状态的任务
-        reset_count = self._task_instance_repo.reset_all_pending()
-        if reset_count > 0:
-            logger.info(f"已重置 {reset_count} 个异常状态的任务为待执行")
-
     @property
     def settings(self):
         """全局配置"""
@@ -181,28 +176,11 @@ class Scheduler:
         elapsed = (datetime.now() - self._last_auto_scale_check).total_seconds()
         return elapsed >= self.config.auto_scale_eval_interval_seconds
 
-    def _has_creating_account(self) -> bool:
-        """检查是否已有账号正在创建中（存在 pending init_account 任务）"""
-        if not self._task_instance_repo:
-            return False
-
-        # 查找所有 init_account 类型的任务实例
-        from sqlmodel import Session, select
-
-        from ptcgp_auto_v2.db.engine import get_engine
-        from ptcgp_auto_v2.db.models import TaskInstance
-
-        with Session(get_engine()) as session:
-            statement = select(TaskInstance).where(
-                TaskInstance.task_type == "init_account",
-                TaskInstance.status.in_(["pending", "running"]),
-            )
-            result = session.exec(statement).first()
-            return result is not None
-
     def _check_and_reset_stale_tasks(self):
         """检查并重置超时的异常任务"""
         if not self._should_check_stale_tasks():
+            return
+        if not self._task_instance_repo:
             return
 
         self._last_stale_check = datetime.now()
@@ -211,6 +189,7 @@ class Scheduler:
             stale_timeout_seconds=int(self.config.stale_task_timeout),
             skipped_timeout_seconds=int(self.config.skipped_reset_timeout),
             exclude_account_ids=active_account_ids,
+            force_all=False,
         )
         if reset_count > 0:
             logger.info(f"已重置 {reset_count} 个超时/异常状态的任务为待执行")
@@ -264,6 +243,8 @@ class Scheduler:
 
     def _count_pending_tasks(self) -> int:
         """统计 pending 任务数量"""
+        if not self._task_instance_repo:
+            return 0
         pending_count = self._task_instance_repo.count_by_status(
             TaskStatus.PENDING.value
         )
@@ -557,20 +538,6 @@ class Scheduler:
             config = {}
         return should_reset_task(instance, reset_type, config)
 
-    def _get_next_task(self) -> Optional["TaskInstance"]:
-        """
-        获取下一个待执行任务
-
-        优先级：
-        1. 状态为 pending
-        2. 该账号没有正在执行的任务（防止同一账号被分配到多个设备）
-        3. 创建时间早的优先
-
-        Returns:
-            TaskInstance 或 None
-        """
-        return self._task_instance_repo.get_next_pending_excluding_busy_accounts()
-
     def _get_next_account_batch(
         self,
     ) -> Optional[tuple["Account", list["TaskInstance"]]]:
@@ -813,58 +780,6 @@ class Scheduler:
                 TaskStatus.SKIPPED.value,
             ):
                 return task
-        return None
-
-    def _get_next_non_init_batch(
-        self,
-    ) -> Optional[tuple["Account", list["TaskInstance"]]]:
-        """
-        获取下一个有待执行非init_account任务的账号
-
-        优先处理现有账号的其他任务（如open_pack, claim_rewards等），
-        让新账号创建在系统空闲时进行。
-
-        Returns:
-            (Account, task_instances_list) 或 None
-        """
-        # 获取所有有待执行任务的账号
-        account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
-
-        for account_id in account_ids:
-            if self._is_account_active(account_id):
-                continue
-
-            # 检查该账号是否已经有正在执行的任务
-            if self._task_instance_repo.has_running_tasks(account_id):
-                continue
-
-            # 获取账号信息
-            account = self._account_repo.get_by_id(account_id)
-            if not account:
-                continue
-
-            # 获取该账号的所有待执行任务
-            pending_tasks = self._task_instance_repo.get_pending_by_account(account_id)
-            if not pending_tasks:
-                continue
-
-            # 【关键】过滤掉 init_account 任务，只处理其他任务
-            non_init_tasks = [t for t in pending_tasks if t.task_type != "init_account"]
-
-            if not non_init_tasks:
-                # 只有 init_account 任务，跳过这个账号
-                continue
-
-            # 检查是否需要前置任务（如 fetch_account_info）
-            non_init_tasks = self._ensure_prerequisites_in_batch(
-                account, non_init_tasks
-            )
-
-            # 按照任务计划顺序排列
-            ordered_tasks = self._order_tasks_by_plan(account, non_init_tasks)
-
-            return (account, ordered_tasks)
-
         return None
 
     def _trigger_multi_device_creation(self):
