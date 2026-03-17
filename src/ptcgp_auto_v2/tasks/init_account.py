@@ -220,14 +220,10 @@ class InitAccountTask(PackOpeningTaskBase):
 
     # 可接受的国家/地区列表（匹配到任一即可）
     ALLOWED_COUNTRIES = ["香港", "台湾", "日本", "新加坡", "美國"]
-    # 默认目标国家（向后兼容）
-    TARGET_COUNTRY = "香港"
     # 昵称前缀
     NICKNAME_PREFIX = "skn"
     # 出生年份偏移（当前年份 - OFFSET）
     BIRTH_YEAR_OFFSET = 20
-    # 出生月份
-    BIRTH_MONTH = 2
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
@@ -299,16 +295,6 @@ class InitAccountTask(PackOpeningTaskBase):
     ) -> ActionResult:
         """动作返回统一兜底为 OK。"""
         return result if result else ActionResult.ok(wait=wait)
-
-    def _build_exact_text_handler(
-        self, pattern_key: str, log_msg: str
-    ) -> Callable[[dict], ActionResult]:
-        """构建精确文本点击处理器。"""
-
-        def _handler(page_info: dict) -> ActionResult:
-            return self._tap_text_exact(page_info, pattern_key, log_msg)
-
-        return _handler
 
     def _tap_text_exact(
         self, page_info: dict, pattern_key: str, log_msg: str

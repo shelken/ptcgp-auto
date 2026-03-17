@@ -69,11 +69,6 @@ def tap(adb: AdbController, x: int, y: int, wait: float = 1.0) -> ActionResult:
     return ActionResult.ok(wait=wait)
 
 
-def perform_tap(adb: AdbController, x: int, y: int, wait: float = 1.0) -> ActionResult:
-    """执行点击动作并返回结果"""
-    return tap(adb, x, y, wait=wait)
-
-
 def tap_box(adb: AdbController, box: Box, wait: float = 1.0) -> ActionResult:
     """点击边界框中心"""
     adb.tap_center(box)
@@ -312,33 +307,6 @@ def tap_by_priority(
     return None
 
 
-def tap_template_or_text(
-    adb: AdbController,
-    page_detector,
-    ocr_results: list[dict],
-    template_name: Optional[str],
-    patterns: list[str],
-    wait: float = 1.0,
-    pick: str | int = "first",
-) -> Optional[ActionResult]:
-    """模板优先、文本兜底的点击（统一日志与等待）"""
-    result = tap_by_priority(
-        adb,
-        page_detector,
-        ocr_results,
-        patterns,
-        template_name=template_name,
-        wait=wait,
-        pick=pick,
-    )
-    if result:
-        return result
-
-    if template_name:
-        logger.debug(f"未匹配模板或文本: {template_name}")
-    return None
-
-
 def tap_template_or_fallback(
     adb: AdbController,
     page_detector,
@@ -391,18 +359,6 @@ def tap_template_with_scale(
     if not match:
         return None
     return tap_box(page_detector.adb, match.box, wait=wait)
-
-
-def tap_template_box(
-    page_detector,
-    template_name: str,
-    wait: float = 1.0,
-) -> Optional[ActionResult]:
-    """查找模板并点击中心（使用 page_detector 最新截图）"""
-    box = page_detector.find_template(template_name)
-    if not box:
-        return None
-    return tap_box(page_detector.adb, box, wait=wait)
 
 
 def tap_above_point(
@@ -497,18 +453,6 @@ def click_close(
     )
 
 
-def tap_bottom_close(
-    adb: AdbController,
-    base_y: int,
-    wait: float = 1.0,
-    ratio_x: float = 0.1,
-) -> ActionResult:
-    """点击底部关闭区域（基准像素 + 缩放）"""
-    tap_x = int(adb.screen_width * ratio_x)
-    tap_y = adb.scaled_y(base_y)
-    return tap(adb, tap_x, tap_y, wait=wait)
-
-
 def tap_home_icon(adb: AdbController, page_detector, wait: float = 1.0) -> ActionResult:
     """点击主页图标"""
     return tap_bottom_icon(adb, page_detector, "icon_home", wait)
@@ -569,17 +513,6 @@ def swipe_up(
     return swipe(adb, start, end, steps=steps, wait=wait)
 
 
-def swipe_down(
-    adb: AdbController,
-    base_distance_y: int = BASE_SCROLL_DISTANCE_DEFAULT,
-    steps: Optional[int] = SWIPE_STEPS_SCROLL,
-    wait: float = 1.0,
-) -> ActionResult:
-    """向下滑动（基准距离 + 步数）"""
-    start, end = scroll_points(adb, base_distance_y, direction="down")
-    return swipe(adb, start, end, steps=steps, wait=wait)
-
-
 def _clamp_steps(value: float, min_steps: int, max_steps: int) -> int:
     """限制步数范围"""
     return max(min_steps, min(max_steps, int(round(value))))
@@ -615,36 +548,6 @@ def swipe(
     resolved_steps = calculate_swipe_steps(adb, start, end) if steps is None else steps
     adb.swipe(*start, *end, resolved_steps)
     return ActionResult.ok(wait=wait)
-
-
-def perform_swipe(
-    adb: AdbController,
-    start: Tuple[int, int],
-    end: Tuple[int, int],
-    steps: Optional[int] = None,
-    wait: float = 1.0,
-) -> ActionResult:
-    """执行滑动动作并返回结果"""
-    return swipe(adb, start, end, steps=steps, wait=wait)
-
-
-def swipe_scaled(
-    adb: AdbController,
-    start_x: int,
-    start_y: int,
-    end_x: int,
-    end_y: int,
-    steps: Optional[int] = None,
-    wait: float = 1.0,
-) -> ActionResult:
-    """基于基准像素执行滑动"""
-    return swipe(
-        adb,
-        (adb.scaled_x(start_x), adb.scaled_y(start_y)),
-        (adb.scaled_x(end_x), adb.scaled_y(end_y)),
-        steps=steps,
-        wait=wait,
-    )
 
 
 def long_press(

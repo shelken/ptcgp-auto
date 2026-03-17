@@ -58,13 +58,8 @@ DEFAULT_OCR_LEVEL = "accurate"  # 默认 OCR 识别级别 ("fast" or "accurate")
 GAME_UTC_OFFSET_HOURS = 8
 
 # 调度配置
-METADATA_DEFAULT_NODE_ID = "all"
-METADATA_DEFAULT_SET_CODE = ""
-METADATA_DEFAULT_PACK_NAME = ""
-METADATA_DEFAULT_UI_STEP = 1
 
 # 卡牌 Key 格式模板
-CARD_KEY_FORMAT = "{set_code}-{number:03d}"
 
 # 调度配置
 DEFAULT_POLL_INTERVAL = 5.0  # 默认轮询间隔 (秒)
@@ -76,12 +71,6 @@ DEFAULT_MAX_RETRIES = 3  # 默认最大重试次数
 DEFAULT_RETRY_DELAY = 30.0  # 默认重试延迟 (秒)
 DEFAULT_WAIT_AFTER_CLICK = 0.3  # 默认点击后等待时间 (秒)
 DEFAULT_LONG_PRESS_STEPS = 600  # 默认长按步数（约 3 秒，0.005s/step）
-DEFAULT_SWIPE_DURATION = 300  # 默认滑动持续时间 (毫秒)
-SWIPE_DURATION_OPEN = 500  # 开包滑动持续时间 (毫秒)（1x速度）
-# SWIPE_DURATION_OPEN = 300  # 开包滑动持续时间 (毫秒)（3x速度）
-SWIPE_DURATION_REGISTER = 100  # 卡牌登录图鉴滑动持续时间 (毫秒)
-DEFAULT_SCROLL_DURATION = 500  # 默认滚动持续时间 (毫秒)
-DEFAULT_SCROLL_RATIO = 0.26  # 默认滚动距离占屏幕高度比例
 DEFAULT_MAX_SCROLL_ATTEMPTS = 10  # 默认最大滚动尝试次数
 
 # 滑动步数配置（相对 steps 模型）

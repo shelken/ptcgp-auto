@@ -27,3 +27,17 @@ dev = [
     "pytest>=9.0.2",
     "vulture>=2.15",
 ]
+
+[tool.pytest.ini_options]
+# 只收集明确的 tests/ 目录下的测试，避免 scripts/ 等目录里
+# 以 test_ 开头的脚本被 pytest 误当成测试文件。
+testpaths = [
+    "src/ptcgp_auto_v2/tests",
+    "src/ptcgp_auto_v2/web/tests",
+]
+
+# 仅识别符合 pytest 默认命名约定的测试文件。
+python_files = [
+    "test_*.py",
+    "*_test.py",
+]

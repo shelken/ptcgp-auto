@@ -33,25 +33,3 @@ def render_template(
     context["request"] = request
     templates = get_templates()
     return templates.TemplateResponse(template_name, context)
-
-
-def render_template_with_trigger(
-    request: Request,
-    template_name: str,
-    context: dict[str, Any],
-    trigger: dict[str, Any],
-) -> HTMLResponse:
-    """带 HX-Trigger 的模板渲染。
-
-    Args:
-        request: FastAPI 请求对象
-        template_name: 模板路径
-        context: 模板上下文数据
-        trigger: HX-Trigger 头数据
-
-    Returns:
-        HTMLResponse 对象
-    """
-    response = render_template(request, template_name, context)
-    response.headers["HX-Trigger"] = json.dumps(trigger, ensure_ascii=True)
-    return response

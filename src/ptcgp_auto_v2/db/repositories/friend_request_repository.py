@@ -66,17 +66,6 @@ class FriendRequestRepository:
         with Session(get_engine()) as session:
             return session.get(AccountFriendRequest, request_id)
 
-    def get_by_to_account_and_status(
-        self, to_account_id: int, status: str
-    ) -> List[AccountFriendRequest]:
-        """获取接收方的指定状态请求"""
-        with Session(get_engine()) as session:
-            statement = select(AccountFriendRequest).where(
-                AccountFriendRequest.to_account_id == to_account_id,
-                AccountFriendRequest.status == status,
-            )
-            return list(session.exec(statement).all())
-
     def get_add_requests_by_to_account_and_status(
         self, to_account_id: int, status: str
     ) -> List[AccountFriendRequest]:
@@ -121,41 +110,6 @@ class FriendRequestRepository:
                 AccountFriendRequest.status == "sended",
             )
             return session.exec(sended_statement).first()
-
-    def get_by_account_friend_status(
-        self,
-        from_account_id: int,
-        to_friend_id: str,
-        status: str,
-    ) -> Optional[AccountFriendRequest]:
-        """按 (from_account_id, to_friend_id, status) 查询请求。"""
-        with Session(get_engine()) as session:
-            statement = select(AccountFriendRequest).where(
-                AccountFriendRequest.from_account_id == from_account_id,
-                AccountFriendRequest.to_friend_id == to_friend_id,
-                AccountFriendRequest.status == status,
-            )
-            return session.exec(statement).first()
-
-    def has_pending_add_request(self, from_account_id: int, to_friend_id: str) -> bool:
-        """是否存在待处理添加请求（sending/sended）。"""
-        with Session(get_engine()) as session:
-            sending_statement = select(AccountFriendRequest.id).where(
-                AccountFriendRequest.from_account_id == from_account_id,
-                AccountFriendRequest.to_friend_id == to_friend_id,
-                AccountFriendRequest.request_type == "add",
-                AccountFriendRequest.status == "sending",
-            )
-            if session.exec(sending_statement).first() is not None:
-                return True
-
-            sended_statement = select(AccountFriendRequest.id).where(
-                AccountFriendRequest.from_account_id == from_account_id,
-                AccountFriendRequest.to_friend_id == to_friend_id,
-                AccountFriendRequest.request_type == "add",
-                AccountFriendRequest.status == "sended",
-            )
-            return session.exec(sended_statement).first() is not None
 
     def has_pending_delete_request(
         self, from_account_id: int, to_friend_id: str

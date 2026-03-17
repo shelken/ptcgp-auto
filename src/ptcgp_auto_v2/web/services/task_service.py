@@ -1,19 +1,20 @@
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
+
 from sqlmodel import Session, col, or_, select
 
+from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.task_plan_utils import (
     build_account_plan_cache,
     compute_next_run_for_instance,
 )
-from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
-from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
-    AccountRepository,
     AccountPackConfigRepository,
+    AccountRepository,
     CardRepository,
     PackRecordRepository,
     TaskInstanceRepository,
@@ -23,12 +24,12 @@ from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
     reset_completed_task_instances,
 )
-from ptcgp_auto_v2.web.utils.i18n import get_current_lang
-from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page,
     normalize_page_size,
 )
+from ptcgp_auto_v2.web.utils.i18n import get_current_lang
+from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
 
 
 def _build_tasks_page_url(
@@ -96,7 +97,6 @@ def build_tasks_list_context(
 
     account_cache: dict[int, dict] = {}
     pack_configs_map: dict[int, AccountPackConfig] = {}
-    auto_pack_map: dict[int, dict] = {}
     account_ids = [
         instance.account_id for instance in instances if instance.account_id is not None
     ]
@@ -118,7 +118,7 @@ def build_tasks_list_context(
             account_cache[account.id] = build_account_plan_cache(account)
 
         cache = account_cache[account.id]
-        computed_next_run_at, effective_reset_type, interval_seconds, plan_source = (
+        _, effective_reset_type, interval_seconds, plan_source = (
             compute_next_run_for_instance(instance, cache)
         )
         # 手动重置后 next_run_at 为 None，不再 fallback 到计算值，确保显示为空

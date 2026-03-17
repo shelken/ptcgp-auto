@@ -6,19 +6,19 @@
 """
 
 import sys
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from io import BytesIO
-from PIL import Image, ImageDraw
+from PIL import Image
 
 # 确保能导入 v2 模块
 ROOT_DIR = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
 from ptcgp_auto_v2.utils.pack_image_manager import (
-    PackImageManager,
     PACK_CROP_RATIO,
+    PackImageManager,
 )
 
 
@@ -132,8 +132,9 @@ def test_match(
         return None
 
     # 3. 加载模板到 TemplateMatcher
-    from ptcgp_auto_v2.infra.template import TemplateMatcher
     import cv2
+
+    from ptcgp_auto_v2.infra.template import TemplateMatcher
 
     matcher = TemplateMatcher()
     if screenshot.width > 0:
@@ -152,7 +153,9 @@ def test_match(
     if scale:
         # 指定比例匹配
         print(f"使用指定缩放比例: {scale}")
-        match = matcher.find_with_scale(screenshot, template_name, scale, threshold=threshold)
+        match = matcher.find_with_scale(
+            screenshot, template_name, scale, threshold=threshold
+        )
         if match:
             print(f"✓ 匹配成功! 置信度: {match.confidence:.4f}, 位置: {match.box}")
             return (match.confidence, match.box)
@@ -165,7 +168,9 @@ def test_match(
         print("自动扫描最佳缩放比例...")
         from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
 
-        best_scale, best_conf = scan_best_scale_with_matcher(matcher, screenshot, template_name)
+        best_scale, best_conf = scan_best_scale_with_matcher(
+            matcher, screenshot, template_name
+        )
         print(f"\n最佳比例: {best_scale:.3f}, 置信度: {best_conf:.4f}")
 
         if best_conf >= threshold:
@@ -301,10 +306,11 @@ def test_crop_adjust(
     Returns:
         (best_confidence, crop_ratio, best_scale) 或 None
     """
+    import os
+    import tempfile
+
     import cv2
     import numpy as np
-    import tempfile
-    import os
 
     print(f"\n{'=' * 60}")
     print(f"交互式裁剪调整工具: {booster_name}")
@@ -365,7 +371,6 @@ def test_crop_adjust(
     cv2.createTrackbar("Right %", window_name, default_right, 100, lambda x: None)
     cv2.createTrackbar("Bottom %", window_name, default_bottom, 100, lambda x: None)
 
-    current_crop_ratio = PACK_CROP_RATIO
     best_result = None
 
     # 从 PIL 转换为 OpenCV 格式（RGB -> BGR）
@@ -422,9 +427,10 @@ def test_crop_adjust(
         processed.save(temp_path)
 
         # 加载并测试匹配
+        import cv2
+
         from ptcgp_auto_v2.infra.template import TemplateMatcher
         from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
-        import cv2
 
         matcher = TemplateMatcher()
         if screenshot.width > 0:
@@ -442,7 +448,9 @@ def test_crop_adjust(
         if abs(scale_ratio - 1.0) > 0.01:
             new_w = int(template_img.shape[1] * scale_ratio)
             new_h = int(template_img.shape[0] * scale_ratio)
-            template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            template_img = cv2.resize(
+                template_img, (new_w, new_h), interpolation=cv2.INTER_AREA
+            )
 
         matcher.templates[template_name] = template_img
 
@@ -486,7 +494,6 @@ def test_crop_adjust(
 
         # 转换为比例
         crop_ratio = (left_pct / 100, top_pct / 100, right_pct / 100, bottom_pct / 100)
-        current_crop_ratio = crop_ratio
 
         # 应用裁剪
         processed, crop_coords = apply_crop(
@@ -731,9 +738,10 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         return
 
     # 5. 加载模板并测试匹配
+    import cv2
+
     from ptcgp_auto_v2.infra.template import TemplateMatcher
     from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
-    import cv2
 
     matcher = TemplateMatcher()
     if screenshot.width > 0:
@@ -750,7 +758,9 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
 
     # 6. 扫描最佳匹配
     print(f"\n正在测试匹配...")
-    best_scale, best_conf = scan_best_scale_with_matcher(matcher, screenshot, template_name)
+    best_scale, best_conf = scan_best_scale_with_matcher(
+        matcher, screenshot, template_name
+    )
 
     print(f"\n{'=' * 60}")
     print(f"测试结果: {booster_name}")

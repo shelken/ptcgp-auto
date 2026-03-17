@@ -733,32 +733,6 @@ class Scheduler:
 
         return prerequisite
 
-    def _insert_prerequisite_task(
-        self, original_task: "TaskInstance", prerequisite_type: str
-    ):
-        """
-        在原任务前插入前置任务
-
-        将原任务状态改为 blocked，创建前置任务优先执行。
-
-        Args:
-            original_task: 原任务实例
-            prerequisite_type: 前置任务类型
-        """
-        # 将原任务改为 blocked，等待前置任务完成后重新调度
-        original_task.status = TaskStatus.BLOCKED.value
-        original_task.save()
-
-        prerequisite = self._get_or_reset_prerequisite_instance(
-            account_id=original_task.account_id,
-            task_type=prerequisite_type,
-        )
-
-        logger.info(
-            f"插入前置任务: {prerequisite_type} -> {original_task.task_type} "
-            f"(账号: {original_task.account.nickname})"
-        )
-
     def _get_incomplete_init_task(
         self, tasks: list["TaskInstance"]
     ) -> "TaskInstance | None":

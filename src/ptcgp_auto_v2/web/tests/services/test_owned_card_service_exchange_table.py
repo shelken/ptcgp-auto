@@ -10,7 +10,6 @@ from ptcgp_auto_v2.web.services.owned_card_service import (
     build_owned_card_exchange_accounts_context,
 )
 
-
 pytestmark = pytest.mark.usefixtures("fake_accounts_data")
 
 

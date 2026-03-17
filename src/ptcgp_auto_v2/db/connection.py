@@ -67,10 +67,7 @@ class Database:
 
     def _init_schema(self):
         """初始化数据库表结构（自动同步模式）"""
-        from sqlmodel import SQLModel, create_engine, inspect, text
-
-        # 必须导入 models 确保它们注册到 metadata
-        from ptcgp_auto_v2.db import models
+        from sqlmodel import SQLModel, create_engine
 
         # 创建用于 Schema 管理的 Engine
         engine = create_engine(f"sqlite:///{self.db_path}")
@@ -165,9 +162,7 @@ class Database:
                 """
                 conn.execute(text(migrate_sql))
             else:
-                logger.info(
-                    "跳过账号资源旧字段迁移：accounts.exchange_points 列不存在"
-                )
+                logger.info("跳过账号资源旧字段迁移：accounts.exchange_points 列不存在")
             conn.commit()
 
     def _table_has_column(self, conn, table_name: str, column_name: str) -> bool:
