@@ -1,5 +1,13 @@
 {
   "typeCheckingMode": "basic",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "src"
+      ]
+    }
+  ],
   "reportAssignmentType": "warning",
   "reportArgumentType": "warning",
   "reportUnknownMemberType": "warning",
