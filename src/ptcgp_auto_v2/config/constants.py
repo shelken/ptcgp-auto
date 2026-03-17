@@ -6,14 +6,6 @@
 本文件保留重新导出以保持向后兼容。
 """
 
-# 从 lang.py 重新导出语言配置（单一真相来源）
-from ptcgp_auto_v2.config.lang import (
-    DEFAULT_LANG_KEY,
-    DEFAULT_LOCALE,
-    DEFAULT_OCR_LANGUAGES,
-    WEB_LANG_TO_DB_LABEL_KEYS,
-)
-
 DEFAULT_TEMPLATE_THRESHOLD = 0.7  # 默认模板匹配阈值
 PACK_TEMPLATE_THRESHOLD = 0.7  # 卡包模板匹配阈值（比默认稍低，因为公共图片匹配度较低）
 PACK_SERIES_CODES = ["A", "B"]  # 扩充包系列代号（仅用于切换次数控制）
