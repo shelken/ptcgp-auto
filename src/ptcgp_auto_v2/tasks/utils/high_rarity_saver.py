@@ -24,10 +24,10 @@ def save_high_rarity_cards(
         rarity = row.get("rarity")
         if not card_id or rarity not in HIGH_RARITY_TARGETS:
             continue
-        account_card_repo.upsert(
+        account_card_repo.increase_owned(
             account_id=account_id,
             card_id=card_id,
-            count=1,
+            amount=0,
             yolo_conf=float(row.get("confidence") or 0.0),
             hash_similarity=float(row.get("hash_similarity") or 0.0),
         )

@@ -390,15 +390,10 @@ class CollectAccountCardsTask(StatefulTask):
         logger.info("开始批量写入卡牌，共 %s 张", len(pending_cards))
         for card_id in reversed(pending_order):
             conf, sim = pending_cards[card_id]
-            existing = self._account_card_repo.get(self.account.id, card_id)
-            # 收集任务只用于“建立拥有关系”，不应覆盖真实库存数量：
-            # - 新纪录：count=1
-            # - 已存在：保持原 count 不变，仅刷新识别置信度
-            count = int(existing.count) if existing is not None else 1
-            self._account_card_repo.upsert(
+            self._account_card_repo.increase_owned(
                 account_id=self.account.id,
                 card_id=card_id,
-                count=count,
+                amount=0,
                 yolo_conf=conf,
                 hash_similarity=sim,
             )
