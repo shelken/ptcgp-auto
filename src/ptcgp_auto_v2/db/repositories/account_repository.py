@@ -8,8 +8,6 @@ from sqlmodel import Session, col, func, select
 from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import (
     Account,
-    AccountPackPoint,
-    AccountStat,
     AccountTaskPlan,
     TaskPlan,
 )

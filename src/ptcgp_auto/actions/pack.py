@@ -130,7 +130,7 @@ class PackActions:
             screenshot, template_name, SCALE_PACK_SERIES_SELECT
         )
         if box:
-            logger.info(f"  -> 找到目标扩充包，点击进入")
+            logger.info("  -> 找到目标扩充包，点击进入")
             self.adb.tap_center(box)
             return
 
@@ -150,7 +150,7 @@ class PackActions:
                 screenshot, template_name, SCALE_PACK_SERIES_SELECT
             )
             if box:
-                logger.info(f"  -> 找到目标扩充包，点击进入")
+                logger.info("  -> 找到目标扩充包，点击进入")
                 self.adb.tap_center(box)
                 return
 
@@ -158,7 +158,7 @@ class PackActions:
             ocr_results = self.recognizer.ocr_full_screen(screenshot)
             current_signature = self._get_ocr_signature(ocr_results)
             if current_signature == last_signature:
-                logger.warning(f"  -> 滑动到底部，未找到目标扩充包")
+                logger.warning("  -> 滑动到底部，未找到目标扩充包")
                 break
             last_signature = current_signature
 
@@ -218,7 +218,7 @@ class PackActions:
             ocr_results = self.recognizer.ocr_full_screen(screenshot)
             current_signature = self._get_ocr_signature(ocr_results)
             if current_signature == first_signature:
-                logger.warning(f"  -> 循环一圈，未找到目标子包")
+                logger.warning("  -> 循环一圈，未找到目标子包")
                 break
 
         logger.warning(f"  -> 未找到目标子包: {template_name}")

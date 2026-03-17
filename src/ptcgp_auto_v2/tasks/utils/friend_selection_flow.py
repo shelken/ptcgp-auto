@@ -17,7 +17,6 @@ from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.constants import (
     BASE_FRIEND_ROW_THRESHOLD_Y,
-    BASE_FRIEND_SCROLL_DISTANCE_Y,
     MAX_FRIEND_PROFILE_READ_ROUNDS,
     MAX_FRIEND_SCROLL_ROUNDS,
     MAX_FRIEND_STABLE_ROUNDS,

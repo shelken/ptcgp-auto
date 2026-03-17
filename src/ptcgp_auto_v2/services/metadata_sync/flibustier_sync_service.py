@@ -272,7 +272,7 @@ class FlibustierSyncService:
         existing_set = self._repo.get_set_by_code(code)
         print(f"[flibustier] set code={code}, existing={existing_set is not None}", flush=True)
         if mode == "supplement" and existing_set is not None:
-            print(f"[flibustier] supplement mode, set exists, skip", flush=True)
+            print("[flibustier] supplement mode, set exists, skip", flush=True)
             return None
 
         incoming_name = set_item.get("name", {})
@@ -451,7 +451,7 @@ class FlibustierSyncService:
         existing_pack = self._repo.get_pack_by_name(pack_name)
         print(f"[flibustier] pack name={pack_name}, existing={existing_pack is not None}", flush=True)
         if mode == "supplement" and existing_pack is not None:
-            print(f"[flibustier] supplement mode, pack exists, skip", flush=True)
+            print("[flibustier] supplement mode, pack exists, skip", flush=True)
             return None
         if (
             existing_pack is not None

@@ -5,10 +5,8 @@ ADB 控制器模块
 封装 uiautomator2 操作（截图、点击、滑动等）。
 """
 
-import io
 import logging
 import time
-from pathlib import Path
 from typing import Optional, Tuple
 
 import uiautomator2 as u2

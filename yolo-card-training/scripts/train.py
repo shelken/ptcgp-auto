@@ -32,7 +32,7 @@ def train_model(
     if device is None:
         device = check_mps()
 
-    print(f"\n🚀 开始训练")
+    print("\n🚀 开始训练")
     print(f"   数据: {data_yaml}")
     print(f"   轮数: {epochs}")
     print(f"   Batch: {batch}")
@@ -120,7 +120,7 @@ def main():
 
     print("\n💡 使用模型:")
     print(f"   uv run python scripts/test_model.py --model {actual_output}/best.pt")
-    print(f"   uv run python scripts/benchmark.py")
+    print("   uv run python scripts/benchmark.py")
 
 
 if __name__ == "__main__":

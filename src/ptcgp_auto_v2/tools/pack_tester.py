@@ -66,7 +66,7 @@ def test_compare(booster_name: str, old_templates_dir: str = "templates/packs"):
     new_path = manager.get_pack_path(booster_name)
     new_img = Image.open(new_path)
 
-    print(f"\n新图片（公共资源处理后）:")
+    print("\n新图片（公共资源处理后）:")
     print(f"  路径: {new_path}")
     print(f"  尺寸: {new_img.width}x{new_img.height}")
 
@@ -82,7 +82,7 @@ def test_compare(booster_name: str, old_templates_dir: str = "templates/packs"):
     old_path = old_candidates[0]
     old_img = Image.open(old_path)
 
-    print(f"\n旧模板（手动裁剪）:")
+    print("\n旧模板（手动裁剪）:")
     print(f"  路径: {old_path}")
     print(f"  尺寸: {old_img.width}x{old_img.height}")
 
@@ -90,15 +90,15 @@ def test_compare(booster_name: str, old_templates_dir: str = "templates/packs"):
     if old_img.width > 0 and new_img.width > 0:
         scale_w = old_img.width / new_img.width
         scale_h = old_img.height / new_img.height
-        print(f"\n缩放比例建议:")
+        print("\n缩放比例建议:")
         print(f"  宽度比: {scale_w:.3f}")
         print(f"  高度比: {scale_h:.3f}")
         print(f"  平均值: {(scale_w + scale_h) / 2:.3f}")
 
     # 4. 显示裁剪参数
-    print(f"\n当前裁剪参数:")
+    print("\n当前裁剪参数:")
     print(f"  CROP_RATIO: {PACK_CROP_RATIO}")
-    print(f"  注: 模板只裁剪不缩放，由匹配器动态缩放")
+    print("  注: 模板只裁剪不缩放，由匹配器动态缩放")
 
 
 def test_match(
@@ -132,7 +132,6 @@ def test_match(
         return None
 
     # 3. 加载模板到 TemplateMatcher
-    import cv2
 
     from ptcgp_auto_v2.infra.template import TemplateMatcher
 
@@ -177,12 +176,12 @@ def test_match(
             match = matcher.find_with_scale(screenshot, template_name, best_scale)
             if match:
                 print(f"✓ 匹配成功! 位置: {match.box}")
-                print(f"\n推荐命令:")
+                print("\n推荐命令:")
                 print(
                     f"  python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
                 )
                 return (best_conf, match.box)
-        print(f"✗ 未达到阈值. 建议调整裁剪参数后重试")
+        print("✗ 未达到阈值. 建议调整裁剪参数后重试")
         return None
 
 
@@ -240,7 +239,7 @@ def test_batch(
 
     # 汇总
     print(f"\n{'=' * 50}")
-    print(f"测试结果汇总:")
+    print("测试结果汇总:")
     print(f"  总计: {len(boosters)}")
     print(f"  成功: {success_count}")
     print(f"  失败: {len(boosters) - success_count}")
@@ -589,7 +588,7 @@ def test_crop_adjust(
                 conf, scale = result
                 print(f"  匹配结果: 置信度={conf:.4f}, 缩放={scale:.3f}")
                 if conf >= threshold:
-                    print(f"  ✓ 匹配成功！")
+                    print("  ✓ 匹配成功！")
                     best_result = (conf, crop_ratio, scale)
                 else:
                     print(f"  ✗ 未达阈值 ({threshold})")
@@ -599,7 +598,7 @@ def test_crop_adjust(
         elif key == ord("s"):
             # 保存配置
             print(f"\n{'=' * 60}")
-            print(f"当前裁剪配置:")
+            print("当前裁剪配置:")
             print(f"  PACK_CROP_RATIO = {crop_ratio}")
             print(
                 f"  原始尺寸: {crop_coords[2] - crop_coords[0]}x{crop_coords[3] - crop_coords[1]}"
@@ -613,7 +612,7 @@ def test_crop_adjust(
 
     # 返回最佳结果
     if best_result:
-        print(f"\n最佳匹配结果:")
+        print("\n最佳匹配结果:")
         print(f"  置信度: {best_result[0]:.4f}")
         print(f"  裁剪参数: {best_result[1]}")
         print(f"  缩放比例: {best_result[2]:.3f}")
@@ -659,7 +658,7 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         threshold: 匹配阈值
     """
     print(f"\n{'=' * 60}")
-    print(f"快速匹配测试模式")
+    print("快速匹配测试模式")
     print(f"{'=' * 60}")
 
     # 1. 列出所有可用卡包（从 GitHub 源）
@@ -738,7 +737,6 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         return
 
     # 5. 加载模板并测试匹配
-    import cv2
 
     from ptcgp_auto_v2.infra.template import TemplateMatcher
     from ptcgp_auto_v2.tools.card_matcher import scan_best_scale_with_matcher
@@ -757,7 +755,7 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
     print(f"LOADED: {template_name}")
 
     # 6. 扫描最佳匹配
-    print(f"\n正在测试匹配...")
+    print("\n正在测试匹配...")
     best_scale, best_conf = scan_best_scale_with_matcher(
         matcher, screenshot, template_name
     )
@@ -769,14 +767,14 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
     print(f"  置信度: {best_conf:.4f}")
 
     if best_conf >= threshold:
-        print(f"  ✓ 匹配成功！")
-        print(f"\n推荐命令:")
+        print("  ✓ 匹配成功！")
+        print("\n推荐命令:")
         print(
             f"  python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
         )
     else:
         print(f"  ✗ 未达阈值 ({threshold})")
-        print(f"\n建议: 尝试调整裁剪参数")
+        print("\n建议: 尝试调整裁剪参数")
         print(
             f"  python debug_tool.py -a PORT --test-pack roi --booster {booster_name}"
         )

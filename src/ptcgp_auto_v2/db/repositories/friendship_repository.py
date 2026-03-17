@@ -5,7 +5,7 @@ FriendshipRepository
 好友关系数据访问层。
 """
 
-from typing import List, Optional
+from typing import Optional
 
 from sqlmodel import Session, select
 

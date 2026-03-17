@@ -7,9 +7,8 @@
 
 import os
 import subprocess
-import sys
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 from PIL import Image
 

@@ -183,7 +183,7 @@ def download_cards_concurrent(set_name: str, max_workers: int = 10):
     card_numbers = discover_cards_in_set(set_name)
 
     if not card_numbers:
-        print(f"❌ 未找到可用卡牌")
+        print("❌ 未找到可用卡牌")
         return
 
     # 生成所有要下载的任务
@@ -249,8 +249,8 @@ def main():
     print("=" * 50)
     print("YOLO 训练素材下载（中文 PNG 版）")
     print("=" * 50)
-    print(f"来源: shelken/ptcgp-assets (繁体中文)")
-    print(f"API: GitHub Contents API 自动发现")
+    print("来源: shelken/ptcgp-assets (繁体中文)")
+    print("API: GitHub Contents API 自动发现")
 
     if args.all:
         # 下载所有系列

@@ -12,7 +12,6 @@
 
 import argparse
 import math
-import os
 import random
 from pathlib import Path
 
@@ -391,13 +390,13 @@ class DatasetGenerator:
             random_count = count - grid_count
 
             # 生成网格模式图像
-            for i in tqdm(range(grid_count), desc=f"  网格模式"):
+            for i in tqdm(range(grid_count), desc="  网格模式"):
                 idx = offset + i
                 self.generate_image_grid(idx, split)
                 current_idx += 1
 
             # 生成随机模式图像
-            for i in tqdm(range(random_count), desc=f"  随机模式"):
+            for i in tqdm(range(random_count), desc="  随机模式"):
                 idx = offset + grid_count + i
                 self.generate_image(idx, split)
                 current_idx += 1

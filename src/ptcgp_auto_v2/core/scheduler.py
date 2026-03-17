@@ -10,9 +10,9 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from math import ceil
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ptcgp_auto_v2.config.settings import Settings, get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.tasks.utils.constants import (
-    BASE_FRIEND_ROW_THRESHOLD_Y,
     BASE_FRIEND_SCROLL_DISTANCE_Y,
 )
 from ptcgp_auto_v2.utils.gesture import scroll_points, swipe

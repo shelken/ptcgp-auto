@@ -5,9 +5,7 @@ YOLO模型管理器
 负责从 ptcgp-assets 仓库下载和管理YOLO模型，提供全局单例访问。
 """
 
-import json
 import logging
-import os
 import platform
 import threading
 from pathlib import Path

@@ -27,7 +27,6 @@ except ImportError:
 # 复用原脚本的工具函数
 sys.path.insert(0, str(Path(__file__).parent))
 from test_massive_matching import (  # type: ignore
-    MatchResult,
     SimpleAdbController,
     discover_all_card_sets,
     discover_devices_simple,

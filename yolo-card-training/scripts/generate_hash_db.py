@@ -197,7 +197,7 @@ def main():
     generate_all_databases(args.set)
 
     print("✅ 完成！现在可以运行大规模匹配测试:")
-    print(f"   uv run python scripts/test_massive_matching.py --set <set_name>")
+    print("   uv run python scripts/test_massive_matching.py --set <set_name>")
 
 
 if __name__ == "__main__":
