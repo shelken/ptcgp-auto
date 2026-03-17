@@ -212,11 +212,10 @@ class GiftRecordService:
             # 双向同步：送卡成功后，目标账号该卡数量 +1。
             if isinstance(record.target_account_id, int):
                 target_row = account_card_repo.get(record.target_account_id, card_id)
-                target_count = int(target_row.count) + 1 if target_row else 1
-                account_card_repo.upsert(
+                account_card_repo.increase_owned(
                     account_id=record.target_account_id,
                     card_id=card_id,
-                    count=target_count,
+                    amount=1,
                     yolo_conf=target_row.yolo_conf if target_row else None,
                     hash_similarity=target_row.hash_similarity if target_row else None,
                 )

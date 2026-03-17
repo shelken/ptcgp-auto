@@ -89,13 +89,27 @@ class AccountCardRepository:
             return statement
         return statement.where(ownership_total_count > 0)
 
+    @staticmethod
+    def _get_by_account_and_card(
+        session: Session, account_id: int, card_id: int
+    ) -> Optional[AccountCard]:
+        """读取单条账号卡牌记录。"""
+        statement = select(AccountCard).where(
+            AccountCard.account_id == account_id,
+            AccountCard.card_id == card_id,
+        )
+        return session.exec(statement).first()
+
+    @staticmethod
+    def _get_existing_count(existing: Optional[AccountCard]) -> int:
+        """读取当前数量；无记录或空值统一按 0 处理。"""
+        if existing is None or existing.count is None:
+            return 0
+        return int(existing.count)
+
     def get(self, account_id: int, card_id: int) -> Optional[AccountCard]:
         with Session(get_engine()) as session:
-            statement = select(AccountCard).where(
-                AccountCard.account_id == account_id,
-                AccountCard.card_id == card_id,
-            )
-            return session.exec(statement).first()
+            return self._get_by_account_and_card(session, account_id, card_id)
 
     def upsert(
         self,
@@ -106,11 +120,7 @@ class AccountCardRepository:
         hash_similarity: Optional[float] = None,
     ) -> AccountCard:
         with Session(get_engine()) as session:
-            statement = select(AccountCard).where(
-                AccountCard.account_id == account_id,
-                AccountCard.card_id == card_id,
-            )
-            existing = session.exec(statement).first()
+            existing = self._get_by_account_and_card(session, account_id, card_id)
             if existing:
                 existing.count = count
                 existing.yolo_conf = yolo_conf
@@ -125,6 +135,49 @@ class AccountCardRepository:
                 account_id=account_id,
                 card_id=card_id,
                 count=count,
+                yolo_conf=yolo_conf,
+                hash_similarity=hash_similarity,
+            )
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+            return record
+
+    def increase_owned(
+        self,
+        account_id: int,
+        card_id: int,
+        amount: int = 0,
+        yolo_conf: Optional[float] = None,
+        hash_similarity: Optional[float] = None,
+    ) -> AccountCard:
+        """统一维护拥有数量：amount=0 时至少写为 1，amount>0 时按增量更新。"""
+        if amount < 0:
+            raise ValueError("amount 不能小于 0")
+
+        with Session(get_engine()) as session:
+            existing = self._get_by_account_and_card(session, account_id, card_id)
+            current_count = self._get_existing_count(existing)
+            if current_count > 0:
+                next_count = current_count + amount
+            else:
+                # 建立拥有关系时至少为 1；增量写入时无记录/0 从 max(amount, 1) 起算。
+                next_count = max(amount, 1)
+
+            if existing:
+                existing.count = next_count
+                existing.yolo_conf = yolo_conf
+                existing.hash_similarity = hash_similarity
+                existing.updated_at = datetime.now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+                return existing
+
+            record = AccountCard(
+                account_id=account_id,
+                card_id=card_id,
+                count=next_count,
                 yolo_conf=yolo_conf,
                 hash_similarity=hash_similarity,
             )
