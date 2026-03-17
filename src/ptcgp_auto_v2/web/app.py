@@ -1,5 +1,6 @@
-import sys
+# ruff: noqa: E402
 import os
+import sys
 
 # Add the src directory to sys.path to allow importing ptcgp_auto_v2
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,10 +11,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
-from ptcgp_auto_v2.web.utils.i18n import init_i18n, detect_lang, set_lang_context
-from ptcgp_auto_v2.web.utils.template_env import init_templates
-from ptcgp_auto_v2.web.utils.view_helpers import format_datetime
-
 from ptcgp_auto_v2.web.routers import (
     index,
     records,
@@ -29,6 +26,9 @@ from ptcgp_auto_v2.web.routers import (
     exchange_card,
     notifications,
 )
+from ptcgp_auto_v2.web.utils.i18n import init_i18n, detect_lang, set_lang_context
+from ptcgp_auto_v2.web.utils.template_env import init_templates
+from ptcgp_auto_v2.web.utils.view_helpers import format_datetime
 
 # 导入任务模块以触发注册
 

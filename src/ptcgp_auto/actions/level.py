@@ -7,9 +7,9 @@ from typing import Dict, List, Callable
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
+from .utils import ScrollHelper, go_back
 
 logger = get_logger(__name__)
-from .utils import ScrollHelper, go_back
 
 
 class LevelActions:

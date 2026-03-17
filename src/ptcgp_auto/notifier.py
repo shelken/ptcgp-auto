@@ -3,12 +3,13 @@ Notification module for PTCGP automation
 Supports WeCom (WeChat Work) webhook and macOS sound alerts
 """
 
+import json
 import subprocess
+from urllib import request
+
 from ptcgp_auto.logger import get_logger
 
 logger = get_logger(__name__)
-from urllib import request
-import json
 
 
 def send_wecom_notification(key: str, message: str) -> bool:

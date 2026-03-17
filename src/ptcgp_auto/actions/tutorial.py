@@ -4,11 +4,11 @@ import time
 from typing import Dict
 
 from ptcgp_auto import config
+from ptcgp_auto.adb_controller import AdbController
 from ptcgp_auto.logger import get_logger
+from ptcgp_auto.recognizer import Recognizer
 
 logger = get_logger(__name__)
-from ptcgp_auto.adb_controller import AdbController
-from ptcgp_auto.recognizer import Recognizer
 
 
 class TutorialRunner:
