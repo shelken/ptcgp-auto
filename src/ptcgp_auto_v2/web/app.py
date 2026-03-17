@@ -31,6 +31,7 @@ from ptcgp_auto_v2.web.utils.template_env import init_templates
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime
 
 # 导入任务模块以触发注册
+import ptcgp_auto_v2.tasks  # noqa: F401
 
 
 app = FastAPI(title="PTCGP Auto Web")
