@@ -13,6 +13,7 @@ import threading
 import uvicorn
 
 # 导入任务模块以触发注册
+import ptcgp_auto_v2.tasks  # noqa: F401
 from ptcgp_auto_v2.config.settings import (
     Settings,
     apply_webhook_cli_overrides,
