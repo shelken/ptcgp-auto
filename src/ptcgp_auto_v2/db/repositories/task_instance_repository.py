@@ -2,12 +2,13 @@
 from datetime import datetime
 from typing import Any, List, Optional, cast
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, func, select
+from sqlmodel import Session, col, func, select, update
 
 from ptcgp_auto_v2.core.task_ordering import build_task_instance_order_by
-from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.core.task_status import TaskStatus
+from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskInstance
 
 
@@ -17,9 +18,10 @@ class TaskInstanceRepository:
     @staticmethod
     def _build_due_pending_condition(now: datetime):
         """构建 pending 且到期可执行的查询条件。"""
-        return (TaskInstance.status == "pending") & (
-            (TaskInstance.next_run_at == None)  # noqa: E711
-            | (TaskInstance.next_run_at <= now)
+        next_run_at_col = col(TaskInstance.next_run_at)
+        return and_(
+            col(TaskInstance.status) == "pending",
+            or_(next_run_at_col.is_(None), next_run_at_col <= now),
         )
 
     def get_by_id(self, instance_id: int) -> Optional[TaskInstance]:
@@ -71,37 +73,6 @@ class TaskInstanceRepository:
             statement = (
                 select(TaskInstance)
                 .where(self._build_due_pending_condition(now))
-                .options(
-                    selectinload(cast(Any, TaskInstance.account))
-                    .selectinload(cast(Any, Account.task_plan_associations))
-                    .selectinload(cast(Any, AccountTaskPlan.task_plan))
-                )
-                .order_by(col(TaskInstance.created_at))
-                .limit(1)
-            )
-            instance = session.exec(statement).first()
-            if instance:
-                # 加载关联的账号
-                _ = instance.account
-            return instance
-
-    def get_next_pending_excluding_busy_accounts(self) -> Optional[TaskInstance]:
-        """获取下一个待执行的任务实例（排除正在执行任务的账号）
-
-        用于防止同一账号被同时分配到多个设备。
-        """
-        now = datetime.now()
-        with Session(get_engine()) as session:
-            # 获取正在执行任务的账号 ID 列表
-            busy_accounts_stmt = select(TaskInstance.account_id).where(
-                TaskInstance.status == "running"
-            )
-            busy_account_ids = [row for row in session.exec(busy_accounts_stmt)]
-
-            statement = (
-                select(TaskInstance)
-                .where(self._build_due_pending_condition(now))
-                .where(col(TaskInstance.account_id).notin_(busy_account_ids))
                 .options(
                     selectinload(cast(Any, TaskInstance.account))
                     .selectinload(cast(Any, Account.task_plan_associations))
@@ -282,90 +253,62 @@ class TaskInstanceRepository:
             instance.save()
         return instance
 
-    def reset_all_pending(self) -> int:
-        """将所有异常状态的任务重置为待执行（用于程序重启后恢复）
-
-        重置的状态包括：
-        - running: 任务正在执行中被中断
-        - blocked: 任务等待前置任务完成，但前置任务没有完成就退出了
-        - skipped: 任务被跳过（12小时内已开包等），重启后重新检查
-        - failed: 任务执行失败，重启后重试
-        """
-        with Session(get_engine()) as session:
-            statement = select(TaskInstance).where(
-                col(TaskInstance.status).in_(
-                    ["running", "blocked", "skipped", "failed"]
-                )
-            )
-            instances = session.exec(statement).all()
-            count = 0
-            for instance in instances:
-                instance.status = "pending"
-                instance.updated_at = datetime.now()
-                session.add(instance)
-                count += 1
-            session.commit()
-            return count
-
     def reset_stale_tasks(
         self,
-        stale_timeout_seconds: int,
-        skipped_timeout_seconds: int,
+        stale_timeout_seconds: Optional[int] = None,
+        skipped_timeout_seconds: Optional[int] = None,
         exclude_account_ids: Optional[List[int]] = None,
+        force_all: bool = False,
     ) -> int:
-        """重置超时的异常状态任务（用于 daemon 模式定期清理）
+        """重置异常状态任务（支持超时/冷却或强制重置）
 
         Args:
             stale_timeout_seconds: running/blocked 状态的超时时间（秒）
-            skipped_timeout_seconds: skipped 状态的超时时间（秒）
+            skipped_timeout_seconds: skipped/failed 状态的冷却时间（秒）
+            force_all: 是否强制重置所有异常状态
 
         Returns:
             重置的任务数量
         """
-        with Session(get_engine()) as session:
-            now = datetime.now()
+        now = datetime.now()
+        status_col = col(TaskInstance.status)
+        if force_all:
+            condition = status_col.in_(["running", "blocked", "skipped", "failed"])
+        else:
+            if stale_timeout_seconds is None or skipped_timeout_seconds is None:
+                raise ValueError("未提供超时/冷却时间")
             stale_threshold = datetime.fromtimestamp(
                 now.timestamp() - stale_timeout_seconds
             )
             skipped_threshold = datetime.fromtimestamp(
                 now.timestamp() - skipped_timeout_seconds
             )
-
-            statement = select(TaskInstance).where(
-                # running 超时
-                (
-                    (TaskInstance.status == "running")
-                    & (TaskInstance.updated_at < stale_threshold)
-                )
-                # failed 按 skipped 超时重试
-                | (
-                    (TaskInstance.status == "failed")
-                    & (TaskInstance.updated_at < skipped_threshold)
-                )
-                # blocked 超时
-                | (
-                    (TaskInstance.status == "blocked")
-                    & (TaskInstance.updated_at < stale_threshold)
-                )
-                # skipped 超时后重新检查
-                | (
-                    (TaskInstance.status == "skipped")
-                    & (TaskInstance.updated_at < skipped_threshold)
-                )
+            condition = or_(
+                and_(
+                    status_col.in_(["running", "blocked"]),
+                    TaskInstance.updated_at < stale_threshold,
+                ),
+                and_(
+                    status_col.in_(["skipped", "failed"]),
+                    TaskInstance.updated_at < skipped_threshold,
+                ),
             )
-            if exclude_account_ids:
-                statement = statement.where(
-                    col(TaskInstance.account_id).notin_(exclude_account_ids)
-                )
-            instances = session.exec(statement).all()
-            count = 0
-            for instance in instances:
-                instance.status = "pending"
-                instance.updated_at = datetime.now()
-                session.add(instance)
-                count += 1
+
+        if exclude_account_ids:
+            condition = and_(
+                condition,
+                col(TaskInstance.account_id).notin_(exclude_account_ids),
+            )
+
+        with Session(get_engine()) as session:
+            statement = (
+                update(TaskInstance)
+                .where(condition)
+                .values(status="pending", updated_at=now)
+            )
+            result = session.exec(statement)
             session.commit()
-            return count
+            return result.rowcount or 0
 
     def delete(self, instance_id: int) -> bool:
         """删除任务实例"""
