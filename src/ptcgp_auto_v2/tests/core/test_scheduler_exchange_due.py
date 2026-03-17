@@ -11,6 +11,9 @@ from ptcgp_auto_v2.db.repositories.task_instance_repository import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("mock_get_engine")
+
+
 @pytest.fixture(name="engine")
 def engine_fixture():
     """创建内存数据库引擎。"""
@@ -29,7 +32,7 @@ def mock_get_engine_fixture(engine):
         yield
 
 
-def test_pending_queries_should_only_return_due_instances(engine, mock_get_engine):
+def test_pending_queries_should_only_return_due_instances():
     """pending 查询仅返回 next_run_at 到期的任务。"""
     now = datetime.now()
     repo = TaskInstanceRepository()
@@ -69,7 +72,7 @@ def test_pending_queries_should_only_return_due_instances(engine, mock_get_engin
     assert pending_of_1[0].account_id == 1
 
 
-def test_ensure_pending_should_clear_next_run_at(engine, mock_get_engine):
+def test_ensure_pending_should_clear_next_run_at():
     """ensure_pending 应清空 next_run_at 以立即可调度。"""
     now = datetime.now()
     repo = TaskInstanceRepository()

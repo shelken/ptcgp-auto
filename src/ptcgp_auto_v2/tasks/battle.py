@@ -472,8 +472,6 @@ class BattleTask(StatefulTask):
         )
         return best.box
 
-        return None
-
     def _parse_stop_conditions(self, configs: list[dict]) -> list[StopCondition]:
         """解析停止条件配置"""
         conditions = []

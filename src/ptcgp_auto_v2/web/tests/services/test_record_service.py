@@ -46,7 +46,7 @@ def test_build_records_list_context_should_not_mutate_pack_card_model(
         pack_type="daily_free",
         pack_name="Mewtwo",
         opened_at=SimpleNamespace(
-            isoformat=lambda timespec=None: "2026-03-01T00:00:00"
+            isoformat=lambda _timespec=None: "2026-03-01T00:00:00"
         ),
     )
 
@@ -101,7 +101,7 @@ def test_build_records_list_context_handles_nullable_pack_name(
         pack_type="gift_box",
         pack_name=None,  # 无子包
         opened_at=SimpleNamespace(
-            isoformat=lambda timespec=None: "2026-03-01T00:00:00"
+            isoformat=lambda _timespec=None: "2026-03-01T00:00:00"
         ),
     )
 
@@ -156,7 +156,7 @@ def test_build_records_list_context_should_translate_ten_pack(
         batch_id=None,  # 无批次ID时按单包处理
         batch_index=None,
         opened_at=SimpleNamespace(
-            isoformat=lambda timespec=None: "2026-03-01T00:00:00"
+            isoformat=lambda _timespec=None: "2026-03-01T00:00:00"
         ),
     )
 
