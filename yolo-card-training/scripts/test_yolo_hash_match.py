@@ -6,7 +6,6 @@ YOLO + 哈希匹配测试脚本
 
 __test__ = False
 
-import base64
 import io
 import sys
 import subprocess
@@ -290,7 +289,7 @@ def load_reference_hash(card_path: Path):
     color_pixels = bgr_to_color_pixels(bgr)
     hash_arr = calculate_perceptual_hash(color_pixels)
 
-    print(f"✅ 参考哈希已计算")
+    print("✅ 参考哈希已计算")
     return hash_arr
 
 
@@ -497,7 +496,7 @@ def test_recognition(
     print(f"   参考卡牌: {reference_card_path.name}")
     print(f"   检测到卡牌: {len(cropped_cards)} 张")
     print(f"   匹配成功: {len(matches)} 张")
-    print(f"\n   ⏱️  性能统计:")
+    print("\n   ⏱️  性能统计:")
     print(
         f"      DCT 哈希计算: {total_dct_time:.1f}ms (平均 {total_dct_time / len(cropped_cards):.1f}ms/张)"
     )
@@ -506,7 +505,7 @@ def test_recognition(
     )
 
     if matches:
-        print(f"\n   ✅ 匹配的卡牌:")
+        print("\n   ✅ 匹配的卡牌:")
         for m in matches:
             print(
                 f"      #{m['index']}: 置信度 {m['confidence']:.3f}, 相似度 {m['similarity']:.4f}"

@@ -6,7 +6,6 @@ from typing import Dict, Optional, Tuple
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
-from .utils import find_text_by_variants
 
 logger = get_logger(__name__)
 

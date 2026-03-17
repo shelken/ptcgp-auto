@@ -9,17 +9,13 @@ import argparse
 import logging
 import sys
 import threading
-from pathlib import Path
 
 import uvicorn
 
 # 导入任务模块以触发注册
-import ptcgp_auto_v2.tasks
-from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.config.settings import (
     Settings,
     apply_webhook_cli_overrides,
-    get_settings,
     set_settings,
 )
 from ptcgp_auto_v2.core.executor import ExecutorConfig
@@ -270,12 +266,12 @@ def manage_account_plan(account_id: int, plan_identifier: str, action: str):
         if account_repo.add_secondary_plan(account.id, plan.id):
             print(f"成功: 已为账号 {account.nickname} 添加计划 '{plan.name}'")
         else:
-            print(f"错误: 添加计划失败")
+            print("错误: 添加计划失败")
     elif action == "remove":
         if account_repo.remove_secondary_plan(account.id, plan.id):
             print(f"成功: 已从账号 {account.nickname} 移除计划 '{plan.name}'")
         else:
-            print(f"错误: 移除计划失败")
+            print("错误: 移除计划失败")
 
 
 def list_accounts():

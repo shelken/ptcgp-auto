@@ -4,7 +4,6 @@ ADB 控制器 - 封装 ADB 操作（截图、点击、滑动）
 
 import io
 import time
-from pathlib import Path
 from typing import Optional, Tuple
 
 from adbutils import adb, AdbDevice

@@ -10,7 +10,6 @@ import cv2
 import io
 import numpy as np
 import os
-import re
 import subprocess
 import sys
 import time

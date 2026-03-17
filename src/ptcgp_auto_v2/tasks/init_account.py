@@ -17,7 +17,7 @@
 import logging
 from datetime import datetime
 from enum import Enum, auto
-from typing import Callable, cast
+from typing import cast
 
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,

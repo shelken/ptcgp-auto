@@ -8,7 +8,6 @@
 import sys
 import logging
 import threading
-from typing import Optional
 
 from loguru import logger
 

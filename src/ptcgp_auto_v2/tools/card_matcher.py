@@ -84,7 +84,6 @@ def scan_best_scale_with_matcher(
     Returns:
         (best_scale, best_confidence) 元组
     """
-    import numpy as np
 
     best_scale = 1.0
     best_confidence = -1.0

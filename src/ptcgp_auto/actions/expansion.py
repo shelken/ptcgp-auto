@@ -2,7 +2,7 @@
 
 import re
 import time
-from typing import Dict, List, Set, Optional, Callable
+from typing import Dict, List, Set, Callable
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
@@ -202,7 +202,7 @@ class ExpansionActions:
                     current_level, pack_id
                 ):
                     if config.DEBUG:
-                        logger.debug(f"  [DEBUG]   -> 已标记为完成，跳过")
+                        logger.debug("  [DEBUG]   -> 已标记为完成，跳过")
                     continue
 
                 # 使用左侧进度判断是否未完成
@@ -217,7 +217,7 @@ class ExpansionActions:
                         }
                     )
                     if config.DEBUG:
-                        logger.debug(f"  [DEBUG]   -> 未完成，加入候选")
+                        logger.debug("  [DEBUG]   -> 未完成，加入候选")
 
             if incomplete_items:
                 incomplete_items.sort(key=lambda x: x["remaining"], reverse=True)

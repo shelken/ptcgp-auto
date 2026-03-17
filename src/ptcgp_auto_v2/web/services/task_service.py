@@ -14,7 +14,6 @@ from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
     AccountPackConfigRepository,
-    AccountRepository,
     CardRepository,
     PackRecordRepository,
     TaskInstanceRepository,
