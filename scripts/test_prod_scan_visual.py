@@ -44,7 +44,13 @@ def _run_formal_scan_with_screenshot(
 ):
     """复用正式 scan 内部流程，并固定为当前截图。"""
     original_screenshot = recognizer.adb.screenshot
-    recognizer.adb.screenshot = lambda: screenshot
+
+    def _fixed_screenshot(lossless: bool = False) -> Image.Image:
+        """兼容正式 adb.screenshot 签名，固定返回调试截图。"""
+        del lossless
+        return screenshot
+
+    recognizer.adb.screenshot = _fixed_screenshot
     try:
         return recognizer._scan_common(
             set_code=set_code,

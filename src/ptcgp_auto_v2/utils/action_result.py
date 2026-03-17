@@ -62,3 +62,8 @@ class ActionResult:
     def wait(cls, seconds: float) -> "ActionResult":
         """创建需要等待的结果"""
         return cls(success=True, should_wait=seconds)
+
+    @classmethod
+    def retry(cls, wait: float = DEFAULT_WAIT_SECONDS) -> "ActionResult":
+        """创建重试结果，语义上等价于等待后继续。"""
+        return cls(success=True, should_wait=wait)

@@ -14,6 +14,7 @@
   "reportUnknownVariableType": "warning",
   "reportUnknownArgumentType": "warning",
   "exclude": [
+    "**/src/ptcgp_auto/**",
     "**/tests/**",
     "**/yolo-card-training/**"
   ]

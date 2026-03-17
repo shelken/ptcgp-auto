@@ -20,12 +20,13 @@ def _template_context_processor(_: Request) -> dict:
 def init_templates(templates_path: str) -> Jinja2Templates:
     """初始化 Jinja2 模板引擎。"""
     global _templates
-    _templates = Jinja2Templates(
+    templates = Jinja2Templates(
         directory=templates_path,
         context_processors=[_template_context_processor],
     )
-    _templates.env.globals["build_card_image_bases"] = build_card_image_bases
-    return _templates
+    templates.env.globals["build_card_image_bases"] = build_card_image_bases
+    _templates = templates
+    return templates
 
 
 def get_templates() -> Jinja2Templates:

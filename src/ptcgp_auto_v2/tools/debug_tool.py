@@ -114,7 +114,8 @@ def parse_roi(roi_str: str) -> Optional[Tuple[int, int, int, int]]:
         parts = roi_str.split(",")
         if len(parts) != 4:
             return None
-        return tuple(int(p.strip()) for p in parts)
+        x, y, w, h = (int(p.strip()) for p in parts)
+        return x, y, w, h
     except (ValueError, AttributeError):
         return None
 

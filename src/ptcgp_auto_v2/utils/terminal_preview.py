@@ -8,7 +8,7 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Union
+from typing import Any, Union
 
 from PIL import Image
 
@@ -51,11 +51,14 @@ def preview_image_inline(
         return False
 
     temp_file = None
+    image_path: str
     if isinstance(image, Image.Image):
         import tempfile
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        image.save(temp_file.name)
+        cast_image = image
+        image_obj: Any = cast_image
+        image_obj.save(temp_file.name)
         image_path = temp_file.name
     else:
         image_path = str(image)

@@ -327,7 +327,7 @@ class AccountSyncer:
         # 条件1：设备 iat 比数据库更新
         iat_is_newer = new_iat and (old_iat is None or new_iat > old_iat)
         # 条件2：数据库没有 xml_content 但设备有
-        db_missing_xml = account_info.xml_content and not account.xml_content
+        db_missing_xml = bool(account_info.xml_content) and not bool(account.xml_content)
 
         should_update = iat_is_newer or db_missing_xml
 

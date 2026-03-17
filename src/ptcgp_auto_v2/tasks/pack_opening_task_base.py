@@ -260,6 +260,8 @@ class PackOpeningTaskBase(StatefulTask):
     def _get_pack_result_mapper(self) -> PackResultMapper:
         """获取统一的开包结果映射器。"""
         self._init_repositories()
+        if self._pack_result_mapper is None:
+            raise RuntimeError("PackResultMapper 未初始化")
         return self._pack_result_mapper
 
     def _resolve_scan_set_code(self) -> str | None:
