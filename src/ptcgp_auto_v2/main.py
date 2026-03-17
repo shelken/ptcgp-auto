@@ -482,8 +482,7 @@ def run_single_task(
 
     scheduler = Scheduler(
         device_addresses=[device],
-        config=SchedulerConfig.from_settings(
-            settings,
+        config=SchedulerConfig(
             max_workers=1,
             executor_config=ExecutorConfig(
                 app_package=settings.app_package,
@@ -538,8 +537,7 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
 
     scheduler = Scheduler(
         device_addresses=settings.device_addresses,
-        config=SchedulerConfig.from_settings(
-            settings,
+        config=SchedulerConfig(
             poll_interval=settings.poll_interval,
             max_workers=settings.max_workers,
             task_generation_interval=settings.task_generation_interval,

@@ -129,7 +129,7 @@ def main():
 
         for info in detected:
             start = time.perf_counter()
-            color_pixels = bgr_to_color_pixels(info["cropped"])
+            color_pixels = bgr_to_color_pixels(info.cropped)
             card_hash = calculate_perceptual_hash(color_pixels)
             hash_times.append(time.perf_counter() - start)
 

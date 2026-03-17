@@ -14,7 +14,7 @@ from datetime import datetime
 from math import ceil
 from typing import TYPE_CHECKING, Any, Optional
 
-from ptcgp_auto_v2.config.settings import Settings, get_settings
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
     ExecutorConfig,
@@ -36,10 +36,6 @@ from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account, TaskInstance
-    from ptcgp_auto_v2.db.repositories import (
-        AccountRepository,
-        TaskInstanceRepository,
-    )
 
 from ptcgp_auto_v2.core.account_creation import check_and_trigger_account_creation
 
@@ -66,40 +62,6 @@ class SchedulerConfig:
     stale_task_check_interval: float = DEFAULT_STALE_CHECK_INTERVAL
     init_first: bool = False  # 是否优先执行 init_account 任务
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
-    # 自动扩缩容配置统一从 Settings 补齐，避免默认值分散定义。
-    auto_scale_emulators: Optional[bool] = None
-    auto_scale_instance_prefix: Optional[str] = None
-    auto_scale_min_idle_devices: Optional[int] = None
-    auto_scale_max_devices: Optional[int] = None
-    auto_scale_pending_step: Optional[int] = None
-    auto_scale_eval_interval_seconds: Optional[int] = None
-    auto_scale_idle_seconds: Optional[int] = None
-
-    def apply_settings(self, settings: Settings) -> "SchedulerConfig":
-        """使用全局配置补齐自动扩缩容参数。"""
-        if self.auto_scale_emulators is None:
-            self.auto_scale_emulators = settings.auto_scale_emulators
-        if self.auto_scale_instance_prefix is None:
-            self.auto_scale_instance_prefix = settings.auto_scale_instance_prefix
-        if self.auto_scale_min_idle_devices is None:
-            self.auto_scale_min_idle_devices = settings.auto_scale_min_idle_devices
-        if self.auto_scale_max_devices is None:
-            self.auto_scale_max_devices = settings.auto_scale_max_devices
-        if self.auto_scale_pending_step is None:
-            self.auto_scale_pending_step = settings.auto_scale_pending_step
-        if self.auto_scale_eval_interval_seconds is None:
-            self.auto_scale_eval_interval_seconds = (
-                settings.auto_scale_eval_interval_seconds
-            )
-        if self.auto_scale_idle_seconds is None:
-            self.auto_scale_idle_seconds = settings.auto_scale_idle_seconds
-        return self
-
-    @classmethod
-    def from_settings(cls, settings: Settings, **kwargs: Any) -> "SchedulerConfig":
-        """从全局配置构造调度器配置。"""
-        return cls(**kwargs).apply_settings(settings)
-
 
 class Scheduler:
     """
@@ -125,7 +87,7 @@ class Scheduler:
             config: 调度器配置
         """
         self._settings = get_settings()
-        self.config = (config or SchedulerConfig()).apply_settings(self._settings)
+        self.config = config or SchedulerConfig()
 
         self.device_pool = DevicePool(device_addresses)
         self._running = False
@@ -137,12 +99,6 @@ class Scheduler:
         self._lock = threading.Lock()
         self._active_account_ids: set[int] = set()  # 进程内活跃账号防重
 
-        # 延迟初始化的仓库
-        self._task_instance_repo: Optional["TaskInstanceRepository"] = None
-        self._account_repo: Optional["AccountRepository"] = None
-
-    def _init_repositories(self):
-        """初始化数据仓库"""
         from ptcgp_auto_v2.db.repositories import (
             AccountRepository,
             TaskInstanceRepository,
@@ -174,13 +130,11 @@ class Scheduler:
     def _should_auto_scale(self) -> bool:
         """检查是否应该执行扩缩容评估"""
         elapsed = (datetime.now() - self._last_auto_scale_check).total_seconds()
-        return elapsed >= self.config.auto_scale_eval_interval_seconds
+        return elapsed >= self._settings.auto_scale_eval_interval_seconds
 
     def _check_and_reset_stale_tasks(self):
         """检查并重置超时的异常任务"""
         if not self._should_check_stale_tasks():
-            return
-        if not self._task_instance_repo:
             return
 
         self._last_stale_check = datetime.now()
@@ -243,8 +197,6 @@ class Scheduler:
 
     def _count_pending_tasks(self) -> int:
         """统计 pending 任务数量"""
-        if not self._task_instance_repo:
-            return 0
         pending_count = self._task_instance_repo.count_by_status(
             TaskStatus.PENDING.value
         )
@@ -255,12 +207,12 @@ class Scheduler:
         """根据 pending 数量计算目标设备数。"""
         if pending_count <= 0:
             return min(
-                self.config.auto_scale_max_devices,
-                max(0, self.config.auto_scale_min_idle_devices),
+                self._settings.auto_scale_max_devices,
+                max(0, self._settings.auto_scale_min_idle_devices),
             )
         return min(
-            self.config.auto_scale_max_devices,
-            ceil(pending_count / self.config.auto_scale_pending_step),
+            self._settings.auto_scale_max_devices,
+            ceil(pending_count / self._settings.auto_scale_pending_step),
         )
 
     def _pick_stoppable_idle_devices(
@@ -282,7 +234,9 @@ class Scheduler:
             idle_at = device.became_idle_at
             if idle_at is None:
                 continue
-            if (now - idle_at).total_seconds() < self.config.auto_scale_idle_seconds:
+            if (
+                now - idle_at
+            ).total_seconds() < self._settings.auto_scale_idle_seconds:
                 continue
 
             candidates.append(device)
@@ -306,7 +260,7 @@ class Scheduler:
 
     def _auto_scale_evaluate(self):
         """执行自动扩缩容评估"""
-        if not self.config.auto_scale_emulators:
+        if not self._settings.auto_scale_emulators:
             return
         if not self._should_auto_scale():
             return
@@ -320,16 +274,17 @@ class Scheduler:
         idle_count = self.device_pool.available_count
         running_count = len(running_devices)
 
-        if self.config.auto_scale_pending_step <= 0:
+        pending_step = self._settings.auto_scale_pending_step
+        if pending_step <= 0:
             logger.warning(
                 "自动扩缩容 pending_step 配置非法: %s",
-                self.config.auto_scale_pending_step,
+                pending_step,
             )
             return
 
         target_devices = self._calculate_target_device_count(pending_count)
         manageable_map = list_manageable_instances(
-            prefix=self.config.auto_scale_instance_prefix,
+            prefix=self._settings.auto_scale_instance_prefix,
         )
         manageable_ports = set(manageable_map.keys())
         running_ports = {
@@ -551,13 +506,15 @@ class Scheduler:
             (Account, task_instances_list) 或 None
         """
         # 获取所有有待执行任务的账号（once 优先，其余按 next_run_at、last_completed_at 排序）
-        account_ids = self._task_instance_repo.get_accounts_with_pending_tasks()
+        task_instance_repo = self._task_instance_repo
+        account_repo = self._account_repo
+        account_ids = task_instance_repo.get_accounts_with_pending_tasks()
 
         # 分离有 init_account 任务的账号和其他账号，保持各自的排序
         init_account_ids = []
         other_account_ids = []
         for account_id in account_ids:
-            pending_tasks = self._task_instance_repo.get_pending_by_account(account_id)
+            pending_tasks = task_instance_repo.get_pending_by_account(account_id)
             has_init = any(
                 task.task_type == "init_account"
                 and task.status == TaskStatus.PENDING.value
@@ -576,16 +533,16 @@ class Scheduler:
                 continue
 
             # 检查该账号是否已经有正在执行的任务
-            if self._task_instance_repo.has_running_tasks(account_id):
+            if task_instance_repo.has_running_tasks(account_id):
                 continue
 
             # 获取账号信息
-            account = self._account_repo.get_by_id(account_id)
+            account = account_repo.get_by_id(account_id)
             if not account:
                 continue
 
             # 获取该账号的所有待执行任务
-            pending_tasks = self._task_instance_repo.get_pending_by_account(account_id)
+            pending_tasks = task_instance_repo.get_pending_by_account(account_id)
             if not pending_tasks:
                 continue
 
@@ -698,7 +655,10 @@ class Scheduler:
         """确保任务列表包含 fetch_account_info 前置任务"""
         from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
 
-        if not FetchAccountInfoTask.needs_fetch(account, tasks):
+        needs_fetch = getattr(FetchAccountInfoTask, "needs_fetch", None)
+        if needs_fetch is None:
+            raise RuntimeError("FetchAccountInfoTask.needs_fetch 未定义")
+        if not needs_fetch(account, tasks):
             return tasks
 
         has_fetch_task = any(t.task_type == "fetch_account_info" for t in tasks)
@@ -793,8 +753,12 @@ class Scheduler:
             except Exception as e:
                 logger.exception(f"后台账号创建任务异常: {e}")
 
+        executor_pool = self._executor_pool
+        if executor_pool is None:
+            raise RuntimeError("调度器线程池未初始化")
+
         for _ in range(create_count):
-            future = self._executor_pool.submit(
+            future = executor_pool.submit(
                 check_and_trigger_account_creation, self
             )
             future.add_done_callback(_creation_done_callback)
@@ -807,7 +771,7 @@ class Scheduler:
             recovery_delay=self.config.executor_config.recovery_delay,
             app_package=self.config.executor_config.app_package,
             template_threshold=self.config.executor_config.template_threshold,
-            auto_scale_instance_prefix=self.config.auto_scale_instance_prefix,
+            auto_scale_instance_prefix=self._settings.auto_scale_instance_prefix,
             stop_event=self._stop_event,
         )
 
@@ -832,8 +796,11 @@ class Scheduler:
         )
 
         executor_config = self._build_executor_config()
+        executor_pool = self._executor_pool
+        if executor_pool is None:
+            raise RuntimeError("调度器线程池未初始化")
         try:
-            future = self._executor_pool.submit(
+            future = executor_pool.submit(
                 run_account_executor,
                 device=device,
                 account=account,
@@ -872,7 +839,6 @@ class Scheduler:
                 if (
                     self.config.init_first
                     and self._settings.auto_create_accounts
-                    and self._account_repo
                     and self._account_repo.count_all() < self._settings.max_accounts
                 ):
                     if batch:
@@ -914,7 +880,6 @@ class Scheduler:
             return
 
         logger.info("启动调度器...")
-        self._init_repositories()
         self._running = True
         self._executor_pool = ThreadPoolExecutor(
             max_workers=self.config.max_workers,
@@ -963,7 +928,6 @@ class Scheduler:
         在当前线程运行，直到收到停止信号。
         """
         logger.info("启动调度器（阻塞模式）...")
-        self._init_repositories()
         self._running = True
         self._executor_pool = ThreadPoolExecutor(
             max_workers=self.config.max_workers,
@@ -990,15 +954,12 @@ class Scheduler:
         """
         device_status = self.device_pool.get_status_summary()
 
-        pending_count = 0
-        running_count = 0
-        if self._task_instance_repo:
-            pending_count = self._task_instance_repo.count_by_status(
-                TaskStatus.PENDING.value
-            )
-            running_count = self._task_instance_repo.count_by_status(
-                TaskStatus.RUNNING.value
-            )
+        pending_count = self._task_instance_repo.count_by_status(
+            TaskStatus.PENDING.value
+        )
+        running_count = self._task_instance_repo.count_by_status(
+            TaskStatus.RUNNING.value
+        )
 
         return {
             "running": self._running,
@@ -1032,8 +993,6 @@ class Scheduler:
         from ptcgp_auto_v2.core.executor import AccountExecutor
 
         logger.info(f"运行单个任务: {task_type} (账号 ID: {account_id})")
-
-        self._init_repositories()
 
         # 获取账号
         account = self._account_repo.get_by_id(account_id)
@@ -1077,6 +1036,8 @@ class Scheduler:
 
         # 刷新任务实例状态
         instance = self._task_instance_repo.get_by_id(instance.id)
+        if instance is None:
+            raise RuntimeError(f"任务实例不存在: task_type={task_type}, account_id={account_id}")
         return instance.status in {
             TaskStatus.COMPLETED.value,
             TaskStatus.SKIPPED.value,
