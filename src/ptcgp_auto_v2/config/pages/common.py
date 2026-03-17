@@ -5,12 +5,19 @@
 
 from ptcgp_auto_v2.locales import get_text_patterns
 
-
 # 下划线开头与游戏无关，系统相关
 # 新增 action 字段用于声明式生成 Handler
 # action 类型参考 common_handlers.py 中的工厂方法
 COMMON_PAGES = [
     # TODO `清除快取 重新下載`
+    {
+        # 匹配各种手指图标并点击（模板匹配）
+        # 目前可以看出，只要出现了这些按钮必定，优先点击
+        "name": "icon_hand_tap",
+        "templates": ["hand_up_left", "hand_up_right"],
+        "priority": 10,
+        "action": "tap_matched",
+    },
     # （这种情况一般游戏有问题，不要点ok，重启过，没用，一般应该需要重启整个模拟器）
     {
         "name": "popup_clean_and_download",
@@ -23,9 +30,32 @@ COMMON_PAGES = [
         "name": "popup_error_code_103_011_05400",
         "identifiers": get_text_patterns("error_code_103_011_05400"),
         "match_all": True,
-        "priority": 145,
+        "priority": 140,
         "action": "restart_emulator",
     },
+    # 点再试一次
+    {
+        "name": "popup_network_error",
+        "identifiers": get_text_patterns("popup_network_error"),
+        "priority": 145,
+        "exact_match": True,
+        "action": "tap_matched",
+    },
+    # 返回按钮（模板匹配）
+    {
+        "name": "btn_back",
+        "templates": ["btn_back"],
+        "priority": 145,
+        "action": "tap_matched",
+    },
+    # 游戏内通用关闭按钮（模板匹配）
+    {
+        "name": "btn_close",
+        "templates": ["btn_close"],
+        "priority": 145,
+        "action": "tap_matched",
+    },
+    # 点 OK
     {
         "name": "popup_ok",
         "identifiers": get_text_patterns("popup_ok"),
@@ -33,15 +63,7 @@ COMMON_PAGES = [
         "exact_match": True,
         "action": "tap_matched",
     },
-    # 点再试一次
-    {
-        "name": "popup_network_error",
-        "identifiers": get_text_patterns("popup_network_error"),
-        "priority": 150,
-        "exact_match": True,
-        "action": "tap_matched",
-    },
-    # 点继续
+    # 点 继续
     {
         "name": "continue_button",
         "identifiers": get_text_patterns("continue_button"),
@@ -63,33 +85,11 @@ COMMON_PAGES = [
         "priority": 150,
         "action": "tap_matched",
     },
+    # 目前可以看出，只要出现了这些按钮必定，优先点击
     {
-        # 匹配各种手指图标并点击（模板匹配）
-        # 目前可以看出，只要出现了这些按钮必定，优先点击
-        "name": "icon_hand_tap",
-        "templates": ["hand_up_left", "hand_up_right"],
-        "priority": 10,
-        "action": "tap_matched",
-    },
-    {
-        # 目前可以看出，只要出现了这些按钮必定，优先点击
         "name": "icon_hand_tap",
         "templates": ["hand_up"],
         "priority": 160,
-        "action": "tap_matched",
-    },
-    {
-        # 返回按钮（模板匹配）
-        "name": "btn_back",
-        "templates": ["btn_back"],
-        "priority": 500,
-        "action": "tap_matched",
-    },
-    {
-        # 游戏内通用关闭按钮（模板匹配）
-        "name": "btn_close",
-        "templates": ["btn_close"],
-        "priority": 500,
         "action": "tap_matched",
     },
     # TODO 执行重新认证（需要通知重新登录账号）
