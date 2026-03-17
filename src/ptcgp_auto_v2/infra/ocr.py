@@ -12,7 +12,8 @@ from typing import List, Optional
 
 from PIL import Image
 
-from ptcgp_auto_v2.config.constants import DEFAULT_OCR_LANGUAGES, DEFAULT_OCR_LEVEL
+from ptcgp_auto_v2.config.constants import DEFAULT_OCR_LEVEL
+from ptcgp_auto_v2.config.lang import DEFAULT_OCR_LANGUAGES
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OcrResult:
     """OCR 识别结果"""
+
     text: str
     box: tuple[int, int, int, int]  # (x1, y1, x2, y2)
     confidence: float
@@ -62,6 +64,7 @@ class OcrEngine:
     def _validate_platform(self):
         """验证是否在 macOS 平台上运行"""
         import platform
+
         if platform.system() != "Darwin":
             raise RuntimeError("OCR 引擎仅支持 macOS 平台")
 
@@ -76,10 +79,10 @@ class OcrEngine:
             OcrResult 列表
         """
         # 延迟导入 macOS 框架
-        import Vision
-        import Quartz
-        from Foundation import NSData
         import objc
+        import Quartz
+        import Vision
+        from Foundation import NSData
 
         if image is None:
             logger.error("OCR 输入图片为 None")
@@ -139,9 +142,13 @@ class OcrEngine:
 
                 # 设置识别级别
                 if self.recognition_level == "fast":
-                    request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
+                    request.setRecognitionLevel_(
+                        Vision.VNRequestTextRecognitionLevelFast
+                    )
                 else:
-                    request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+                    request.setRecognitionLevel_(
+                        Vision.VNRequestTextRecognitionLevelAccurate
+                    )
 
                 # 设置识别语言
                 request.setRecognitionLanguages_(self.languages)
@@ -184,11 +191,13 @@ class OcrEngine:
                             x2 = int((x + w) * width)
                             y2 = int((1 - y) * height)
 
-                            results.append(OcrResult(
-                                text=text,
-                                box=(x1, y1, x2, y2),
-                                confidence=confidence,
-                            ))
+                            results.append(
+                                OcrResult(
+                                    text=text,
+                                    box=(x1, y1, x2, y2),
+                                    confidence=confidence,
+                                )
+                            )
 
         except Exception as e:
             # PyObjC / Vision / Quartz 的桥接层可能抛出多种异常类型，
@@ -216,7 +225,9 @@ class OcrEngine:
         text_normalized = "".join(text_lower.split())
         return text_lower, text_normalized
 
-    def _matches(self, target_lower: str, target_normalized: str, text: str, exact_match: bool) -> bool:
+    def _matches(
+        self, target_lower: str, target_normalized: str, text: str, exact_match: bool
+    ) -> bool:
         text_lower, text_normalized = self._normalize_text(text)
         if exact_match:
             return target_lower == text_lower
