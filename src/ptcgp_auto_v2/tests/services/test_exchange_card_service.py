@@ -12,6 +12,9 @@ from ptcgp_auto_v2.db.repositories.exchange_card_request_repository import (
 from ptcgp_auto_v2.services.exchange_card_service import ExchangeCardService
 
 
+pytestmark = pytest.mark.usefixtures("mock_get_engine")
+
+
 @pytest.fixture(name="engine")
 def engine_fixture():
     """创建内存数据库引擎。"""
@@ -30,7 +33,7 @@ def mock_get_engine_fixture(engine):
         yield
 
 
-def test_one_account_only_one_active_exchange_request(engine, mock_get_engine):
+def test_one_account_only_one_active_exchange_request():
     """同一账号在非 completed/failed/canceled 状态下只能有一条活跃请求。"""
     repo = ExchangeCardRequestRepository()
 
@@ -80,7 +83,7 @@ def test_create_request_rejects_im_and_ur_rarity():
         repo_cls.return_value.create.assert_not_called()
 
 
-def test_has_active_request_returns_true_for_sending_or_sended(engine, mock_get_engine):
+def test_has_active_request_returns_true_for_sending_or_sended():
     """sending/sended 状态应被识别为活跃请求。"""
     repo = ExchangeCardRequestRepository()
     created = repo.create(
@@ -103,7 +106,7 @@ def test_has_active_request_returns_true_for_sending_or_sended(engine, mock_get_
     assert repo.has_active_request(301) is False
 
 
-def test_list_due_sended_requests_only_returns_due_rows(engine, mock_get_engine):
+def test_list_due_sended_requests_only_returns_due_rows():
     """仅返回 next_check_at <= now 的 sended 请求。"""
     repo = ExchangeCardRequestRepository()
     now = datetime.now()

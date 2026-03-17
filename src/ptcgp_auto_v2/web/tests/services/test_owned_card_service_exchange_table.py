@@ -11,6 +11,9 @@ from ptcgp_auto_v2.web.services.owned_card_service import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("fake_accounts_data")
+
+
 @pytest.fixture
 def card_id(session: Session) -> int:
     """构造测试卡牌。"""
@@ -24,6 +27,7 @@ def card_id(session: Session) -> int:
     session.add(card)
     session.commit()
     session.refresh(card)
+    assert card.id is not None
     return card.id
 
 
@@ -79,9 +83,7 @@ def fake_accounts_data(monkeypatch):
     )
 
 
-def test_exchange_accounts_context_supports_search(
-    session: Session, card_id: int, fake_accounts_data
-):
+def test_exchange_accounts_context_supports_search(session: Session, card_id: int):
     """应支持按账号 ID/朋友id/昵称进行简单搜索。"""
     context = build_owned_card_exchange_accounts_context(
         session=session,
@@ -99,7 +101,7 @@ def test_exchange_accounts_context_supports_search(
 
 
 def test_exchange_accounts_context_supports_sort_whitelist(
-    session: Session, card_id: int, fake_accounts_data
+    session: Session, card_id: int
 ):
     """应支持白名单排序（按数量降序）。"""
     context = build_owned_card_exchange_accounts_context(
@@ -117,7 +119,7 @@ def test_exchange_accounts_context_supports_sort_whitelist(
 
 
 def test_exchange_accounts_context_supports_exchange_points_sort(
-    session: Session, card_id: int, fake_accounts_data
+    session: Session, card_id: int
 ):
     """应支持按交换点数排序，空值排在末尾。"""
     context = build_owned_card_exchange_accounts_context(
@@ -134,9 +136,7 @@ def test_exchange_accounts_context_supports_exchange_points_sort(
     assert account_ids == [4, 2, 1, 3]
 
 
-def test_exchange_accounts_context_supports_pagination(
-    session: Session, card_id: int, fake_accounts_data
-):
+def test_exchange_accounts_context_supports_pagination(session: Session, card_id: int):
     """应支持固定 page_size 的传统分页。"""
     context = build_owned_card_exchange_accounts_context(
         session=session,
@@ -157,7 +157,7 @@ def test_exchange_accounts_context_supports_pagination(
 
 
 def test_exchange_accounts_context_returns_enabled_action_by_default(
-    session: Session, card_id: int, fake_accounts_data
+    session: Session, card_id: int
 ):
     """满足条件时应返回启用状态的交换动作。"""
     context = build_owned_card_exchange_accounts_context(
@@ -176,7 +176,9 @@ def test_exchange_accounts_context_returns_enabled_action_by_default(
     assert context["accounts"][0]["exchange_points"] == 1200
 
 
-def test_exchange_accounts_context_blocks_active_request(monkeypatch, session: Session, card_id: int, fake_accounts_data):
+def test_exchange_accounts_context_blocks_active_request(
+    monkeypatch, session: Session, card_id: int
+):
     """有活跃请求时应直接返回禁用按钮和原因。"""
     monkeypatch.setattr(
         "ptcgp_auto_v2.web.services.owned_card_service.ExchangeCardRequestRepository.has_active_request",
@@ -199,7 +201,7 @@ def test_exchange_accounts_context_blocks_active_request(monkeypatch, session: S
 
 
 def test_exchange_accounts_context_blocks_insufficient_exchange_points(
-    monkeypatch, session: Session, card_id: int, fake_accounts_data
+    monkeypatch, session: Session, card_id: int
 ):
     """交换点数不足时应返回禁用按钮和原因。"""
     payload = {
@@ -240,7 +242,9 @@ def test_exchange_accounts_context_blocks_insufficient_exchange_points(
     assert action["reason_key"] == "insufficient_exchange_points"
 
 
-def test_exchange_accounts_context_blocks_missing_owned_card_first(monkeypatch, session: Session, card_id: int, fake_accounts_data):
+def test_exchange_accounts_context_blocks_missing_owned_card_first(
+    monkeypatch, session: Session, card_id: int
+):
     """持有数量不足时应优先返回数量不足原因。"""
     payload = {
         "accounts": [
@@ -280,7 +284,9 @@ def test_exchange_accounts_context_blocks_missing_owned_card_first(monkeypatch, 
     assert action["reason_key"] == "missing_owned_card"
 
 
-def test_exchange_accounts_context_blocks_non_exchangeable_rarity(monkeypatch, session: Session, fake_accounts_data):
+def test_exchange_accounts_context_blocks_non_exchangeable_rarity(
+    monkeypatch, session: Session
+):
     """不可交换稀有度应优先禁用所有账号按钮。"""
     card = Card(
         set_code="A1",

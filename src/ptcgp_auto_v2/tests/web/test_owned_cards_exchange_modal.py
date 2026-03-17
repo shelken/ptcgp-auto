@@ -9,6 +9,9 @@ from ptcgp_auto_v2.db.models import Account, AccountCard, Card
 from ptcgp_auto_v2.web.services.owned_card_service import build_owned_card_modal_context
 
 
+pytestmark = pytest.mark.usefixtures("mock_get_engine")
+
+
 @pytest.fixture(name="engine")
 def engine_fixture():
     """创建内存数据库引擎。"""
@@ -29,7 +32,6 @@ def mock_get_engine_fixture(engine):
 
 def test_owned_card_modal_only_allows_exchange_when_count_gt_zero(
     engine,
-    mock_get_engine,
 ):
     """账号卡牌数量为 0 时不应出现交换入口。"""
     with Session(engine) as session:

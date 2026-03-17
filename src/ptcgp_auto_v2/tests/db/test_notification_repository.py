@@ -11,6 +11,9 @@ from ptcgp_auto_v2.db.models import Notification
 from ptcgp_auto_v2.db.repositories.notification_repository import NotificationRepository
 
 
+pytestmark = pytest.mark.usefixtures("mock_get_engine")
+
+
 @pytest.fixture(name="engine")
 def engine_fixture():
     engine = create_engine("sqlite:///:memory:")
@@ -30,7 +33,7 @@ def mock_get_engine_fixture(engine):
 class TestNotificationRepositoryCreate:
     """创建通知测试"""
 
-    def test_create_notification_with_required_fields(self, mock_get_engine):
+    def test_create_notification_with_required_fields(self):
         """测试创建通知 - 仅必填字段"""
         repo = NotificationRepository()
 
@@ -49,7 +52,7 @@ class TestNotificationRepositoryCreate:
         assert notification.related_card_id is None
         assert notification.related_task_instance_id is None
 
-    def test_create_notification_with_all_fields(self, mock_get_engine):
+    def test_create_notification_with_all_fields(self):
         """测试创建通知 - 全部字段"""
         repo = NotificationRepository()
 
@@ -68,7 +71,7 @@ class TestNotificationRepositoryCreate:
 class TestNotificationRepositoryList:
     """列表查询测试"""
 
-    def test_list_all_notifications(self, mock_get_engine, engine):
+    def test_list_all_notifications(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1")
         repo.create(scene="rare_card_obtained", title="通知2", content="内容2")
@@ -77,7 +80,7 @@ class TestNotificationRepositoryList:
         all_notifications = repo.list()
         assert len(all_notifications) == 3
 
-    def test_list_filter_by_scene(self, mock_get_engine):
+    def test_list_filter_by_scene(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1")
         repo.create(scene="rare_card_obtained", title="通知2", content="内容2")
@@ -86,7 +89,7 @@ class TestNotificationRepositoryList:
         assert len(task_notifications) == 1
         assert task_notifications[0].scene == "task_status"
 
-    def test_list_filter_by_account(self, mock_get_engine):
+    def test_list_filter_by_account(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1", account_id=1)
         repo.create(scene="task_status", title="通知2", content="内容2", account_id=2)
@@ -94,7 +97,7 @@ class TestNotificationRepositoryList:
         account_notifications = repo.list(account_id=1)
         assert len(account_notifications) == 1
 
-    def test_list_pagination(self, mock_get_engine):
+    def test_list_pagination(self):
         repo = NotificationRepository()
         for i in range(25):
             repo.create(scene="task_status", title=f"通知{i}", content=f"内容{i}")
@@ -109,21 +112,21 @@ class TestNotificationRepositoryList:
 class TestNotificationRepositoryCount:
     """计数测试"""
 
-    def test_count_all(self, mock_get_engine):
+    def test_count_all(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1")
         repo.create(scene="rare_card_obtained", title="通知2", content="内容2")
 
         assert repo.count() == 2
 
-    def test_count_unread(self, mock_get_engine):
+    def test_count_unread(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1")
         repo.create(scene="task_status", title="通知2", content="内容2")
 
         assert repo.count_unread() == 2
 
-    def test_count_filter_by_scene(self, mock_get_engine):
+    def test_count_filter_by_scene(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1")
         repo.create(scene="rare_card_obtained", title="通知2", content="内容2")
@@ -134,7 +137,7 @@ class TestNotificationRepositoryCount:
 class TestNotificationRepositoryMarkRead:
     """标记已读测试"""
 
-    def test_mark_single_as_read(self, mock_get_engine):
+    def test_mark_single_as_read(self):
         repo = NotificationRepository()
         notification = repo.create(scene="task_status", title="通知", content="内容")
 
@@ -146,7 +149,7 @@ class TestNotificationRepositoryMarkRead:
         assert updated is not None
         assert updated.is_read is True
 
-    def test_mark_all_as_read(self, mock_get_engine):
+    def test_mark_all_as_read(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1")
         repo.create(scene="task_status", title="通知2", content="内容2")
@@ -156,7 +159,7 @@ class TestNotificationRepositoryMarkRead:
         assert count == 2
         assert repo.count_unread() == 1
 
-    def test_mark_all_as_read_by_account(self, mock_get_engine):
+    def test_mark_all_as_read_by_account(self):
         repo = NotificationRepository()
         repo.create(scene="task_status", title="通知1", content="内容1", account_id=1)
         repo.create(scene="task_status", title="通知2", content="内容2", account_id=1)
@@ -169,13 +172,13 @@ class TestNotificationRepositoryMarkRead:
 class TestNotificationRepositoryDelete:
     """删除测试"""
 
-    def test_delete_notification(self, mock_get_engine):
+    def test_delete_notification(self):
         repo = NotificationRepository()
         notification = repo.create(scene="task_status", title="通知", content="内容")
 
         assert repo.delete(notification.id) is True
         assert repo.get_by_id(notification.id) is None
 
-    def test_delete_nonexistent(self, mock_get_engine):
+    def test_delete_nonexistent(self):
         repo = NotificationRepository()
         assert repo.delete(999) is False
