@@ -166,7 +166,7 @@ class FriendRequestRepository:
         with Session(get_engine()) as session:
             statement = select(AccountFriendRequest).where(
                 AccountFriendRequest.from_account_id == from_account_id,
-                AccountFriendRequest.to_account_id == None,
+                AccountFriendRequest.to_account_id.is_(None),
                 AccountFriendRequest.status == "sended",
                 AccountFriendRequest.request_type == "add",
             )
