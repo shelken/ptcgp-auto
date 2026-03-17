@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ruff check --fix $CLAUDE_TOOL_INPUT_PATH 2>&1 | head -50"
+          }
+        ]
+      }
+    ]
+  }
+}
