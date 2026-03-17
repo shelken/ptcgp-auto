@@ -11,13 +11,13 @@ import logging
 import re
 from typing import Optional, cast
 
+from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
@@ -206,8 +206,8 @@ class FetchAccountInfoTask(StatefulTask):
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """处理未知页面"""
-        logger.debug("点击屏幕中心兜底")
-        return quick_tap(self.adb, y=self.adb.center_y() + 50)
+        logger.debug("未知页面，点击屏幕上方兜底")
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10))
 
     def _handle_game_home_main(self, page_info: dict) -> ActionResult:
         """主页：根据进度决定下一步"""

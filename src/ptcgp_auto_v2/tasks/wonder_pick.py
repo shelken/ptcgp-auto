@@ -32,6 +32,7 @@ from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
     navigate_back,
+    quick_tap,
     scroll_points,
     swipe,
     tap,
@@ -165,8 +166,8 @@ class WonderPickTask(StatefulTask):
 
     def handle_unknown_page(self, page_info) -> ActionResult:
         """未知页面等待。"""
-        logger.debug("未知页面，等待后重试")
-        return ActionResult.wait(0.5)
+        logger.debug("未知页面，点击屏幕上方兜底")
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10))
 
     @staticmethod
     def sort_rarity_targets(targets: list[str]) -> list[str]:
