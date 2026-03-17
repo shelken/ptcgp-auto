@@ -13,12 +13,12 @@ from ptcgp_auto_v2.services.metadata_sync.cache_store import TTLCacheStore
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (
     FlibustierSyncService,
 )
-
-# 预览快照缓存（30分钟），避免依赖数据库快照表。
-_METADATA_SYNC_PREVIEW_CACHE = TTLCacheStore(ttl_seconds=1800)
 from ptcgp_auto_v2.services.metadata_sync.poke52_localization_service import (
     Poke52LocalizationService,
 )
+
+# 预览快照缓存（30分钟），避免依赖数据库快照表。
+_METADATA_SYNC_PREVIEW_CACHE = TTLCacheStore(ttl_seconds=1800)
 
 
 def check_sources(

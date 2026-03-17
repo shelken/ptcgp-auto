@@ -96,7 +96,7 @@ def get_env_value(env_name: str, typ: type, default: Any) -> Any:
     value = os.environ.get(env_name)
     if value is None:
         return default
-    if typ == bool:
+    if typ is bool:
         return value.lower() in ("true", "1", "yes")
     return typ(value)
 
@@ -122,7 +122,7 @@ def create_parser() -> argparse.ArgumentParser:
         if short:
             flags.insert(0, short)
 
-        if typ == bool:
+        if typ is bool:
             parser.add_argument(*flags, action="store_true", help=help_text)
         else:
             kwargs = {"type": typ, "default": None, "help": help_text}
@@ -153,13 +153,13 @@ def load_settings() -> dict:
         cli_value = getattr(args, attr_name, None)
 
         # CLI args have highest priority (for bool, only when explicitly True)
-        if cli_value is not None and (typ != bool or cli_value):
+        if cli_value is not None and (typ is not bool or cli_value):
             settings[cli_name] = cli_value
         else:
             # 只在环境变量存在时才设置，不使用默认值
             env_value = os.environ.get(env_name)
             if env_value is not None:
-                if typ == bool:
+                if typ is bool:
                     settings[cli_name] = env_value.lower() in ("true", "1", "yes")
                 else:
                     settings[cli_name] = typ(env_value)

@@ -9,10 +9,6 @@
 去掉与 common.py 重复的页面（popup_ok、网络错误、手指图标等）。
 """
 
-# 基准像素值（基于 1080x1920 分辨率）
-# 等级选择页面：判断等级文字与进度/COMPLETE标记是否在同一行的Y轴容差
-BASE_BATTLE_LEVEL_ROW_THRESHOLD_Y = 100  # 等级行内元素判断阈值（基准像素）
-
 import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
@@ -47,6 +43,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# 基准像素值（基于 1080x1920 分辨率）
+# 等级选择页面：判断等级文字与进度/COMPLETE标记是否在同一行的Y轴容差
+BASE_BATTLE_LEVEL_ROW_THRESHOLD_Y = 100  # 等级行内元素判断阈值（基准像素）
 
 # ============================================================
 # 停止条件类

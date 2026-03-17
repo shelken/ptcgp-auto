@@ -5,9 +5,9 @@ from typing import Dict
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
+from .utils import find_auto_mode_button, find_text_by_variants
 
 logger = get_logger(__name__)
-from .utils import find_text_by_variants, find_auto_mode_button
 
 
 class BaseActions:

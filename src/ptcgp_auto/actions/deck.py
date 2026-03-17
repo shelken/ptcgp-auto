@@ -6,9 +6,9 @@ from typing import Dict, List, Optional, Callable
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
+from .utils import detect_and_close_popup, find_text_by_variants, go_back
 
 logger = get_logger(__name__)
-from .utils import go_back, find_text_by_variants, detect_and_close_popup
 
 
 class DeckActions:

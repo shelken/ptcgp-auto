@@ -6,9 +6,9 @@ from typing import Dict, List, Set, Callable
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
+from .utils import close_popup, detect_and_close_popup
 
 logger = get_logger(__name__)
-from .utils import close_popup, detect_and_close_popup
 
 
 class ExpansionActions:

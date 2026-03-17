@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
-
 """
 基础手势与点击工具
 """
+
+from __future__ import annotations
 
 import logging
 import math
@@ -12,8 +12,6 @@ from typing import TYPE_CHECKING, Callable, Optional, Tuple
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.infra.adb import AdbController
-
-Box = tuple[int, int, int, int]
 
 from ptcgp_auto_v2.config.constants import (
     DEFAULT_LONG_PRESS_STEPS,
@@ -26,6 +24,8 @@ from ptcgp_auto_v2.config.constants import (
 )
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.action_result import ActionResult
+
+Box = tuple[int, int, int, int]
 
 logger = logging.getLogger(__name__)
 

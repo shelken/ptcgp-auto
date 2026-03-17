@@ -5,9 +5,9 @@ from typing import Dict, Callable
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
+from .utils import find_auto_mode_button, find_text_by_variants, go_back
 
 logger = get_logger(__name__)
-from .utils import go_back, find_auto_mode_button, find_text_by_variants
 
 
 class BattleActions:

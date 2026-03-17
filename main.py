@@ -2,6 +2,7 @@
 PTCGP 单人对战自动化脚本 - 主入口
 """
 
+# ruff: noqa: E402
 import sys
 import subprocess
 from pathlib import Path
@@ -10,14 +11,10 @@ ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
 from ptcgp_auto import config
-from ptcgp_auto.settings import (
-    load_settings,
-    apply_settings_to_config,
-    print_active_settings,
-)
 from ptcgp_auto.device_discovery import discover_devices
 from ptcgp_auto.logger import setup_logging, get_logger, allocate_colors
 from ptcgp_auto.runner import PTCGPAuto
+from ptcgp_auto.settings import load_settings, apply_settings_to_config, print_active_settings
 
 logger = get_logger(__name__)
 

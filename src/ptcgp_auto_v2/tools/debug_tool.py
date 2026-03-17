@@ -12,6 +12,7 @@ PTCGP 调试工具 - v2 版本
     python debug_tool.py -a 5555 --test-pack match --booster Charizard
 """
 
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse

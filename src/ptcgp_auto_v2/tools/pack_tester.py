@@ -16,7 +16,7 @@ from PIL import Image
 ROOT_DIR = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
-from ptcgp_auto_v2.utils.pack_image_manager import (
+from ptcgp_auto_v2.utils.pack_image_manager import (  # noqa: E402  # 入口脚本需要先调整 sys.path
     PACK_CROP_RATIO,
     PackImageManager,
 )
