@@ -60,14 +60,6 @@ class FriendshipRepository:
         with Session(get_engine()) as session:
             return self._get_by_account_and_friend(session, account_id, friend_id)
 
-    def get_friend_ids(self, account_id: int) -> List[str]:
-        """获取账号的所有好友 friend_id 列表"""
-        with Session(get_engine()) as session:
-            statement = select(AccountFriendship.friend_id).where(
-                AccountFriendship.account_id == account_id
-            )
-            return [row[0] for row in session.exec(statement).all()]
-
     def delete(self, account_id: int, friend_id: str) -> bool:
         """删除好友关系（物理删除）"""
         with Session(get_engine()) as session:

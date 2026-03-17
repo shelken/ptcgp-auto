@@ -18,11 +18,11 @@ from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.hooks import HookContext
 from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult
-from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.core.task_plan_utils import (
     build_account_plan_cache,
     compute_next_run_for_instance,
 )
+from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.infra.page_detector import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
 from ptcgp_auto_v2.utils.log_source import resolve_log_device
@@ -150,11 +150,6 @@ class BaseExecutor(ABC):
         logger.debug("重启游戏应用...")
         self._adb.restart_app(self.config.app_package)
         time.sleep(self.config.recovery_delay)
-
-    def _try_recover(self):
-        """尝试恢复到可执行状态"""
-        logger.debug("尝试恢复执行状态...")
-        self._restart_app()
 
     def _is_current_account(self, target_account: "Account") -> bool:
         """
@@ -327,12 +322,16 @@ class BaseExecutor(ABC):
             self._unblock_dependent_tasks(account)
             if clear_error_on_success:
                 task_instance.error_message = None
-        if status in (
-            TaskStatus.COMPLETED,
-            TaskStatus.FAILED,
-            TaskStatus.SKIPPED,
-            TaskStatus.BLOCKED,
-        ) and duration_seconds is not None:
+        if (
+            status
+            in (
+                TaskStatus.COMPLETED,
+                TaskStatus.FAILED,
+                TaskStatus.SKIPPED,
+                TaskStatus.BLOCKED,
+            )
+            and duration_seconds is not None
+        ):
             task_instance.last_duration_seconds = max(0, duration_seconds)
         if error_message:
             task_instance.error_message = error_message
@@ -372,7 +371,9 @@ class BaseExecutor(ABC):
         duration_seconds = self._get_result_duration_seconds(result)
         if result.success:
             if result.skipped:
-                logger.info(f"任务跳过: {task_instance.task_type} ({result.skip_reason})")
+                logger.info(
+                    f"任务跳过: {task_instance.task_type} ({result.skip_reason})"
+                )
                 self._apply_task_status(
                     task_instance=task_instance,
                     account=account,
@@ -622,8 +623,8 @@ class BaseExecutor(ABC):
             self._build_task(task_instance, account),
             skip_pre_hooks=True,
         )
-        total_duration_seconds = current_duration_seconds + self._get_result_duration_seconds(
-            resumed_result
+        total_duration_seconds = (
+            current_duration_seconds + self._get_result_duration_seconds(resumed_result)
         )
         return self._set_result_duration_seconds(
             resumed_result,
@@ -830,7 +831,5 @@ def run_account_executor(
     config: Optional[ExecutorConfig] = None,
 ):
     """运行账号任务执行器的便捷函数。"""
-    executor = AccountExecutor(
-        device, account, task_instances, device_pool, config
-    )
+    executor = AccountExecutor(device, account, task_instances, device_pool, config)
     executor.run()

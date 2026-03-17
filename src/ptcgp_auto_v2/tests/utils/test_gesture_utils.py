@@ -3,22 +3,20 @@
 手势工具最小单测
 """
 
+from typing import Any, cast
+
+from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.tests.fake_adb import FakeU2Device
 from ptcgp_auto_v2.utils.gesture import (
     calculate_swipe_steps,
     clear_text,
     input_text,
     is_text_visible,
     normalize_text,
-    perform_swipe,
-    perform_tap,
     quick_tap,
     scroll_points,
     tap_text_exact,
 )
-from typing import Any, cast
-
-from ptcgp_auto_v2.infra.adb import AdbController
-from ptcgp_auto_v2.tests.fake_adb import FakeU2Device
 
 
 class DummyAdb:
@@ -80,14 +78,6 @@ def test_scroll_points_up_and_down():
     assert start_down[1] < end_down[1]
 
 
-def test_perform_tap_and_swipe_return_action_result():
-    """验证基础动作返回 ActionResult。"""
-    adb = DummyAdb(screen_width=1080, screen_height=1920)
-    adb_controller = cast(AdbController, adb)
-    assert perform_tap(adb_controller, 1, 2).ok is True
-    assert perform_swipe(adb_controller, (0, 0), (10, 10)).ok is True
-
-
 def test_calculate_swipe_steps_proportional():
     """验证滑动步数与距离成比例。"""
     adb = DummyAdb(screen_width=1080, screen_height=1000)
@@ -112,7 +102,6 @@ def test_calculate_swipe_steps_clamp_max():
 def test_adb_no_business_gestures():
     """确认 adb 控制器不暴露业务手势。"""
     assert not hasattr(AdbController, "swipe_up")
-    assert not hasattr(AdbController, "swipe_down")
 
 
 def test_quick_tap_should_click_by_points_in_order():

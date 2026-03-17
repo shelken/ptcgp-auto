@@ -18,7 +18,6 @@ class ExchangeCardRequestRepository:
     """交换卡牌请求数据访问。"""
 
     ACTIVE_STATUSES = {"sending", "sended"}
-    FINAL_STATUSES = {"completed", "failed", "canceled"}
 
     def create(
         self,
@@ -61,33 +60,6 @@ class ExchangeCardRequestRepository:
         """查询账号当前活跃请求（sending/sended）。"""
         with Session(get_engine()) as session:
             return self._get_active_by_account_with_session(session, from_account_id)
-
-    def list_sended_requests(self) -> list[ExchangeCardRequest]:
-        """查询处于 sended 状态的请求。"""
-        with Session(get_engine()) as session:
-            statement = (
-                select(ExchangeCardRequest)
-                .where(
-                    ExchangeCardRequest.status == "sended",
-                    ExchangeCardRequest.next_check_at != None,  # noqa: E711
-                )
-                .order_by(col(ExchangeCardRequest.next_check_at))
-            )
-            return list(session.exec(statement).all())
-
-    def list_due_sended_requests(self, now: datetime) -> list[ExchangeCardRequest]:
-        """查询到期的 sended 请求（next_check_at <= now）。"""
-        with Session(get_engine()) as session:
-            statement = (
-                select(ExchangeCardRequest)
-                .where(
-                    ExchangeCardRequest.status == "sended",
-                    ExchangeCardRequest.next_check_at != None,  # noqa: E711
-                    ExchangeCardRequest.next_check_at <= now,
-                )
-                .order_by(col(ExchangeCardRequest.next_check_at))
-            )
-            return list(session.exec(statement).all())
 
     def has_active_request(self, from_account_id: int) -> bool:
         """判断账号是否存在活跃请求（sending/sended）。"""

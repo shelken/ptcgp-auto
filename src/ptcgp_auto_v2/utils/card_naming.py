@@ -7,6 +7,7 @@
 import re
 from typing import Optional
 
+
 def normalize_name_str(name: str) -> str:
     """统一的文件名标准化逻辑：过滤特殊字符 + 空格转下划线"""
     # 保留字母数字、横杠、下划线、空格
@@ -14,13 +15,6 @@ def normalize_name_str(name: str) -> str:
     # 将空格替换为下划线
     return safe_name.replace(" ", "_")
 
-def get_card_filename(number: int, name: str) -> str:
-    """
-    生成标准化的卡牌文件名 (空格替换为下划线)
-    Format: {number:03d}_{name}.png
-    """
-    safe_name = normalize_name_str(name)
-    return f"{number:03d}_{safe_name}.png"
 
 def parse_card_number_from_filename(filename: str) -> Optional[int]:
     """

@@ -3,8 +3,8 @@
 提供安全的表单数据解析功能
 """
 
-from typing import Any, Optional
 import json
+from typing import Any, Optional
 
 
 def safe_get_string(
@@ -15,15 +15,6 @@ def safe_get_string(
     if isinstance(value, str):
         return value
     return default
-
-
-def safe_get_int(form_data: Any, key: str, default: int = 0) -> int:
-    """安全地从表单数据获取整数值"""
-    value = form_data.get(key)
-    try:
-        return int(value) if value is not None else default
-    except (ValueError, TypeError):
-        return default
 
 
 def parse_optional_int(value: Any) -> Optional[int]:

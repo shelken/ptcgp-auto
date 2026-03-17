@@ -175,18 +175,6 @@ class DevicePool:
             if device.address in self._devices:
                 self._devices[device.address].mark_unhealthy()
 
-    def get_device(self, address: str) -> Optional[Device]:
-        """
-        根据地址获取设备
-
-        Args:
-            address: ADB 地址
-
-        Returns:
-            Device 实例或 None
-        """
-        return self._devices.get(address)
-
     def get_all_devices(self) -> list[Device]:
         """获取所有设备列表"""
         return list(self._devices.values())
@@ -199,38 +187,6 @@ class DevicePool:
     def get_idle_devices(self) -> list[Device]:
         """获取所有空闲设备列表"""
         return self.get_available_devices()
-
-    def pick_idle_devices_for_shutdown(
-        self,
-        count: int,
-        min_idle_seconds: int,
-    ) -> list[Device]:
-        """
-        选择需要关闭的空闲设备
-
-        仅返回空闲时间大于等于阈值的设备，按空闲时间从久到新排序。
-        """
-        if count <= 0:
-            return []
-        now = datetime.now()
-        with self._lock:
-            candidates = [
-                d
-                for d in self._devices.values()
-                if d.is_available and d.became_idle_at is not None
-            ]
-        filtered: list[Device] = []
-        for device in candidates:
-            idle_at = device.became_idle_at
-            if not idle_at:
-                continue
-            if (now - idle_at).total_seconds() >= min_idle_seconds:
-                filtered.append(device)
-        candidates = filtered
-        candidates.sort(
-            key=lambda d: d.became_idle_at or datetime.min,
-        )
-        return candidates[:count]
 
     def add_device(self, address: str) -> bool:
         """

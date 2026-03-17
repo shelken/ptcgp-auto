@@ -7,6 +7,7 @@
 """
 
 from typing import List
+
 from ptcgp_auto_v2.db.repositories import CardRepository
 
 
@@ -23,16 +24,3 @@ def get_boosters(set_code: str) -> List[str]:
     """
     repo = CardRepository()
     return repo.get_pack_names_by_set(set_code)
-
-
-def get_booster_count(set_code: str) -> int:
-    """
-    获取指定 set_code 的子包数量
-
-    Args:
-        set_code: 系列代码，如 A1, B1
-
-    Returns:
-        子包数量
-    """
-    return len(get_boosters(set_code))

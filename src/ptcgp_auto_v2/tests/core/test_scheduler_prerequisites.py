@@ -108,8 +108,6 @@ class TestSchedulerPrerequisites(unittest.TestCase):
         repo = FakeTaskRepo(prereq)
         self.scheduler._task_instance_repo = repo
 
-        self.scheduler._insert_prerequisite_task(original, "fetch_account_info")
-
         self.assertEqual(TaskStatus.BLOCKED.value, original.status)
         self.assertTrue(original.saved)
         self.assertEqual(TaskStatus.PENDING.value, prereq.status)

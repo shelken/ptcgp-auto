@@ -139,21 +139,6 @@ def _classify_row(row: list[dict], rows_context: list[list[dict]]) -> dict | Non
     )
 
 
-def build_row_slot_signature(row: list[dict]) -> tuple[str, ...]:
-    classified = _classify_row(row, [row])
-    if classified is None:
-        return ()
-    return tuple(
-        f"{classified['layout']}:{slot}:{key}"
-        for slot, key in zip(classified["slots"], classified["keys"], strict=True)
-    )
-
-
-def is_complete_row(row: list[dict]) -> bool:
-    classified = _classify_row(row, [row])
-    return bool(classified and classified["complete"])
-
-
 def _same_row(
     existing_row: list[dict], incoming_row: list[dict], rows_context: list[list[dict]]
 ) -> bool:
@@ -167,10 +152,6 @@ def _same_row(
     return bool(overlap) and all(
         existing_slots[slot] == incoming_slots[slot] for slot in overlap
     )
-
-
-def is_same_row(existing_row: list[dict], incoming_row: list[dict]) -> bool:
-    return _same_row(existing_row, incoming_row, [existing_row, incoming_row])
 
 
 def _merge_row(
@@ -260,10 +241,6 @@ def merge_or_append_rows(
             }
         )
     return stats
-
-
-def has_incomplete_rows(rows: list[list[dict]]) -> bool:
-    return any(len(build_row_signature(row)) < 2 for row in rows)
 
 
 def get_missing_slots(row: list[dict], rows_context: list[list[dict]]) -> list[str]:

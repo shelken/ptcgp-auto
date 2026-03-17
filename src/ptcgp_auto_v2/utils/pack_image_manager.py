@@ -39,9 +39,6 @@ PACK_IMAGE_DOWNLOAD_TIMEOUT = 15
 # 匹配缩放比例: 0.81, 置信度: 0.9057
 PACK_CROP_RATIO = (0.18, 0.23, 0.82, 0.44)
 
-# 目标宽度（与旧手动模板一致 513px）
-TARGET_WIDTH = 513
-
 # 标准卡包图片尺寸（用于计算比例）
 # 来源: GitHub 上的标准卡包图片尺寸为 160x256
 STANDARD_PACK_WIDTH = 160
@@ -254,21 +251,6 @@ class PackImageManager:
             return cropped.convert("RGB")
 
         return cropped
-
-    def _resize_image(self, img: Image.Image) -> Image.Image:
-        """
-        缩放图片到目标宽度
-
-        Args:
-            img: 原始图片
-
-        Returns:
-            缩放后的图片
-        """
-        ratio = TARGET_WIDTH / img.width
-        new_height = int(img.height * ratio)
-
-        return img.resize((TARGET_WIDTH, new_height), Image.Resampling.LANCZOS)
 
     def get_pack_path(self, booster_name: str) -> Path:
         """

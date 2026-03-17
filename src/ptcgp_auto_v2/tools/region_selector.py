@@ -5,11 +5,12 @@
 """
 
 import json
+from pathlib import Path
+from typing import Optional, Tuple
+
 import cv2
 import numpy as np
 from PIL import Image
-from pathlib import Path
-from typing import Optional, Tuple
 
 # 模板保存目录
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "templates"
@@ -37,11 +38,6 @@ def _save_cached_roi(roi: Tuple[int, int, int, int]):
             json.dump({"roi": list(roi)}, f)
     except Exception:
         pass
-
-
-def get_cached_roi() -> Optional[Tuple[int, int, int, int]]:
-    """获取缓存的 ROI（供外部使用）"""
-    return _load_cached_roi()
 
 
 def select_region(
@@ -73,7 +69,9 @@ def select_region(
 
     # 选择区域
     try:
-        roi = cv2.selectROI(window_name, display_image, fromCenter=False, showCrosshair=True)
+        roi = cv2.selectROI(
+            window_name, display_image, fromCenter=False, showCrosshair=True
+        )
     except Exception as e:
         print(f"选择区域时出错: {e}")
         cv2.destroyAllWindows()
@@ -94,7 +92,7 @@ def select_region(
     w = int(w / scale)
     h = int(h / scale)
 
-    print(f"选中区域: ({x}, {y}) - ({x+w}, {y+h})  尺寸: {w}x{h}")
+    print(f"选中区域: ({x}, {y}) - ({x + w}, {y + h})  尺寸: {w}x{h}")
 
     # 保存到缓存
     _save_cached_roi((x, y, w, h))
@@ -140,26 +138,7 @@ def select_and_save_template(
     cropped.save(template_path)
 
     print(f"模板已保存: {template_path}")
-    print(f"区域坐标: ({x}, {y}) - ({x+w}, {y+h})")
+    print(f"区域坐标: ({x}, {y}) - ({x + w}, {y + h})")
     print(f"尺寸: {w}x{h}")
 
     return template_path
-
-
-def select_region_from_device(adb_controller, template_name: str = None) -> Optional[Path]:
-    """
-    从设备截图并打开区域选择器
-
-    Args:
-        adb_controller: ADB 控制器实例
-        template_name: 模板名称（不含扩展名）
-
-    Returns:
-        保存的模板路径
-    """
-    screenshot = adb_controller.screenshot()
-    if not screenshot:
-        print("截图失败")
-        return None
-
-    return select_and_save_template(screenshot, template_name)

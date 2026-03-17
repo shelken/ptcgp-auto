@@ -5,12 +5,12 @@
 供 send_card_daily 和 exchange_cards 共用。
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.tasks.utils.constants import (
-    BASE_FRIEND_SCROLL_DISTANCE_Y,
     BASE_FRIEND_ROW_THRESHOLD_Y,
+    BASE_FRIEND_SCROLL_DISTANCE_Y,
 )
 from ptcgp_auto_v2.utils.gesture import scroll_points, swipe
 
@@ -53,52 +53,6 @@ def build_detect_signature(detected) -> str:
     if not items:
         return "__EMPTY__"
     return "|".join(sorted(items))
-
-
-def find_send_button_for_target(
-    ocr_results: list[dict],
-    target_nickname: str,
-    send_text_patterns: list[str],
-) -> Optional[tuple[int, int, int, int]]:
-    """按目标昵称匹配对应分送/交换按钮。"""
-    target_text = _normalize_nickname_for_match(target_nickname)
-    nickname_boxes: list[tuple[int, int, int, int]] = []
-    for item in ocr_results:
-        text = _normalize_nickname_for_match(str(item.get("text", "")))
-        if text != target_text:
-            continue
-        box = item.get("box")
-        if box and len(box) == 4:
-            nickname_boxes.append(tuple(box))
-
-    if not nickname_boxes:
-        return None
-
-    send_patterns = {_normalize_text(t) for t in send_text_patterns}
-    send_boxes: list[tuple[int, int, int, int]] = []
-    for item in ocr_results:
-        text = _normalize_text(str(item.get("text", "")))
-        if text not in send_patterns:
-            continue
-        box = item.get("box")
-        if box and len(box) == 4:
-            send_boxes.append(tuple(box))
-
-    best: Optional[tuple[int, int, int, int]] = None
-    best_distance: Optional[int] = None
-    for nickname_box in nickname_boxes:
-        nickname_cy = (nickname_box[1] + nickname_box[3]) // 2
-        nickname_cx = (nickname_box[0] + nickname_box[2]) // 2
-        for send_box in send_boxes:
-            send_cy = (send_box[1] + send_box[3]) // 2
-            send_cx = (send_box[0] + send_box[2]) // 2
-            if send_cx <= nickname_cx:
-                continue
-            distance = abs(send_cy - nickname_cy)
-            if best_distance is None or distance < best_distance:
-                best_distance = distance
-                best = send_box
-    return best
 
 
 def find_target_search_plus_box(
@@ -164,39 +118,6 @@ def find_send_box_near_anchor(
         return None
     candidates.sort(key=lambda item: item[0])
     return candidates[0][1]
-
-
-def is_target_row_unavailable(
-    ocr_results: list[dict],
-    target_nickname: str,
-    unavailable_patterns: list[str],
-    row_threshold_y: int,
-) -> bool:
-    """判断目标昵称所在行是否包含不可送标记。"""
-    target_text = _normalize_nickname_for_match(target_nickname)
-    nickname_boxes = []
-    for item in ocr_results:
-        text = _normalize_nickname_for_match(str(item.get("text", "")))
-        if text == target_text and item.get("box"):
-            nickname_boxes.append(item["box"])
-
-    if not nickname_boxes:
-        return False
-
-    pattern_set = {_normalize_text(t) for t in unavailable_patterns}
-    for nickname_box in nickname_boxes:
-        nickname_cy = (nickname_box[1] + nickname_box[3]) // 2
-        for item in ocr_results:
-            box = item.get("box")
-            if not box:
-                continue
-            text = _normalize_text(str(item.get("text", "")))
-            if text not in pattern_set:
-                continue
-            text_cy = (box[1] + box[3]) // 2
-            if abs(text_cy - nickname_cy) <= row_threshold_y:
-                return True
-    return False
 
 
 def scroll_friend_list(

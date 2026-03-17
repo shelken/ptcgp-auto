@@ -50,7 +50,6 @@ class FilterPanelState:
 
     cleared: bool = False
     scrolled: bool = False
-    rarity_selected: bool = False
     ok_scrolled: bool = False
 
 
@@ -245,43 +244,3 @@ def handle_filter_panel(
         action_cache=action_cache if action_cache is not None else {},
     )
     return handler.handle(page_info, rarity_codes)
-
-
-def select_rarity_in_filter_panel(
-    adb,
-    page_detector,
-    icon_detector,
-    rarity_code: str,
-    wait: float = 0.4,
-) -> Optional[ActionResult]:
-    """
-    匹配单个目标稀有度并点击（简化接口，保持向后兼容）。
-
-    注意：此方法仅执行点击，不包含清除/滑动等前置操作。
-    推荐使用 handle_filter_panel 进行完整筛选流程。
-    """
-    screenshot, _ = page_detector.get_last_page_context()
-    if screenshot is None:
-        screenshot, _ = page_detector.capture()
-        if screenshot is None:
-            return None
-
-    hits = icon_detector.detect_icons(
-        screenshot=screenshot,
-        template_paths=RARITY_ICON_TEMPLATES,
-        roi=None,
-        threshold=RARITY_GROUP_DEFAULTS["threshold"],
-        nms_iou=RARITY_GROUP_DEFAULTS["nms_iou"],
-        screen_width=adb.screen_width,
-    )
-    groups = icon_detector.group_hits(
-        hits,
-        row_tol=adb.scaled_y(RARITY_GROUP_DEFAULTS["row_tol_px"]),
-        gap=adb.scaled_x(RARITY_GROUP_DEFAULTS["gap_px"]),
-        min_count=RARITY_GROUP_DEFAULTS["min_count"],
-    )
-
-    group = find_group_by_rarity(rarity_code, groups, RARITY_CODE_REVERSE)
-    if group is None:
-        return None
-    return tap(adb, int(group.center[0]), int(group.center[1]), wait=wait)
