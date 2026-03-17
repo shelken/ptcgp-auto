@@ -5,6 +5,7 @@
 ### 运行
 
 - 从现在开始，修复bug时不要写任何测试，直接修改代码。
+- 不允许使用`py_compile`来检查语法
 - 如果在工作目录出错后，使用direnv exec运行（目录无法执行时先`direnv allow`）,任何python命令，使用uv跑
 - 如果没有数据测试，尝试`cp -r ~/Code/MyRepo/ptcgp-auto/data ./`, 没有启动web时启动`./scripts/web_dev.sh`，然后使用`devtools`自己测试web变更。
 
