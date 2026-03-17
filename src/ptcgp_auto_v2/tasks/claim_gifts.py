@@ -140,7 +140,7 @@ class ClaimGiftsTask(PackOpeningTaskBase):
     def handle_unknown_page(self, page_info) -> ActionResult:
         """未知页面兜底：点击屏幕上方，触发页面继续流转。"""
         logger.debug("未知页面，点击屏幕上方兜底")
-        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10), times=3)
+        return quick_tap(self.adb, self.adb.center_x(), self.adb.scaled_y(10))
 
     def on_complete(self, result: TaskResult):
         """任务完成后的处理"""
