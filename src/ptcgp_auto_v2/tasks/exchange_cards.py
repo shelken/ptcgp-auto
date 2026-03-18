@@ -306,7 +306,8 @@ class ExchangeCardsTask(StatefulTask):
                 account_card = account_card_repo.get(
                     self.account.id, request.target_card_id
                 )
-            if account_card is None or account_card.count < 1:
+                account_card_count = int(account_card.count) if account_card else 0
+            if account_card_count < 1:
                 return self._fail("目标卡牌库存不足", preserve_last_completed_at=True)
 
         with session_scope() as session:
@@ -340,8 +341,11 @@ class ExchangeCardsTask(StatefulTask):
                 friendship = friendship_repo.get_friendship(
                     self.account.id, request.to_friend_id
                 )
-            if friendship and friendship.friend_nickname:
-                nickname = friendship.friend_nickname
+                friendship_nickname = (
+                    friendship.friend_nickname if friendship else None
+                )
+            if friendship_nickname:
+                nickname = friendship_nickname
                 logger.info(
                     "从好友关系读取昵称: %s -> %s", request.to_friend_id, nickname
                 )
