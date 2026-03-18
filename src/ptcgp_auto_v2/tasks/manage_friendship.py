@@ -184,7 +184,8 @@ class ManageFriendshipTask(StatefulTask):
             reason = f"好友请求超时未处理（{expire_minutes}分钟）"
             with session_scope() as session:
                 repo = FriendRequestRepository(session)
-                repo.update_status(req.id, "failed", failed_reason=reason)
+                if not repo.update_status(req.id, "failed", failed_reason=reason):
+                    raise RuntimeError(f"好友请求过期更新失败: request_id={req.id}")
 
             req.status = "failed"
             req.failed_reason = reason
@@ -316,12 +317,13 @@ class ManageFriendshipTask(StatefulTask):
         self, req: FriendRequestSnapshot, status: str, failed_reason: Optional[str] = None
     ):
         """持久化请求状态。"""
+        with session_scope() as session:
+            repo = FriendRequestRepository(session)
+            if not repo.update_status(req.id, status, failed_reason=failed_reason):
+                raise RuntimeError(f"好友请求状态更新失败: request_id={req.id}")
         req.status = status
         req.failed_reason = failed_reason
         req.updated_at = datetime.now()
-        with session_scope() as session:
-            repo = FriendRequestRepository(session)
-            repo.update_status(req.id, status, failed_reason=failed_reason)
 
     def _close_modal(self, wait: float = 0.8) -> ActionResult:
         """点击关闭按钮。"""
@@ -383,11 +385,12 @@ class ManageFriendshipTask(StatefulTask):
         if req.to_nickname == nickname:
             return
 
-        req.to_nickname = nickname
-        req.updated_at = datetime.now()
         with session_scope() as session:
             repo = FriendRequestRepository(session)
-            repo.update_nickname(req.id, nickname)
+            if not repo.update_nickname(req.id, nickname):
+                raise RuntimeError(f"好友请求昵称更新失败: request_id={req.id}")
+        req.to_nickname = nickname
+        req.updated_at = datetime.now()
 
         if target_friend_id and self.account.id is not None:
             with session_scope() as session:
