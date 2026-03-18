@@ -9,28 +9,25 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from sqlmodel import Session, select
+from sqlmodel import select
 
 from ptcgp_auto_v2.config.notification import (
     NOTIFICATION_SCENE_OPTIONS,
     build_default_scene_config,
 )
-from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import NotificationConfig
+from .base import BaseRepository
 
 
-class NotificationConfigRepository:
+class NotificationConfigRepository(BaseRepository):
     """通知配置数据访问层"""
 
     SCENES = list(NOTIFICATION_SCENE_OPTIONS)
 
     def get_by_scene(self, scene: str) -> Optional[NotificationConfig]:
         """根据场景获取配置"""
-        with Session(get_engine()) as session:
-            statement = select(NotificationConfig).where(
-                NotificationConfig.scene == scene
-            )
-            return session.exec(statement).first()
+        statement = select(NotificationConfig).where(NotificationConfig.scene == scene)
+        return self.session.exec(statement).first()
 
     def get_or_create(self, scene: str) -> NotificationConfig:
         """获取或创建配置"""
@@ -45,17 +42,14 @@ class NotificationConfigRepository:
             enabled_webhook=default_config.get("enabled_webhook", False),
             extra_config=json.dumps(default_config.get("extra_config", {})),
         )
-        with Session(get_engine()) as session:
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-            return config
+        self.session.add(config)
+        self._finish_write(config)
+        return config
 
     def get_all(self) -> list[NotificationConfig]:
         """获取所有配置"""
-        with Session(get_engine()) as session:
-            statement = select(NotificationConfig)
-            return list(session.exec(statement).all())
+        statement = select(NotificationConfig)
+        return list(self.session.exec(statement).all())
 
     def ensure_all_scenes(self) -> None:
         """确保所有场景都有配置"""
@@ -70,24 +64,22 @@ class NotificationConfigRepository:
         extra_config: Optional[Dict[str, Any]] = None,
     ) -> Optional[NotificationConfig]:
         """更新配置"""
-        with Session(get_engine()) as session:
-            config = session.exec(
-                select(NotificationConfig).where(NotificationConfig.scene == scene)
-            ).first()
-            if not config:
-                return None
+        config = self.session.exec(
+            select(NotificationConfig).where(NotificationConfig.scene == scene)
+        ).first()
+        if not config:
+            return None
 
-            if enabled is not None:
-                config.enabled = enabled
-            if enabled_webhook is not None:
-                config.enabled_webhook = enabled_webhook
-            if extra_config is not None:
-                config.extra_config = json.dumps(extra_config)
-            config.updated_at = datetime.now()
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-            return config
+        if enabled is not None:
+            config.enabled = enabled
+        if enabled_webhook is not None:
+            config.enabled_webhook = enabled_webhook
+        if extra_config is not None:
+            config.extra_config = json.dumps(extra_config)
+        config.updated_at = datetime.now()
+        self.session.add(config)
+        self._finish_write(config)
+        return config
 
     def get_extra_config(self, scene: str) -> Dict[str, Any]:
         """获取场景的扩展配置"""

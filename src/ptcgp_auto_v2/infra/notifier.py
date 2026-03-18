@@ -30,6 +30,7 @@ from ptcgp_auto_v2.config.settings import (
     build_wecom_webhook_url_from_key,
     load_dotenv,
 )
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import (
     NotificationConfigRepository,
     NotificationRepository,
@@ -54,8 +55,6 @@ class Notifier:
 
     def __init__(self, webhook_url: Optional[str] = None):
         self.webhook_url = self._resolve_webhook_url(webhook_url)
-        self._config_repo = NotificationConfigRepository()
-        self._notification_repo = NotificationRepository()
 
     def _resolve_webhook_url(self, explicit_url: Optional[str] = None) -> Optional[str]:
         """解析企业微信 Webhook URL（优先级：显式参数 > 环境变量 > .env > 默认空）。"""
@@ -93,22 +92,27 @@ class Notifier:
         Returns:
             是否成功发送站内通知
         """
-        config = self._config_repo.get_or_create(scene)
-        if not config.enabled:
-            logger.debug(f"通知场景 {scene} 未启用，跳过")
-            return False
+        enabled_webhook = False
+        with session_scope() as session:
+            config_repo = NotificationConfigRepository(session)
+            notification_repo = NotificationRepository(session)
+            config = config_repo.get_or_create(scene)
+            if not config.enabled:
+                logger.debug(f"通知场景 {scene} 未启用，跳过")
+                return False
+            enabled_webhook = bool(config.enabled and config.enabled_webhook)
 
-        self._notification_repo.create(
-            scene=scene,
-            title=title,
-            content=content,
-            account_id=account_id,
-            card_id=card_id,
-            task_instance_id=task_instance_id,
-        )
+            notification_repo.create(
+                scene=scene,
+                title=title,
+                content=content,
+                account_id=account_id,
+                card_id=card_id,
+                task_instance_id=task_instance_id,
+            )
         logger.info(f"站内通知已创建: [{scene}] {title}")
 
-        if config.enabled_webhook and self.webhook_url:
+        if enabled_webhook and self.webhook_url:
             self._send_webhook(title, content)
 
         return True
@@ -127,10 +131,12 @@ class Notifier:
 
     def _load_scene_extra_config(self, scene: str) -> tuple[bool, dict]:
         """加载场景配置，返回 (是否启用, 扩展配置)。"""
-        config = self._config_repo.get_or_create(scene)
-        if not config.enabled:
-            return False, {}
-        return True, self._config_repo.get_extra_config(scene)
+        with session_scope() as session:
+            config_repo = NotificationConfigRepository(session)
+            config = config_repo.get_or_create(scene)
+            if not config.enabled:
+                return False, {}
+            return True, config_repo.get_extra_config(scene)
 
     @staticmethod
     def _build_rare_card_content(
@@ -158,48 +164,6 @@ class Notifier:
             content += f"\n\n![{card_name}]({image_url})"
         return content
 
-    @staticmethod
-    def _resolve_card_display_name(card: "Card") -> str:
-        """解析卡牌显示名（与 Web 同一映射逻辑）。"""
-        fallback_name = str(getattr(card, "name", ""))
-        web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
-        return resolve_localized_text(
-            raw_data=getattr(card, "data", None),
-            web_lang=web_lang,
-            fallback=fallback_name,
-            localized_field="localized_name",
-        )
-
-    @staticmethod
-    def _resolve_pack_display_name(pack: Optional["Pack"]) -> str:
-        """解析子包显示名（由调用方传入 pack，不在此查库）。"""
-        if pack is None:
-            return ""
-        fallback_name = str(getattr(pack, "name", ""))
-        web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
-        return resolve_localized_text(
-            raw_data=getattr(pack, "label_data", None),
-            web_lang=web_lang,
-            fallback=fallback_name,
-        )
-
-    @staticmethod
-    def _build_task_status_content(
-        account_name: str,
-        task_type: str,
-        status_text: str,
-        message: str,
-        time_text: str,
-    ) -> str:
-        """构建任务状态通知正文。"""
-        return (
-            f"账号: {account_name}\n"
-            f"任务: {task_type}\n"
-            f"状态: {status_text}\n"
-            f"原因: {message}\n"
-            f"时间: {time_text}"
-        )
-
     def notify_rare_card(
         self,
         account: "Account",
@@ -221,31 +185,80 @@ class Notifier:
         Returns:
             是否发送通知
         """
+        account_name = self._resolve_account_name(account)
+        pack_name = ""
+        if pack is not None:
+            web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
+            pack_name = resolve_localized_text(
+                raw_data=getattr(pack, "label_data", None),
+                web_lang=web_lang,
+                fallback=str(getattr(pack, "name", "")),
+            )
+        card_id = getattr(card, "id", None)
+        card_number = getattr(card, "number", None)
+        if card_id is None or card_number is None:
+            return False
+        return self.notify_rare_card_data(
+            account_id=getattr(account, "id", None),
+            account_name=account_name,
+            card_id=int(card_id),
+            card_name=str(getattr(card, "name", "")),
+            card_data=getattr(card, "data", None),
+            set_code=str(getattr(card, "set_code", "") or ""),
+            card_number=int(card_number),
+            rarity=rarity,
+            pack_name=pack_name,
+            image_url=image_url,
+            message=message,
+        )
+
+    def notify_rare_card_data(
+        self,
+        *,
+        account_id: int | None,
+        account_name: str,
+        card_id: int,
+        card_name: str,
+        card_data: str | None,
+        set_code: str,
+        card_number: int,
+        rarity: str,
+        pack_name: str = "",
+        image_url: Optional[str] = None,
+        message: Optional[str] = None,
+    ) -> bool:
+        """使用纯数据发送稀有卡通知。"""
         enabled, extra_config = self._load_scene_extra_config(SCENE_RARE_CARD)
         if not enabled:
             return False
         notify_by_rarity = extra_config.get("notify_by_rarity", [])
         notify_card_ids = extra_config.get("notify_card_ids", [])
 
-        card_id = card.id
         # 内联 _is_rare_card_notifiable 判断
         if not (card_id in notify_card_ids or rarity in notify_by_rarity):
-            logger.debug(f"卡牌 {card.name} ({rarity}) 不符合通知条件")
+            logger.debug(f"卡牌 {card_name} ({rarity}) 不符合通知条件")
             return False
 
-        account_name = self._resolve_account_name(account)
         web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
         rarity_display = get_rarity_display(rarity, web_lang)
-        card_display_name = self._resolve_card_display_name(card)
-        pack_display_name = self._resolve_pack_display_name(pack)
-        set_code = str(getattr(card, "set_code", "") or "")
+        card_display_name = resolve_localized_text(
+            raw_data=card_data,
+            web_lang=web_lang,
+            fallback=card_name,
+            localized_field="localized_name",
+        )
 
         title = "稀有卡牌通知"
-        resolved_image_url = self._resolve_card_image_url(card, image_url)
+        resolved_image_url = image_url or build_card_cdn_image_url(
+            set_code=set_code,
+            card_number=card_number,
+            lang=web_lang,
+            ext="png",
+        )
         content = self._build_rare_card_content(
             account_name=account_name,
             set_code=set_code,
-            pack_name=pack_display_name,
+            pack_name=pack_name,
             card_name=card_display_name,
             rarity_display=rarity_display,
             event_message=message or "开出稀有卡牌",
@@ -256,28 +269,10 @@ class Notifier:
             scene=SCENE_RARE_CARD,
             title=title,
             content=content,
-            account_id=account.id,
-            card_id=card.id,
+            account_id=account_id,
+            card_id=card_id,
             image_url=resolved_image_url,
         )
-
-    @staticmethod
-    def _resolve_card_image_url(
-        card: "Card", image_url: Optional[str]
-    ) -> Optional[str]:
-        """解析卡牌图片 URL：优先绝对 URL，否则按 set_code/number 生成。"""
-        if image_url and image_url.startswith(("http://", "https://")):
-            return image_url
-        set_code = getattr(card, "set_code", None)
-        card_number = getattr(card, "number", None)
-        if set_code and card_number is not None:
-            return build_card_cdn_image_url(
-                set_code=set_code,
-                card_number=card_number,
-                lang=TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN"),
-                ext="png",
-            )
-        return None
 
     def notify_task_status(
         self,
@@ -321,12 +316,12 @@ class Notifier:
         now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 内联 _format_now
 
         title = "任务状态通知"
-        content = self._build_task_status_content(
-            account_name=account_name,
-            task_type=task_type,
-            status_text=status_text,
-            message=message,
-            time_text=now_text,
+        content = (
+            f"账号: {account_name}\n"
+            f"任务: {task_type}\n"
+            f"状态: {status_text}\n"
+            f"原因: {message}\n"
+            f"时间: {now_text}"
         )
 
         return self.notify(

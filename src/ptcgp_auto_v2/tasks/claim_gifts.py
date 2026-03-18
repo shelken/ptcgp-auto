@@ -125,7 +125,6 @@ class ClaimGiftsTask(PackOpeningTaskBase):
         """任务开始前的初始化"""
         logger.info("礼物盒领取任务开始")
 
-        self._init_repositories()
         self.state.reset()
         self.state_set("claim_attempt_count", 0)
         self._packs_opened_count = 0

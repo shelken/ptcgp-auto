@@ -9,6 +9,7 @@ import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import ceil
@@ -17,8 +18,9 @@ from typing import TYPE_CHECKING, Any, Optional
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.executor import (
+    AccountExecutor,
     ExecutorConfig,
-    run_account_executor,
+    TaskInstanceSnapshot,
 )
 from ptcgp_auto_v2.core.task_base import ResetType, TaskRegistry
 from ptcgp_auto_v2.core.task_schedule import (
@@ -26,6 +28,9 @@ from ptcgp_auto_v2.core.task_schedule import (
     should_reset_task,
 )
 from ptcgp_auto_v2.core.task_status import TaskStatus
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+from ptcgp_auto_v2.infra.account_syncer import AccountSnapshot
 from ptcgp_auto_v2.utils.bluestacks_manager import (
     extract_port_from_address,
     list_manageable_instances,
@@ -99,14 +104,6 @@ class Scheduler:
         self._lock = threading.Lock()
         self._active_account_ids: set[int] = set()  # 进程内活跃账号防重
 
-        from ptcgp_auto_v2.db.repositories import (
-            AccountRepository,
-            TaskInstanceRepository,
-        )
-
-        self._task_instance_repo = TaskInstanceRepository()
-        self._account_repo = AccountRepository()
-
     @property
     def settings(self):
         """全局配置"""
@@ -116,6 +113,12 @@ class Scheduler:
     def is_running(self) -> bool:
         """调度器是否正在运行"""
         return self._running
+
+    @contextmanager
+    def _repository_scope(self):
+        """为一次高层调度动作提供统一的 Repository 工厂。"""
+        with session_scope() as session:
+            yield RepositoryFactory(session)
 
     def _should_generate_tasks(self) -> bool:
         """检查是否应该生成任务"""
@@ -139,12 +142,13 @@ class Scheduler:
 
         self._last_stale_check = datetime.now()
         active_account_ids = self._snapshot_active_account_ids()
-        reset_count = self._task_instance_repo.reset_stale_tasks(
-            stale_timeout_seconds=int(self.config.stale_task_timeout),
-            skipped_timeout_seconds=int(self.config.skipped_reset_timeout),
-            exclude_account_ids=active_account_ids,
-            force_all=False,
-        )
+        with self._repository_scope() as repos:
+            reset_count = repos.task_instances().reset_stale_tasks(
+                stale_timeout_seconds=int(self.config.stale_task_timeout),
+                skipped_timeout_seconds=int(self.config.skipped_reset_timeout),
+                exclude_account_ids=active_account_ids,
+                force_all=False,
+            )
         if reset_count > 0:
             logger.info(f"已重置 {reset_count} 个超时/异常状态的任务为待执行")
 
@@ -197,9 +201,10 @@ class Scheduler:
 
     def _count_pending_tasks(self) -> int:
         """统计 pending 任务数量"""
-        pending_count = self._task_instance_repo.count_by_status(
-            TaskStatus.PENDING.value
-        )
+        with self._repository_scope() as repos:
+            pending_count = repos.task_instances().count_by_status(
+                TaskStatus.PENDING.value
+            )
         logger.info("当前 pending 任务数量: %s", pending_count)
         return pending_count
 
@@ -355,18 +360,21 @@ class Scheduler:
         self._last_task_generation = datetime.now()
 
         try:
-            # 获取所有有任务计划的账号（旧关联或新关联）
-            # 注意：get_accounts_with_plans 可能只查了旧关联，需要确保能查到所有
-            # 暂时遍历所有账号可能更安全，或者依赖 Repository 的优化
-            accounts = self._account_repo.get_all()
+            with self._repository_scope() as repos:
+                accounts = repos.accounts().get_all()
+                task_instance_repo = repos.task_instances()
+                for account in accounts:
+                    task_configs = self._aggregate_account_plans(account)
+                    if not task_configs:
+                        continue
 
-            for account in accounts:
-                task_configs = self._aggregate_account_plans(account)
-                if not task_configs:
-                    continue
-
-                for task_type, config in task_configs.items():
-                    self._ensure_task_instance(account, task_type, config)
+                    for task_type, config in task_configs.items():
+                        self._ensure_task_instance(
+                            account,
+                            task_type,
+                            config,
+                            task_instance_repo,
+                        )
 
         except RuntimeError as e:
             logger.exception(f"生成任务失败: {e}")
@@ -432,6 +440,7 @@ class Scheduler:
         account: "Account",
         task_type: str,
         config: dict[str, Any] | None = None,
+        task_instance_repo=None,
     ) -> None:
         """
         确保账号的任务实例存在且状态正确
@@ -454,7 +463,10 @@ class Scheduler:
         reset_type = get_effective_reset_type(task_class, config)
 
         # 查找或创建任务实例
-        instance = self._task_instance_repo.get_or_create(
+        if task_instance_repo is None:
+            raise RuntimeError("task_instance_repo 未提供")
+
+        instance = task_instance_repo.get_or_create(
             account_id=account.id,
             task_type=task_type,
             reset_type=reset_type.value,
@@ -465,12 +477,17 @@ class Scheduler:
             logger.info(
                 f"重置任务: {task_type} (账号: {account.nickname}, 规则: {reset_type.value})"
             )
+            if instance.id is None:
+                raise RuntimeError("任务实例 ID 为空，无法重置")
             instance.status = TaskStatus.PENDING.value
             instance.next_run_at = None
-            # 如果 reset_type 变了，更新数据库
-            if instance.reset_type != reset_type.value:
-                instance.reset_type = reset_type.value
-            instance.save()
+            instance.reset_type = reset_type.value
+            task_instance_repo.update_runtime_state(
+                instance.id,
+                status=TaskStatus.PENDING.value,
+                next_run_at=None,
+                reset_type=reset_type.value,
+            )
 
     def _should_reset_task(
         self,
@@ -495,7 +512,7 @@ class Scheduler:
 
     def _get_next_account_batch(
         self,
-    ) -> Optional[tuple["Account", list["TaskInstance"]]]:
+    ) -> Optional[tuple[AccountSnapshot, list[TaskInstanceSnapshot]]]:
         """
         获取下一个有待执行任务的账号及其所有待执行任务
 
@@ -505,83 +522,67 @@ class Scheduler:
         Returns:
             (Account, task_instances_list) 或 None
         """
-        # 获取所有有待执行任务的账号（once 优先，其余按 next_run_at、last_completed_at 排序）
-        task_instance_repo = self._task_instance_repo
-        account_repo = self._account_repo
-        account_ids = task_instance_repo.get_accounts_with_pending_tasks()
+        with self._repository_scope() as repos:
+            task_instance_repo = repos.task_instances()
+            account_repo = repos.accounts()
+            account_ids = task_instance_repo.get_accounts_with_pending_tasks()
+            if not account_ids:
+                return None
 
-        # 分离有 init_account 任务的账号和其他账号，保持各自的排序
-        init_account_ids = []
-        other_account_ids = []
-        for account_id in account_ids:
-            pending_tasks = task_instance_repo.get_pending_by_account(account_id)
-            has_init = any(
-                task.task_type == "init_account"
-                and task.status == TaskStatus.PENDING.value
-                for task in pending_tasks
-            )
-            if has_init:
-                init_account_ids.append(account_id)
-            else:
-                other_account_ids.append(account_id)
+            pending_tasks_map = task_instance_repo.get_pending_by_account_ids(account_ids)
+            running_account_ids = task_instance_repo.get_running_account_ids(account_ids)
+            accounts_map = account_repo.get_by_ids(account_ids)
 
-        # 优先处理有 init_account 的账号（各自内部保持 last_completed_at 排序）
-        ordered_account_ids = init_account_ids + other_account_ids
+            init_account_ids: list[int] = []
+            other_account_ids: list[int] = []
+            for account_id in account_ids:
+                pending_tasks = pending_tasks_map.get(account_id, [])
+                if not pending_tasks:
+                    continue
+                has_init = any(task.task_type == "init_account" for task in pending_tasks)
+                if has_init:
+                    init_account_ids.append(account_id)
+                else:
+                    other_account_ids.append(account_id)
 
-        for account_id in ordered_account_ids:
-            if self._is_account_active(account_id):
-                continue
+            ordered_account_ids = init_account_ids + other_account_ids
 
-            # 检查该账号是否已经有正在执行的任务
-            if task_instance_repo.has_running_tasks(account_id):
-                continue
+            for account_id in ordered_account_ids:
+                if self._is_account_active(account_id):
+                    continue
+                if account_id in running_account_ids:
+                    continue
 
-            # 获取账号信息
-            account = account_repo.get_by_id(account_id)
-            if not account:
-                continue
+                account = accounts_map.get(account_id)
+                if account is None:
+                    continue
 
-            # 获取该账号的所有待执行任务
-            pending_tasks = task_instance_repo.get_pending_by_account(account_id)
-            if not pending_tasks:
-                continue
+                pending_tasks = pending_tasks_map.get(account_id, [])
+                if not pending_tasks:
+                    continue
 
-            # 检查未完成的新号初始化任务（断点恢复支持）
-            init_task = self._get_incomplete_init_task(pending_tasks)
-            if init_task:
-                # 仅执行 init_account 任务，跳过其他任务
-                pending_tasks = [init_task]
+                init_task = self._get_incomplete_init_task(pending_tasks)
+                if init_task:
+                    pending_tasks = [init_task]
 
-            # 检查是否需要前置任务（如 fetch_account_info）
-            pending_tasks = self._ensure_prerequisites_in_batch(account, pending_tasks)
-
-            # 按照任务计划顺序排列
-            ordered_tasks = self._order_tasks_by_plan(account, pending_tasks)
-
-            return (account, ordered_tasks)
+                pending_tasks = self._ensure_fetch_account_info(
+                    account,
+                    pending_tasks,
+                    task_instance_repo,
+                )
+                ordered_tasks = self._order_tasks_by_plan(account, pending_tasks)
+                account_snapshot = AccountSnapshot.from_account(account)
+                task_snapshots = [
+                    TaskInstanceSnapshot.from_instance(task)
+                    for task in ordered_tasks
+                ]
+                return (account_snapshot, task_snapshots)
 
         return None
 
-    def _ensure_prerequisites_in_batch(
-        self, account: "Account", tasks: list["TaskInstance"]
-    ) -> list["TaskInstance"]:
-        """
-        确保批量任务包含必要的前置任务
-
-        如果账号信息不完整，在任务列表开头插入 fetch_account_info 任务。
-
-        Args:
-            account: 账号
-            tasks: 待执行任务列表
-
-        Returns:
-            可能添加了前置任务的任务列表
-        """
-        return self._ensure_fetch_account_info(account, tasks)
-
     def _order_tasks_by_plan(
-        self, account: "Account", tasks: list["TaskInstance"]
-    ) -> list["TaskInstance"]:
+        self, account: "Account", tasks: list[TaskInstanceSnapshot]
+    ) -> list[TaskInstanceSnapshot]:
         """
         按照账号的主任务计划顺序排列任务
 
@@ -632,7 +633,7 @@ class Scheduler:
         )
 
     def _dispatch_account_tasks(
-        self, account: "Account", task_instances: list["TaskInstance"]
+        self, account: AccountSnapshot, task_instances: list[TaskInstanceSnapshot]
     ):
         """
         批量分配账号的所有任务到同一设备执行
@@ -642,16 +643,21 @@ class Scheduler:
             task_instances: 按顺序排列的任务列表
         """
         # 获取设备（优先获取已登录该账号的设备）
+        if account.id is None:
+            raise RuntimeError("账号快照缺少 ID，无法分配设备")
         device = self.device_pool.acquire_for_account(account.id)
         if not device:
-            logger.debug(f"账号 {account.nickname} 没有可用设备，等待...")
+            logger.debug(f"账号 {account.display_name} 没有可用设备，等待...")
             return
 
         self._submit_account_executor(device, account, task_instances)
 
     def _ensure_fetch_account_info(
-        self, account: "Account", tasks: list["TaskInstance"]
-    ) -> list["TaskInstance"]:
+        self,
+        account: "Account",
+        tasks: list[TaskInstanceSnapshot],
+        task_instance_repo,
+    ) -> list[TaskInstanceSnapshot]:
         """确保任务列表包含 fetch_account_info 前置任务"""
         from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
 
@@ -668,6 +674,7 @@ class Scheduler:
         prereq_instance = self._get_or_reset_prerequisite_instance(
             account_id=account.id,
             task_type="fetch_account_info",
+            task_instance_repo=task_instance_repo,
         )
 
         tasks.insert(0, prereq_instance)
@@ -677,25 +684,24 @@ class Scheduler:
 
         return tasks
 
-    def _get_or_reset_prerequisite_instance(self, account_id: int, task_type: str):
+    def _get_or_reset_prerequisite_instance(
+        self,
+        account_id: int,
+        task_type: str,
+        task_instance_repo,
+    ) -> TaskInstanceSnapshot:
         """获取前置任务实例并保证其为 pending 状态"""
         task_class = TaskRegistry.get(task_type)
-        prerequisite = self._task_instance_repo.get_or_create(
+        prerequisite = task_instance_repo.ensure_pending(
             account_id=account_id,
             task_type=task_type,
             reset_type=task_class.reset_type.value,
         )
-
-        if prerequisite.status != TaskStatus.PENDING.value:
-            prerequisite.status = TaskStatus.PENDING.value
-            prerequisite.next_run_at = None
-            prerequisite.save()
-
-        return prerequisite
+        return TaskInstanceSnapshot.from_instance(prerequisite)
 
     def _get_incomplete_init_task(
-        self, tasks: list["TaskInstance"]
-    ) -> "TaskInstance | None":
+        self, tasks: list[TaskInstanceSnapshot]
+    ) -> TaskInstanceSnapshot | None:
         """
         查找未完成的新号初始化任务
 
@@ -728,7 +734,8 @@ class Scheduler:
             return
 
         # 计算还可以创建多少账号
-        current_count = self._account_repo.count_all()
+        with self._repository_scope() as repos:
+            current_count = repos.accounts().count_all()
         remaining = self._settings.max_accounts - current_count
         if remaining <= 0:
             logger.debug(
@@ -778,21 +785,32 @@ class Scheduler:
     def _submit_account_executor(
         self,
         device: Device,
-        account: "Account",
-        task_instances: list["TaskInstance"],
+        account: AccountSnapshot,
+        task_instances: list[TaskInstanceSnapshot],
     ):
         """提交账号任务执行。"""
+        if account.id is None:
+            raise RuntimeError("账号快照缺少 ID，无法提交执行器")
         self._mark_account_active(account.id)
 
         # 将所有任务状态改为 running，防止被其他线程分配
-        for task_instance in task_instances:
-            task_instance.status = TaskStatus.RUNNING.value
-            task_instance.save()
+        with self._repository_scope() as repos:
+            task_instance_repo = repos.task_instances()
+            task_instance_repo.set_status_for_ids(
+                [
+                    task_instance.id
+                    for task_instance in task_instances
+                    if task_instance.id is not None
+                ],
+                TaskStatus.RUNNING.value,
+            )
+            for task_instance in task_instances:
+                task_instance.status = TaskStatus.RUNNING.value
 
         task_types = [t.task_type for t in task_instances]
         logger.debug(
             f"分配批量任务: {task_types} "
-            f"(账号: {account.nickname}, 设备: {device.address})"
+            f"(账号: {account.display_name}, 设备: {device.address})"
         )
 
         executor_config = self._build_executor_config()
@@ -800,14 +818,14 @@ class Scheduler:
         if executor_pool is None:
             raise RuntimeError("调度器线程池未初始化")
         try:
-            future = executor_pool.submit(
-                run_account_executor,
+            executor = AccountExecutor(
                 device=device,
                 account=account,
                 task_instances=task_instances,
                 device_pool=self.device_pool,
                 config=executor_config,
             )
+            future = executor_pool.submit(executor.run)
         except Exception:
             self._unmark_account_active(account.id)
             raise
@@ -831,34 +849,26 @@ class Scheduler:
                     time.sleep(self.config.poll_interval)
                     continue
 
-                # 优先执行所有待处理任务（包括 init_account）
-                # 只有在完全没有待执行任务时才创建新账号
                 batch = self._get_next_account_batch()
 
-                # init_first: 创建账号优先于非 init 任务，但不应打断 init_account 执行
-                if (
-                    self.config.init_first
-                    and self._settings.auto_create_accounts
-                    and self._account_repo.count_all() < self._settings.max_accounts
-                ):
-                    if batch:
-                        account, task_instances = batch
-                        has_init_task = any(
-                            task.task_type == "init_account" for task in task_instances
-                        )
-                        if has_init_task:
-                            self._dispatch_account_tasks(account, task_instances)
-                            continue
+                # init_first: 账号未满时持续优先创建账号；若已有 init_account 任务则先执行 init_account
+                if self.config.init_first and self._settings.auto_create_accounts:
+                    with self._repository_scope() as repos:
+                        account_count = repos.accounts().count_all()
+                    if account_count < self._settings.max_accounts:
+                        if batch:
+                            account, task_instances = batch
+                            has_init_task = any(
+                                task.task_type == "init_account"
+                                for task in task_instances
+                            )
+                            if has_init_task:
+                                self._dispatch_account_tasks(account, task_instances)
+                                continue
 
-                        # 当前无 init 任务可执行，优先触发新账号创建
                         self._trigger_multi_device_creation()
                         time.sleep(self.config.poll_interval)
                         continue
-
-                    # 无待执行任务，触发创建流程
-                    self._trigger_multi_device_creation()
-                    time.sleep(self.config.poll_interval)
-                    continue
 
                 if batch:
                     # 有待执行任务，优先执行
@@ -954,12 +964,10 @@ class Scheduler:
         """
         device_status = self.device_pool.get_status_summary()
 
-        pending_count = self._task_instance_repo.count_by_status(
-            TaskStatus.PENDING.value
-        )
-        running_count = self._task_instance_repo.count_by_status(
-            TaskStatus.RUNNING.value
-        )
+        with self._repository_scope() as repos:
+            task_instance_repo = repos.task_instances()
+            pending_count = task_instance_repo.count_by_status(TaskStatus.PENDING.value)
+            running_count = task_instance_repo.count_by_status(TaskStatus.RUNNING.value)
 
         return {
             "running": self._running,
@@ -994,28 +1002,46 @@ class Scheduler:
 
         logger.info(f"运行单个任务: {task_type} (账号 ID: {account_id})")
 
-        # 获取账号
-        account = self._account_repo.get_by_id(account_id)
-        if not account:
-            logger.error(f"账号不存在: {account_id}")
-            return False
+        with self._repository_scope() as repos:
+            account = repos.accounts().get_by_id(account_id)
+            if not account:
+                logger.error(f"账号不存在: {account_id}")
+                return False
 
-        # 获取或创建任务实例
-        task_class = TaskRegistry.get(task_type)
-        instance = self._task_instance_repo.get_or_create(
-            account_id=account_id,
-            task_type=task_type,
-            reset_type=task_class.reset_type.value,
-        )
+            task_class = TaskRegistry.get(task_type)
+            task_instance_repo = repos.task_instances()
+            instance = task_instance_repo.get_or_create(
+                account_id=account_id,
+                task_type=task_type,
+                reset_type=task_class.reset_type.value,
+            )
 
-        # 构建任务列表（自动添加前置任务）
-        tasks = self._ensure_prerequisites_in_batch(account, [instance])
+            tasks = self._ensure_fetch_account_info(
+                account,
+                [instance],
+                task_instance_repo,
+            )
+            task_ids = [
+                task.id for task in tasks if task.id is not None
+            ]
+            if len(task_ids) != len(tasks):
+                raise RuntimeError("任务实例缺少 ID，无法执行")
+            task_instance_repo.set_status_for_ids(
+                task_ids,
+                TaskStatus.RUNNING.value,
+            )
+            for task in tasks:
+                task.status = TaskStatus.RUNNING.value
+            account_snapshot = AccountSnapshot.from_account(account)
+            task_snapshots = [
+                TaskInstanceSnapshot.from_instance(task) for task in tasks
+            ]
+            instance_id = instance.id
 
-        # 调试单任务路径也需要先标记为 running，
-        # 这样执行器初始化阶段异常时才能被统一收口为 failed。
-        for task in tasks:
-            task.status = TaskStatus.RUNNING.value
-            task.save()
+        if instance_id is None:
+            raise RuntimeError(
+                f"任务实例不存在: task_type={task_type}, account_id={account_id}"
+            )
 
         # 创建临时设备池
         temp_pool = DevicePool([device_address])
@@ -1027,18 +1053,22 @@ class Scheduler:
         # 使用 AccountExecutor 执行（统一逻辑）
         executor = AccountExecutor(
             device=device,
-            account=account,
-            task_instances=tasks,
+            account=account_snapshot,
+            task_instances=task_snapshots,
             device_pool=temp_pool,
             config=self.config.executor_config,
         )
         executor.run()
 
         # 刷新任务实例状态
-        instance = self._task_instance_repo.get_by_id(instance.id)
-        if instance is None:
-            raise RuntimeError(f"任务实例不存在: task_type={task_type}, account_id={account_id}")
-        return instance.status in {
+        with self._repository_scope() as repos:
+            instance = repos.task_instances().get_by_id(instance_id)
+            final_status = instance.status if instance is not None else None
+        if final_status is None:
+            raise RuntimeError(
+                f"任务实例不存在: task_type={task_type}, account_id={account_id}"
+            )
+        return final_status in {
             TaskStatus.COMPLETED.value,
             TaskStatus.SKIPPED.value,
         }

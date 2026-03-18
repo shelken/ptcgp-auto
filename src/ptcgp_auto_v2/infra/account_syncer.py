@@ -11,13 +11,15 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from ptcgp_auto_v2.config.settings import get_settings
-from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import Account
-from ptcgp_auto_v2.db.repositories import AccountRepository
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+from ptcgp_auto_v2.infra.adb import AdbController
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,47 @@ class DeviceAccountInfo:
     country: Optional[str] = None  # 国家/地区
     session_token_iat: Optional[int] = None  # sessionToken 的 iat（签发时间戳）
     xml_content: bytes = b""  # 原始 XML 内容
+
+
+@dataclass
+class AccountSnapshot:
+    """账号运行快照（纯数据对象）。"""
+
+    id: Optional[int]
+    game_id: str
+    friend_id: Optional[str]
+    nintendo_id: Optional[str]
+    nickname: Optional[str]
+    level: Optional[int]
+    country: Optional[str]
+    xml_content: Optional[bytes]
+    session_token_iat: Optional[int]
+    remark: str
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    @property
+    def display_name(self) -> str:
+        """获取显示名称（优先昵称 > 朋友ID > 游戏ID）。"""
+        return self.nickname or self.friend_id or self.game_id or f"Account#{self.id}"
+
+    @classmethod
+    def from_account(cls, account: Account) -> "AccountSnapshot":
+        """从数据库账号对象构造运行快照。"""
+        return cls(
+            id=account.id,
+            game_id=account.game_id,
+            friend_id=account.friend_id,
+            nintendo_id=account.nintendo_id,
+            nickname=account.nickname,
+            level=account.level,
+            country=account.country,
+            xml_content=account.xml_content,
+            session_token_iat=account.session_token_iat,
+            remark=account.remark,
+            created_at=account.created_at,
+            updated_at=account.updated_at,
+        )
 
 
 class AccountSyncer:
@@ -58,9 +101,8 @@ class AccountSyncer:
             storage_dir = Path("data/accounts")
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        self.account_repo = AccountRepository()
 
-    def get_current_account(self) -> Optional[Account]:
+    def get_current_account(self) -> Optional[AccountSnapshot]:
         """
         获取设备当前登录的账号
 
@@ -71,7 +113,7 @@ class AccountSyncer:
         4. 如果不存在则创建新账号
 
         Returns:
-            Account 对象，失败返回 None
+            账号快照，失败返回 None
         """
         # 提取并解析 XML
         account_info = self._extract_account_info()
@@ -82,65 +124,70 @@ class AccountSyncer:
         device_account_id = account_info.device_account
         logger.debug(f"设备账号 ID: {device_account_id}")
 
-        # 用 device_account 作为 game_id 查找
-        account = self.account_repo.get_by_game_id(device_account_id)
-        if account:
-            if self._update_account_from_info(account, account_info):
-                self.account_repo.update(account)
-                logger.debug(f"已更新账号: {account.nickname or account.game_id}")
-            logger.info(
-                f"识别到账号: {account.nickname or account.game_id} (ID: {account.id})"
+        with session_scope() as session:
+            repos = RepositoryFactory(session)
+            account_repo = repos.accounts()
+
+            # 用 device_account 作为 game_id 查找
+            account = account_repo.get_by_game_id(device_account_id)
+            if account:
+                if self._update_account_from_info(account_repo, account, account_info):
+                    logger.debug(f"已更新账号: {account.nickname or account.game_id}")
+                logger.info(
+                    f"识别到账号: {account.nickname or account.game_id} (ID: {account.id})"
+                )
+                fresh_account = account_repo.get_by_id(account.id)
+                if fresh_account is None:
+                    raise RuntimeError(f"账号同步后无法重新读取: {account.id}")
+                return AccountSnapshot.from_account(fresh_account)
+
+            # 创建新账号
+            account = Account(
+                game_id=device_account_id,
+                nintendo_id=account_info.nintendo_id,
+                country=account_info.country,
+                xml_content=account_info.xml_content,
+                session_token_iat=account_info.session_token_iat,
             )
-            return account
+            account = account_repo.create(account, auto_assign_plan=False)
+            logger.info(
+                f"创建新账号: {device_account_id} (ID: {account.id}) [未分配计划，等待初始化]"
+            )
 
-        # 创建新账号
-        account = Account(
-            game_id=device_account_id,
-            nintendo_id=account_info.nintendo_id,
-            country=account_info.country,
-            xml_content=account_info.xml_content,
-            session_token_iat=account_info.session_token_iat,
-        )
-        account = self.account_repo.create(account, auto_assign_plan=False)
-        logger.info(
-            f"创建新账号: {device_account_id} (ID: {account.id}) [未分配计划，等待初始化]"
-        )
+            # 仅在启用自动创建账号时生成 init_account 任务
+            if self._settings.auto_create_accounts:
+                self._create_init_task(account.id, repos)
+            else:
+                logger.info("自动创建账号未启用，跳过 init_account 任务")
 
-        # 仅在启用自动创建账号时生成 init_account 任务
-        if self._settings.auto_create_accounts:
-            self._create_init_task(account)
-        else:
-            logger.info("自动创建账号未启用，跳过 init_account 任务")
+            return AccountSnapshot.from_account(account)
 
-        return account
-
-    def _create_init_task(self, account: Account):
+    def _create_init_task(self, account_id: int, repos: RepositoryFactory):
         """为新账号创建初始化任务"""
-        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
         from ptcgp_auto_v2.db.models import TaskInstance
 
         try:
-            task_repo = TaskInstanceRepository()
+            task_repo = repos.task_instances()
             # 检查是否已存在 init_account 任务
-            existing = task_repo.get_by_account_and_type(account.id, "init_account")
+            existing = task_repo.get_by_account_and_type(account_id, "init_account")
             if existing:
-                logger.debug(f"账号 {account.id} 已存在 init_account 任务")
+                logger.debug(f"账号 {account_id} 已存在 init_account 任务")
                 return
 
             # 创建 init_account 任务
             init_task = TaskInstance(
-                account_id=account.id,
+                account_id=account_id,
                 task_type="init_account",
                 status="pending",
                 reset_type="once",
             )
             task_repo.create(init_task)
-            logger.info(f"为账号 {account.id} 创建 init_account 任务")
+            logger.info(f"为账号 {account_id} 创建 init_account 任务")
         except Exception as e:
             logger.warning(f"创建 init_account 任务失败: {e}")
 
     def _update_account_from_info(
-        self, account: Account, info: DeviceAccountInfo
+        self, account_repo, account: Account, info: DeviceAccountInfo
     ) -> bool:
         """
         根据设备信息更新账号对象
@@ -153,21 +200,28 @@ class AccountSyncer:
             bool: 是否有更新
         """
         updated = False
+        update_kwargs: dict[str, object] = {}
 
         if info.nintendo_id and account.nintendo_id != info.nintendo_id:
-            account.nintendo_id = info.nintendo_id
+            update_kwargs["nintendo_id"] = info.nintendo_id
             updated = True
         if info.country and account.country != info.country:
-            account.country = info.country
+            update_kwargs["country"] = info.country
             updated = True
 
         # 比较 iat，决定是否更新 xml_content
         if self._should_update_xml(account, info):
             old_iat = account.session_token_iat
-            account.xml_content = info.xml_content
-            account.session_token_iat = info.session_token_iat
+            update_kwargs["xml_content"] = info.xml_content
+            update_kwargs["session_token_iat"] = info.session_token_iat
             updated = True
             logger.debug(f"Token 已更新: iat {old_iat} -> {info.session_token_iat}")
+
+        if update_kwargs:
+            if account.id is None:
+                raise RuntimeError("账号 ID 为空，无法更新同步数据")
+            if not account_repo.update_sync_data(account.id, **update_kwargs):
+                raise RuntimeError(f"更新账号失败: {account.id}")
 
         return updated
 
@@ -350,17 +404,3 @@ class AccountSyncer:
                 logger.debug("XML 无需更新: 账号无 iat")
 
         return should_update
-
-
-def get_current_account(adb: AdbController) -> Optional[Account]:
-    """
-    便捷函数：获取设备当前登录的账号
-
-    Args:
-        adb: ADB 控制器
-
-    Returns:
-        Account 对象或 None
-    """
-    syncer = AccountSyncer(adb)
-    return syncer.get_current_account()

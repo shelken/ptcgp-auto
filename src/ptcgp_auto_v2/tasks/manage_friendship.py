@@ -9,19 +9,22 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
-from ptcgp_auto_v2.db.repositories import (
-    AccountRepository,
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.exchange_card_request_repository import (
     ExchangeCardRequestRepository,
-    FriendRequestRepository,
-    FriendshipRepository,
 )
+from ptcgp_auto_v2.db.repositories.account_repository import AccountRepository
+from ptcgp_auto_v2.db.repositories.friend_request_repository import (
+    FriendRequestRepository,
+    FriendRequestSnapshot,
+)
+from ptcgp_auto_v2.db.repositories import FriendshipRepository
 from ptcgp_auto_v2.locales import get_text_patterns
-from ptcgp_auto_v2.services import FriendshipService
 from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
@@ -39,7 +42,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.core.hooks import Hook
-    from ptcgp_auto_v2.db.models import AccountFriendRequest
 
 
 def _build_manage_friendship_pages() -> list[dict]:
@@ -116,8 +118,8 @@ class ManageFriendshipTask(StatefulTask):
     def __init__(self, adb, recognizer, page_detector):
         """初始化任务状态。"""
         super().__init__(adb, recognizer, page_detector)
-        self.current_request: Optional["AccountFriendRequest"] = None
-        self.requests_to_process: list["AccountFriendRequest"] = []
+        self.current_request: Optional[FriendRequestSnapshot] = None
+        self.requests_to_process: list[FriendRequestSnapshot] = []
         self._active_request_id: Optional[int] = None
         self._submitted_request_id: Optional[int] = None
         self._wake_account_ids: set[int] = set()
@@ -144,29 +146,26 @@ class ManageFriendshipTask(StatefulTask):
         if self._expire_stale_add_requests():
             self.requests_to_process = self._get_pending_requests()
         self._log_pending_request_order("start")
+        sending_count = sum(
+            1
+            for item in self.requests_to_process
+            if item.request_type == "add" and item.status == "sending"
+        )
+        sended_count = sum(
+            1
+            for item in self.requests_to_process
+            if item.request_type == "add" and item.status == "sended"
+        )
+        deleting_count = sum(
+            1
+            for item in self.requests_to_process
+            if item.request_type == "delete" and item.status == "deleting"
+        )
         logger.info(
             "manage_friendship 待处理请求: sending=%s, sended=%s, deleting=%s",
-            len(
-                [
-                    item
-                    for item in self.requests_to_process
-                    if item.request_type == "add" and item.status == "sending"
-                ]
-            ),
-            len(
-                [
-                    item
-                    for item in self.requests_to_process
-                    if item.request_type == "add" and item.status == "sended"
-                ]
-            ),
-            len(
-                [
-                    item
-                    for item in self.requests_to_process
-                    if item.request_type == "delete" and item.status == "deleting"
-                ]
-            ),
+            sending_count,
+            sended_count,
+            deleting_count,
         )
         if not self.requests_to_process:
             self.mark_completed_without_timestamp("没有待处理的好友请求")
@@ -178,10 +177,39 @@ class ManageFriendshipTask(StatefulTask):
         changed = False
         now = datetime.now()
         for req in self.requests_to_process:
-            if FriendshipService.expire_add_request_if_needed(req, now=now):
-                logger.info("好友请求已过期并标记失败: id=%s", getattr(req, "id", None))
-                changed = True
+            if not self._is_add_request_expired(req, now):
+                continue
+
+            expire_minutes = self._get_add_request_expire_minutes(req.to_account_id)
+            reason = f"好友请求超时未处理（{expire_minutes}分钟）"
+            with session_scope() as session:
+                repo = FriendRequestRepository(session)
+                repo.update_status(req.id, "failed", failed_reason=reason)
+
+            req.status = "failed"
+            req.failed_reason = reason
+            req.updated_at = now
+            logger.info("好友请求已过期并标记失败: id=%s", req.id)
+            changed = True
         return changed
+
+    @staticmethod
+    def _get_add_request_expire_minutes(to_account_id: Optional[int]) -> int:
+        """按目标类型返回 add 请求过期分钟数。"""
+        if to_account_id is None:
+            return 10
+        return 30
+
+    @classmethod
+    def _is_add_request_expired(
+        cls, request: FriendRequestSnapshot, now: Optional[datetime] = None
+    ) -> bool:
+        """判断 add 请求是否已过期。"""
+        if request.request_type != "add" or request.status not in {"sending", "sended"}:
+            return False
+        current = now or datetime.now()
+        expire_minutes = cls._get_add_request_expire_minutes(request.to_account_id)
+        return request.created_at <= current - timedelta(minutes=expire_minutes)
 
     def get_post_hooks(self) -> list["Hook"]:
         """任务结束后统一唤醒被影响账号的 manage_friendship。"""
@@ -201,59 +229,31 @@ class ManageFriendshipTask(StatefulTask):
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         return ActionResult.wait(0.8)
 
-    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
-        return self._handle_home(page_info)
-
-    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
-        return self._handle_home(page_info)
-
-    def _handle_community_page(self, page_info: dict) -> ActionResult:
-        return self._handle_community(page_info)
-
-    def _handle_friend_search_modal(self, page_info: dict) -> ActionResult:
-        return self._handle_search_modal(page_info)
-
-    def _handle_friend_search_result_modal(self, page_info: dict) -> ActionResult:
-        return self._handle_search_result(page_info)
-
-    def _get_pending_requests(self) -> list["AccountFriendRequest"]:
+    def _get_pending_requests(self) -> list[FriendRequestSnapshot]:
         """读取当前账号待处理请求，并严格按创建时间升序排序。"""
         if self.account.id is None:
             return []
-        repo = FriendRequestRepository()
-        sending = repo.get_by_from_account_and_status(self.account.id, "sending")
-        sended = repo.get_add_requests_by_to_account_and_status(
-            self.account.id, "sended"
-        )
-        external_sended = repo.get_external_sended_requests(self.account.id)
-        canceling = repo.get_by_from_account_and_type(
-            self.account.id, "add", "canceling"
-        )
-        deleting = repo.get_by_from_account_and_type(
-            self.account.id, "delete", "deleting"
-        )
-        pending_requests = (
-            list(sending)
-            + list(sended)
-            + list(external_sended)
-            + list(canceling)
-            + list(deleting)
-        )
+        with session_scope() as session:
+            repo = FriendRequestRepository(session)
+            sending = repo.get_by_from_account_and_status_data(self.account.id, "sending")
+            sended = repo.get_add_requests_by_to_account_and_status_data(
+                self.account.id, "sended"
+            )
+            external_sended = repo.get_external_sended_requests_data(self.account.id)
+            canceling = repo.get_by_from_account_and_type_data(
+                self.account.id, "add", "canceling"
+            )
+            deleting = repo.get_by_from_account_and_type_data(
+                self.account.id, "delete", "deleting"
+            )
+        pending_requests = sending + sended + external_sended + canceling + deleting
         pending_requests.sort(key=self._request_order_key)
         return pending_requests
 
     @staticmethod
-    def _request_order_key(req) -> tuple[datetime, int]:
+    def _request_order_key(req: FriendRequestSnapshot) -> tuple[datetime, int]:
         """请求排序键：先按创建时间，再按ID，保证旧请求优先执行。"""
-        created_at = getattr(req, "created_at", None)
-        request_id = getattr(req, "id", None)
-
-        if not isinstance(created_at, datetime):
-            created_at = datetime.max
-        if not isinstance(request_id, int):
-            request_id = 2**31 - 1
-
-        return created_at, request_id
+        return req.created_at, req.id
 
     def _refresh_requests(self):
         """刷新请求列表。"""
@@ -265,15 +265,11 @@ class ManageFriendshipTask(StatefulTask):
         if not self.requests_to_process:
             self.complete()
 
-    def _defer_current_request(self, req, stage: str):
+    def _defer_current_request(self, req: FriendRequestSnapshot, stage: str):
         """本轮暂缓当前请求，避免同一轮重复查询同一请求。"""
-        req_id = getattr(req, "id", None)
-        if req_id is not None:
-            self.requests_to_process = [
-                item
-                for item in self.requests_to_process
-                if getattr(item, "id", None) != req_id
-            ]
+        self.requests_to_process = [
+            item for item in self.requests_to_process if item.id != req.id
+        ]
         self.current_request = None
         self._active_request_id = None
         self._submitted_request_id = None
@@ -295,13 +291,13 @@ class ManageFriendshipTask(StatefulTask):
         order_text = " | ".join(
             (
                 f"id={item.id},type={item.request_type},status={item.status},"
-                f"created_at={getattr(item, 'created_at', None)}"
+                f"created_at={item.created_at}"
             )
             for item in self.requests_to_process
         )
         logger.debug("[%s] 好友请求处理顺序(旧->新): %s", stage, order_text)
 
-    def _pick_current_request(self) -> Optional["AccountFriendRequest"]:
+    def _pick_current_request(self) -> Optional[FriendRequestSnapshot]:
         """获取当前处理请求。"""
         if self.current_request is None and self.requests_to_process:
             self.current_request = self.requests_to_process[0]
@@ -316,12 +312,16 @@ class ManageFriendshipTask(StatefulTask):
             )
         return self.current_request
 
-    def _save_request(self, req, status: str, failed_reason: Optional[str] = None):
+    def _save_request(
+        self, req: FriendRequestSnapshot, status: str, failed_reason: Optional[str] = None
+    ):
         """持久化请求状态。"""
         req.status = status
         req.failed_reason = failed_reason
         req.updated_at = datetime.now()
-        FriendRequestRepository().update(req)
+        with session_scope() as session:
+            repo = FriendRequestRepository(session)
+            repo.update_status(req.id, status, failed_reason=failed_reason)
 
     def _close_modal(self, wait: float = 0.8) -> ActionResult:
         """点击关闭按钮。"""
@@ -333,14 +333,17 @@ class ManageFriendshipTask(StatefulTask):
             wait=wait,
         )
 
-    def _resolve_request_friend_id(self, req) -> Optional[str]:
+    def _resolve_request_friend_id(self, req: FriendRequestSnapshot) -> Optional[str]:
         """解析请求目标 friend_id。"""
         if (
             req.request_type == "add"
             and req.status == "sended"
             and req.to_account_id == self.account.id
         ):
-            sender = AccountRepository().get_by_id(req.from_account_id)
+            with session_scope() as session:
+                sender = AccountRepository(session).get_friend_ref_by_id(
+                    req.from_account_id
+                )
             if sender and sender.friend_id:
                 return sender.friend_id
 
@@ -348,7 +351,10 @@ class ManageFriendshipTask(StatefulTask):
             return req.to_friend_id
 
         if req.to_account_id:
-            target = AccountRepository().get_by_id(req.to_account_id)
+            with session_scope() as session:
+                target = AccountRepository(session).get_friend_ref_by_id(
+                    req.to_account_id
+                )
             if target and target.friend_id:
                 return target.friend_id
         return None
@@ -356,7 +362,6 @@ class ManageFriendshipTask(StatefulTask):
     def _extract_nickname_from_ocr(
         self,
         ocr_results: list[dict],
-        target_friend_id: Optional[str],
     ) -> Optional[str]:
         """从搜索结果 OCR 中提取目标昵称（Lv 下方）。"""
         return extract_nickname_by_lv(
@@ -365,95 +370,67 @@ class ManageFriendshipTask(StatefulTask):
             excluded_contains=get_text_patterns("profile_exclude"),
         )
 
-    def _save_target_nickname(self, req, ocr_results: list[dict]):
+    def _save_target_nickname(
+        self, req: FriendRequestSnapshot, ocr_results: list[dict]
+    ):
         """保存好友请求与交换请求的目标昵称。"""
         if req.request_type != "add" or req.status != "sending":
             return
         target_friend_id = self._resolve_request_friend_id(req)
-        nickname = self._extract_nickname_from_ocr(ocr_results, target_friend_id)
+        nickname = self._extract_nickname_from_ocr(ocr_results)
         if not nickname:
             return
         if req.to_nickname == nickname:
             return
 
         req.to_nickname = nickname
-        FriendRequestRepository().update(req)
+        req.updated_at = datetime.now()
+        with session_scope() as session:
+            repo = FriendRequestRepository(session)
+            repo.update_nickname(req.id, nickname)
 
         if target_friend_id and self.account.id is not None:
-            ExchangeCardRequestRepository().update_active_nickname(
-                from_account_id=self.account.id,
-                to_friend_id=target_friend_id,
-                to_nickname=nickname,
-            )
-
-    def _get_search_icon_box(self) -> Optional[tuple[int, int, int, int]]:
-        """获取搜索按钮模板框。"""
-        box = self.page_detector.find_template("icon_search", threshold=0.8)
-        if box:
-            return box
-        match = self.page_detector.find_template_with_scale(
-            "icon_search", scale=1.0, threshold=0.8
-        )
-        if match:
-            return match.box
-        return None
-
-    def _get_search_input_focus_point(self) -> Optional[tuple[int, int]]:
-        """根据搜索按钮获取输入框坐标。"""
-        icon_box = self._get_search_icon_box()
-        if icon_box is None:
-            return None
-        return self.adb.center_x(), (icon_box[1] + icon_box[3]) // 2
-
-    def _find_green_yes_match(self):
-        """查找绿色勾模板。"""
-        match = self.page_detector.find_template_with_scale(
-            "icon_green_yes", scale=1.0, threshold=0.8
-        )
-        if match:
-            return match
-        return self.page_detector.find_template_with_scale(
-            "icon_green_yes", scale=0.8, threshold=0.8
-        )
-
-    def _find_green_yes_match_by_scale(self, scale: float):
-        """按指定缩放比例查找绿色勾模板。"""
-        return self.page_detector.find_template_with_scale(
-            "icon_green_yes", scale=scale, threshold=0.8
-        )
-
-    def _find_red_no_match(self):
-        """查找红色叉模板。"""
-        match = self.page_detector.find_template_with_scale(
-            "icon_red_no", scale=1.0, threshold=0.8
-        )
-        if match:
-            return match
-        return self.page_detector.find_template_with_scale(
-            "icon_red_no", scale=0.8, threshold=0.8
-        )
-
-    def _find_red_no_match_by_scale(self, scale: float):
-        """按指定缩放比例查找红色叉模板。"""
-        return self.page_detector.find_template_with_scale(
-            "icon_red_no", scale=scale, threshold=0.8
-        )
+            with session_scope() as session:
+                repo = ExchangeCardRequestRepository(session)
+                repo.update_active_nickname(
+                    from_account_id=self.account.id,
+                    to_friend_id=target_friend_id,
+                    to_nickname=nickname,
+                )
 
     def _is_pending_reply_by_icons(self) -> bool:
         """1.0 模板下同时有绿色勾和红色叉，判定为待回复状态。"""
-        green_1x = self._find_green_yes_match_by_scale(1.0)
-        red_1x = self._find_red_no_match_by_scale(1.0)
+        green_1x = self.page_detector.find_template_with_scale(
+            "icon_green_yes", scale=1.0, threshold=0.8
+        )
+        red_1x = self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=1.0, threshold=0.8
+        )
         return green_1x is not None and red_1x is not None
 
     def _is_already_friend_by_icons(self) -> bool:
         """0.8 模板下命中绿色勾，判定为已是好友状态。"""
-        green_08 = self._find_green_yes_match_by_scale(0.8)
+        green_08 = self.page_detector.find_template_with_scale(
+            "icon_green_yes", scale=0.8, threshold=0.8
+        )
         return green_08 is not None
 
     def _is_friend_confirmed_by_icons(self, request_id: Optional[int] = None) -> bool:
         """仅当存在绿色勾且不存在红叉时，判定为已确认好友。"""
-        green_match = self._find_green_yes_match()
-        red_match = self._find_red_no_match()
+        green_match = self.page_detector.find_template_with_scale(
+            "icon_green_yes", scale=1.0, threshold=0.8
+        )
+        if not green_match:
+            green_match = self.page_detector.find_template_with_scale(
+                "icon_green_yes", scale=0.8, threshold=0.8
+            )
+        red_match = self.page_detector.find_template_with_scale(
+            "icon_red_no", scale=1.0, threshold=0.8
+        )
+        if not red_match:
+            red_match = self.page_detector.find_template_with_scale(
+                "icon_red_no", scale=0.8, threshold=0.8
+            )
 
         if green_match and not red_match:
             return True
@@ -541,9 +518,15 @@ class ManageFriendshipTask(StatefulTask):
             self._accept_wait_rounds = 0
             self._delete_wait_rounds = 0
 
-        focus_point = self._get_search_input_focus_point()
-        if focus_point is None:
-            return ActionResult.wait(0.5)
+        focus_box = self.page_detector.find_template("icon_search", threshold=0.8)
+        if focus_box is None:
+            match = self.page_detector.find_template_with_scale(
+                "icon_search", scale=1.0, threshold=0.8
+            )
+            if match is None:
+                return ActionResult.wait(0.5)
+            focus_box = match.box
+        focus_point = self.adb.center_x(), (focus_box[1] + focus_box[3]) // 2
 
         if not self.is_action_done("search_cleared"):
             logger.debug("请求 %s: 强制清空输入框", request_id)
@@ -603,6 +586,20 @@ class ManageFriendshipTask(StatefulTask):
         if req.request_type == "delete" and req.status == "deleting":
             return self._handle_delete_result(req, page_info)
         return ActionResult.wait(0.6)
+
+    (
+        _handle_home_with_community_icon,
+        _handle_game_home_main,
+        _handle_community_page,
+        _handle_friend_search_modal,
+        _handle_friend_search_result_modal,
+    ) = (
+        _handle_home,
+        _handle_home,
+        _handle_community,
+        _handle_search_modal,
+        _handle_search_result,
+    )
 
     def _handle_add_sending_result(self, req, page_info: dict) -> ActionResult:
         """处理发送好友请求结果。"""
@@ -669,23 +666,28 @@ class ManageFriendshipTask(StatefulTask):
 
         # 优先补齐当前账号 -> 目标账号的关系
         if req.to_friend_id:
-            FriendshipRepository().create(
-                current_account_id, req.to_friend_id, req.to_account_id
-            )
+            with session_scope() as session:
+                repo = FriendshipRepository(session)
+                repo.create(current_account_id, req.to_friend_id, req.to_account_id)
 
         # 若有目标账号信息，尝试补齐双向关系
         if req.to_account_id:
-            target = AccountRepository().get_by_id(req.to_account_id)
+            with session_scope() as session:
+                target = AccountRepository(session).get_friend_ref_by_id(
+                    req.to_account_id
+                )
             if target and target.friend_id:
-                FriendshipRepository().create(
-                    current_account_id, target.friend_id, target.id
-                )
+                with session_scope() as session:
+                    repo = FriendshipRepository(session)
+                    repo.create(current_account_id, target.friend_id, target.id)
             if target and target.id and self.account.friend_id:
-                FriendshipRepository().create(
-                    target.id,
-                    self.account.friend_id,
-                    current_account_id,
-                )
+                with session_scope() as session:
+                    repo = FriendshipRepository(session)
+                    repo.create(
+                        target.id,
+                        self.account.friend_id,
+                        current_account_id,
+                    )
 
     def _handle_add_sended_result(self, req, page_info: dict) -> ActionResult:
         """处理接受好友请求结果（系统内）或确认外部好友是否已接受。"""
@@ -722,9 +724,9 @@ class ManageFriendshipTask(StatefulTask):
             logger.info("外部好友请求 %s 仅检测到绿色勾，对方已接受", req.id)
             self._save_request(req, "completed")
             if req.to_friend_id and self.account.id is not None:
-                FriendshipRepository().create(
-                    self.account.id, req.to_friend_id, req.to_account_id
-                )
+                with session_scope() as session:
+                    repo = FriendshipRepository(session)
+                    repo.create(self.account.id, req.to_friend_id, req.to_account_id)
             self._refresh_requests()
             return self._close_modal(wait=0.8)
 
@@ -839,16 +841,21 @@ class ManageFriendshipTask(StatefulTask):
             self._refresh_requests()
             return
 
-        sender = AccountRepository().get_by_id(req.from_account_id)
+        with session_scope() as session:
+            sender = AccountRepository(session).get_friend_ref_by_id(
+                req.from_account_id
+            )
         if sender is None or sender.id is None or not sender.friend_id:
             self._save_request(req, "failed", failed_reason="发送方账号信息不完整")
             self._refresh_requests()
             return
 
         self._save_request(req, "completed")
-        FriendshipRepository().create(current_account_id, sender.friend_id, sender.id)
+        with session_scope() as session:
+            repo = FriendshipRepository(session)
+            repo.create(current_account_id, sender.friend_id, sender.id)
         if self.account.friend_id:
-            FriendshipRepository().create(
-                sender.id, self.account.friend_id, current_account_id
-            )
+            with session_scope() as session:
+                repo = FriendshipRepository(session)
+                repo.create(sender.id, self.account.friend_id, current_account_id)
         self._refresh_requests()

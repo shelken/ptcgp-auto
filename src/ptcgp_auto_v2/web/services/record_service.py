@@ -2,6 +2,7 @@ from typing import Any
 
 from sqlmodel import Session, select, col
 
+from ptcgp_auto_v2.config.rarity_icons import RARITY_META
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
 from ptcgp_auto_v2.web.queries.record_queries import (
@@ -38,32 +39,32 @@ def _build_record_card_view(pack_card: Any) -> dict[str, Any]:
     }
 
 
-def _fetch_batch_records(
+def _fetch_batch_records_map(
     session: Session,
-    batch_id: str,
-) -> list[PackRecord]:
-    """查询同一批次的所有开包记录（用于十连包展示）。"""
+    batch_ids: list[str],
+) -> dict[str, list[PackRecord]]:
+    """批量查询批次记录映射。"""
+    if not batch_ids:
+        return {}
     from ptcgp_auto_v2.db.models.pack_card import PackCard
     from sqlalchemy.orm import selectinload
 
     stmt = (
         select(PackRecord)
-        .where(col(PackRecord.batch_id) == batch_id)
+        .where(col(PackRecord.batch_id).in_(batch_ids))
         .options(
             selectinload(PackRecord.cards).selectinload(PackCard.card),
             selectinload(PackRecord.account),
         )
-        .order_by(col(PackRecord.batch_index))
+        .order_by(col(PackRecord.batch_id), col(PackRecord.batch_index))
     )
-    return list(session.exec(stmt).all())
-
-
-def _get_rarity_weight(rarity: str) -> int:
-    """获取稀有度权重，基于 RARITY_META 的 priority（单一数据源）。"""
-    from ptcgp_auto_v2.config.rarity_icons import RARITY_META
-
-    meta = RARITY_META.get(rarity)
-    return meta["priority"] if meta else -1
+    records = list(session.exec(stmt).all())
+    mapping: dict[str, list[PackRecord]] = {}
+    for record in records:
+        if not record.batch_id:
+            continue
+        mapping.setdefault(record.batch_id, []).append(record)
+    return mapping
 
 
 def _build_batch_pack_view(
@@ -79,7 +80,8 @@ def _build_batch_pack_view(
 
     for card in card_views:
         rarity = card.get("rarity", "")
-        weight = _get_rarity_weight(rarity)
+        meta = RARITY_META.get(rarity)
+        weight = meta["priority"] if meta else -1
         if weight > max_weight:
             max_weight = weight
             max_rarity = rarity
@@ -100,34 +102,6 @@ def _build_batch_pack_view(
         "max_rarity": max_rarity,
         "has_new": has_new,
         "card_count": len(card_views),
-    }
-
-
-def _build_record_item_view(
-    record: PackRecord,
-    card_views: list[dict[str, Any]],
-    layout_type: str,
-    account_name: str,
-    opened_at,
-    current_points: int | None,
-    series_code: str,
-    set_name_display: str,
-    pack_name_display: str,
-    pack_type_display: str,
-) -> dict[str, Any]:
-    """构建单包记录视图模型。"""
-    return {
-        "is_batch": False,
-        "record": record,
-        "cards": card_views,
-        "layout": layout_type,
-        "account_name": account_name,
-        "opened_at": opened_at,
-        "current_points": current_points,
-        "series": series_code,
-        "set_name_display": set_name_display,
-        "pack_name_display": pack_name_display,
-        "pack_type_display": pack_type_display,
     }
 
 
@@ -204,16 +178,25 @@ def build_records_list_context(
         card_type,
     )
 
-    card_repo = CardRepository()
-    all_sets = card_repo.get_all_sets()
-    all_packs = card_repo.get_all_packs()
-
-    sets_map = {item.code: parse_json_label(item.label_data) for item in all_sets}
-    packs_map = {item.name: parse_json_label(item.label_data) for item in all_packs}
+    card_repo = CardRepository(session)
+    set_codes = sorted({record.set_code for record in results if record.set_code})
+    pack_names = sorted({record.pack_name for record in results if record.pack_name})
+    sets_map = {
+        code: parse_json_label(label_data)
+        for code, label_data in card_repo.get_set_labels_map(set_codes).items()
+    }
+    packs_map = {
+        pack_name: parse_json_label(label_data)
+        for pack_name, label_data in card_repo.get_pack_labels_map(pack_names).items()
+    }
 
     points_map = fetch_pack_points_map(session, results)
     items = []
     _, translations = get_current_i18n()
+    batch_record_map = _fetch_batch_records_map(
+        session,
+        sorted({record.batch_id for record in results if record.batch_id}),
+    )
 
     # 用于追踪已处理的批次，避免重复展示
     processed_batches: set[str] = set()
@@ -227,8 +210,7 @@ def build_records_list_context(
         ):
             processed_batches.add(record.batch_id)
 
-            # 查询该批次全部记录
-            batch_records = _fetch_batch_records(session, record.batch_id)
+            batch_records = batch_record_map.get(record.batch_id, [])
             items.append(
                 _build_batch_item_view(
                     batch_id=record.batch_id,
@@ -286,18 +268,21 @@ def build_records_list_context(
         )
 
         items.append(
-            _build_record_item_view(
-                record=record,
-                card_views=card_views,
-                layout_type=layout_type,
-                account_name=record.account.nickname if record.account else "Unknown",
-                opened_at=record.opened_at,
-                current_points=current_points,
-                series_code=series_code,
-                set_name_display=set_name_display,
-                pack_name_display=pack_name_display,
-                pack_type_display=pack_type_display,
-            )
+            {
+                "is_batch": False,
+                "record": record,
+                "cards": card_views,
+                "layout": layout_type,
+                "account_name": (
+                    record.account.nickname if record.account else "Unknown"
+                ),
+                "opened_at": record.opened_at,
+                "current_points": current_points,
+                "series": series_code,
+                "set_name_display": set_name_display,
+                "pack_name_display": pack_name_display,
+                "pack_type_display": pack_type_display,
+            }
         )
 
     return {

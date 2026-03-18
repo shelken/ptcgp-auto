@@ -15,6 +15,7 @@ SRC_DIR = Path(__file__).resolve().parent.parent.parent
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from ptcgp_auto_v2.db.engine import session_scope  # noqa: E402  # 入口脚本需要先调整 sys.path
 from ptcgp_auto_v2.db.repositories import CardRepository  # noqa: E402  # 入口脚本需要先调整 sys.path
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (  # noqa: E402  # 入口脚本需要先调整 sys.path
     FlibustierSyncService,
@@ -91,24 +92,28 @@ def _confirm_sync(input_fn: Callable[[str], str] = input) -> bool:
 
 def sync_metadata(input_fn: Callable[[str], str] = input) -> bool:
     """同步卡牌元数据，先预览再确认写库。"""
-    repo = CardRepository()
-    service = FlibustierSyncService(repo)
+    with session_scope() as session:
+        repo = CardRepository(session)
+        service = FlibustierSyncService(repo)
 
-    sets_data, cards_data, extra_map = service.fetch_remote_metadata()
-    plan = service.build_plan(
-        mode="force",
-        scope_level="all",
-        scope_value=None,
-        sets_data=sets_data,
-        cards_data=cards_data,
-        extra_map=extra_map,
-    )
+        sets_data, cards_data, extra_map = service.fetch_remote_metadata()
+        plan = service.build_plan(
+            mode="force",
+            scope_level="all",
+            scope_value=None,
+            sets_data=sets_data,
+            cards_data=cards_data,
+            extra_map=extra_map,
+        )
 
     _show_preview(plan)
     if not _confirm_sync(input_fn):
         return False
 
-    result = service.execute_plan(plan.get("operations", {}))
+    with session_scope() as session:
+        result = FlibustierSyncService(CardRepository(session)).execute_plan(
+            plan.get("operations", {})
+        )
     logger.info("写入完成: %s", json.dumps(result, ensure_ascii=False))
     return True
 

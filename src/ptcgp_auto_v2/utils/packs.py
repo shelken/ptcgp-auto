@@ -8,6 +8,7 @@
 
 from typing import List
 
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import CardRepository
 
 
@@ -22,5 +23,5 @@ def get_boosters(set_code: str) -> List[str]:
         boosters 名称列表，如 ["Charizard", "Mewtwo", "Pikachu"]
         如果 set_code 不存在，返回空列表
     """
-    repo = CardRepository()
-    return repo.get_pack_names_by_set(set_code)
+    with session_scope() as session:
+        return CardRepository(session).get_pack_names_by_set(set_code)

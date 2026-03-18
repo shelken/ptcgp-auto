@@ -18,7 +18,8 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.db.repositories import AccountRepository, AccountStatRepository
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.utils.gesture import (
@@ -116,9 +117,6 @@ class FetchAccountInfoTask(StatefulTask):
     screenshot_lossless = True
     pages = _build_fetch_pages()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     @staticmethod
     def needs_fetch(account, tasks) -> bool:
         """检查是否需要获取账号信息"""
@@ -128,7 +126,10 @@ class FetchAccountInfoTask(StatefulTask):
 
         stat = getattr(account, "account_stat", None)
         if stat is None and getattr(account, "id", None):
-            stat = AccountStatRepository().get_by_account_id(int(account.id))
+            with session_scope() as session:
+                stat = RepositoryFactory(session).account_stats().get_by_account_id_data(
+                    int(account.id)
+                )
 
         exchange_points = (
             stat.exchange_points
@@ -150,9 +151,6 @@ class FetchAccountInfoTask(StatefulTask):
 
     def setup(self) -> bool:
         return True
-
-    def cleanup(self):
-        pass
 
     def on_start(self):
         """初始化任务运行状态。"""
@@ -508,41 +506,43 @@ class FetchAccountInfoTask(StatefulTask):
             self.account.level = level
             changed = True
         if changed:
-            AccountRepository().update(self.account)
+            with session_scope() as session:
+                RepositoryFactory(session).accounts().update(self.account)
 
         if self.account.id is None:
             return
 
-        stat_repo = AccountStatRepository()
-        existing_stat = stat_repo.get_by_account_id(int(self.account.id))
-        exchange_points = (
-            cast(Optional[int], self.state_get("exchange_points"))
-            if self.state_get("exchange_points") is not None
-            else (existing_stat.exchange_points if existing_stat else None)
-        )
-        pack_hourglass_count = (
-            cast(Optional[int], self.state_get("pack_hourglass_count"))
-            if self.state_get("pack_hourglass_count") is not None
-            else (existing_stat.pack_hourglass_count if existing_stat else None)
-        )
-
-        stat_changed = False
-        if existing_stat is None:
-            stat_changed = (
-                exchange_points is not None or pack_hourglass_count is not None
+        with session_scope() as session:
+            stat_repo = RepositoryFactory(session).account_stats()
+            existing_stat = stat_repo.get_by_account_id_data(int(self.account.id))
+            exchange_points = (
+                cast(Optional[int], self.state_get("exchange_points"))
+                if self.state_get("exchange_points") is not None
+                else (existing_stat.exchange_points if existing_stat else None)
             )
-        else:
-            stat_changed = (
-                existing_stat.exchange_points != exchange_points
-                or existing_stat.pack_hourglass_count != pack_hourglass_count
+            pack_hourglass_count = (
+                cast(Optional[int], self.state_get("pack_hourglass_count"))
+                if self.state_get("pack_hourglass_count") is not None
+                else (existing_stat.pack_hourglass_count if existing_stat else None)
             )
 
-        if stat_changed:
-            stat_repo.upsert(
-                account_id=int(self.account.id),
-                exchange_points=exchange_points,
-                pack_hourglass_count=pack_hourglass_count,
-            )
+            stat_changed = False
+            if existing_stat is None:
+                stat_changed = (
+                    exchange_points is not None or pack_hourglass_count is not None
+                )
+            else:
+                stat_changed = (
+                    existing_stat.exchange_points != exchange_points
+                    or existing_stat.pack_hourglass_count != pack_hourglass_count
+                )
+
+            if stat_changed:
+                stat_repo.upsert(
+                    account_id=int(self.account.id),
+                    exchange_points=exchange_points,
+                    pack_hourglass_count=pack_hourglass_count,
+                )
 
         if changed or stat_changed:
             logger.info(

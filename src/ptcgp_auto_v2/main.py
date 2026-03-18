@@ -23,7 +23,8 @@ from ptcgp_auto_v2.core.executor import ExecutorConfig
 from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
 from ptcgp_auto_v2.core.task_base import TaskRegistry
 from ptcgp_auto_v2.db.connection import get_database
-from ptcgp_auto_v2.db.repositories import AccountRepository, TaskInstanceRepository
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories import AccountRepository
 from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
 from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
 from ptcgp_auto_v2.infra.adb import AdbController
@@ -38,13 +39,9 @@ DEFAULT_WORKERS = 4  # 默认并发工作线程数
 def normalize_device_addresses(devices: list[str]) -> list[str]:
     normalized = []
     for device in devices:
-        if device.isdigit():
-            normalized.append(f"127.0.0.1:{device}")
-            continue
-        if ":" in device:
-            normalized.append(device)
-            continue
-        raise ValueError(f"设备地址格式不正确: {device}")
+        if not device.isdigit() and ":" not in device:
+            raise ValueError(f"设备地址格式不正确: {device}")
+        normalized.append(f"127.0.0.1:{device}" if device.isdigit() else device)
     return normalized
 
 
@@ -215,8 +212,8 @@ def list_plans():
     """列出所有任务计划"""
     from ptcgp_auto_v2.db.repositories import TaskPlanRepository
 
-    repo = TaskPlanRepository()
-    plans = repo.get_all()
+    with session_scope() as session:
+        plans = TaskPlanRepository(session).get_all()
 
     print("\n任务计划列表:")
     print("-" * 60)
@@ -242,43 +239,60 @@ def manage_account_plan(account_id: int, plan_identifier: str, action: str):
         plan_identifier: 计划 ID 或名称
         action: "add" 或 "remove"
     """
-    from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+    from ptcgp_auto_v2.db.engine import session_scope
+    from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 
-    account_repo = AccountRepository()
-    plan_repo = TaskPlanRepository()
+    success_message: str | None = None
+    with session_scope() as session:
+        repos = RepositoryFactory(session)
+        account_repo = repos.accounts()
+        plan_repo = repos.task_plans()
 
-    account = account_repo.get_by_id(account_id)
-    if not account or account.id is None:
-        print(f"错误: 账号 ID {account_id} 不存在")
-        return
+        account = account_repo.get_by_id(account_id)
+        if not account or account.id is None:
+            print(f"错误: 账号 ID {account_id} 不存在")
+            return
 
-    # 解析 Plan
-    plan = None
-    if plan_identifier.isdigit():
-        plan = plan_repo.get_by_id(int(plan_identifier))
-    else:
-        plan = plan_repo.get_by_name(plan_identifier)
-
-    if not plan or plan.id is None:
-        print(f"错误: 计划 '{plan_identifier}' 不存在")
-        return
-
-    if action == "add":
-        if account_repo.add_secondary_plan(account.id, plan.id):
-            print(f"成功: 已为账号 {account.nickname} 添加计划 '{plan.name}'")
+        # 解析 Plan
+        plan = None
+        if plan_identifier.isdigit():
+            plan = plan_repo.get_by_id(int(plan_identifier))
         else:
-            print("错误: 添加计划失败")
-    elif action == "remove":
-        if account_repo.remove_secondary_plan(account.id, plan.id):
-            print(f"成功: 已从账号 {account.nickname} 移除计划 '{plan.name}'")
+            plan = plan_repo.get_by_name(plan_identifier)
+
+        if not plan or plan.id is None:
+            print(f"错误: 计划 '{plan_identifier}' 不存在")
+            return
+
+        if action == "add":
+            success = account_repo.add_secondary_plan(account.id, plan.id)
+            error_message = "添加计划失败"
+            success_prefix = "为"
+            success_verb = "添加"
+        elif action == "remove":
+            success = account_repo.remove_secondary_plan(account.id, plan.id)
+            error_message = "移除计划失败"
+            success_prefix = "从"
+            success_verb = "移除"
         else:
-            print("错误: 移除计划失败")
+            return
+
+        if success:
+            success_message = (
+                f"成功: 已{success_prefix}账号 {account.nickname} "
+                f"{success_verb}计划 '{plan.name}'"
+            )
+        else:
+            print(f"错误: {error_message}")
+
+    if success_message:
+        print(success_message)
 
 
 def list_accounts():
     """列出所有账号"""
-    repo = AccountRepository()
-    accounts = repo.get_all()
+    with session_scope() as session:
+        accounts = AccountRepository(session).get_all()
 
     print("\n账号列表:")
 
@@ -346,10 +360,13 @@ def list_accounts():
 
 def reset_running_tasks():
     """将所有异常状态的任务重置为待执行"""
-    repo = TaskInstanceRepository()
-    count = repo.reset_stale_tasks(
-        force_all=True,
-    )
+    from ptcgp_auto_v2.db.engine import session_scope
+    from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+
+    with session_scope() as session:
+        count = RepositoryFactory(session).task_instances().reset_stale_tasks(
+            force_all=True,
+        )
     print(f"已重置 {count} 个异常状态任务为待执行状态")
 
 
@@ -447,8 +464,8 @@ def run_init_account(device_address: str) -> bool:
 def run_switch_account(device: str, account_id: int) -> int:
     """切换到指定账号"""
     get_database()
-    repo = AccountRepository()
-    account = repo.get_by_id(account_id)
+    with session_scope() as session:
+        account = AccountRepository(session).get_by_id(account_id)
     if not account or not account.xml_content:
         logger.error(f"账号不存在或缺少 XML 内容: {account_id}")
         return 1
@@ -610,7 +627,8 @@ def main():
     from ptcgp_auto_v2.db.repositories import PackRecordRepository
 
     try:
-        PackRecordRepository().migrate_legacy_data()
+        with session_scope() as session:
+            PackRecordRepository(session).migrate_legacy_data()
     except Exception as e:
         logger.warning(f"数据迁移失败: {e}")
 

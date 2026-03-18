@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from ptcgp_auto_v2.db.engine import get_session, session_scope
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (
     FlibustierSyncService,
@@ -77,38 +78,58 @@ def build_metadata_context(
     """构建元数据管理视图数据。"""
     from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
-    repo = CardRepository()
-    sets = repo.get_all_sets()
-    packs = repo.get_all_packs()
+    with session_scope() as session:
+        repo = CardRepository(session)
+        sets = repo.get_all_sets()
+        packs = repo.get_all_packs()
 
-    sets_data = []
-    for item in sets:
-        data = item.model_dump()
-        data["label_dict"] = build_label_dict(item.label_data)
-        data["display_name"] = resolve_label(data["label_dict"], fallback=item.name)
-        sets_data.append(data)
+        sets_data: list[dict[str, Any]] = []
+        for item in sets:
+            label_dict = build_label_dict(item.label_data)
+            sets_data.append(
+                {
+                    "code": item.code,
+                    "name": item.name,
+                    "release_date": item.release_date,
+                    "total_cards": item.total_cards,
+                    "label_data": item.label_data,
+                    "created_at": item.created_at,
+                    "updated_at": item.updated_at,
+                    "label_dict": label_dict,
+                    "display_name": resolve_label(label_dict, fallback=item.name),
+                }
+            )
 
-    packs_data = []
-    for item in packs:
-        data = item.model_dump()
-        data["label_dict"] = build_label_dict(item.label_data)
-        data["display_name"] = resolve_label(data["label_dict"], fallback=item.name)
-        packs_data.append(data)
+        packs_data: list[dict[str, Any]] = []
+        for item in packs:
+            label_dict = build_label_dict(item.label_data)
+            packs_data.append(
+                {
+                    "name": item.name,
+                    "set_code": item.set_code,
+                    "label_data": item.label_data,
+                    "image_url": item.image_url,
+                    "created_at": item.created_at,
+                    "updated_at": item.updated_at,
+                    "label_dict": label_dict,
+                    "display_name": resolve_label(label_dict, fallback=item.name),
+                }
+            )
 
-    packs_by_set: dict[str, list[dict]] = {}
-    for item in packs_data:
-        set_code = item["set_code"]
-        packs_by_set.setdefault(set_code, []).append(item)
+        packs_by_set: dict[str, list[dict]] = {}
+        for item in packs_data:
+            set_code = item["set_code"]
+            packs_by_set.setdefault(set_code, []).append(item)
 
-    selected_context = _build_selected_context(
-        repo=repo,
-        sets_data=sets_data,
-        packs_by_set=packs_by_set,
-        selected_node_type=selected_node_type,
-        selected_node_id=selected_node_id,
-        selected_set_code=selected_set_code,
-        selected_pack_name=selected_pack_name,
-    )
+        selected_context = _build_selected_context(
+            repo=repo,
+            sets_data=sets_data,
+            packs_by_set=packs_by_set,
+            selected_node_type=selected_node_type,
+            selected_node_id=selected_node_id,
+            selected_set_code=selected_set_code,
+            selected_pack_name=selected_pack_name,
+        )
 
     # 进入页面默认不触发远端请求，避免仅打开管理页就访问 flibustier/52poke。
     sync_check = build_default_check_context()
@@ -147,59 +168,71 @@ def preview_metadata_sync(
     """生成元数据同步预览。"""
     resolved = resolve_sync_request(node_type=node_type, node_id=node_id, action=action)
 
-    repo = CardRepository()
-    flibustier_service = FlibustierSyncService(repo, cache=_METADATA_REMOTE_CACHE)
-    poke52_service = Poke52LocalizationService(cache=_METADATA_REMOTE_CACHE)
-
     sets_data: dict[str, list[dict[str, Any]]] = {}
     cards_data: list[dict[str, Any]] = []
     extra_map: dict[tuple[str, int], dict[str, Any]] = {}
     if resolved["source"] == "flibustier":
-        sets_data, cards_data, extra_map = flibustier_service.fetch_remote_metadata(
-            force_refresh=force_refresh
-        )
+        with session_scope() as session:
+            flibustier_service = FlibustierSyncService(
+                CardRepository(session),
+                cache=_METADATA_REMOTE_CACHE,
+            )
+            sets_data, cards_data, extra_map = flibustier_service.fetch_remote_metadata(
+                force_refresh=force_refresh
+            )
 
-    return preview_sync(
-        flibustier_service=flibustier_service,
-        poke52_service=poke52_service,
-        sync_kind=str(resolved["sync_kind"]),
-        source=resolved["source"],
-        mode=resolved["mode"],
-        scope_level=resolved["scope_level"],
-        scope_value=resolved["scope_value"],
-        force_refresh=force_refresh,
-        remote_sets_data=sets_data,
-        remote_cards_data=cards_data,
-        remote_extra_map=extra_map,
-    )
+    with session_scope() as session:
+        repo = CardRepository(session)
+        flibustier_service = FlibustierSyncService(repo, cache=_METADATA_REMOTE_CACHE)
+        poke52_service = Poke52LocalizationService(cache=_METADATA_REMOTE_CACHE)
+        return preview_sync(
+            flibustier_service=flibustier_service,
+            poke52_service=poke52_service,
+            repo=repo,
+            sync_kind=str(resolved["sync_kind"]),
+            source=resolved["source"],
+            mode=resolved["mode"],
+            scope_level=resolved["scope_level"],
+            scope_value=resolved["scope_value"],
+            force_refresh=force_refresh,
+            remote_sets_data=sets_data,
+            remote_cards_data=cards_data,
+            remote_extra_map=extra_map,
+        )
 
 
 def execute_metadata_sync(snapshot_id: str) -> dict[str, Any]:
     """执行元数据同步。"""
-    repo = CardRepository()
-    return execute_sync(
-        flibustier_service=FlibustierSyncService(repo),
-        snapshot_id=snapshot_id,
-    )
+    with session_scope() as session:
+        repo = CardRepository(session)
+        return execute_sync(
+            flibustier_service=FlibustierSyncService(repo),
+            repo=repo,
+            snapshot_id=snapshot_id,
+        )
 
 
 def check_metadata_sources() -> dict[str, dict[str, int]]:
     """检查本地与远端源的基础统计。"""
-    repo = CardRepository()
-    local_stats = {
-        "sets": len(repo.get_all_sets()),
-        "packs": len(repo.get_all_packs()),
-        "cards": sum(
-            len(repo.get_cards_by_set(item.code)) for item in repo.get_all_sets()
-        ),
-    }
+    with session_scope() as session:
+        repo = CardRepository(session)
+        local_stats = repo.get_metadata_counts()
 
-    flibustier_service = FlibustierSyncService(repo, cache=_METADATA_REMOTE_CACHE)
-    flibustier_stats = {"sets": 0, "cards": 0}
+    temp_session = get_session()
     try:
-        flibustier_stats = flibustier_service.fetch_remote_stats(force_refresh=False)
-    except RuntimeError:
-        pass
+        flibustier_service = FlibustierSyncService(
+            CardRepository(temp_session),
+            cache=_METADATA_REMOTE_CACHE,
+        )
+        flibustier_stats = {"sets": 0, "cards": 0}
+        try:
+            flibustier_stats = flibustier_service.fetch_remote_stats(
+                force_refresh=False
+            )
+        except RuntimeError:
+            pass
+    finally:
+        temp_session.close()
 
     poke52_service = Poke52LocalizationService(cache=_METADATA_REMOTE_CACHE)
     poke52_stats = {"series": 0, "packs": 0}

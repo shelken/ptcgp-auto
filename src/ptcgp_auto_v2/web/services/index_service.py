@@ -22,12 +22,12 @@ def build_index_context(session: Session) -> dict:
     elements = session.exec(select(distinct(Card.element)).order_by(Card.element)).all()
     elements = normalize_elements(elements)
 
-    card_repo = CardRepository()
+    card_repo = CardRepository(session)
     card_sets = card_repo.get_all_sets()
     packs = card_repo.get_all_packs()
 
     # 获取未读通知数量（用于通知面板按钮状态）
-    notification_repo = NotificationRepository()
+    notification_repo = NotificationRepository(session)
     unread_count = notification_repo.count_unread()
 
     sets_data = []

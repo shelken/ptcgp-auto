@@ -17,10 +17,13 @@ import logging
 import threading
 import time
 from abc import abstractmethod
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass
+from typing import cast
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.notifier import get_notifier
@@ -39,7 +42,7 @@ from ptcgp_auto_v2.tasks.utils.pack_opening_flow import (
     swipe_open_pack,
     tap_opening_continue,
 )
-from ptcgp_auto_v2.tasks.utils.pack_result_mapper import PackResultMapper
+from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
 from ptcgp_auto_v2.tasks.utils.pack_result_rows import (
     build_pack_groups,
     build_row_signature,
@@ -61,14 +64,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_matched_element,
 )
 
-if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.repositories import (
-        AccountCardRepository,
-        AccountPackPointRepository,
-        CardRepository,
-        PackRecordRepository,
-    )
-
 logger = logging.getLogger(__name__)
 
 
@@ -78,6 +73,22 @@ PACK_RESULT_ROWS_PER_PACK = 2
 OPENING_CARD_QUICK_TAP_TIMES = 6
 OPENING_CARD_WAIT = 3.0
 OPENING_CARD_TEN_FAST_TAP_LIMIT = 10
+
+
+@dataclass(slots=True, frozen=True)
+class _PackInferencePack:
+    """子包推断使用的纯数据子包对象。"""
+
+    pack_name: str
+
+
+@dataclass(slots=True, frozen=True)
+class _PackInferenceCard:
+    """子包推断使用的纯数据卡牌对象。"""
+
+    id: int
+    set_code: str
+    packs: tuple[_PackInferencePack, ...]
 
 
 # ============================================================
@@ -169,14 +180,7 @@ class PackOpeningTaskBase(StatefulTask):
         self._pack_result_rows: list[list[dict]] = []
         self._multi_pack_swipe_counted = False
         self._opening_card_tap_count = 0
-        self._pack_result_mapper: PackResultMapper | None = None
         self._current_batch_id: str | None = None  # 当前十连包批次ID
-
-        # 数据仓储（延迟初始化）
-        self._pack_record_repo: "PackRecordRepository | None" = None
-        self._card_repo: "CardRepository | None" = None
-        self._account_card_repo: "AccountCardRepository | None" = None
-        self._pack_point_repo: "AccountPackPointRepository | None" = None
 
         # 子包推断会话状态（单次开包生命周期）
         self._inferred_pack_context: dict[str, str] | None = None
@@ -237,32 +241,18 @@ class PackOpeningTaskBase(StatefulTask):
     # 内部方法
     # ============================================================
 
-    def _init_repositories(self):
-        """初始化数据仓储（如未初始化）"""
-        from ptcgp_auto_v2.db.repositories import (
-            AccountCardRepository,
-            AccountPackPointRepository,
-            CardRepository,
-            PackRecordRepository,
-        )
-
-        if self._account_card_repo is None:
-            self._account_card_repo = AccountCardRepository()
-        if self._pack_record_repo is None:
-            self._pack_record_repo = PackRecordRepository()
-        if self._card_repo is None:
-            self._card_repo = CardRepository()
-        if self._pack_point_repo is None:
-            self._pack_point_repo = AccountPackPointRepository()
-        if self._pack_result_mapper is None:
-            self._pack_result_mapper = PackResultMapper(self._card_repo)
-
-    def _get_pack_result_mapper(self) -> PackResultMapper:
-        """获取统一的开包结果映射器。"""
-        self._init_repositories()
-        if self._pack_result_mapper is None:
-            raise RuntimeError("PackResultMapper 未初始化")
-        return self._pack_result_mapper
+    def _map_detected_cards(
+        self,
+        cards: list[DetectedCard],
+        fixed_set_code: str | None = None,
+    ) -> list[dict]:
+        """在局部 Session 内映射识别结果，避免长期持有仓储。"""
+        with session_scope() as session:
+            return map_detected_cards(
+                RepositoryFactory(session).cards(),
+                cards=cards,
+                fixed_set_code=fixed_set_code,
+            )
 
     def _resolve_scan_set_code(self) -> str | None:
         """解析要使用的 set_code
@@ -323,8 +313,6 @@ class PackOpeningTaskBase(StatefulTask):
 
     def _recognize_cards(self):
         """识别卡牌并保存记录（YOLO+Hash 版本）"""
-        self._init_repositories()
-
         # 注意：None 表示全局识别模式，不兜底成 "Unknown"
         set_code = self._resolve_scan_set_code()
         cards = self._scan_cards_with_retry(set_code, max_retries=3)
@@ -337,18 +325,14 @@ class PackOpeningTaskBase(StatefulTask):
             self._packs_opened_count = 1
 
         # 使用 set_code 进行映射；set_code=None 时由映射器使用每张卡自带的 set_code
-        rows = self._get_pack_result_mapper().map_detected_cards(
+        rows = self._map_detected_cards(
             cards=cards,
             fixed_set_code=set_code,
         )
 
         # 第二阶段：卡牌反推子包（仅在当前无目标包上下文时兜底）
         if self.get_target_pack_context() is None and rows:
-            from ptcgp_auto_v2.db.models import Card
-
-            cards = [
-                row["card_obj"] for row in rows if isinstance(row.get("card_obj"), Card)
-            ]
+            cards = self._build_pack_inference_cards(rows)
             inferred = infer_pack_by_cards(cards)
             if inferred:
                 self._inferred_pack_context = inferred
@@ -358,7 +342,7 @@ class PackOpeningTaskBase(StatefulTask):
 
         self._save_pack_record(rows)
 
-        if self._account_card_repo and self.account.id:
+        if self.account.id:
             self._save_high_rarity_cards(rows)
         self._result_recognized = True
 
@@ -371,25 +355,38 @@ class PackOpeningTaskBase(StatefulTask):
             rows: 卡牌行数据
             batch_index: 批次内序号，十连包为1-10
         """
-        self._init_repositories()
-
-        if not (self._pack_record_repo and self.account.id):
-            return
-
         try:
+            if not self.account.id:
+                return
+
             context = self.get_target_pack_context() or {}
             set_code = context.get("set_code")
             pack_name = context.get("booster_name")
+            with session_scope() as session:
+                factory = RepositoryFactory(session)
+                pack_record_repo = factory.pack_records()
+                pack_point_repo = factory.account_pack_points()
 
-            self._pack_record_repo.create_for_account(
-                self.account.id,
-                pack_type=self.get_pack_record_type(),
-                set_code=set_code,
-                pack_name=pack_name,
-                cards=rows,
-                batch_id=self._current_batch_id,
-                batch_index=batch_index,
-            )
+                pack_record_repo.create_for_account(
+                    self.account.id,
+                    pack_type=self.get_pack_record_type(),
+                    set_code=set_code,
+                    pack_name=pack_name,
+                    cards=rows,
+                    batch_id=self._current_batch_id,
+                    batch_index=batch_index,
+                )
+
+                # 根据开包数量累加开包点数（仅 open_pack 任务：基础点数 + 开包数 × 5）
+                if set_code and self._base_pack_points is not None:
+                    final_points = self._base_pack_points + self._packs_opened_count * 5
+                    pack_point_repo.upsert_points(
+                        self.account.id, set_code, final_points
+                    )
+                    logger.info(
+                        f"  -> 更新开包点数: {set_code} = {final_points}pt (基础 {self._base_pack_points}pt + 开包 {self._packs_opened_count} 包 × 5pt)"
+                    )
+
             card_names = [
                 f"{self._resolve_log_card_name(row)}({row['rarity']})" for row in rows
             ]
@@ -397,20 +394,6 @@ class PackOpeningTaskBase(StatefulTask):
                 f"已保存开包记录: {set_code}/{pack_name} "
                 f"({len(rows)} 张): {', '.join(card_names)}"
             )
-
-            # 根据开包数量累加开包点数（仅 open_pack 任务：基础点数 + 开包数 × 5）
-            if (
-                set_code
-                and self._pack_point_repo
-                and self._base_pack_points is not None
-            ):
-                final_points = self._base_pack_points + self._packs_opened_count * 5
-                self._pack_point_repo.upsert_points(
-                    self.account.id, set_code, final_points
-                )
-                logger.info(
-                    f"  -> 更新开包点数: {set_code} = {final_points}pt (基础 {self._base_pack_points}pt + 开包 {self._packs_opened_count} 包 × 5pt)"
-                )
 
         except Exception as e:
             logger.error(f"保存开包记录失败: {e}")
@@ -424,20 +407,19 @@ class PackOpeningTaskBase(StatefulTask):
         try:
             context = self.get_target_pack_context() or {}
             pack_name = context.get("booster_name")
-            pack = (
-                self._card_repo.get_pack_by_name(pack_name)
-                if (self._card_repo is not None and pack_name)
-                else None
-            )
-            save_high_rarity_cards(
-                account_card_repo=self._account_card_repo,
-                account_id=self.account.id,
-                rows=rows,
-                account=self.account,
-                notifier=get_notifier(),
-                notify_message=self.get_rare_card_notify_message(),
-                pack=pack,
-            )
+            with session_scope() as session:
+                factory = RepositoryFactory(session)
+                account_card_repo = factory.account_cards()
+                account_name = self._resolve_account_name()
+                save_high_rarity_cards(
+                    account_card_repo=account_card_repo,
+                    account_id=self.account.id,
+                    rows=rows,
+                    account_name=account_name,
+                    notifier=get_notifier(),
+                    notify_message=self.get_rare_card_notify_message(),
+                    pack_name=pack_name,
+                )
         except Exception as e:
             logger.warning(f"保存高稀有度卡牌并通知失败: {e}")
 
@@ -504,9 +486,6 @@ class PackOpeningTaskBase(StatefulTask):
 
     def _infer_pack_on_swipe(self) -> dict[str, str] | None:
         """第一阶段：滑动页模板推断。"""
-        if not self._card_repo:
-            self._init_repositories()
-
         if not self.recognizer:
             return None
 
@@ -524,18 +503,27 @@ class PackOpeningTaskBase(StatefulTask):
             return None
 
         candidates: list[PackCandidate] = []
+        with session_scope() as session:
+            from ptcgp_auto_v2.db.models import Pack
+            from sqlmodel import select
 
-        for pack in self._card_repo.get_all_packs() if self._card_repo else []:
-            if target_set_code and pack.set_code != target_set_code:
-                continue
-            # 使用 set_code 过滤 PROMO，避免名称不是 "PROMO*"（如 "Vol. 1"）时误入候选
-            if (pack.set_code or "").upper().startswith("PROMO"):
-                continue
-            if not pack.name or not pack.set_code:
-                continue
-            candidates.append(
-                PackCandidate(set_code=str(pack.set_code), booster_name=str(pack.name))
-            )
+            rows = session.exec(
+                select(Pack.set_code, Pack.name).order_by(Pack.set_code, Pack.name)
+            ).all()
+            for set_code, pack_name in rows:
+                if target_set_code and set_code != target_set_code:
+                    continue
+                # 使用 set_code 过滤 PROMO，避免名称不是 "PROMO*"（如 "Vol. 1"）时误入候选
+                if (set_code or "").upper().startswith("PROMO"):
+                    continue
+                if not pack_name or not set_code:
+                    continue
+                candidates.append(
+                    PackCandidate(
+                        set_code=str(set_code),
+                        booster_name=str(pack_name),
+                    )
+                )
 
         best = matcher.match_best(
             screenshot,
@@ -581,10 +569,6 @@ class PackOpeningTaskBase(StatefulTask):
         logger.debug(f"  -> 向上滑动卡牌（已开 {self._packs_opened_count} 包）")
         return swipe_card_register(self.adb)
 
-    def _handle_pack_opening_multi_result(self, page_info: dict) -> ActionResult:
-        """10包总览结果页沿用开包结果处理逻辑。"""
-        return self._handle_pack_opening_result(page_info)
-
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页：识别卡牌并点击继续"""
         if not self._result_recognized:
@@ -598,6 +582,8 @@ class PackOpeningTaskBase(StatefulTask):
         return tap_opening_continue(
             self.adb, page_info.get("ocr_results", []), wait=1.5
         )
+
+    _handle_pack_opening_multi_result = _handle_pack_opening_result
 
     def _set_pack_result_mode(self, batch_size: int = 1) -> None:
         """设置当前开包结果模式。"""
@@ -629,7 +615,7 @@ class PackOpeningTaskBase(StatefulTask):
 
     def _group_result_rows(self, cards: list[DetectedCard]) -> list[list[dict]]:
         """将单屏识别结果转换为按行分组的卡牌列表。"""
-        mapped_cards = self._get_pack_result_mapper().map_detected_cards(
+        mapped_cards = self._map_detected_cards(
             cards=cards,
             fixed_set_code=self._resolve_scan_set_code(),
         )
@@ -639,8 +625,7 @@ class PackOpeningTaskBase(StatefulTask):
     @staticmethod
     def _resolve_log_card_name(card: dict) -> str:
         """解析日志中的卡牌名称，优先中文，缺失时回退现有名称。"""
-        card_obj = card.get("card_obj")
-        raw_data = getattr(card_obj, "data", None) if card_obj else None
+        raw_data = card.get("card_data")
         if raw_data:
             try:
                 payload = (
@@ -660,13 +645,44 @@ class PackOpeningTaskBase(StatefulTask):
         signature = build_row_signature([card])
         return signature[0] if signature else "Unknown"
 
-    @staticmethod
-    def _format_result_row(row: list[dict] | None) -> str:
-        """格式化结果行日志。"""
-        if not row:
-            return "[]"
-        names = [PackOpeningTaskBase._resolve_log_card_name(card) for card in row]
-        return "[" + ", ".join(names) + "]"
+    def _build_pack_inference_cards(
+        self, rows: list[dict]
+    ) -> list[_PackInferenceCard]:
+        """把结果行转成子包推断需要的纯数据对象。"""
+        if not rows:
+            return []
+
+        with session_scope() as session:
+            card_repo = RepositoryFactory(session).cards()
+            cards: list[_PackInferenceCard] = []
+            for row in rows:
+                card_id = row.get("card_id")
+                set_code = row.get("set_code")
+                if card_id is None or not set_code:
+                    continue
+                pack_names = card_repo.get_card_pack_names(int(card_id))
+                if not pack_names:
+                    continue
+                cards.append(
+                    _PackInferenceCard(
+                        id=int(card_id),
+                        set_code=str(set_code),
+                        packs=tuple(
+                            _PackInferencePack(pack_name=str(pack_name))
+                            for pack_name in pack_names
+                            if pack_name
+                        ),
+                    )
+                )
+            return cards
+
+    def _resolve_account_name(self) -> str:
+        """解析账号显示名，用于通知。"""
+        return (
+            getattr(self.account, "nickname", None)
+            or getattr(self.account, "display_name", None)
+            or str(getattr(self.account, "id", ""))
+        )
 
     def _log_multi_pack_rows_snapshot(self) -> None:
         """打印当前已收集的全部结果行，便于调试分组问题。"""
@@ -678,11 +694,14 @@ class PackOpeningTaskBase(StatefulTask):
         for index, row in enumerate(self._pack_result_rows, start=1):
             missing_slots = get_missing_slots(row, self._pack_result_rows)
             missing_text = f" 缺槽={','.join(missing_slots)}" if missing_slots else ""
+            row_text = "[" + ", ".join(
+                self._resolve_log_card_name(card) for card in row
+            ) + "]"
             logger.debug(
                 "  行%02d (%s张): %s%s",
                 index,
                 len(row),
-                self._format_result_row(row),
+                row_text,
                 missing_text,
             )
 
@@ -710,12 +729,30 @@ class PackOpeningTaskBase(StatefulTask):
                 tuple(build_row_signature(row)) for row in self._pack_result_rows
             ]
             for decision in cast(list[dict[str, object]], stats.get("decisions", [])):
+                incoming_row = decision.get("incoming_row")
+                matched_row = decision.get("matched_row")
+                result_row = decision.get("result_row")
+                incoming_text = (
+                    "[" + ", ".join(self._resolve_log_card_name(card) for card in incoming_row) + "]"
+                    if incoming_row
+                    else "[]"
+                )
+                matched_text = (
+                    "[" + ", ".join(self._resolve_log_card_name(card) for card in matched_row) + "]"
+                    if matched_row
+                    else "[]"
+                )
+                result_text = (
+                    "[" + ", ".join(self._resolve_log_card_name(card) for card in result_row) + "]"
+                    if result_row
+                    else "[]"
+                )
                 logger.debug(
                     "  -> 结果行策略=%s incoming=%s matched=%s result=%s",
                     decision["action"],
-                    self._format_result_row(decision.get("incoming_row")),
-                    self._format_result_row(decision.get("matched_row")),
-                    self._format_result_row(decision.get("result_row")),
+                    incoming_text,
+                    matched_text,
+                    result_text,
                 )
 
             current_row_count = len(self._pack_result_rows)
@@ -760,8 +797,6 @@ class PackOpeningTaskBase(StatefulTask):
 
     def _recognize_multi_pack_results(self) -> bool:
         """识别 10 包结果页并拆成多条独立开包记录。"""
-        self._init_repositories()
-
         try:
             collected = self._collect_multi_pack_rows()
             self._log_multi_pack_rows_snapshot()
@@ -787,7 +822,7 @@ class PackOpeningTaskBase(StatefulTask):
 
             for idx, rows in enumerate(pack_groups, start=1):
                 self._save_pack_record(rows, batch_index=idx)
-                if self._account_card_repo and self.account.id:
+                if self.account.id:
                     self._save_high_rarity_cards(rows)
 
             self._result_recognized = True

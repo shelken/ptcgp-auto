@@ -23,12 +23,15 @@ from ptcgp_auto_v2.core.task_plan_utils import (
     compute_next_run_for_instance,
 )
 from ptcgp_auto_v2.core.task_status import TaskStatus
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+from ptcgp_auto_v2.infra.account_syncer import AccountSnapshot
 from ptcgp_auto_v2.infra.page_detector import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
 from ptcgp_auto_v2.utils.log_source import resolve_log_device
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account, TaskInstance
+    from ptcgp_auto_v2.db.models import TaskInstance
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,44 @@ class ExecutorConfig:
             self.template_threshold = settings.template_threshold
         if not self.auto_scale_instance_prefix:
             self.auto_scale_instance_prefix = settings.auto_scale_instance_prefix
+
+
+@dataclass
+class TaskInstanceSnapshot:
+    """任务实例运行快照（纯数据对象）。"""
+
+    id: Optional[int]
+    account_id: int
+    task_type: str
+    status: str
+    reset_type: str
+    error_message: Optional[str]
+    last_completed_at: Optional[datetime]
+    schedule_anchor_at: Optional[datetime]
+    last_duration_seconds: Optional[int]
+    next_run_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    @classmethod
+    def from_instance(cls, instance: "TaskInstance") -> "TaskInstanceSnapshot":
+        """从数据库任务实例对象构造运行快照。"""
+        if instance.id is None:
+            raise RuntimeError("任务实例 ID 为空，无法构造快照")
+        return cls(
+            id=instance.id,
+            account_id=instance.account_id,
+            task_type=instance.task_type,
+            status=instance.status,
+            reset_type=instance.reset_type,
+            error_message=instance.error_message,
+            last_completed_at=instance.last_completed_at,
+            schedule_anchor_at=instance.schedule_anchor_at,
+            last_duration_seconds=instance.last_duration_seconds,
+            next_run_at=instance.next_run_at,
+            created_at=instance.created_at,
+            updated_at=instance.updated_at,
+        )
 
 
 class BaseExecutor(ABC):
@@ -90,13 +131,17 @@ class BaseExecutor(ABC):
         self._account_switcher = None
         self._account_syncer = None
 
+    @contextmanager
+    def _repository_scope(self):
+        """为一次数据库动作提供统一的 Repository 工厂。"""
+        with session_scope() as session:
+            yield RepositoryFactory(session)
+
     # --- 基础设施与账号环境 -------------------------------------------------
 
     def _should_stop(self) -> bool:
         """检查是否应该停止执行"""
-        if self.config.stop_event and self.config.stop_event.is_set():
-            return True
-        return False
+        return bool(self.config.stop_event and self.config.stop_event.is_set())
 
     def _init_components(self):
         """初始化基础设施组件"""
@@ -151,7 +196,7 @@ class BaseExecutor(ABC):
         self._adb.restart_app(self.config.app_package)
         time.sleep(self.config.recovery_delay)
 
-    def _is_current_account(self, target_account: "Account") -> bool:
+    def _is_current_account(self, target_account: AccountSnapshot) -> bool:
         """
         检查设备当前是否已登录目标账号
 
@@ -174,7 +219,7 @@ class BaseExecutor(ABC):
         logger.warning("无法获取设备当前账号，将尝试切换")
         return False
 
-    def _switch_account(self, target_account: "Account") -> bool:
+    def _switch_account(self, target_account: AccountSnapshot) -> bool:
         """切换到目标账号。"""
         assert self._account_switcher is not None
         if target_account.id is None:
@@ -192,13 +237,13 @@ class BaseExecutor(ABC):
             logger.error(f"账号切换失败: {e}")
             return False
 
-    def _ensure_target_account(self, target_account: "Account") -> bool:
+    def _ensure_target_account(self, target_account: AccountSnapshot) -> bool:
         """确保设备当前已经切换到目标账号。"""
         if self._is_current_account(target_account):
             return True
         return self._switch_account(target_account)
 
-    def _resolve_log_nickname(self, account: "Account") -> str:
+    def _resolve_log_nickname(self, account: AccountSnapshot) -> str:
         """统一解析日志中的账号显示名。"""
         nickname = account.nickname
         if nickname and nickname.lower() == "skn" and account.id is not None:
@@ -208,7 +253,7 @@ class BaseExecutor(ABC):
     @contextmanager
     def _bind_log_context(
         self,
-        account: "Account",
+        account: AccountSnapshot,
         initial_task: str = "",
     ):
         """统一绑定执行器级日志上下文。"""
@@ -231,7 +276,11 @@ class BaseExecutor(ABC):
 
     # --- 任务构建 ---------------------------------------------------------
 
-    def _build_task(self, task_instance: "TaskInstance", account: "Account") -> Task:
+    def _build_task(
+        self,
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
+    ) -> Task:
         """构建一个已注入上下文的任务对象。"""
         assert self._page_detector is not None
         assert self._adb is not None
@@ -250,7 +299,7 @@ class BaseExecutor(ABC):
             task.set_stop_event(self.config.stop_event)
         return task
 
-    def _build_hook_context(self, task: Task, account: "Account") -> HookContext:
+    def _build_hook_context(self, task: Task, account: AccountSnapshot) -> HookContext:
         """构建 Hook 上下文"""
         return HookContext(
             device=self.device,
@@ -261,43 +310,46 @@ class BaseExecutor(ABC):
 
     def _get_or_create_task_instance(
         self, account_id: int, task_type: str
-    ) -> Optional["TaskInstance"]:
+    ) -> Optional[TaskInstanceSnapshot]:
         """获取或创建任务实例（用于 Hook 插入任务）"""
-        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-
         task_class = TaskRegistry.get_or_none(task_type)
         if not task_class:
             logger.warning(f"未知的任务类型: {task_type}")
             return None
 
-        repo = TaskInstanceRepository()
-        return repo.get_or_create(
-            account_id=account_id,
-            task_type=task_type,
-            reset_type=task_class.reset_type.value,
-        )
+        with self._repository_scope() as repos:
+            instance = repos.task_instances().get_or_create(
+                account_id=account_id,
+                task_type=task_type,
+                reset_type=task_class.reset_type.value,
+            )
+            return TaskInstanceSnapshot.from_instance(instance)
 
-    def _unblock_dependent_tasks(self, account: "Account"):
+    def _unblock_dependent_tasks(self, account: AccountSnapshot):
         """恢复该账号被阻塞的任务"""
         if account.id is None:
             return
-
-        from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-
-        repo = TaskInstanceRepository()
-        blocked_tasks = repo.get_blocked_by_account(account.id)
-        for task in blocked_tasks:
-            logger.info(f"恢复被阻塞任务: {task.task_type} (账号: {account.nickname})")
-            task.status = TaskStatus.PENDING.value
-            task.next_run_at = None
-            task.save()
+        with self._repository_scope() as repos:
+            repo = repos.task_instances()
+            blocked_tasks = repo.get_blocked_by_account(account.id)
+            for task in blocked_tasks:
+                if task.id is None:
+                    raise RuntimeError("被阻塞任务缺少 ID，无法恢复")
+                logger.info(
+                    f"恢复被阻塞任务: {task.task_type} (账号: {account.display_name})"
+                )
+                repo.update_runtime_state(
+                    task.id,
+                    status=TaskStatus.PENDING.value,
+                    next_run_at=None,
+                )
 
     # --- 状态与结果收口 ---------------------------------------------------
 
     def _apply_task_status(
         self,
-        task_instance: "TaskInstance",
-        account: "Account",
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         status: TaskStatus,
         error_message: Optional[str] = None,
         clear_error_on_success: bool = True,
@@ -305,23 +357,32 @@ class BaseExecutor(ABC):
         preserve_last_completed_at: bool = False,
     ):
         """更新任务实例状态"""
+        if task_instance.id is None:
+            raise RuntimeError("任务实例 ID 为空，无法更新状态")
+
         task_instance.status = status.value
+        update_kwargs: dict[str, object] = {"status": status.value}
         if status == TaskStatus.COMPLETED:
             completed_at = datetime.now()
             task_instance.schedule_anchor_at = completed_at
+            update_kwargs["schedule_anchor_at"] = completed_at
             if not preserve_last_completed_at:
                 task_instance.last_completed_at = completed_at
-            # 根据账号计划配置计算下次运行时间
-            account_cache = build_account_plan_cache(account)
-            next_run_at, _, _, _ = compute_next_run_for_instance(
-                task_instance,
-                account_cache,
-            )
+                update_kwargs["last_completed_at"] = completed_at
+            next_run_at = None
+            if account.id is not None:
+                with self._repository_scope() as repos:
+                    fresh_account = repos.accounts().get_by_id(account.id)
+                    if fresh_account is not None:
+                        account_cache = build_account_plan_cache(fresh_account)
+                        next_run_at, _, _, _ = compute_next_run_for_instance(
+                            task_instance,
+                            account_cache,
+                        )
             task_instance.next_run_at = next_run_at
+            update_kwargs["next_run_at"] = next_run_at
             # 恢复被阻塞的任务（前置任务完成后）
             self._unblock_dependent_tasks(account)
-            if clear_error_on_success:
-                task_instance.error_message = None
         if (
             status
             in (
@@ -333,11 +394,16 @@ class BaseExecutor(ABC):
             and duration_seconds is not None
         ):
             task_instance.last_duration_seconds = max(0, duration_seconds)
-        if error_message:
+            update_kwargs["last_duration_seconds"] = max(0, duration_seconds)
+        if error_message is not None:
             task_instance.error_message = error_message
+            update_kwargs["error_message"] = error_message
+        elif clear_error_on_success and status == TaskStatus.COMPLETED:
+            task_instance.error_message = None
+            update_kwargs["error_message"] = None
         task_instance.updated_at = datetime.now()
-        # 保存到数据库
-        task_instance.save()
+        with self._repository_scope() as repos:
+            repos.task_instances().update_runtime_state(task_instance.id, **update_kwargs)
 
         # 发送任务状态通知
         if status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
@@ -345,8 +411,8 @@ class BaseExecutor(ABC):
 
     def _apply_task_failure(
         self,
-        task_instance: "TaskInstance",
-        account: "Account",
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         error_message: Optional[str],
         *,
         duration_seconds: int = 0,
@@ -363,8 +429,8 @@ class BaseExecutor(ABC):
 
     def _apply_task_result(
         self,
-        task_instance: "TaskInstance",
-        account: "Account",
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         result: TaskResult,
     ):
         """将 TaskResult 收敛成任务实例的最终状态。"""
@@ -455,7 +521,7 @@ class BaseExecutor(ABC):
 
     def _notify_task_status(
         self,
-        task_instance: "TaskInstance",
+        task_instance: TaskInstanceSnapshot,
         status: str,
         message: str,
     ):
@@ -470,22 +536,30 @@ class BaseExecutor(ABC):
 
     def _reschedule_task(
         self,
-        task_instance: "TaskInstance",
+        task_instance: TaskInstanceSnapshot,
         when: datetime,
         reason: Optional[str] = None,
     ):
         """将任务重新排队到指定时间执行（通用机制）。"""
+        if task_instance.id is None:
+            raise RuntimeError("任务实例 ID 为空，无法重排")
         task_instance.status = TaskStatus.PENDING.value
         task_instance.next_run_at = when
+        update_kwargs: dict[str, object] = {
+            "status": TaskStatus.PENDING.value,
+            "next_run_at": when,
+        }
         if reason:
             task_instance.error_message = f"等待复查: {reason}"
+            update_kwargs["error_message"] = f"等待复查: {reason}"
         task_instance.updated_at = datetime.now()
-        task_instance.save()
+        with self._repository_scope() as repos:
+            repos.task_instances().update_runtime_state(task_instance.id, **update_kwargs)
 
     def _handle_requeue_in_result(
         self,
         result: "TaskResult",
-        task_instance: "TaskInstance",
+        task_instance: TaskInstanceSnapshot,
     ) -> bool:
         """处理结果中的重排请求，返回是否已处理。"""
         requeue_at = result.data.get("requeue_at")
@@ -524,17 +598,18 @@ class BaseExecutor(ABC):
 
     def _apply_prerequisite_result(
         self,
-        task_instance: "TaskInstance",
-        account: "Account",
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         result: TaskResult,
     ):
         """前置任务链有自己的收口规则，不在这里处理 requeue。"""
+        duration_seconds = self._get_result_duration_seconds(result)
         if not result.success:
             self._apply_task_failure(
                 task_instance=task_instance,
                 account=account,
                 error_message=result.error,
-                duration_seconds=self._get_result_duration_seconds(result),
+                duration_seconds=duration_seconds,
             )
             return
 
@@ -544,7 +619,7 @@ class BaseExecutor(ABC):
             status=TaskStatus.SKIPPED if result.skipped else TaskStatus.COMPLETED,
             error_message=f"跳过: {result.skip_reason}" if result.skipped else None,
             clear_error_on_success=not result.skipped,
-            duration_seconds=self._get_result_duration_seconds(result),
+            duration_seconds=duration_seconds,
             preserve_last_completed_at=result.preserve_last_completed_at,
         )
 
@@ -552,7 +627,7 @@ class BaseExecutor(ABC):
         self,
         current_task_type: str,
         prerequisite_task_types: list[str],
-        account: "Account",
+        account: AccountSnapshot,
         current_duration_seconds: int,
         stack: set[str],
         chain: list[str],
@@ -599,8 +674,8 @@ class BaseExecutor(ABC):
 
     def _resume_task_after_prerequisites(
         self,
-        task_instance: "TaskInstance",
-        account: "Account",
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         initial_result: TaskResult,
         prerequisite_task_types: list[str],
         stack: set[str],
@@ -633,8 +708,8 @@ class BaseExecutor(ABC):
 
     def _execute_task_with_prerequisites(
         self,
-        task_instance: "TaskInstance",
-        account: "Account",
+        task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         stack: Optional[set[str]] = None,
         chain: Optional[list[str]] = None,
     ) -> TaskResult:
@@ -696,8 +771,8 @@ class AccountExecutor(BaseExecutor):
     def __init__(
         self,
         device: Device,
-        account: "Account",
-        task_instances: list["TaskInstance"],
+        account: AccountSnapshot,
+        task_instances: list[TaskInstanceSnapshot],
         device_pool: DevicePool,
         config: Optional[ExecutorConfig] = None,
     ):
@@ -716,26 +791,17 @@ class AccountExecutor(BaseExecutor):
         self.task_instances = task_instances
         self.pending_tasks = list(task_instances)
 
-    def _fail_tasks_before_start(self, error_message: str):
-        """在正式开始前，统一标记全部任务失败。"""
+    def _fail_tasks(self, error_message: str, only_running: bool = False):
+        """统一标记任务失败。"""
         for task_instance in self.task_instances:
+            if only_running and task_instance.status != TaskStatus.RUNNING.value:
+                continue
             self._apply_task_failure(
                 task_instance=task_instance,
                 account=self.account,
                 error_message=error_message,
                 duration_seconds=0,
             )
-
-    def _fail_running_tasks(self, error_message: str):
-        """执行器异常时，仅收口仍处于 running 的任务。"""
-        for task_instance in self.task_instances:
-            if task_instance.status == TaskStatus.RUNNING.value:
-                self._apply_task_failure(
-                    task_instance=task_instance,
-                    account=self.account,
-                    error_message=error_message,
-                    duration_seconds=0,
-                )
 
     def _prepare_run(self) -> bool:
         """初始化执行环境，并切换到目标账号。"""
@@ -747,27 +813,27 @@ class AccountExecutor(BaseExecutor):
         if self._ensure_target_account(self.account):
             return True
 
-        self._fail_tasks_before_start("账号切换失败")
+        self._fail_tasks("账号切换失败")
         logger.error("账号切换失败，终止账号任务执行")
         return False
 
-    def _should_skip_task(self, task_instance: "TaskInstance") -> bool:
+    def _should_skip_task(self, task_instance: TaskInstanceSnapshot) -> bool:
         """判断当前任务是否应直接跳过。"""
         if task_instance.status != TaskStatus.BLOCKED.value:
             return False
 
         logger.info(
-            f"跳过被阻塞任务: {task_instance.task_type} (账号: {self.account.nickname})"
+            f"跳过被阻塞任务: {task_instance.task_type} (账号: {self.account.display_name})"
         )
         return True
 
-    def _set_active_task(self, task_instance: "TaskInstance"):
+    def _set_active_task(self, task_instance: TaskInstanceSnapshot):
         """切换当前任务上下文。"""
         from ptcgp_auto_v2.utils.logger import set_context
 
         set_context(task=task_instance.task_type)
 
-    def _execute_single_task(self, task_instance: "TaskInstance"):
+    def _execute_single_task(self, task_instance: TaskInstanceSnapshot):
         """执行单个任务，并将结果收口到统一状态更新入口。"""
         self._set_active_task(task_instance)
         logger.info(f"执行任务: {task_instance.task_type}")
@@ -812,24 +878,9 @@ class AccountExecutor(BaseExecutor):
                 if not self._prepare_run():
                     return
                 self._run_pending_tasks()
-                logger.info(f"账号任务执行完成 (账号: {self.account.nickname})")
+                logger.info(f"账号任务执行完成 (账号: {self.account.display_name})")
             except Exception as e:
                 logger.exception(f"账号执行器异常: {e}")
-                self._fail_running_tasks(str(e))
+                self._fail_tasks(str(e), only_running=True)
             finally:
                 self._cleanup()
-
-
-# --- 线程池提交入口 -------------------------------------------------------
-
-
-def run_account_executor(
-    device: Device,
-    account: "Account",
-    task_instances: list["TaskInstance"],
-    device_pool: DevicePool,
-    config: Optional[ExecutorConfig] = None,
-):
-    """运行账号任务执行器的便捷函数。"""
-    executor = AccountExecutor(device, account, task_instances, device_pool, config)
-    executor.run()
