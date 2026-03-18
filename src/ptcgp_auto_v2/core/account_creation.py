@@ -133,12 +133,13 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
                             account.id,
                             "init_account",
                         )
+                        init_task_id = init_task.id if init_task else None
 
-                    if init_task:
+                    if init_task_id is not None:
                         # 有init_task，说明是新创建的账号
                         logger.info(
                             f"发现新账号！Player ID: {account.game_id}, "
-                            f"已创建init_account任务 (任务ID: {init_task.id})"
+                            f"已创建init_account任务 (任务ID: {init_task_id})"
                         )
                         new_account = account
                         break
