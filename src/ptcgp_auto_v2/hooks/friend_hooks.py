@@ -58,7 +58,7 @@ class FriendPreHook(Hook):
             return HookResult.CONTINUE, {}
 
         with session_scope() as session:
-            existing = FriendRequestRepository(session).get_pending_request(
+            existing = FriendRequestRepository(session).get_pending_request_data(
                 from_account_id=account_id,
                 to_friend_id=self.target_friend_id,
             )
