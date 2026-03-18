@@ -85,6 +85,8 @@
   - Repository 内部禁止自建 `Session`、禁止自行 `commit`
   - 模型层禁止 `save()/update()/delete()` 这类写库入口
   - 事务外禁止继续传递 ORM 实体；跨层只允许标量、`dataclass` 纯数据或视图 `dict`
+  - 日志、通知、Webhook 这类次要副作用不得与主数据写入共用同一事务；主数据必须先提交，副作用随后单独执行
+  - 反例：开包写入 `account_cards` 时，禁止把 `notifications` 插入放在同一个 `session_scope()` 里；否则通知失败会把已识别出的高稀有卡一并回滚
 
 ### 调试与运维
 

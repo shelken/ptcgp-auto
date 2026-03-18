@@ -6,7 +6,6 @@ import logging
 import random
 from typing import Optional
 
-from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -29,6 +28,7 @@ from ptcgp_auto_v2.tasks.utils.constants import (
     BASE_PACK_RESULT_SCROLL_DISTANCE_Y,
     PACK_RESULT_SCROLL_SWIPE_STEPS,
 )
+from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
@@ -436,7 +436,7 @@ class WonderPickTask(StatefulTask):
         """GET/结果页保存高稀有度卡并继续推进。"""
         ocr_results = page_info.get("ocr_results", [])
         if not self._get_card_saved:
-            account_id = self._get_account_id()
+            account_id = getattr(self.account, "id", None)
             if account_id is None:
                 return ActionResult.ok(wait=0.5)
 
@@ -612,31 +612,43 @@ class WonderPickTask(StatefulTask):
         rows: list[WonderPickCardMatch],
     ) -> None:
         """保存高稀有度卡牌并发送通知。"""
-        notifier = get_notifier()
         account_name = self._get_account_name()
+        row_dicts = [
+            {
+                "card_id": row.card_id,
+                "card_name": row.card_name,
+                "card_data": row.card_data,
+                "set_code": row.set_code,
+                "card_number": row.card_number,
+                "rarity": row.rarity,
+                "confidence": row.confidence,
+                "hash_similarity": row.hash_similarity,
+            }
+            for row in rows
+        ]
         with session_scope() as session:
-            account_card_repo = RepositoryFactory(session).account_cards()
-            for row in rows:
-                if row.card_id is None or row.rarity not in HIGH_RARITY_TARGETS:
-                    continue
-                account_card_repo.increase_owned(
-                    account_id=account_id,
-                    card_id=row.card_id,
-                    amount=0,
-                    yolo_conf=row.confidence,
-                    hash_similarity=row.hash_similarity,
-                )
-                notifier.notify_rare_card_data(
-                    account_id=account_id,
-                    account_name=account_name,
-                    card_id=row.card_id,
-                    card_name=row.card_name,
-                    card_data=row.card_data,
-                    set_code=row.set_code or "",
-                    card_number=row.card_number,
-                    rarity=row.rarity,
-                    message="得卡挑战获得稀有卡牌",
-                )
+            notifications = save_high_rarity_cards(
+                account_card_repo=RepositoryFactory(session).account_cards(),
+                account_id=account_id,
+                rows=row_dicts,
+                account_name=account_name,
+                notify_message="得卡挑战获得稀有卡牌",
+            )
+        notifier = get_notifier()
+        for item in notifications:
+            notifier.notify_rare_card_data(
+                account_id=item.account_id,
+                account_name=item.account_name,
+                card_id=item.card_id,
+                card_name=item.card_name,
+                card_data=item.card_data,
+                set_code=item.set_code,
+                card_number=item.card_number,
+                rarity=item.rarity,
+                pack_name=item.pack_name,
+                image_url=None,
+                message=item.message,
+            )
 
     def _get_account_name(self) -> str:
         """构建通知使用的账号显示名。"""
