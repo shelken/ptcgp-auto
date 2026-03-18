@@ -47,11 +47,12 @@
 - **开包识别编排原则**：`_recognize_cards` 只做流程编排，`DetectedCard -> Card/批次dict` 映射统一放 `tasks/utils`
 - **开包结果纯数据原则**：识别映射、通知、入库前整理统一使用纯数据结构，禁止把 `Card/CardSet/Pack` ORM 带出事务
 - **识别查询去重原则**：同一批识别结果的卡牌详情只查一次并复用（入库与通知共用）
-- **高稀有度保存与通知同入口原则**：稀有度通知必须绑定在 `high_rarity_saver.py` 保存流程内触发
+- **高稀有度保存与通知分离原则**：`high_rarity_saver.py` 只负责写 `account_cards` 并返回待通知纯数据；任务层必须在事务提交后再调用 `Notifier`
 - **识别映射统一结构原则**：`DetectedCard` 映射统一走 `pack_result_mapper.py::map_detected_cards`
 - **结果行归并分层原则**：结果页行签名、归并、分包统一放 `pack_result_rows.py`，不要继续塞回 mapper
 - **通知配置归 Notifier 原则**：task 层不做通知过滤，由 `Notifier.notify_rare_card` 内部配置决定
 - **稀有卡事件来源标记原则**：调用 `save_high_rarity_cards` 时必须传入中文来源消息（如"开包获得稀有卡牌"）
+- **次要副作用不得回滚主数据原则**：日志、通知、Webhook、测试消息这类次要操作必须放在主事务提交之后执行，禁止影响开包记录、高稀有卡写库、任务状态写库
 
 ### PackOpeningTaskBase 规范
 
@@ -78,10 +79,21 @@
   
   # ❌ 错误：英文 pack_type 拼接
   notify_message = f"{self.get_pack_record_type()}获得稀有卡牌"
+
+  # ❌ 错误：把通知和主数据写入放在同一事务
+  with session_scope() as session:
+      save_high_rarity_cards(...)
+      get_notifier().notify_rare_card_data(...)
   
   # ✅ 正确：通过扩展点提供纯中文消息
   def get_rare_card_notify_message(self):
       return "开包获得稀有卡牌"
+
+  # ✅ 正确：事务内只写主数据，提交后再发通知
+  with session_scope() as session:
+      notifications = save_high_rarity_cards(...)
+  for item in notifications:
+      get_notifier().notify_rare_card_data(...)
   ```
 
 ### 测试规范
