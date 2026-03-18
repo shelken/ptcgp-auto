@@ -20,6 +20,10 @@ PTCGP Auto
 Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 **v2 版本全新架构**：采用任务队列 + 多设备调度模式，专为多账号日常托管设计。
 
+## 关键事实
+
+- v2 当前以 `main_v2.py` 为主入口，v1 仅保留在 `src/ptcgp_auto`
+
 ## ✨ 核心功能 (v2)
 
 ### 日常任务
@@ -81,7 +85,7 @@ direnv allow
 
 手动安装依赖：
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 1.1 使用 `.env` 配置（v2）
@@ -112,33 +116,33 @@ Webhook 解析优先级：**显式 URL 参数 > `PTCGP_WEBHOOK_URL` > `PTCGP_NOT
 
 ```bash
 # 自动发现 BlueStacks 模拟器并启动守护模式
-python main_v2.py --daemon
+uv run python main_v2.py --daemon
 
 # 指定设备启动
-python main_v2.py --daemon -d 127.0.0.1:5555
+uv run python main_v2.py --daemon -d 127.0.0.1:5555
 ```
 
 ### 3. 常用命令
 
 ```bash
 # 查看帮助
-python main_v2.py --help
+uv run python main_v2.py --help
 
 # 列出所有账号
-python main_v2.py --list-accounts
+uv run python main_v2.py --list-accounts
 
 # 列出支持的任务类型
-python main_v2.py --list-tasks
+uv run python main_v2.py --list-tasks
 
 # 手动执行单次任务（调试用）
-python main_v2.py --task open_pack --account 1
+uv run python main_v2.py --task open_pack --account 1
 
 # 同步当前设备登录的账号到数据库
-python main_v2.py --sync-account
+uv run python main_v2.py --sync-account
 
 # CLI 直接覆盖企微配置（优先级最高）
-python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
-python main_v2.py --web --notify-key "xxxx"
+uv run python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
+uv run python main_v2.py --web --notify-key "xxxx"
 ```
 
 ## 📦 模型自动下载
