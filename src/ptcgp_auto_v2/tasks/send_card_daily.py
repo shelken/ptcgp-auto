@@ -785,6 +785,6 @@ class SendCardDailyTask(StatefulTask):
             return 0
         with session_scope() as session:
             row = AccountCardRepository(session).get(account_id, fixed_card_id)
-        if row is None:
-            return 0
-        return max(int(row.count), 0)
+            if row is None:
+                return 0
+            return max(int(row.count), 0)
