@@ -1,5 +1,12 @@
 - 编写代码前，先阅读一次项目根目录的`AGENTS.md`
 
+### 数据访问与状态原则
+
+- **任务状态禁止存 ORM**：`state`、实例属性、跨页面缓存里只允许放 `id`、标量和 `dataclass` 纯数据，禁止放 `Account/Card/Request/TaskInstance` 这类 ORM 实体
+- **任务内事务边界单一**：需要访问数据库时，在当前业务动作内显式 `with session_scope() as session:`，需要多个 Repository 时统一 `RepositoryFactory(session)`
+- **任务辅助函数返回纯数据**：`tasks/utils`、任务私有 helper 返回 `dataclass` 纯数据或标量，禁止返回带 Session 生命周期的 ORM
+- **任务完成写库后立即结束事务**：不要把查出的 ORM 带到页面处理循环外继续使用，需要时重新开事务按 `id` 查询
+
 ### 页面内处理原则
 
 - **完整处理**：使用 pages 规则匹配到处理函数时，必须在同一段逻辑内完成该页面所有操作（包括弹窗），然后通过 close/back 返回主界面，让 page 规则重新匹配
@@ -38,6 +45,7 @@
 ### 开包流程规范
 
 - **开包识别编排原则**：`_recognize_cards` 只做流程编排，`DetectedCard -> Card/批次dict` 映射统一放 `tasks/utils`
+- **开包结果纯数据原则**：识别映射、通知、入库前整理统一使用纯数据结构，禁止把 `Card/CardSet/Pack` ORM 带出事务
 - **识别查询去重原则**：同一批识别结果的卡牌详情只查一次并复用（入库与通知共用）
 - **高稀有度保存与通知同入口原则**：稀有度通知必须绑定在 `high_rarity_saver.py` 保存流程内触发
 - **识别映射统一结构原则**：`DetectedCard` 映射统一走 `pack_result_mapper.py::map_detected_cards`
