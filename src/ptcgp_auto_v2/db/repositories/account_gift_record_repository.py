@@ -4,8 +4,6 @@ AccountGiftRecordRepository
 
 送卡执行记录数据访问层。
 """
-
-from datetime import datetime
 from typing import Optional
 
 from sqlmodel import select
@@ -16,6 +14,10 @@ from .base import BaseRepository
 
 class AccountGiftRecordRepository(BaseRepository):
     """送卡执行记录数据访问层。"""
+
+    def get_by_id(self, record_id: int) -> Optional[AccountGiftRecord]:
+        """按主键读取记录。"""
+        return self.session.get(AccountGiftRecord, record_id)
 
     def get_daily_record(
         self,
@@ -74,13 +76,6 @@ class AccountGiftRecordRepository(BaseRepository):
             biz_date_local=biz_date_local,
             status="init",
         )
-        self.session.add(record)
-        self._finish_write(record)
-        return record
-
-    def update(self, record: AccountGiftRecord) -> AccountGiftRecord:
-        """更新记录。"""
-        record.updated_at = datetime.now()
         self.session.add(record)
         self._finish_write(record)
         return record

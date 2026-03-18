@@ -175,7 +175,7 @@ class GiftRecordService:
 
     @staticmethod
     def update_status(
-        record: GiftRecordData,
+        record_id: int,
         status: str,
         error_code: Optional[str] = None,
         error_message: Optional[str] = None,
@@ -183,22 +183,20 @@ class GiftRecordService:
         """更新记录状态与错误信息。"""
         with session_scope() as session:
             repo = RepositoryFactory(session).account_gift_records()
-            db_record = repo.get_daily_record(
-                account_id=record.account_id,
-                target_friend_id=record.target_friend_id,
-                biz_date_local=record.biz_date_local,
-            )
-            if db_record is None or db_record.id != record.id:
+            db_record = repo.get_by_id(record_id)
+            if db_record is None:
                 raise RuntimeError("更新送卡记录失败：记录不存在")
             db_record.status = status
             db_record.error_code = error_code
             db_record.error_message = error_message
-            updated = repo.update(db_record)
-            return GiftRecordService._record_to_data(updated)
+            db_record.updated_at = datetime.now()
+            session.flush()
+            session.refresh(db_record)
+            return GiftRecordService._record_to_data(db_record)
 
     @staticmethod
     def mark_success_and_sync_count(
-        record: GiftRecordData,
+        record_id: int,
         card_id: Optional[int],
         before_count: Optional[int],
         after_count: Optional[int],
@@ -211,10 +209,13 @@ class GiftRecordService:
             repos = RepositoryFactory(session)
             account_card_repo = repos.account_cards()
             gift_record_repo = repos.account_gift_records()
+            db_record = gift_record_repo.get_by_id(record_id)
+            if db_record is None:
+                raise RuntimeError("送卡成功收敛失败：记录不存在")
 
             db_row = None
             if card_id is not None:
-                db_row = account_card_repo.get(record.account_id, card_id)
+                db_row = account_card_repo.get(db_record.account_id, card_id)
 
             if resolved_after_count is None:
                 if before_count is not None:
@@ -223,14 +224,6 @@ class GiftRecordService:
                 elif db_row is not None:
                     resolved_after_count = max(int(db_row.count) - 1, 0)
                     count_source = "db"
-
-            db_record = gift_record_repo.get_daily_record(
-                account_id=record.account_id,
-                target_friend_id=record.target_friend_id,
-                biz_date_local=record.biz_date_local,
-            )
-            if db_record is None or db_record.id != record.id:
-                raise RuntimeError("送卡成功收敛失败：记录不存在")
             db_record.card_id = card_id
             db_record.before_count = before_count
             db_record.after_count = resolved_after_count
@@ -240,11 +233,13 @@ class GiftRecordService:
             db_record.status = "success"
             db_record.error_code = None
             db_record.error_message = None
-            updated = gift_record_repo.update(db_record)
+            db_record.updated_at = datetime.now()
+            session.flush()
+            session.refresh(db_record)
 
             if card_id is not None and resolved_after_count is not None:
                 account_card_repo.upsert(
-                    account_id=record.account_id,
+                    account_id=db_record.account_id,
                     card_id=card_id,
                     count=resolved_after_count,
                     yolo_conf=db_row.yolo_conf if db_row else None,
@@ -252,10 +247,10 @@ class GiftRecordService:
                 )
 
                 # 双向同步：送卡成功后，目标账号该卡数量 +1。
-                if isinstance(record.target_account_id, int):
-                    target_row = account_card_repo.get(record.target_account_id, card_id)
+                if isinstance(db_record.target_account_id, int):
+                    target_row = account_card_repo.get(db_record.target_account_id, card_id)
                     account_card_repo.increase_owned(
-                        account_id=record.target_account_id,
+                        account_id=db_record.target_account_id,
                         card_id=card_id,
                         amount=1,
                         yolo_conf=target_row.yolo_conf if target_row else None,
@@ -264,4 +259,4 @@ class GiftRecordService:
                         else None,
                     )
 
-        return GiftRecordService._record_to_data(updated)
+        return GiftRecordService._record_to_data(db_record)

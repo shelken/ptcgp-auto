@@ -363,9 +363,18 @@ class BattleTask(StatefulTask):
 
         # 从 task_instance 获取账号和任务实例ID
         task_instance = getattr(self, "task_instance", None)
-        if task_instance:
-            self._account_id = getattr(task_instance, "account_id", 0)
-            self._task_instance_id = getattr(task_instance, "id", 0)
+        if task_instance is None:
+            raise RuntimeError("battle 任务缺少 task_instance")
+
+        account_id = getattr(task_instance, "account_id", None)
+        task_instance_id = getattr(task_instance, "id", None)
+        if not isinstance(account_id, int) or account_id <= 0:
+            raise RuntimeError("battle 任务缺少有效 account_id")
+        if not isinstance(task_instance_id, int) or task_instance_id <= 0:
+            raise RuntimeError("battle 任务缺少有效 task_instance_id")
+
+        self._account_id = account_id
+        self._task_instance_id = task_instance_id
 
         with session_scope() as session:
             stop_conditions_config = (

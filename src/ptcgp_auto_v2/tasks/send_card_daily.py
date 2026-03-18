@@ -180,21 +180,6 @@ class SendCardDailyTask(StatefulTask):
         self.state_del("action.filter_keyword_input")
         self.state_set("filter_modal_stay_rounds", 0)
 
-    def _load_record(self):
-        """按当前上下文重新加载送卡记录。"""
-        record_id = cast(Optional[int], self.state_get("record_id"))
-        target_friend_id = cast(Optional[str], self.state_get("target_friend_id"))
-        target_account_id = cast(Optional[int], self.state_get("target_account_id"))
-        if record_id is None or self.account.id is None or not target_friend_id:
-            return None
-        return GiftRecordService.ensure_daily_record(
-            account_id=self.account.id,
-            target_friend_id=target_friend_id,
-            target_account_id=target_account_id,
-            card_set_code=FIXED_CARD_SET_CODE,
-            card_number=FIXED_CARD_NUMBER,
-        )
-
     def on_start(self):
         """任务启动初始化。"""
         self.state.reset()
@@ -307,9 +292,9 @@ class SendCardDailyTask(StatefulTask):
 
     def _on_friend_verified(self):
         """好友验证成功回调。"""
-        record = self._load_record()
-        if record:
-            GiftRecordService.update_status(record, status="target_found")
+        record_id = cast(Optional[int], self.state_get("record_id"))
+        if record_id is not None:
+            GiftRecordService.update_status(record_id, status="target_found")
 
     def _on_nickname_found(self, account_id: int, friend_id: str, nickname: str):
         """发现 nickname 回调：持久化到好友关系。"""
@@ -384,10 +369,10 @@ class SendCardDailyTask(StatefulTask):
         """以完成态收敛任务。"""
         self.complete(complete_reason)
         logger.info("send_card_daily 完成收敛: %s", complete_reason)
-        record = self._load_record()
-        if record:
+        record_id = cast(Optional[int], self.state_get("record_id"))
+        if record_id is not None:
             GiftRecordService.update_status(
-                record,
+                record_id,
                 status=record_status,
                 error_code=error_code,
                 error_message=complete_reason,
@@ -403,10 +388,10 @@ class SendCardDailyTask(StatefulTask):
         """以跳过态收敛任务。"""
         self.skip(skip_reason)
         logger.info("send_card_daily 跳过收敛: %s", skip_reason)
-        record = self._load_record()
-        if record and record_status:
+        record_id = cast(Optional[int], self.state_get("record_id"))
+        if record_id is not None and record_status:
             GiftRecordService.update_status(
-                record,
+                record_id,
                 status=record_status,
                 error_code=error_code,
                 error_message=skip_reason,
@@ -538,9 +523,9 @@ class SendCardDailyTask(StatefulTask):
         )
         scan_tap_result = self._tap_target_card_by_scan(detected)
         if scan_tap_result:
-            record = self._load_record()
-            if record:
-                GiftRecordService.update_status(record, status="card_selected")
+            record_id = cast(Optional[int], self.state_get("record_id"))
+            if record_id is not None:
+                GiftRecordService.update_status(record_id, status="card_selected")
             return scan_tap_result
 
         signature = build_detect_signature(detected)
@@ -668,9 +653,9 @@ class SendCardDailyTask(StatefulTask):
             wait=0.8,
         )
         if send_result:
-            record = self._load_record()
-            if record:
-                GiftRecordService.update_status(record, status="confirming")
+            record_id = cast(Optional[int], self.state_get("record_id"))
+            if record_id is not None:
+                GiftRecordService.update_status(record_id, status="confirming")
             return send_result
         return ActionResult.wait(0.6)
 
@@ -719,14 +704,14 @@ class SendCardDailyTask(StatefulTask):
 
     def _finalize_success(self):
         """任务成功后的记录与库存同步。"""
-        record = self._load_record()
-        if not record:
+        record_id = cast(Optional[int], self.state_get("record_id"))
+        if record_id is None:
             return
         fixed_card_id = cast(Optional[int], self.state_get("fixed_card_id"))
         before_count = cast(Optional[int], self.state_get("before_count"))
         after_count = cast(Optional[int], self.state_get("after_count"))
         GiftRecordService.mark_success_and_sync_count(
-            record=record,
+            record_id=record_id,
             card_id=fixed_card_id,
             before_count=before_count,
             after_count=after_count,
