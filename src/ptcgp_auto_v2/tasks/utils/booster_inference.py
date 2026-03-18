@@ -10,12 +10,19 @@
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Card
+from dataclasses import dataclass
+from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True, frozen=True)
+class PackInferenceCard:
+    """结果页子包推断使用的纯数据卡牌对象。"""
+
+    id: int
+    set_code: str
+    pack_names: tuple[str, ...]
 
 
 def _is_promo_pack(pack_name: str) -> bool:
@@ -23,16 +30,7 @@ def _is_promo_pack(pack_name: str) -> bool:
     return pack_name.upper().startswith("PROMO")
 
 
-def _get_card_pack_names(card: "Card") -> list[str]:
-    """获取卡牌所属的非 PROMO 子包名称列表"""
-    return [
-        cp.pack_name
-        for cp in card.packs
-        if cp.pack_name and not _is_promo_pack(cp.pack_name)
-    ]
-
-
-def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
+def infer_pack_by_cards(cards: list[PackInferenceCard]) -> Optional[dict]:
     """通过卡牌反推子包（第二阶段兜底）。
 
     判定规则（按优先级）：
@@ -45,7 +43,7 @@ def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
     4. 无法唯一确定时返回 pack_name=None，但 set_code 可能确定
 
     Args:
-        cards: Card 对象列表（需要已加载 packs 关系）
+        cards: 纯数据卡牌对象列表
 
     Returns:
         推断结果 {"set_code": str, "booster_name": str|None, "source": "cards"}
@@ -56,7 +54,7 @@ def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
 
     # 1. 统计系列占比，同时收集该系列的所有子包
     set_counts: dict[str, int] = {}
-    valid_cards: list["Card"] = []
+    valid_cards: list[PackInferenceCard] = []
     # 按系列收集子包（排除 PROMO）
     packs_by_set: dict[str, set[str]] = {}
     # 每张卡牌对应的子包列表
@@ -66,7 +64,11 @@ def infer_pack_by_cards(cards: list["Card"]) -> Optional[dict]:
         if not card.id or not card.set_code:
             continue
 
-        pack_names = _get_card_pack_names(card)
+        pack_names = [
+            pack_name
+            for pack_name in card.pack_names
+            if pack_name and not _is_promo_pack(pack_name)
+        ]
         if not pack_names:
             continue
 

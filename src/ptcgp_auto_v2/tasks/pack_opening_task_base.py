@@ -17,7 +17,6 @@ import logging
 import threading
 import time
 from abc import abstractmethod
-from dataclasses import dataclass
 from typing import cast
 
 from ptcgp_auto_v2.config.settings import get_settings
@@ -30,6 +29,7 @@ from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.infra.yolo_card_recognizer import DetectedCard, YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.booster_inference import (
+    PackInferenceCard,
     infer_pack_by_cards,
 )
 from ptcgp_auto_v2.tasks.utils.constants import (
@@ -73,23 +73,6 @@ PACK_RESULT_ROWS_PER_PACK = 2
 OPENING_CARD_QUICK_TAP_TIMES = 6
 OPENING_CARD_WAIT = 3.0
 OPENING_CARD_TEN_FAST_TAP_LIMIT = 10
-
-
-@dataclass(slots=True, frozen=True)
-class _PackInferencePack:
-    """子包推断使用的纯数据子包对象。"""
-
-    pack_name: str
-
-
-@dataclass(slots=True, frozen=True)
-class _PackInferenceCard:
-    """子包推断使用的纯数据卡牌对象。"""
-
-    id: int
-    set_code: str
-    packs: tuple[_PackInferencePack, ...]
-
 
 # ============================================================
 # 通用开包页面规则构建
@@ -410,7 +393,11 @@ class PackOpeningTaskBase(StatefulTask):
             with session_scope() as session:
                 factory = RepositoryFactory(session)
                 account_card_repo = factory.account_cards()
-                account_name = self._resolve_account_name()
+                account_name = (
+                    getattr(self.account, "nickname", None)
+                    or getattr(self.account, "display_name", None)
+                    or str(getattr(self.account, "id", ""))
+                )
                 save_high_rarity_cards(
                     account_card_repo=account_card_repo,
                     account_id=self.account.id,
@@ -583,7 +570,9 @@ class PackOpeningTaskBase(StatefulTask):
             self.adb, page_info.get("ocr_results", []), wait=1.5
         )
 
-    _handle_pack_opening_multi_result = _handle_pack_opening_result
+    def _handle_pack_opening_multi_result(self, page_info: dict) -> ActionResult:
+        """10包总览结果页沿用开包结果处理逻辑。"""
+        return self._handle_pack_opening_result(page_info)
 
     def _set_pack_result_mode(self, batch_size: int = 1) -> None:
         """设置当前开包结果模式。"""
@@ -647,14 +636,14 @@ class PackOpeningTaskBase(StatefulTask):
 
     def _build_pack_inference_cards(
         self, rows: list[dict]
-    ) -> list[_PackInferenceCard]:
+    ) -> list[PackInferenceCard]:
         """把结果行转成子包推断需要的纯数据对象。"""
         if not rows:
             return []
 
         with session_scope() as session:
             card_repo = RepositoryFactory(session).cards()
-            cards: list[_PackInferenceCard] = []
+            cards: list[PackInferenceCard] = []
             for row in rows:
                 card_id = row.get("card_id")
                 set_code = row.get("set_code")
@@ -664,25 +653,15 @@ class PackOpeningTaskBase(StatefulTask):
                 if not pack_names:
                     continue
                 cards.append(
-                    _PackInferenceCard(
+                    PackInferenceCard(
                         id=int(card_id),
                         set_code=str(set_code),
-                        packs=tuple(
-                            _PackInferencePack(pack_name=str(pack_name))
-                            for pack_name in pack_names
-                            if pack_name
+                        pack_names=tuple(
+                            str(pack_name) for pack_name in pack_names if pack_name
                         ),
                     )
                 )
             return cards
-
-    def _resolve_account_name(self) -> str:
-        """解析账号显示名，用于通知。"""
-        return (
-            getattr(self.account, "nickname", None)
-            or getattr(self.account, "display_name", None)
-            or str(getattr(self.account, "id", ""))
-        )
 
     def _log_multi_pack_rows_snapshot(self) -> None:
         """打印当前已收集的全部结果行，便于调试分组问题。"""
