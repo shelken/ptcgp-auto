@@ -259,4 +259,4 @@ class GiftRecordService:
                         else None,
                     )
 
-        return GiftRecordService._record_to_data(db_record)
+            return GiftRecordService._record_to_data(db_record)
