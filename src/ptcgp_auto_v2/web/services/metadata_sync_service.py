@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.services.metadata_sync.cache_store import TTLCacheStore
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (
@@ -37,6 +40,7 @@ def check_sources(
 def preview_sync(
     flibustier_service: FlibustierSyncService,
     poke52_service: Poke52LocalizationService,
+    repo: CardRepository,
     sync_kind: str,
     source: str,
     mode: str,
@@ -71,7 +75,6 @@ def preview_sync(
             extra_map=remote_extra_map,
         )
 
-    repo = CardRepository()
     if sync_kind == "update_new_series":
         flibustier_plan = _keep_new_series_only_plan(flibustier_plan)
     if sync_kind == "update_data":
@@ -132,6 +135,7 @@ def preview_sync(
 
 def execute_sync(
     flibustier_service: FlibustierSyncService,
+    repo: CardRepository,
     snapshot_id: str,
 ) -> dict[str, Any]:
     """按缓存快照执行同步。"""
@@ -146,7 +150,7 @@ def execute_sync(
         payload["flibustier"]["operations"]
     )
     localization_result = _apply_localization(
-        repo=CardRepository(),
+        repo=repo,
         localization=payload.get("localization", {}),
         mode=str(payload.get("mode") or "supplement"),
     )
@@ -159,19 +163,13 @@ def execute_sync(
 
 def build_default_check_context() -> dict[str, dict[str, int]]:
     """构建默认检查上下文（读取本地基础统计）。"""
-    repo = CardRepository()
-    local_stats = {
-        "sets": len(repo.get_all_sets()),
-        "packs": len(repo.get_all_packs()),
-        "cards": sum(
-            len(repo.get_cards_by_set(item.code)) for item in repo.get_all_sets()
-        ),
-    }
-    return check_sources(
-        local_stats=local_stats,
-        flibustier_stats={"sets": 0, "cards": 0},
-        poke52_stats={"series": 0, "packs": 0},
-    )
+    with session_scope() as session:
+        repo = CardRepository(session)
+        return check_sources(
+            local_stats=repo.get_metadata_counts(),
+            flibustier_stats={"sets": 0, "cards": 0},
+            poke52_stats={"series": 0, "packs": 0},
+        )
 
 
 def _build_preview_items(
@@ -180,7 +178,8 @@ def _build_preview_items(
     """将预览 payload 转换为可读清单。"""
     items: list[dict[str, str]] = []
     if repo is None:
-        repo = CardRepository()
+        with session_scope() as session:
+            return _build_preview_items(payload, CardRepository(session))
 
     flib = payload.get("flibustier") if isinstance(payload, dict) else {}
     operations = flib.get("operations", {}) if isinstance(flib, dict) else {}
@@ -498,8 +497,9 @@ def _apply_localization(
 
         localized_name["zh"] = zh_name
         data["localized_name"] = localized_name
-        card.data = json.dumps(data, ensure_ascii=False)
-        repo.upsert_card(card)
+        card_payload = asdict(card)
+        card_payload["data"] = json.dumps(data, ensure_ascii=False)
+        repo.upsert_card(Card.model_validate(card_payload))
         card_updates += 1
 
     return {

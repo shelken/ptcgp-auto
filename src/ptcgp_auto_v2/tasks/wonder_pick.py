@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """得卡挑战任务。"""
 
+from dataclasses import dataclass
 import logging
 import random
 from typing import Optional
 
+from ptcgp_auto_v2.config.constants import HIGH_RARITY_TARGETS
 from ptcgp_auto_v2.config.wonder_pick import (
     WONDER_PICK_DEFAULT_TARGETS,
     WONDER_PICK_POSITIONS,
@@ -14,6 +16,8 @@ from ptcgp_auto_v2.config.wonder_pick import (
 )
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector, count_icons
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
@@ -25,9 +29,7 @@ from ptcgp_auto_v2.tasks.utils.constants import (
     BASE_PACK_RESULT_SCROLL_DISTANCE_Y,
     PACK_RESULT_SCROLL_SWIPE_STEPS,
 )
-from ptcgp_auto_v2.tasks.utils.high_rarity_saver import save_high_rarity_cards
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
-from ptcgp_auto_v2.tasks.utils.pack_result_mapper import map_detected_cards
 from ptcgp_auto_v2.utils.card_name_resolver import resolve_card_name
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
@@ -48,6 +50,20 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 WONDER_STAMINA_TEMPLATE = "icon_wonder_stamina"  # 挑战力图标模板
+
+
+@dataclass(slots=True, frozen=True)
+class WonderPickCardMatch:
+    """得卡挑战识别后的卡牌纯数据。"""
+
+    card_id: int | None
+    set_code: str | None
+    card_number: int
+    card_name: str
+    rarity: str
+    confidence: float
+    hash_similarity: float
+    card_data: str | None
 
 
 def _build_challenge_pages() -> list[dict]:
@@ -141,16 +157,9 @@ class WonderPickTask(StatefulTask):
         self._same_signature_count = 0
         self._pending_after_challenge = False
 
-        self._card_repo = None
-        self._account_card_repo = None
-
     def on_start(self):
         """初始化任务运行状态。"""
-        from ptcgp_auto_v2.db.repositories import AccountCardRepository, CardRepository
-
         self.state.reset()
-        self._card_repo = CardRepository()
-        self._account_card_repo = AccountCardRepository()
         self._get_card_saved = False
         self._current_stamina = None
         self._stamina_zero_count = 0
@@ -172,20 +181,16 @@ class WonderPickTask(StatefulTask):
     @staticmethod
     def sort_rarity_targets(targets: list[str]) -> list[str]:
         """按稀有度优先级排序。"""
-        priority = {
-            rarity: idx for idx, rarity in enumerate(WONDER_PICK_RARITY_PRIORITY)
-        }
-        valid = [rarity for rarity in targets if rarity in priority]
-        return sorted(valid, key=lambda rarity: priority[rarity])
+        valid = [rarity for rarity in targets if rarity in WONDER_PICK_RARITY_PRIORITY]
+        return sorted(valid, key=WONDER_PICK_RARITY_PRIORITY.index)
 
     @staticmethod
     def pick_best_target(found: list[str], targets: list[str]) -> Optional[str]:
         """从命中的目标中选择最高优先级。"""
-        priority = {
-            rarity: idx for idx, rarity in enumerate(WONDER_PICK_RARITY_PRIORITY)
-        }
-        valid = [rarity for rarity in targets if rarity in priority]
-        sorted_targets = sorted(valid, key=lambda rarity: priority[rarity])
+        sorted_targets = sorted(
+            (rarity for rarity in targets if rarity in WONDER_PICK_RARITY_PRIORITY),
+            key=WONDER_PICK_RARITY_PRIORITY.index,
+        )
         for rarity in sorted_targets:
             if rarity in found:
                 return rarity
@@ -334,13 +339,13 @@ class WonderPickTask(StatefulTask):
 
     def _collect_page_targets(self, detected) -> list[tuple[str, tuple[float, float]]]:
         """收集当前页所有目标卡及其坐标。"""
-        if not self._card_repo or not detected:
+        if not detected:
             return []
 
-        rows = map_detected_cards(cards=detected, card_repo=self._card_repo)
+        rows = self._build_card_matches(detected)
         page_targets: list[tuple[str, tuple[float, float]]] = []
         for item, row in zip(detected, rows):
-            rarity = row.get("rarity")
+            rarity = row.rarity
             if not rarity or rarity not in self._target_rarities:
                 continue
             page_targets.append((rarity, item.center))
@@ -431,35 +436,27 @@ class WonderPickTask(StatefulTask):
         """GET/结果页保存高稀有度卡并继续推进。"""
         ocr_results = page_info.get("ocr_results", [])
         if not self._get_card_saved:
-            if (
-                not self._card_repo
-                or not self._account_card_repo
-                or not self.account.id
-            ):
+            account_id = self._get_account_id()
+            if account_id is None:
                 return ActionResult.ok(wait=0.5)
 
-            detected = self.card_recognizer.scan(
-                resolve_name=lambda set_code, card_number: resolve_card_name(
-                    self._card_repo,
-                    set_code,
-                    card_number,
-                ),
-            )
+            with session_scope() as session:
+                card_repo = RepositoryFactory(session).cards()
+                detected = self.card_recognizer.scan(
+                    resolve_name=lambda set_code, card_number: resolve_card_name(
+                        card_repo,
+                        set_code,
+                        card_number,
+                    ),
+                )
             if not detected:
                 return ActionResult.ok(wait=0.5)
 
-            rows = map_detected_cards(cards=detected, card_repo=self._card_repo)
-            if not any(row.get("card_id") for row in rows):
+            rows = self._build_card_matches(detected)
+            if not any(row.card_id for row in rows):
                 return ActionResult.ok(wait=0.5)
 
-            save_high_rarity_cards(
-                account_card_repo=self._account_card_repo,
-                account_id=self.account.id,
-                rows=rows,
-                account=self.account,
-                notifier=get_notifier(),
-                notify_message="得卡挑战获得稀有卡牌",
-            )
+            self._save_high_rarity_cards(account_id, rows)
             self._get_card_saved = True
 
         result = tap_text_exact(
@@ -527,13 +524,15 @@ class WonderPickTask(StatefulTask):
 
     def _scan_cards(self):
         """扫描当前页卡牌。"""
-        return self.card_recognizer.scan(
-            resolve_name=lambda set_code, card_number: resolve_card_name(
-                self._card_repo,
-                set_code,
-                card_number,
-            ),
-        )
+        with session_scope() as session:
+            card_repo = RepositoryFactory(session).cards()
+            return self.card_recognizer.scan(
+                resolve_name=lambda set_code, card_number: resolve_card_name(
+                    card_repo,
+                    set_code,
+                    card_number,
+                ),
+            )
 
     def _tap_card_center(self, center: tuple[float, float]):
         """点击目标卡片中心。"""
@@ -567,17 +566,94 @@ class WonderPickTask(StatefulTask):
     def _refresh_target_pick_index_in_popup(self):
         """在确认弹窗内读取目标位索引。"""
         self._target_pick_index = None
-        if not self._selected_rarity or not self._card_repo:
+        if not self._selected_rarity:
             return
         detected = self._scan_cards()
         if not detected:
             return
 
-        rows = map_detected_cards(cards=detected, card_repo=self._card_repo)
+        rows = self._build_card_matches(detected)
         for idx, row in enumerate(rows, start=1):
-            if row.get("rarity") == self._selected_rarity:
+            if row.rarity == self._selected_rarity:
                 self._target_pick_index = idx
                 return
+
+    def _build_card_matches(self, detected) -> list[WonderPickCardMatch]:
+        """将识别结果映射为任务内使用的纯数据。"""
+        if not detected:
+            return []
+
+        with session_scope() as session:
+            card_repo = RepositoryFactory(session).cards()
+            rows: list[WonderPickCardMatch] = []
+            for item in detected:
+                card_data = (
+                    card_repo.get_card_by_set_and_number(item.set_code, item.card_number)
+                    if item.set_code
+                    else None
+                )
+                rows.append(
+                    WonderPickCardMatch(
+                        card_id=card_data.id if card_data else None,
+                        set_code=item.set_code,
+                        card_number=item.card_number,
+                        card_name=card_data.name if card_data else f"Card #{item.card_number}",
+                        rarity=card_data.rarity if card_data else "Unknown",
+                        confidence=float(item.confidence),
+                        hash_similarity=float(item.similarity),
+                        card_data=card_data.data if card_data else None,
+                    )
+                )
+            return rows
+
+    def _save_high_rarity_cards(
+        self,
+        account_id: int,
+        rows: list[WonderPickCardMatch],
+    ) -> None:
+        """保存高稀有度卡牌并发送通知。"""
+        notifier = get_notifier()
+        account_name = self._get_account_name()
+        with session_scope() as session:
+            account_card_repo = RepositoryFactory(session).account_cards()
+            for row in rows:
+                if row.card_id is None or row.rarity not in HIGH_RARITY_TARGETS:
+                    continue
+                account_card_repo.increase_owned(
+                    account_id=account_id,
+                    card_id=row.card_id,
+                    amount=0,
+                    yolo_conf=row.confidence,
+                    hash_similarity=row.hash_similarity,
+                )
+                notifier.notify_rare_card_data(
+                    account_id=account_id,
+                    account_name=account_name,
+                    card_id=row.card_id,
+                    card_name=row.card_name,
+                    card_data=row.card_data,
+                    set_code=row.set_code or "",
+                    card_number=row.card_number,
+                    rarity=row.rarity,
+                    message="得卡挑战获得稀有卡牌",
+                )
+
+    def _get_account_name(self) -> str:
+        """构建通知使用的账号显示名。"""
+        account_id = getattr(self.account, "id", None)
+        if account_id is not None:
+            account_id = int(account_id)
+        primary_name = (
+            getattr(self.account, "nickname", None)
+            or getattr(self.account, "display_name", None)
+            or str(account_id or "")
+        )
+        if account_id is None:
+            return primary_name
+        account_id_text = str(account_id)
+        if primary_name != account_id_text:
+            return f"{primary_name} ({account_id_text})"
+        return primary_name
 
     def _get_wonder_stamina(self) -> Optional[int]:
         """统计主页挑战力图标数量。"""

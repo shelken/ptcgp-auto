@@ -6,6 +6,7 @@ from sqlmodel import Session, col, or_, select
 
 from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
 from ptcgp_auto_v2.config.settings import get_settings
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.core.task_plan_utils import (
     build_account_plan_cache,
     compute_next_run_for_instance,
@@ -147,15 +148,13 @@ def build_tasks_list_context(
             "target_pack_auto": False,
         }
 
-        if instance.task_type == "open_pack":
-            target_pack_label = None
-            target_pack_auto = False
-            config = pack_configs_map.get(account.id)
-            if config:
-                target_pack_label = f"{config.set_code}/{config.booster_name}"
+        if instance.task_type != "open_pack":
+            rows.append(row_data)
+            continue
 
-            row_data["target_pack_label"] = target_pack_label
-            row_data["target_pack_auto"] = target_pack_auto
+        config = pack_configs_map.get(account.id)
+        if config:
+            row_data["target_pack_label"] = f"{config.set_code}/{config.booster_name}"
 
         rows.append(row_data)
 
@@ -188,7 +187,9 @@ def build_tasks_list_context(
 
 
 def recompute_next_run_at_for_account(
-    account: Account, task_types: list[str] | None
+    account: Account,
+    task_types: list[str] | None,
+    session: Session | None = None,
 ) -> None:
     """重算指定账号的任务 next_run_at。"""
     if account.id is None:
@@ -198,14 +199,23 @@ def recompute_next_run_at_for_account(
         task_types = list(account_cache["config"].keys())
     if not task_types:
         return
-    repo = TaskInstanceRepository()
-    instances = repo.list_by_account_and_task_types(account.id, task_types)
-    if not instances:
+    if session is not None:
+        repo = TaskInstanceRepository(session)
+        instances = repo.list_by_account_and_task_types(account.id, task_types)
+        if not instances:
+            return
+        for instance in instances:
+            next_run_at, _, _, _ = compute_next_run_for_instance(instance, account_cache)
+            instance.next_run_at = next_run_at
+        repo.update_next_run_at(instances)
         return
-    for instance in instances:
-        next_run_at, _, _, _ = compute_next_run_for_instance(instance, account_cache)
-        instance.next_run_at = next_run_at
-    repo.update_next_run_at(instances)
+
+    with session_scope() as owned_session:
+        recompute_next_run_at_for_account(
+            account=account,
+            task_types=task_types,
+            session=owned_session,
+        )
 
 
 def list_task_filter_accounts(
@@ -213,7 +223,7 @@ def list_task_filter_accounts(
     session: Session,
     q: str = "",
     limit: int = 20,
-) -> list[Account]:
+) -> list[dict[str, Any]]:
     """获取任务筛选账号候选（轻量查询）。"""
     normalized_q = (q or "").strip()
     normalized_limit = min(max(limit, 1), 50)
@@ -230,7 +240,10 @@ def list_task_filter_accounts(
             filters.append(Account.id == int(normalized_q))
         statement = statement.where(or_(*filters))
 
-    return list(session.exec(statement).all())
+    return [
+        {**account.to_dict(), "display_name": account.display_name}
+        for account in session.exec(statement).all()
+    ]
 
 
 def build_task_list_render_context(
@@ -278,22 +291,29 @@ def build_task_list_render_context(
 
 def build_task_target_pack_context(task_instance_id: int) -> dict | None:
     """构建任务目标包单元格上下文。"""
-    repo = TaskInstanceRepository()
-    instance = repo.get_by_id(task_instance_id)
-    if not instance or not instance.account or instance.account_id is None:
-        return None
+    with session_scope() as session:
+        repo = TaskInstanceRepository(session)
+        instance = repo.get_by_id(task_instance_id)
+        if not instance or not instance.account or instance.account_id is None:
+            return None
 
-    target_pack_label = None
-    target_pack_auto = False
-    if instance.task_type == "open_pack":
-        config_repo = AccountPackConfigRepository()
+        if instance.task_type != "open_pack":
+            return {
+                "task_instance_id": task_instance_id,
+                "target_pack_label": None,
+                "target_pack_auto": False,
+            }
+
+        target_pack_label = None
+        target_pack_auto = False
+        config_repo = AccountPackConfigRepository(session)
         config = config_repo.get_by_account_and_type(instance.account_id, "daily")
         if config:
             target_pack_label = f"{config.set_code}/{config.booster_name}"
         else:
             settings = get_settings()
-            card_repo = CardRepository()
-            record_repo = PackRecordRepository()
+            card_repo = CardRepository(session)
+            record_repo = PackRecordRepository(session)
             auto_pack = select_pack_for_account(
                 account=instance.account,
                 strategy=settings.pack_auto_strategy,
@@ -302,16 +322,14 @@ def build_task_target_pack_context(task_instance_id: int) -> dict | None:
                 exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
             )
             if auto_pack:
-                target_pack_label = (
-                    f"{auto_pack['set_code']}/{auto_pack['booster_name']}"
-                )
+                target_pack_label = f"{auto_pack['set_code']}/{auto_pack['booster_name']}"
                 target_pack_auto = True
 
-    return {
-        "task_instance_id": task_instance_id,
-        "target_pack_label": target_pack_label,
-        "target_pack_auto": target_pack_auto,
-    }
+        return {
+            "task_instance_id": task_instance_id,
+            "target_pack_label": target_pack_label,
+            "target_pack_auto": target_pack_auto,
+        }
 
 
 def reset_completed_tasks_by_filters(

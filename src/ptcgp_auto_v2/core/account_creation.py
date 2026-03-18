@@ -9,6 +9,9 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+
 if TYPE_CHECKING:
     from ptcgp_auto_v2.core.scheduler import Scheduler
 
@@ -39,10 +42,8 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         return False
 
     # 2. 检查账号数是否达上限
-    if not scheduler._account_repo:
-        return False
-
-    current_count = scheduler._account_repo.count_all()
+    with session_scope() as session:
+        current_count = RepositoryFactory(session).accounts().count_all()
     if current_count >= scheduler.settings.max_accounts:
         logger.debug(
             f"账号数量 ({current_count}) 已达上限 ({scheduler.settings.max_accounts})，跳过创建"
@@ -127,12 +128,11 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
                     logger.info(f"获取到账号: {account.game_id}")
 
                     # 检查是否为新创建的账号（通过init_account任务判断）
-                    from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
-
-                    task_repo = TaskInstanceRepository()
-                    init_task = task_repo.get_by_account_and_type(
-                        account.id, "init_account"
-                    )
+                    with session_scope() as session:
+                        init_task = RepositoryFactory(session).task_instances().get_by_account_and_type(
+                            account.id,
+                            "init_account",
+                        )
 
                     if init_task:
                         # 有init_task，说明是新创建的账号

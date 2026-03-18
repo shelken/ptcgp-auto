@@ -3,6 +3,7 @@
 
 import json
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from sqlmodel import Session, col, func, select
@@ -16,11 +17,11 @@ from ptcgp_auto_v2.config.notification import (
     NOTIFICATION_SCENE_OPTIONS,
     NOTIFICATION_TASK_STATUS_OPTIONS,
 )
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import (
     Account,
     Card,
     Notification,
-    NotificationConfig,
 )
 from ptcgp_auto_v2.db.repositories import (
     CardRepository,
@@ -40,6 +41,31 @@ from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data, resolve_la
 SCENE_OPTIONS = list(NOTIFICATION_SCENE_OPTIONS)
 TASK_STATUS_OPTIONS = list(NOTIFICATION_TASK_STATUS_OPTIONS)
 RARITY_ORDER = {code: index for index, code in enumerate(HIGH_RARITY_TARGETS, start=1)}
+
+
+@dataclass(slots=True, frozen=True)
+class NotificationConfigData:
+    """通知配置纯数据。"""
+
+    scene: str
+    enabled: bool
+    enabled_webhook: bool
+    extra_config: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class NotificationData:
+    """通知纯数据。"""
+
+    id: int
+    scene: str
+    title: str
+    content: str
+    related_account_id: int | None
+    related_card_id: int | None
+    related_task_instance_id: int | None
+    is_read: bool
+    created_at: Any
 
 
 def _build_scene_options() -> list[dict[str, str]]:
@@ -78,7 +104,17 @@ def get_task_type_options() -> list[str]:
     return TaskRegistry.all_types()
 
 
-def build_config_view(config: NotificationConfig) -> dict[str, Any]:
+def _to_notification_config_data(config) -> NotificationConfigData:
+    """将通知配置模型转成纯数据。"""
+    return NotificationConfigData(
+        scene=config.scene,
+        enabled=config.enabled,
+        enabled_webhook=config.enabled_webhook,
+        extra_config=config.extra_config,
+    )
+
+
+def build_config_view(config: NotificationConfigData) -> dict[str, Any]:
     """将通知配置模型转换为模板可用结构。"""
     return {
         "scene": config.scene,
@@ -166,7 +202,7 @@ def build_notification_card_selector_context(
         page=normalized_page,
         page_size=normalized_page_size,
     )
-    card_repo = CardRepository()
+    card_repo = CardRepository(session)
     set_options = [
         {
             "value": item.code,
@@ -219,8 +255,8 @@ def build_notifications_context(
     page_size: int = 10,
 ) -> dict[str, Any]:
     """构建通知页面上下文。"""
-    config_repo = NotificationConfigRepository()
-    notification_repo = NotificationRepository()
+    config_repo = NotificationConfigRepository(session)
+    notification_repo = NotificationRepository(session)
 
     config_repo.ensure_all_scenes()
 
@@ -243,14 +279,23 @@ def build_notifications_context(
         page_size=normalized_page_size,
     )
 
-    accounts = list(session.exec(select(Account).order_by(Account.id)).all())
+    accounts = [
+        {**account.to_dict(), "display_name": account.display_name}
+        for account in session.exec(select(Account).order_by(Account.id)).all()
+    ]
     account_name_map = {
-        account.id: (account.nickname or account.display_name or account.game_id)
+        account["id"]: (
+            account["nickname"] or account["display_name"] or account["game_id"]
+        )
         for account in accounts
-        if account.id is not None
+        if account["id"] is not None
     }
 
-    config_views = [build_config_view(config) for config in config_repo.get_all()]
+    config_views = [
+        build_config_view(_to_notification_config_data(config))
+        for config in config_repo.get_all()
+    ]
+    notifications = [item.model_dump() for item in notifications]
 
     return {
         "notifications": notifications,
@@ -281,9 +326,11 @@ def build_recent_notifications_context(
     limit: int = 5,
 ) -> dict[str, Any]:
     """构建最近通知下拉内容上下文。"""
-    rows = list_recent_notifications(session, limit=limit)
     return {
-        "notifications": rows,
+        "notifications": [
+            item.model_dump()
+            for item in list_recent_notifications(session, limit=limit)
+        ],
     }
 
 
@@ -665,8 +712,8 @@ def _format_time_value(
 
 def mark_notification_as_read(notification_id: int) -> None:
     """标记单条通知为已读。"""
-    repo = NotificationRepository()
-    repo.mark_as_read(notification_id)
+    with session_scope() as session:
+        NotificationRepository(session).mark_as_read(notification_id)
 
 
 def mark_all_notifications_as_read(
@@ -678,14 +725,17 @@ def mark_all_notifications_as_read(
     Returns:
         标记为已读的通知数量
     """
-    repo = NotificationRepository()
-    return repo.mark_all_as_read(scene=scene, account_id=account_id)
+    with session_scope() as session:
+        return NotificationRepository(session).mark_all_as_read(
+            scene=scene,
+            account_id=account_id,
+        )
 
 
 def get_unread_notification_count() -> int:
     """获取未读通知数量。"""
-    repo = NotificationRepository()
-    return repo.count_unread()
+    with session_scope() as session:
+        return NotificationRepository(session).count_unread()
 
 
 def update_notification_config(
@@ -693,23 +743,31 @@ def update_notification_config(
     enabled: bool,
     enabled_webhook: bool,
     extra_config: dict[str, object],
-) -> NotificationConfig:
+) -> NotificationConfigData:
     """更新通知配置。
 
     Returns:
         更新后的配置对象
     """
-    config_repo = NotificationConfigRepository()
-    config_repo.update(
-        scene=scene,
-        enabled=enabled,
-        enabled_webhook=enabled_webhook,
-        extra_config=extra_config,
-    )
-    return config_repo.get_or_create(scene)
+    with session_scope() as session:
+        config_repo = NotificationConfigRepository(session)
+        updated = config_repo.update(
+            scene=scene,
+            enabled=enabled,
+            enabled_webhook=enabled_webhook,
+            extra_config=extra_config,
+        )
+        if updated is None:
+            raise RuntimeError(f"通知配置不存在: {scene}")
+
+    with session_scope() as session:
+        config = NotificationConfigRepository(session).get_or_create(scene)
+        if config.scene != scene:
+            raise RuntimeError(f"通知配置读取失败: {scene}")
+        return _to_notification_config_data(config)
 
 
-def get_notification_by_id(notification_id: int) -> Notification | None:
+def get_notification_by_id(notification_id: int) -> NotificationData | None:
     """根据 ID 获取单条通知。
 
     Args:
@@ -718,5 +776,18 @@ def get_notification_by_id(notification_id: int) -> Notification | None:
     Returns:
         通知对象，不存在则返回 None
     """
-    repo = NotificationRepository()
-    return repo.get_by_id(notification_id)
+    with session_scope() as session:
+        notification = NotificationRepository(session).get_by_id(notification_id)
+        if notification is None or notification.id is None:
+            return None
+        return NotificationData(
+            id=notification.id,
+            scene=notification.scene,
+            title=notification.title,
+            content=notification.content,
+            related_account_id=notification.related_account_id,
+            related_card_id=notification.related_card_id,
+            related_task_instance_id=notification.related_task_instance_id,
+            is_read=notification.is_read,
+            created_at=notification.created_at,
+        )

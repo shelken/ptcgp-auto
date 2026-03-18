@@ -181,8 +181,7 @@ class FlibustierSyncService:
             card_model = Card.model_validate(card_item["card"])
             card_id: int | None = card_item.get("existing_card_id")
             if card_item.get("needs_upsert"):
-                saved_card = self._repo.upsert_card(card_model)
-                card_id = saved_card.id
+                card_id = self._repo.upsert_card(card_model)
                 card_count += 1
 
             if card_id is None:

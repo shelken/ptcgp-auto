@@ -6,13 +6,18 @@ from typing import Any, Optional
 
 from sqlmodel import Session, select
 
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import Account
-from ptcgp_auto_v2.db.repositories import (
-    ExchangeCardRequestRepository,
-    TaskInstanceRepository,
-)
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.services import ExchangeCardService as CoreExchangeCardService
 from ptcgp_auto_v2.web.queries.exchange_card_queries import list_exchange_requests
+
+
+def _serialize_account(account: Account) -> dict[str, Any]:
+    """把账号转成模板可直接消费的纯数据。"""
+    data = account.to_dict()
+    data["display_name"] = account.display_name
+    return data
 
 
 def create_exchange_request_with_task(
@@ -35,11 +40,12 @@ def create_exchange_request_with_task(
         target_card_rarity=target_card_rarity,
     )
     if created is not None:
-        TaskInstanceRepository().ensure_pending(
-            account_id=from_account_id,
-            task_type="exchange_cards",
-            reset_type="once",
-        )
+        with session_scope() as session:
+            RepositoryFactory(session).task_instances().ensure_pending(
+                account_id=from_account_id,
+                task_type="exchange_cards",
+                reset_type="once",
+            )
         return True
     return False
 
@@ -70,31 +76,20 @@ def build_exchange_card_context(
     else:
         requests = result
         total_items = len(requests)
-    accounts = session.exec(select(Account)).all()
+    accounts = [_serialize_account(account) for account in session.exec(select(Account)).all()]
     account_name_map = {
-        account.id: (account.nickname or account.game_id or f"#{account.id}")
+        account["id"]: (
+            account["nickname"] or account["game_id"] or f"#{account['id']}"
+        )
         for account in accounts
+        if account["id"] is not None
     }
 
     rows: list[dict[str, Any]] = []
     for row in requests:
-        can_cancel = row.status in {"sending", "sended"}
-        rows.append(
-            {
-                "id": row.id,
-                "from_account_id": row.from_account_id,
-                "to_account_id": row.to_account_id,
-                "to_friend_id": row.to_friend_id,
-                "target_card_id": row.target_card_id,
-                "target_card_rarity": row.target_card_rarity,
-                "status": row.status,
-                "failed_reason": row.failed_reason,
-                "cancel_reason": row.cancel_reason,
-                "created_at": row.created_at,
-                "updated_at": row.updated_at,
-                "can_cancel": can_cancel,
-            }
-        )
+        data = row.model_dump()
+        data["can_cancel"] = row.status in {"sending", "sended"}
+        rows.append(data)
 
     return {
         "requests": rows,
@@ -115,24 +110,26 @@ def build_exchange_card_context(
 
 def cancel_exchange_request(request_id: int, reason: str = "web_cancel") -> bool:
     """取消交换请求（仅 sending/sended）。"""
-    repo = ExchangeCardRequestRepository()
-    request = repo.get_by_id(request_id)
-    if request is None:
-        return False
-    if request.status not in {"sending", "sended"}:
-        return False
-    if request.status == "sending":
-        repo.mark_canceled(request, reason=reason)
-        return True
+    with session_scope() as session:
+        repos = RepositoryFactory(session)
+        repo = repos.exchange_card_requests()
+        request = repo.get_by_id(request_id)
+        if request is None:
+            return False
+        if request.status not in {"sending", "sended"}:
+            return False
+        if request.status == "sending":
+            repo.mark_canceled(request_id, reason=reason)
+            return True
 
-    request.cancel_reason = reason
-    request.next_check_at = datetime.now()
-    request.updated_at = datetime.now()
-    repo.update(request)
-
-    TaskInstanceRepository().ensure_pending(
-        account_id=request.from_account_id,
-        task_type="exchange_cards",
-        reset_type="once",
-    )
+        repo.update_fields_by_id(
+            request_id,
+            cancel_reason=reason,
+            next_check_at=datetime.now(),
+        )
+        repos.task_instances().ensure_pending(
+            account_id=request.from_account_id,
+            task_type="exchange_cards",
+            reset_type="once",
+        )
     return True

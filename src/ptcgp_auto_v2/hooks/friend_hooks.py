@@ -8,6 +8,7 @@
 from typing import Optional
 
 from ptcgp_auto_v2.core.hooks import Hook, HookContext, HookResult
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import FriendRequestRepository
 from ptcgp_auto_v2.services.friendship_service import FriendshipService
 
@@ -56,10 +57,11 @@ class FriendPreHook(Hook):
         if is_friend:
             return HookResult.CONTINUE, {}
 
-        existing = FriendRequestRepository().get_pending_request(
-            from_account_id=account_id,
-            to_friend_id=self.target_friend_id,
-        )
+        with session_scope() as session:
+            existing = FriendRequestRepository(session).get_pending_request(
+                from_account_id=account_id,
+                to_friend_id=self.target_friend_id,
+            )
 
         if existing is not None and FriendshipService.expire_add_request_if_needed(
             existing

@@ -15,6 +15,13 @@ from ptcgp_auto_v2.web.queries.friendship_queries import (
 )
 
 
+def _serialize_account(account) -> dict[str, object]:
+    """把账号转成模板可直接消费的纯数据。"""
+    data = account.to_dict()
+    data["display_name"] = account.display_name
+    return data
+
+
 def build_friendship_context(
     session: Session,
     account_id: int | None = None,
@@ -26,16 +33,16 @@ def build_friendship_context(
     page_size: int = 10,
 ) -> dict:
     """构建好友管理页面所需上下文数据。"""
-    account_repo = AccountRepository()
-    accounts = account_repo.get_all()
+    account_repo = AccountRepository(session)
+    accounts = [_serialize_account(account) for account in account_repo.get_all()]
 
     account_name_map: dict[int, str] = {}
     account_friend_id_map: dict[int, str] = {}
     for account in accounts:
-        if account.id is None:
+        if account["id"] is None:
             continue
-        account_name_map[account.id] = account.display_name
-        account_friend_id_map[account.id] = account.friend_id or "-"
+        account_name_map[account["id"]] = str(account["display_name"])
+        account_friend_id_map[account["id"]] = str(account["friend_id"] or "-")
 
     request_result = list_friend_requests(
         session=session,
@@ -68,11 +75,14 @@ def build_friendship_context(
         friendships = friendship_result
         friendship_total = len(friendships)
 
+    request_rows = [row.model_dump() for row in requests]
+    friendship_rows = [row.model_dump() for row in friendships]
+
     return {
         "accounts": accounts,
-        "requests": requests,
+        "requests": request_rows,
         "request_total": request_total,
-        "friendships": friendships,
+        "friendships": friendship_rows,
         "friendship_total": friendship_total,
         "account_name_map": account_name_map,
         "account_friend_id_map": account_friend_id_map,

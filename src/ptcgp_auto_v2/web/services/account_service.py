@@ -3,8 +3,10 @@ from typing import Any, cast
 
 from sqlalchemy.orm import selectinload
 
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
+from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
@@ -41,6 +43,39 @@ def _match_account(item: Account, query: str) -> bool:
     )
 
 
+def _serialize_task_plan(plan: TaskPlan) -> dict[str, Any]:
+    """把任务计划转成模板可直接使用的纯数据。"""
+    data = plan.to_dict()
+    return {
+        **data,
+        "task_types_list": data["task_types"],
+        "config_dict": data["configuration"],
+    }
+
+
+def _serialize_account_task_plan_assoc(assoc: AccountTaskPlan) -> dict[str, Any]:
+    """把账号计划关联转成纯数据。"""
+    return {
+        **assoc.model_dump(),
+        "task_plan": _serialize_task_plan(assoc.task_plan) if assoc.task_plan else None,
+    }
+
+
+def _serialize_account(
+    account: Account,
+    *,
+    include_assocs: bool = False,
+) -> dict[str, Any]:
+    """把账号转成纯数据。"""
+    data = {**account.to_dict(), "display_name": account.display_name}
+    if include_assocs:
+        data["task_plan_associations"] = [
+            _serialize_account_task_plan_assoc(assoc)
+            for assoc in account.task_plan_associations or []
+        ]
+    return data
+
+
 def build_accounts_list_context(
     *,
     session: Session,
@@ -51,7 +86,7 @@ def build_accounts_list_context(
     page_size: int = 10,
 ) -> dict:
     """构建账号管理列表视图上下文（统一列表协议：q/sort/page）。"""
-    repo = AccountRepository()
+    repo = AccountRepository(session)
     accounts = repo.get_all()
 
     normalized_q = normalize_query_text(q)
@@ -80,13 +115,15 @@ def build_accounts_list_context(
     total = len(accounts)
     start = normalized_page * normalized_page_size
     end = start + normalized_page_size
-    accounts_page = accounts[start:end]
+    accounts_page = [
+        _serialize_account(item, include_assocs=True) for item in accounts[start:end]
+    ]
     has_prev = normalized_page > 0
     has_next = end < total
 
     config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
     all_configs = session.exec(config_stm).all()
-    pack_configs_map = {item.account_id: item for item in all_configs}
+    pack_configs_map = {item.account_id: item.to_dict() for item in all_configs}
 
     return {
         "items": accounts_page,
@@ -105,51 +142,54 @@ def build_accounts_list_context(
 
 def build_account_target_pack_context(account_id: int) -> dict | None:
     """构建账号目标包单元格上下文。"""
-    repo = AccountRepository()
-    account = repo.get_by_id(account_id)
-    if not account or account.id is None:
-        return None
+    with session_scope() as session:
+        repo = AccountRepository(session)
+        account = repo.get_by_id(account_id)
+        if not account or account.id is None:
+            return None
 
-    config_repo = AccountPackConfigRepository()
-    config = config_repo.get_by_account_and_type(account.id, "daily")
-    auto_pack = None
-    if not config:
-        settings = get_settings()
-        card_repo = CardRepository()
-        record_repo = PackRecordRepository()
-        auto_pack = select_pack_for_account(
-            account=account,
-            strategy=settings.pack_auto_strategy,
-            card_repo=card_repo,
-            record_repo=record_repo,
-            exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-        )
+        config_repo = AccountPackConfigRepository(session)
+        config = config_repo.get_by_account_and_type(account.id, "daily")
+        auto_pack = None
+        if not config:
+            settings = get_settings()
+            card_repo = CardRepository(session)
+            record_repo = PackRecordRepository(session)
+            auto_pack = select_pack_for_account(
+                account=account,
+                strategy=settings.pack_auto_strategy,
+                card_repo=card_repo,
+                record_repo=record_repo,
+                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+            )
 
-    return {
-        "account_id": account.id,
-        "config": config,
-        "auto_pack": auto_pack,
-    }
+        return {
+            "account_id": account.id,
+            "config": config.to_dict() if config else None,
+            "auto_pack": auto_pack,
+        }
 
 
 def build_account_edit_context(account_id: int) -> dict | None:
     """构建账号编辑弹窗数据。"""
-    repo = AccountRepository()
-    account = repo.get_by_id(account_id)
-    if not account:
-        return None
-    return {"account": account}
+    with session_scope() as session:
+        repo = AccountRepository(session)
+        account = repo.get_by_id(account_id)
+        if not account:
+            return None
+        return {"account": _serialize_account(account)}
 
 
 def update_account_details(account_id: int, nickname: str, remark: str) -> None:
     """更新账号信息。"""
-    repo = AccountRepository()
-    account = repo.get_by_id(account_id)
-    if not account:
-        return
-    account.nickname = nickname
-    account.remark = remark
-    repo.update(account)
+    with session_scope() as session:
+        repo = AccountRepository(session)
+        account = repo.get_by_id(account_id)
+        if not account:
+            return
+        account.nickname = nickname
+        account.remark = remark
+        repo.update(account)
 
 
 def build_account_plans_context(session: Session, account_id: int) -> dict | None:
@@ -167,16 +207,17 @@ def build_account_plans_context(session: Session, account_id: int) -> dict | Non
     if not account:
         return None
 
-    plan_repo = TaskPlanRepository()
-    all_plans = plan_repo.get_all()
-    current_assocs = sorted(
-        account.task_plan_associations, key=lambda item: -item.priority
-    )
-    associated_plan_ids = {assoc.task_plan_id for assoc in current_assocs}
-    available_plans = [plan for plan in all_plans if plan.id not in associated_plan_ids]
+    plan_repo = TaskPlanRepository(session)
+    current_assocs = [
+        _serialize_account_task_plan_assoc(item)
+        for item in sorted(account.task_plan_associations, key=lambda item: -item.priority)
+    ]
+    available_plans = [
+        _serialize_task_plan(item) for item in plan_repo.list_unassigned_for_account(account_id)
+    ]
 
     return {
-        "account": account,
+        "account": _serialize_account(account, include_assocs=True),
         "current_assocs": current_assocs,
         "available_plans": available_plans,
     }
@@ -184,25 +225,34 @@ def build_account_plans_context(session: Session, account_id: int) -> dict | Non
 
 def update_account_plans(account_id: int, data: list[dict]) -> None:
     """保存账号计划关联关系。"""
-    repo = AccountRepository()
-    plans_data = []
-    base_priority = 100
-    for index, item in enumerate(data):
-        plan_id = item.get("plan_id")
-        is_active = item.get("is_active", True)
-        if plan_id:
-            priority = max(0, base_priority - (index * 10))
-            plans_data.append(
-                {"plan_id": int(plan_id), "is_active": is_active, "priority": priority}
-            )
-    repo.update_plan_associations(account_id, plans_data)
+    with session_scope() as session:
+        repo = AccountRepository(session)
+        plans_data = []
+        base_priority = 100
+        for index, item in enumerate(data):
+            plan_id = item.get("plan_id")
+            is_active = item.get("is_active", True)
+            if plan_id:
+                priority = max(0, base_priority - (index * 10))
+                plans_data.append(
+                    {
+                        "plan_id": int(plan_id),
+                        "is_active": is_active,
+                        "priority": priority,
+                    }
+                )
+        repo.update_plan_associations(account_id, plans_data)
 
-    account = repo.get_by_id(account_id)
-    if not account:
-        return
-    task_types: set[str] = set()
-    for assoc in account.task_plan_associations or []:
-        if not assoc.is_active or not assoc.task_plan:
-            continue
-        task_types.update(assoc.task_plan.task_types_list)
-    recompute_next_run_at_for_account(account, list(task_types))
+        account = repo.get_by_id(account_id)
+        if not account:
+            return
+        task_types: set[str] = set()
+        for assoc in account.task_plan_associations or []:
+            if not assoc.is_active or not assoc.task_plan:
+                continue
+            task_types.update(assoc.task_plan.task_types_list)
+        recompute_next_run_at_for_account(
+            account,
+            list(task_types),
+            session=session,
+        )

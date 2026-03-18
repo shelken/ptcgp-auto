@@ -12,13 +12,13 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
-from sqlmodel import Session
 
 from ptcgp_auto_v2.config.assets import build_card_image_bases
 from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, TASK_LOCALE_TO_WEB_LANG
-from ptcgp_auto_v2.db.engine import get_engine
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
+from ptcgp_auto_v2.db.repositories.card_repository import CardData
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,6 @@ class ImageResourceManager:
         # 默认 base_dir 是相对于运行目录（项目根目录）的
         self.cards_dir = Path(base_dir)
         self.cards_dir.mkdir(parents=True, exist_ok=True)
-        self.repo = CardRepository()
         self.session = requests.Session()
         # 设置请求头，模仿浏览器
         self.session.headers.update(
@@ -62,7 +61,8 @@ class ImageResourceManager:
             True表示所有卡牌图片已就绪
         """
         logger.info(f"正在检查系列 {set_code} 的图片资源...")
-        cards = self.repo.get_cards_by_set(set_code)
+        with session_scope() as session:
+            cards = CardRepository(session).get_cards_by_set(set_code)
 
         if not cards:
             logger.warning(f"系列 {set_code} 没有卡牌数据")
@@ -159,7 +159,7 @@ class ImageResourceManager:
 
         return results
 
-    def _process_cards_parallel(self, cards: List[Card], max_workers: int):
+    def _process_cards_parallel(self, cards: List[CardData], max_workers: int):
         """并发处理卡牌列表"""
         if not cards:
             return
@@ -195,7 +195,7 @@ class ImageResourceManager:
 
         logger.info(f"处理完成: {completed} 成功, {failed} 失败")
 
-    def _is_resource_valid(self, card: Card) -> bool:
+    def _is_resource_valid(self, card: CardData) -> bool:
         """检查卡牌资源是否有效（DB有路径且文件存在，支持png/webp）"""
         if not card.local_image_path:
             # 检查默认路径是否存在（支持png和webp）
@@ -206,7 +206,7 @@ class ImageResourceManager:
         # 假设 local_image_path 是相对于项目根目录的路径
         return Path(card.local_image_path).exists()
 
-    def _process_single_card(self, card: Card) -> bool:
+    def _process_single_card(self, card: CardData) -> bool:
         """处理单张卡牌：下载 -> 保存 -> 更新DB"""
         if not card.number or not card.set_code:
             return False
@@ -219,12 +219,11 @@ class ImageResourceManager:
                 return False
 
             # 更新数据库（记录本地路径）
-            with Session(get_engine()) as session:
+            with session_scope() as session:
                 db_card = session.get(Card, card.id)
                 if db_card:
                     db_card.local_image_path = str(saved_path)
                     session.add(db_card)
-                    session.commit()
 
             return True
 

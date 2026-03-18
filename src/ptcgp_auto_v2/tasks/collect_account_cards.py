@@ -17,6 +17,8 @@ from ptcgp_auto_v2.core.task_base import (
     ResetType,
     TaskRegistry,
 )
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
 from ptcgp_auto_v2.infra.model_manager import get_model_manager
@@ -117,15 +119,7 @@ class CollectAccountCardsTask(StatefulTask):
             template_matcher=page_detector.template_matcher
         )
 
-        self._account_card_repo = None
-        self._card_repo = None
-
     def on_start(self):
-        from ptcgp_auto_v2.db.repositories import AccountCardRepository, CardRepository
-
-        self._account_card_repo = AccountCardRepository()
-        self._card_repo = CardRepository()
-
         self.state.reset()
         self.state_update(
             {
@@ -148,14 +142,13 @@ class CollectAccountCardsTask(StatefulTask):
         logger.debug("未知页面，等待后重试")
         return ActionResult.wait(0.5)
 
-    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
-        return self._handle_card_entry_icon(page_info)
-
     def _handle_card_entry_icon(self, page_info: dict) -> ActionResult:
         result = tap_template(
             self.adb, self.page_detector, "icon_bottom_card", wait=1.0
         )
         return result or ActionResult.ok(wait=1.0)
+
+    _handle_game_home_main = _handle_card_entry_icon
 
     def _handle_card_page_own(self, page_info: dict) -> ActionResult:
         phase = cast(CollectPhase, self.state_get("phase", CollectPhase.ENTER))
@@ -189,8 +182,6 @@ class CollectAccountCardsTask(StatefulTask):
             state=cast(FilterPanelState, self.state_get("filter_state")),
             action_cache=action_cache,
         )
-        # 将 action_cache 的变更同步回 state
-        self.state_set("filter_action_cache", action_cache)
 
         if action_cache.get("filter_applied"):
             no_target_box = self._find_text_box(
@@ -293,91 +284,88 @@ class CollectAccountCardsTask(StatefulTask):
         return ActionResult.ok(wait=0.5)
 
     def _scan_current_page(self) -> Optional[str]:
-        if not self._account_card_repo or not self._card_repo:
-            return None
         if self.account.id is None:
             return None
 
-        detected = self.card_recognizer.scan(
-            obb_threshold=0.75,
-            resolve_name=lambda set_code, card_number: resolve_card_name(
-                self._card_repo, set_code, card_number
-            ),
-        )
-        if not detected:
-            self.state_set("consecutive_all_owned", 0)
-            return None
-
-        written = 0
-        skipped_not_high = 0
-        skipped_missing = 0
-        skipped_no_set = 0
-        signature_items = []
-        all_in_db = True
-        pending_cards = cast(
-            dict[int, tuple[float, float]], self.state_get("pending_cards", {})
-        )
-        pending_order = cast(list[int], self.state_get("pending_order", []))
-        for item in detected:
-            if not item.set_code:
-                skipped_no_set += 1
-                all_in_db = False
-                continue
-            card = self._card_repo.get_card_by_set_and_number(
-                item.set_code, item.card_number
+        with session_scope() as session:
+            factory = RepositoryFactory(session)
+            card_repo = factory.cards()
+            account_card_repo = factory.account_cards()
+            detected = self.card_recognizer.scan(
+                obb_threshold=0.75,
+                resolve_name=lambda set_code, card_number: resolve_card_name(
+                    card_repo, set_code, card_number
+                ),
             )
-            if not card:
-                skipped_missing += 1
-                all_in_db = False
-                continue
-            signature_items.append(f"{item.set_code}:{item.card_number}")
-            if card.rarity not in HIGH_RARITY_TARGETS:
-                skipped_not_high += 1
-                all_in_db = False
-                continue
-            if card.id is None:
-                all_in_db = False
-                continue
-            if self._account_card_repo.get(self.account.id, card.id) is None:
-                all_in_db = False
-            conf = float(item.confidence)
-            sim = float(item.similarity)
-            if card.id not in pending_cards:
-                pending_order.append(card.id)
-                pending_cards[card.id] = (conf, sim)
+            if not detected:
+                self.state_set("consecutive_all_owned", 0)
+                return None
+
+            written = 0
+            skipped_not_high = 0
+            skipped_missing = 0
+            skipped_no_set = 0
+            signature_items = []
+            all_in_db = True
+            pending_cards = cast(
+                dict[int, tuple[float, float]], self.state_get("pending_cards", {})
+            )
+            pending_order = cast(list[int], self.state_get("pending_order", []))
+            for item in detected:
+                if not item.set_code:
+                    skipped_no_set += 1
+                    all_in_db = False
+                    continue
+                card_data = card_repo.get_card_by_set_and_number(
+                    item.set_code, item.card_number
+                )
+                if not card_data:
+                    skipped_missing += 1
+                    all_in_db = False
+                    continue
+                signature_items.append(f"{item.set_code}:{item.card_number}")
+                if card_data.rarity not in HIGH_RARITY_TARGETS:
+                    skipped_not_high += 1
+                    all_in_db = False
+                    continue
+                if account_card_repo.get(self.account.id, card_data.id) is None:
+                    all_in_db = False
+                conf = float(item.confidence)
+                sim = float(item.similarity)
+                if card_data.id not in pending_cards:
+                    pending_order.append(card_data.id)
+                    pending_cards[card_data.id] = (conf, sim)
+                else:
+                    _prev_conf, prev_sim = pending_cards[card_data.id]
+                    # 以最高相似度为准，同时保留对应置信度
+                    if sim > prev_sim:
+                        pending_cards[card_data.id] = (conf, sim)
+                written += 1
+
+            self.state_set("pending_cards", pending_cards)
+            self.state_set("pending_order", pending_order)
+
+            # 注意：该逻辑依赖“按获得顺序最新到旧”的排序，若变更排序需重新评估
+            if all_in_db:
+                self.state_set(
+                    "consecutive_all_owned",
+                    int(self.state_get("consecutive_all_owned", 0)) + 1,
+                )
             else:
-                prev_conf, prev_sim = pending_cards[card.id]
-                # 以最高相似度为准，同时保留对应置信度
-                if sim > prev_sim:
-                    pending_cards[card.id] = (conf, sim)
-            written += 1
+                self.state_set("consecutive_all_owned", 0)
 
-        self.state_set("pending_cards", pending_cards)
-        self.state_set("pending_order", pending_order)
-
-        # 注意：该逻辑依赖“按获得顺序最新到旧”的排序，若变更排序需重新评估
-        if all_in_db:
-            self.state_set(
-                "consecutive_all_owned",
-                int(self.state_get("consecutive_all_owned", 0)) + 1,
+            logger.info("已写入高稀有度卡牌: %s 张", written)
+            logger.info(
+                "跳过统计: 无set=%s, 未入库=%s, 非高稀有度=%s",
+                skipped_no_set,
+                skipped_missing,
+                skipped_not_high,
             )
-        else:
-            self.state_set("consecutive_all_owned", 0)
-
-        logger.info("已写入高稀有度卡牌: %s 张", written)
-        logger.info(
-            "跳过统计: 无set=%s, 未入库=%s, 非高稀有度=%s",
-            skipped_no_set,
-            skipped_missing,
-            skipped_not_high,
-        )
-        if not signature_items:
-            return None
-        return "|".join(sorted(signature_items))
+            if not signature_items:
+                return None
+            return "|".join(sorted(signature_items))
 
     def _flush_pending_cards(self):
-        if not self._account_card_repo:
-            return
         if self.account.id is None:
             return
         pending_cards = cast(
@@ -388,15 +376,17 @@ class CollectAccountCardsTask(StatefulTask):
             return
 
         logger.info("开始批量写入卡牌，共 %s 张", len(pending_cards))
-        for card_id in reversed(pending_order):
-            conf, sim = pending_cards[card_id]
-            self._account_card_repo.increase_owned(
-                account_id=self.account.id,
-                card_id=card_id,
-                amount=0,
-                yolo_conf=conf,
-                hash_similarity=sim,
-            )
+        with session_scope() as session:
+            account_card_repo = RepositoryFactory(session).account_cards()
+            for card_id in reversed(pending_order):
+                conf, sim = pending_cards[card_id]
+                account_card_repo.increase_owned(
+                    account_id=self.account.id,
+                    card_id=card_id,
+                    amount=0,
+                    yolo_conf=conf,
+                    hash_similarity=sim,
+                )
         logger.info("批量写入完成")
 
     def _mark_filter_applied(self, result: ActionResult) -> ActionResult:
@@ -408,7 +398,6 @@ class CollectAccountCardsTask(StatefulTask):
         filter_action_cache.pop("filter_cleared", None)
         filter_action_cache.pop("filter_selected", None)
         filter_action_cache.pop("filter_ok_scrolled", None)
-        self.state_set("filter_action_cache", filter_action_cache)
         return result
 
     @staticmethod

@@ -20,11 +20,8 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
 )
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
-from ptcgp_auto_v2.db.repositories import (
-    AccountBattleProgressRepository,
-    BattleTaskConfigRepository,
-    CardRepository,
-)
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.gesture import (
     press_back,
@@ -54,7 +51,10 @@ class BattleTaskLike(Protocol):
     _start_time: Optional[datetime]
     _battle_count: int
     _account_id: int
-    _progress_repo: AccountBattleProgressRepository
+
+    def is_level_completed(self, account_id: int, set_code: str, level: str) -> bool:
+        """判断指定系列+等级是否已完成。"""
+        raise NotImplementedError
 
 # ============================================================
 # 停止条件类
@@ -119,7 +119,7 @@ class LevelCompleteCondition(StopCondition):
         level = self.config.get("level")
         if not set_code or not level:
             return False
-        return task._progress_repo.is_level_completed(task._account_id, set_code, level)
+        return task.is_level_completed(task._account_id, set_code, level)
 
 
 class NoRewardCondition(StopCondition):
@@ -327,10 +327,6 @@ class BattleTask(StatefulTask):
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
-        # 数据仓库
-        self._progress_repo = AccountBattleProgressRepository()
-        self._config_repo = BattleTaskConfigRepository()
-        self._card_repo = CardRepository()
         # packs_auto 模板匹配器（对战任务会话级复用）
         self._pack_template_matcher: PackTemplateMatcher | None = None
         # 运行时状态
@@ -371,10 +367,12 @@ class BattleTask(StatefulTask):
             self._account_id = getattr(task_instance, "account_id", 0)
             self._task_instance_id = getattr(task_instance, "id", 0)
 
-        # 从 BattleTaskConfig 获取停止条件
-        stop_conditions_config = self._config_repo.get_stop_conditions(
-            self._task_instance_id
-        )
+        with session_scope() as session:
+            stop_conditions_config = (
+                RepositoryFactory(session)
+                .battle_task_configs()
+                .get_stop_conditions(self._task_instance_id)
+            )
         self._stop_conditions = self._parse_stop_conditions(stop_conditions_config)
 
         self._target_set_code = self._get_target_set_code(stop_conditions_config)
@@ -397,10 +395,11 @@ class BattleTask(StatefulTask):
             return
 
         try:
-            # 获取该系列下的所有子包
-            pack_names = self._card_repo.get_pack_names_by_set(
-                target_set_code, exclude_promo=True
-            )
+            with session_scope() as session:
+                # 获取该系列下的所有子包
+                pack_names = RepositoryFactory(session).cards().get_pack_names_by_set(
+                    target_set_code, exclude_promo=True
+                )
             if not pack_names:
                 logger.warning(f"[BattleTask] 未找到系列 {target_set_code} 的子包")
                 return
@@ -487,6 +486,20 @@ class BattleTask(StatefulTask):
             else:
                 logger.warning(f"[BattleTask] 未知的停止条件类型: {condition_type}")
         return conditions
+
+    def is_level_completed(self, account_id: int, set_code: str, level: str) -> bool:
+        """判断指定系列+等级是否已完成。"""
+        with session_scope() as session:
+            return RepositoryFactory(session).account_battle_progress().is_level_completed(
+                account_id, set_code, level
+            )
+
+    def _mark_level_completed(self, set_code: str, level: str) -> bool:
+        """标记指定系列+等级为已完成。"""
+        with session_scope() as session:
+            return RepositoryFactory(session).account_battle_progress().mark_completed(
+                self._account_id, set_code, level
+            )
 
     def is_completed(self) -> bool:
         """检查是否满足任一停止条件"""
@@ -605,9 +618,7 @@ class BattleTask(StatefulTask):
         logger.info(
             f"[BattleTask] {self._target_set_code} {self._target_level} 无可用对战，标记完成"
         )
-        self._progress_repo.mark_completed(
-            self._account_id, self._target_set_code, self._target_level
-        )
+        self._mark_level_completed(self._target_set_code, self._target_level)
 
         # 尝试点击"擴充組"查看更多系列
         screenshot = self.adb.screenshot()
@@ -729,10 +740,8 @@ class BattleTask(StatefulTask):
                                 logger.info(
                                     f"[BattleTask] 等级 {self._target_level} 已完成"
                                 )
-                                self._progress_repo.mark_completed(
-                                    self._account_id,
-                                    self._target_set_code,
-                                    self._target_level,
+                                self._mark_level_completed(
+                                    self._target_set_code, self._target_level
                                 )
                                 return ActionResult.ok(wait=1.0)
 
