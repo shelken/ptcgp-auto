@@ -11,6 +11,12 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from sqlalchemy import event
+from ptcgp_auto_v2.db.sqlite_config import (
+    SQLITE_BUSY_TIMEOUT_MS,
+    apply_sqlite_pragmas,
+)
+
 logger = logging.getLogger(__name__)
 
 # 全局数据库实例
@@ -57,9 +63,9 @@ class Database:
             self._local.connection = sqlite3.connect(
                 str(self.db_path),
                 check_same_thread=False,
-                timeout=30.0,
+                timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
             )
-            self._local.connection.execute("PRAGMA foreign_keys = OFF")
+            apply_sqlite_pragmas(self._local.connection)
             # 使用 Row 对象方便按列名访问
             self._local.connection.row_factory = sqlite3.Row
 
@@ -70,7 +76,14 @@ class Database:
         from sqlmodel import SQLModel, create_engine
 
         # 创建用于 Schema 管理的 Engine
-        engine = create_engine(f"sqlite:///{self.db_path}")
+        engine = create_engine(
+            f"sqlite:///{self.db_path}",
+            connect_args={
+                "check_same_thread": False,
+                "timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,
+            },
+        )
+        event.listen(engine, "connect", apply_sqlite_pragmas)
 
         # 1. 自动创建所有不存在的表
         SQLModel.metadata.create_all(engine)

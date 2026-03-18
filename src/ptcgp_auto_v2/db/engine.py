@@ -8,10 +8,15 @@ SQLModel 数据库引擎
 from contextlib import contextmanager
 from typing import Generator
 
+from sqlalchemy import event
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, create_engine
 
 from ptcgp_auto_v2.config.settings import get_settings
+from ptcgp_auto_v2.db.sqlite_config import (
+    SQLITE_BUSY_TIMEOUT_MS,
+    apply_sqlite_pragmas,
+)
 
 # 全局引擎实例（延迟初始化）
 _engine = None
@@ -39,7 +44,12 @@ def get_engine():
             f"sqlite:///{settings.db_path}",
             echo=False,
             poolclass=NullPool,
+            connect_args={
+                "check_same_thread": False,
+                "timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,
+            },
         )
+        event.listen(_engine, "connect", apply_sqlite_pragmas)
     return _engine
 
 
