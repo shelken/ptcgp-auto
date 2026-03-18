@@ -585,7 +585,6 @@ class OpenPackTask(PackOpeningTaskBase):
         ocr_results = page_info.get("ocr_results", [])
 
         if self._has_started_10_pack_this_task():
-            self._set_state_flag("pack_flow", "exit_after_paid")
             logger.debug("  -> 已使用过開封10包，返回上一页")
             return navigate_back(self.adb, self.page_detector, ocr_results)
 
