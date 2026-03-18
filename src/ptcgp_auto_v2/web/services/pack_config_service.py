@@ -47,6 +47,9 @@ def build_pack_config_context(account_id: int) -> dict:
     with session_scope() as session:
         config_repo = AccountPackConfigRepository(session)
         config = config_repo.get_by_account_and_type(account_id, "daily")
+        config_dict = config.to_dict() if config else None
+        selected_set_code = config.set_code if config else ""
+        selected_booster_name = config.booster_name if config else ""
 
         current_boosters = []
         target_set = (
@@ -63,9 +66,9 @@ def build_pack_config_context(account_id: int) -> dict:
 
     return {
         "account_id": account_id,
-        "config": config.to_dict() if config else None,
-        "selected_set_code": config.set_code if config else "",
-        "selected_booster_name": config.booster_name if config else "",
+        "config": config_dict,
+        "selected_set_code": selected_set_code,
+        "selected_booster_name": selected_booster_name,
         "card_sets": card_sets,
         "current_boosters": current_booster_options,
     }

@@ -26,7 +26,7 @@ from ptcgp_auto_v2.db.connection import get_database
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import AccountRepository
 from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
-from ptcgp_auto_v2.infra.account_syncer import AccountSyncer
+from ptcgp_auto_v2.infra.account_syncer import AccountSnapshot, AccountSyncer
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
@@ -293,37 +293,35 @@ def list_accounts():
     """列出所有账号"""
     with session_scope() as session:
         accounts = AccountRepository(session).get_all()
+        rows = []
+        for account in accounts:
+            plan_name = "-"
+            if account.task_plan_associations:
+                active_assocs = [a for a in account.task_plan_associations if a.is_active]
+                if active_assocs:
+                    active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
+                    primary_assoc = active_assocs[0]
+                    if primary_assoc.task_plan:
+                        plan_name = primary_assoc.task_plan.name
+
+            game_id = account.game_id[:16] if len(account.game_id) > 16 else account.game_id
+            rows.append(
+                [
+                    account.id,
+                    game_id,
+                    account.friend_id or "-",
+                    account.nickname or "-",
+                    account.level or "-",
+                    account.country or "-",
+                    plan_name,
+                    account.remark or "-",
+                ]
+            )
 
     print("\n账号列表:")
 
     # 构建表格数据
     headers = ["ID", "游戏ID", "朋友ID", "昵称", "等级", "国家", "计划", "备注"]
-    rows = []
-    for account in accounts:
-        # 获取主计划名称
-        plan_name = "-"
-        if account.task_plan_associations:
-            active_assocs = [a for a in account.task_plan_associations if a.is_active]
-            if active_assocs:
-                # 按优先级降序排序
-                active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
-                primary_assoc = active_assocs[0]
-                if primary_assoc.task_plan:
-                    plan_name = primary_assoc.task_plan.name
-
-        game_id = account.game_id[:16] if len(account.game_id) > 16 else account.game_id
-        rows.append(
-            [
-                account.id,
-                game_id,
-                account.friend_id or "-",
-                account.nickname or "-",
-                account.level or "-",
-                account.country or "-",
-                plan_name,
-                account.remark or "-",
-            ]
-        )
 
     # 计算每列最大宽度（考虑中文字符占2个宽度）
     def display_width(s):
@@ -465,7 +463,8 @@ def run_switch_account(device: str, account_id: int) -> int:
     """切换到指定账号"""
     get_database()
     with session_scope() as session:
-        account = AccountRepository(session).get_by_id(account_id)
+        db_account = AccountRepository(session).get_by_id(account_id)
+        account = AccountSnapshot.from_account(db_account) if db_account else None
     if not account or not account.xml_content:
         logger.error(f"账号不存在或缺少 XML 内容: {account_id}")
         return 1

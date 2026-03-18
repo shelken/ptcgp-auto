@@ -15,6 +15,7 @@ from ptcgp_auto_v2.infra.adb import AdbController
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account
+    from ptcgp_auto_v2.infra.account_syncer import AccountSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,11 @@ class AccountSwitcher:
         self.adb = adb
         self._settings = get_settings()
 
-    def switch_to(self, account: "Account", restart_app: bool = False) -> bool:
+    def switch_to(
+        self,
+        account: "Account | AccountSnapshot",
+        restart_app: bool = False,
+    ) -> bool:
         """
         切换到指定账号
 
@@ -67,7 +72,7 @@ class AccountSwitcher:
             except Exception as e:
                 logger.debug(f"清理临时 XML 失败: {e}")
 
-    def _write_temp_xml(self, account: "Account") -> Optional[Path]:
+    def _write_temp_xml(self, account: "Account | AccountSnapshot") -> Optional[Path]:
         """写入账号 XML 内容到临时文件"""
         if not account.xml_content:
             return None
