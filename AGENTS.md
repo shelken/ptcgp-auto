@@ -78,10 +78,17 @@
   - Python 代码使用 `datetime.now()` 获取本地时间
   - SQL 查询中时间比较使用 `datetime('now', 'localtime', ...)` 格式
   - 禁止混用 UTC 和本地时间，避免时区转换问题
+- **v2 数据访问统一规则**：
+  - 高层业务动作统一使用 `session_scope()` 作为事务边界
+  - 所有 Repository 构造都必须显式传入 `Session`
+  - 同一动作需要多个 Repository 时，统一使用 `RepositoryFactory(session)`
+  - Repository 内部禁止自建 `Session`、禁止自行 `commit`
+  - 模型层禁止 `save()/update()/delete()` 这类写库入口
+  - 事务外禁止继续传递 ORM 实体；跨层只允许标量、`dataclass` 纯数据或视图 `dict`
 
 ### 调试与运维
 
-- 必要时直接通过 `python debug_tool.py -a [ADB_PORT] --template [template_name]` 查看当前页面的 ocr 内容和是否出现相应模板文件
+- 必要时直接通过 `uv run python debug_tool.py -a [ADB_PORT] --template [template_name]` 查看当前页面的 ocr 内容和是否出现相应模板文件
 - 当在对话中某个代码问题第一次出现时，应直接给出`源代码问题部分`的代码块作为引用展示
 - 长时间的任务不应该自己执行而是请求人工接管，除非自身支持后台运行或有设置超时时间
 
@@ -114,7 +121,7 @@ src/ptcgp_auto_v2/
 │   ├── task_status.py      # 任务状态定义
 │   ├── hooks.py            # Hook 机制基础定义
 │   └── device_pool.py      # 设备池管理
-├── tasks/                  # 任务实现（10 个任务）
+├── tasks/                  # 任务实现（11 个任务）
 │   ├── pack_opening_task_base.py  # 统一开包流程基类（open_pack/claim_gifts/init_account 继承）
 │   ├── open_pack.py        # 每日开包
 │   ├── claim_rewards.py    # 领取任务奖励
@@ -220,20 +227,20 @@ Scheduler (Loop)
 
 ```bash
 # v2 守护模式
-python main_v2.py --daemon
+uv run python main_v2.py --daemon
 
 # 调试工具
-python debug_tool.py
+uv run python debug_tool.py
 
 # 手动执行单次任务
-python main_v2.py --task open_pack --account 1 --debug
+uv run python main_v2.py --task open_pack --account 1 --debug
 ```
 
 ## 调试与开发
 
 1. **新增任务**: 在 `src/ptcgp_auto_v2/tasks/` 创建新文件，继承 `Task` 类并使用 `@TaskRegistry.register` 装饰器。
 2. **页面定义**: 在各自 task 中定义页面识别规则。
-3. **本地测试**: 使用 `python main_v2.py --task <task_name> --account <id> --debug` 单独测试任务。
+3. **本地测试**: 使用 `uv run python main_v2.py --task <task_name> --account <id> --debug` 单独测试任务。
 4. **卡牌识别配置**: 在 `src/ptcgp_auto_v2/config/constants.py` 中调整 YOLO 和 Hash 阈值。
 5. **子包推断**: `PackOpeningTaskBase` 已集成两阶段子包推断（滑动页模板优先 + 结果页卡牌兜底），支持 `exclude_promo` 排除 PROMO 干扰。动态模板在会话结束后自动清理。
 
