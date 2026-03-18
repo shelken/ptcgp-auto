@@ -390,22 +390,36 @@ class PackOpeningTaskBase(StatefulTask):
         try:
             context = self.get_target_pack_context() or {}
             pack_name = context.get("booster_name")
+            account_name = (
+                getattr(self.account, "nickname", None)
+                or getattr(self.account, "display_name", None)
+                or str(getattr(self.account, "id", ""))
+            )
             with session_scope() as session:
                 factory = RepositoryFactory(session)
                 account_card_repo = factory.account_cards()
-                account_name = (
-                    getattr(self.account, "nickname", None)
-                    or getattr(self.account, "display_name", None)
-                    or str(getattr(self.account, "id", ""))
-                )
-                save_high_rarity_cards(
+                notifications = save_high_rarity_cards(
                     account_card_repo=account_card_repo,
                     account_id=self.account.id,
                     rows=rows,
                     account_name=account_name,
-                    notifier=get_notifier(),
                     notify_message=self.get_rare_card_notify_message(),
                     pack_name=pack_name,
+                )
+            notifier = get_notifier()
+            for item in notifications:
+                notifier.notify_rare_card_data(
+                    account_id=item.account_id,
+                    account_name=item.account_name,
+                    card_id=item.card_id,
+                    card_name=item.card_name,
+                    card_data=item.card_data,
+                    set_code=item.set_code,
+                    card_number=item.card_number,
+                    rarity=item.rarity,
+                    pack_name=item.pack_name,
+                    image_url=None,
+                    message=item.message,
                 )
         except Exception as e:
             logger.warning(f"保存高稀有度卡牌并通知失败: {e}")
