@@ -722,9 +722,9 @@ class PackOpeningTaskBase(StatefulTask):
                 tuple(build_row_signature(row)) for row in self._pack_result_rows
             ]
             for decision in cast(list[dict[str, object]], stats.get("decisions", [])):
-                incoming_row = decision.get("incoming_row")
-                matched_row = decision.get("matched_row")
-                result_row = decision.get("result_row")
+                incoming_row = cast(list[dict[str, object]], decision.get("incoming_row") or [])
+                matched_row = cast(list[dict[str, object]], decision.get("matched_row") or [])
+                result_row = cast(list[dict[str, object]], decision.get("result_row") or [])
                 incoming_text = (
                     "[" + ", ".join(self._resolve_log_card_name(card) for card in incoming_row) + "]"
                     if incoming_row
