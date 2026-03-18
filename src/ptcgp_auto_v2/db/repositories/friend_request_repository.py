@@ -139,6 +139,13 @@ class FriendRequestRepository(BaseRepository):
         )
         return self.session.exec(sended_statement).first()
 
+    def get_pending_request_data(
+        self, from_account_id: int, to_friend_id: str
+    ) -> Optional[FriendRequestSnapshot]:
+        """获取待处理请求快照（sending 优先，其次 sended）。"""
+        row = self.get_pending_request(from_account_id, to_friend_id)
+        return None if row is None else self._to_data(FriendRequestSnapshot, row)
+
     def has_pending_delete_request(
         self, from_account_id: int, to_friend_id: str
     ) -> bool:
