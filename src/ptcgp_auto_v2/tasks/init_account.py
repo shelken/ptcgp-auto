@@ -406,21 +406,23 @@ class InitAccountTask(PackOpeningTaskBase):
         from ptcgp_auto_v2.db.engine import session_scope
         from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 
-        try:
-            with session_scope() as session:
-                repos = RepositoryFactory(session)
-                base_plan = repos.task_plans().get_by_name("base")
-                if base_plan and self.account.id:
-                    repos.accounts().add_secondary_plan(
-                        account_id=self.account.id,
-                        plan_id=base_plan.id,
-                        priority=0,
-                    )
-                    logger.info(
-                        f"账号 {self.account.nickname or self.account.game_id} 已自动分配 base 计划"
-                    )
-        except Exception as e:
-            logger.warning(f"分配 base 计划失败: {e}")
+        account_id = getattr(self.account, "id", None)
+        if not isinstance(account_id, int) or account_id <= 0:
+            raise RuntimeError("初始化完成后账号 ID 无效，无法分配 base 计划")
+
+        with session_scope() as session:
+            repos = RepositoryFactory(session)
+            base_plan = repos.task_plans().get_by_name("base")
+            if base_plan is None or base_plan.id is None:
+                raise RuntimeError("缺少 base 计划，无法完成初始化收尾")
+            repos.accounts().add_secondary_plan(
+                account_id=account_id,
+                plan_id=base_plan.id,
+                priority=0,
+            )
+            logger.info(
+                f"账号 {self.account.nickname or self.account.game_id} 已自动分配 base 计划"
+            )
 
     # ============================================================
     # 页面处理方法

@@ -229,12 +229,13 @@ class ExchangeCardsTask(StatefulTask):
         """获取好友选择流程状态。"""
         return cast(FriendSelectionFlow, self.state_get("friend_flow"))
 
-    def _update_request_fields(self, request_id: int, **fields) -> bool:
+    def _update_request_fields(self, request_id: int, **fields):
         """按 ID 更新交换请求字段。"""
         with session_scope() as session:
-            return ExchangeCardRequestRepository(session).update_fields_by_id(
+            if not ExchangeCardRequestRepository(session).update_fields_by_id(
                 request_id, **fields
-            )
+            ):
+                raise RuntimeError(f"交换请求更新失败: request_id={request_id}")
 
     def _done(self, reason: str = "", skip: bool = False):
         """按原语义收敛任务。"""
@@ -267,9 +268,12 @@ class ExchangeCardsTask(StatefulTask):
         if request.expire_at and now >= request.expire_at:
             if request.status == "sending":
                 with session_scope() as session:
-                    ExchangeCardRequestRepository(session).mark_canceled(
+                    if not ExchangeCardRequestRepository(session).mark_canceled(
                         request.id, reason="交换请求已过期（未送出）"
-                    )
+                    ):
+                        raise RuntimeError(
+                            f"交换请求过期取消失败: request_id={request.id}"
+                        )
                 self.mark_completed_without_timestamp("交换请求已过期（未送出）")
                 self._done("交换请求已过期（未送出）")
                 return
@@ -277,9 +281,12 @@ class ExchangeCardsTask(StatefulTask):
                 request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
                 request.updated_at = now
                 with session_scope() as session:
-                    ExchangeCardRequestRepository(session).set_cancel_reason(
+                    if not ExchangeCardRequestRepository(session).set_cancel_reason(
                         request.id, request.cancel_reason
-                    )
+                    ):
+                        raise RuntimeError(
+                            f"交换请求取消原因更新失败: request_id={request.id}"
+                        )
 
         if request.cancel_reason:
             logger.debug(
@@ -375,11 +382,14 @@ class ExchangeCardsTask(StatefulTask):
         """发现 nickname 回调：持久化并同步运行态。"""
         with session_scope() as session:
             friendship_repo = FriendshipRepository(session)
-            friendship_repo.update_nickname(
+            if not friendship_repo.update_nickname(
                 account_id=account_id,
                 friend_id=friend_id,
                 nickname=nickname,
-            )
+            ):
+                raise RuntimeError(
+                    f"好友昵称更新失败: account_id={account_id}, friend_id={friend_id}"
+                )
         self.state_set("friend_nickname", nickname)
 
     def _on_scroll_exhausted(self, reason: str) -> ActionResult:
@@ -666,7 +676,8 @@ class ExchangeCardsTask(StatefulTask):
             return result
 
         with session_scope() as session:
-            ExchangeCardRequestRepository(session).mark_sended(request.id, None)
+            if not ExchangeCardRequestRepository(session).mark_sended(request.id, None):
+                raise RuntimeError(f"交换请求标记 sended 失败: request_id={request.id}")
         request.expire_at = None
         request.cancel_reason = None
         request.failed_reason = None
@@ -765,9 +776,15 @@ class ExchangeCardsTask(StatefulTask):
         with session_scope() as session:
             request_repo = ExchangeCardRequestRepository(session)
             if "超时" in reason:
-                request_repo.mark_failed(request.id, reason)
+                if not request_repo.mark_failed(request.id, reason):
+                    raise RuntimeError(
+                        f"交换请求标记 failed 失败: request_id={request.id}"
+                    )
             else:
-                request_repo.mark_canceled(request.id, reason=reason)
+                if not request_repo.mark_canceled(request.id, reason=reason):
+                    raise RuntimeError(
+                        f"交换请求标记 canceled 失败: request_id={request.id}"
+                    )
         self._done("交换超时失败" if "超时" in reason else "交换已取消")
         return result
 
@@ -814,7 +831,10 @@ class ExchangeCardsTask(StatefulTask):
 
         with session_scope() as session:
             repos = RepositoryFactory(session)
-            repos.exchange_card_requests().mark_completed(request.id)
+            if not repos.exchange_card_requests().mark_completed(request.id):
+                raise RuntimeError(
+                    f"交换请求标记 completed 失败: request_id={request.id}"
+                )
             row = repos.account_cards().get(self.account.id, request.target_card_id)
             if row:
                 repos.account_cards().upsert(
@@ -837,7 +857,12 @@ class ExchangeCardsTask(StatefulTask):
         request = self._req()
         if request:
             with session_scope() as session:
-                ExchangeCardRequestRepository(session).mark_failed(request.id, reason)
+                if not ExchangeCardRequestRepository(session).mark_failed(
+                    request.id, reason
+                ):
+                    raise RuntimeError(
+                        f"交换请求标记 failed 失败: request_id={request.id}"
+                    )
         if preserve_last_completed_at:
             self.mark_completed_without_timestamp(reason)
         self._done(reason)
