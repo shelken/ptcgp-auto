@@ -28,8 +28,9 @@ from ptcgp_auto_v2.config.constants import (
 from ptcgp_auto_v2.utils.game_time import get_game_biz_date_str
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account, CardSet, Pack
     from ptcgp_auto_v2.db.repositories import CardRepository, PackRecordRepository
+    from ptcgp_auto_v2.db.repositories.card_repository import CardSetData, PackData
+    from ptcgp_auto_v2.db.models import Account
 
 
 _HRW_WEEKLY_CACHE: dict[str, dict] = {}
@@ -78,7 +79,7 @@ def select_pack_for_account(
 
 def _build_candidates(
     card_repo: "CardRepository", exclude_set_codes: list[str]
-) -> list["Pack"]:
+) -> list["PackData"]:
     """构建可用的卡包候选列表。"""
     candidates = card_repo.get_packs_by_set_prefixes(
         prefixes=PACK_SERIES_CODES,
@@ -103,8 +104,8 @@ def _build_account_key(account: "Account") -> str:
 
 
 def _select_latest_pack(
-    candidates: list["Pack"], card_repo: "CardRepository"
-) -> Optional["Pack"]:
+    candidates: list["PackData"], card_repo: "CardRepository"
+) -> Optional["PackData"]:
     """选择最新系列的一个卡包。"""
     set_codes = {pack.set_code for pack in candidates if pack.set_code}
     if not set_codes:
@@ -133,7 +134,7 @@ def _select_latest_pack(
     return latest_candidates[0]
 
 
-def _parse_release_date(card_set: "CardSet") -> Optional[datetime]:
+def _parse_release_date(card_set: "CardSetData") -> Optional[datetime]:
     """解析系列发布日期。"""
     if not card_set.release_date:
         return None
@@ -145,14 +146,14 @@ def _parse_release_date(card_set: "CardSet") -> Optional[datetime]:
 
 def _select_by_consistent_hash(
     account_key: str,
-    candidates: list["Pack"],
+    candidates: list["PackData"],
     virtual_nodes: int = PACK_AUTO_HASH_VIRTUAL_NODES,
-) -> Optional["Pack"]:
+) -> Optional["PackData"]:
     """使用一致性哈希选择卡包。"""
     if not candidates:
         return None
 
-    ring: list[tuple[int, "Pack"]] = []
+    ring: list[tuple[int, "PackData"]] = []
     for pack in candidates:
         base_key = f"{pack.set_code}/{pack.name}"
         for index in range(virtual_nodes):
@@ -172,7 +173,7 @@ def _select_by_weighted_hrw(
     account_key: str,
     card_repo: "CardRepository",
     exclude_set_codes: list[str],
-) -> tuple[Optional["Pack"], int]:
+) -> tuple[Optional["PackData"], int]:
     """按全局进度权重使用 HRW 选择卡包。"""
     cache_key = _build_weekly_cache_key(exclude_set_codes)
     snapshot = _get_or_build_weekly_snapshot(
@@ -319,7 +320,7 @@ def _build_weekly_snapshot(
 
 
 def _build_pack_weights(
-    candidates: list["Pack"],
+    candidates: list["PackData"],
     card_repo: "CardRepository",
     effective_scale: float,
 ) -> tuple[dict[str, float], dict[str, dict[str, int]], dict[str, float]]:
@@ -381,16 +382,20 @@ def _build_seed_candidates() -> list[str]:
             for index in range(1, PACK_AUTO_HRW_SEED_SCAN_COUNT + 1)
         ]
     )
-    return list(dict.fromkeys(seeds))
+    return seeds
 
 
 def _load_all_account_keys(current_account_key: str) -> list[str]:
     """加载用于全局分配的账号 key 列表。"""
     try:
-        from ptcgp_auto_v2.db.repositories import AccountRepository
+        from ptcgp_auto_v2.db.engine import session_scope
+        from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 
-        accounts = AccountRepository().get_all()
-        keys = [_build_account_key(item) for item in accounts]
+        with session_scope() as session:
+            keys = [
+                _build_account_key(item)
+                for item in RepositoryFactory(session).accounts().get_all()
+            ]
     except Exception:
         keys = []
 
@@ -520,9 +525,9 @@ def _select_best_seed_distribution(
 
 def _select_least_used(
     account_key: str,
-    candidates: list["Pack"],
+    candidates: list["PackData"],
     record_repo: "PackRecordRepository",
-) -> Optional["Pack"]:
+) -> Optional["PackData"]:
     """选择使用次数最少的卡包。"""
     if not candidates:
         return None

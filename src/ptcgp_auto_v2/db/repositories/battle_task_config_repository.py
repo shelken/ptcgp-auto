@@ -6,45 +6,41 @@
 import json
 from typing import Optional
 
-from sqlmodel import Session, select
+from sqlmodel import select
 
-from ptcgp_auto_v2.db.engine import get_engine
 from ptcgp_auto_v2.db.models import BattleTaskConfig
+from .base import BaseRepository
 
 
-class BattleTaskConfigRepository:
+class BattleTaskConfigRepository(BaseRepository):
     """对战任务配置数据访问层"""
 
     def get_by_task_instance(self, task_instance_id: int) -> Optional[BattleTaskConfig]:
         """根据任务实例ID获取配置"""
-        with Session(get_engine()) as session:
-            statement = select(BattleTaskConfig).where(
-                BattleTaskConfig.task_instance_id == task_instance_id
-            )
-            return session.exec(statement).first()
+        statement = select(BattleTaskConfig).where(
+            BattleTaskConfig.task_instance_id == task_instance_id
+        )
+        return self.session.exec(statement).first()
 
     def get_by_account(self, account_id: int) -> list[BattleTaskConfig]:
         """获取账号的所有对战任务配置"""
-        with Session(get_engine()) as session:
-            statement = select(BattleTaskConfig).where(
-                BattleTaskConfig.account_id == account_id
-            )
-            return list(session.exec(statement).all())
+        statement = select(BattleTaskConfig).where(
+            BattleTaskConfig.account_id == account_id
+        )
+        return list(self.session.exec(statement).all())
 
     def create_config(
         self, account_id: int, task_instance_id: int, stop_conditions: list[dict]
     ) -> BattleTaskConfig:
         """创建对战任务配置"""
-        with Session(get_engine()) as session:
-            config = BattleTaskConfig(
-                account_id=account_id,
-                task_instance_id=task_instance_id,
-                stop_conditions=json.dumps(stop_conditions),
-            )
-            session.add(config)
-            session.commit()
-            session.refresh(config)
-            return config
+        config = BattleTaskConfig(
+            account_id=account_id,
+            task_instance_id=task_instance_id,
+            stop_conditions=json.dumps(stop_conditions),
+        )
+        self.session.add(config)
+        self._finish_write(config)
+        return config
 
     def get_stop_conditions(self, task_instance_id: int) -> list[dict]:
         """获取停止条件配置"""

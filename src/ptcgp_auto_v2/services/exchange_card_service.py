@@ -8,11 +8,11 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from ptcgp_auto_v2.db.models import ExchangeCardRequest
-from ptcgp_auto_v2.db.repositories import (
-    AccountRepository,
-    ExchangeCardRequestRepository,
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.exchange_card_request_repository import (
+    ExchangeCardRequestSnapshot,
 )
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.config.rarity_icons import RARITY_META
 
 
@@ -46,7 +46,7 @@ class ExchangeCardService:
         target_card_rarity: str,
         to_account_id: Optional[int] = None,
         to_nickname: Optional[str] = None,
-    ) -> Optional[ExchangeCardRequest]:
+    ) -> Optional[ExchangeCardRequestSnapshot]:
         """创建交换请求；不允许 IM/UR 稀有度。"""
         normalized_rarity = (target_card_rarity or "").upper()
         if not cls.is_exchangeable(normalized_rarity):
@@ -56,29 +56,36 @@ class ExchangeCardService:
         if required_points is None:
             return None
 
-        account = AccountRepository().get_by_id(from_account_id)
-        if account is None:
-            return None
-        current_points = int(account.exchange_points or 0)
-        if current_points < required_points:
-            return None
+        with session_scope() as session:
+            repos = RepositoryFactory(session)
+            account = repos.accounts().get_by_id(from_account_id)
+            if account is None:
+                return None
+            current_points = int(account.exchange_points or 0)
+            if current_points < required_points:
+                return None
 
-        repo = ExchangeCardRequestRepository()
-        if repo.has_active_request(from_account_id):
-            return None
+            repo = repos.exchange_card_requests()
+            if repo.has_active_request(from_account_id):
+                return None
 
-        request = repo.create(
-            from_account_id=from_account_id,
-            to_account_id=to_account_id,
-            to_nickname=to_nickname,
-            to_friend_id=to_friend_id,
-            target_card_id=target_card_id,
-            target_card_rarity=normalized_rarity,
-            status="sending",
-        )
-        if request is None:
-            return None
-        request.expire_at = datetime.now() + timedelta(
-            minutes=cls.DEFAULT_EXPIRE_MINUTES
-        )
-        return repo.update(request)
+            request = repo.create(
+                from_account_id=from_account_id,
+                to_account_id=to_account_id,
+                to_nickname=to_nickname,
+                to_friend_id=to_friend_id,
+                target_card_id=target_card_id,
+                target_card_rarity=normalized_rarity,
+                status="sending",
+            )
+            if request is None:
+                return None
+            if request.id is None:
+                raise RuntimeError("交换请求 ID 为空")
+            repo.update_fields_by_id(
+                request.id,
+                expire_at=datetime.now() + timedelta(
+                    minutes=cls.DEFAULT_EXPIRE_MINUTES
+                ),
+            )
+            return repo.get_by_id_data(request.id)

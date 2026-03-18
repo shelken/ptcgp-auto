@@ -70,6 +70,8 @@ def session_scope() -> Generator[Session, None, None]:
     """
     数据库会话上下文管理器
 
+    默认的高层动作事务边界。
+
     自动处理提交和回滚：
     - 正常退出时自动提交
     - 发生异常时自动回滚

@@ -254,8 +254,6 @@ class InitAccountTask(PackOpeningTaskBase):
         self.state.reset()
         self.state_set("phase", InitAccountPhase.INIT)
 
-        # 初始化基类的仓储和数据
-        self._init_repositories()
         self.reset_action_cache()
         self._packs_opened_count = 0
         self._result_recognized = False
@@ -405,20 +403,22 @@ class InitAccountTask(PackOpeningTaskBase):
 
     def _assign_base_plan(self):
         """为完成的账号分配 base 计划"""
-        from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
+        from ptcgp_auto_v2.db.engine import session_scope
+        from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 
         try:
-            plan_repo = TaskPlanRepository()
-            account_repo = AccountRepository()
-
-            base_plan = plan_repo.get_by_name("base")
-            if base_plan and self.account.id:
-                account_repo.add_secondary_plan(
-                    account_id=self.account.id, plan_id=base_plan.id, priority=0
-                )
-                logger.info(
-                    f"账号 {self.account.nickname or self.account.game_id} 已自动分配 base 计划"
-                )
+            with session_scope() as session:
+                repos = RepositoryFactory(session)
+                base_plan = repos.task_plans().get_by_name("base")
+                if base_plan and self.account.id:
+                    repos.accounts().add_secondary_plan(
+                        account_id=self.account.id,
+                        plan_id=base_plan.id,
+                        priority=0,
+                    )
+                    logger.info(
+                        f"账号 {self.account.nickname or self.account.game_id} 已自动分配 base 计划"
+                    )
         except Exception as e:
             logger.warning(f"分配 base 计划失败: {e}")
 

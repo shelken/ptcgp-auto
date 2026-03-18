@@ -80,12 +80,6 @@ class TaskInstance(SQLModel, table=True):
         },
     )
 
-    def save(self):
-        """保存到数据库（兼容旧接口）"""
-        from ..repositories import TaskInstanceRepository
-
-        TaskInstanceRepository().update(self)
-
     def to_dict(self) -> dict:
         """转换为字典"""
         return {

@@ -16,6 +16,7 @@ from ptcgp_auto_v2.config.constants import (
     HASH_SIMILARITY_TIE_THRESHOLD,
     TOPK_CANDIDATES,
 )
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
 from ptcgp_auto_v2.utils.perceptual_hash import (
@@ -41,7 +42,6 @@ class CardHashManager:
         self._all_loaded: bool = False
         # 内存缓存：记录下载失败的卡牌，避免重复尝试（按卡牌粒度）
         self._failed_downloads: Set[str] = set()  # 格式: "{set_code}/{number:03d}"
-        self._repo = CardRepository()
         self._downloader = ImageResourceManager() if enable_download else None
         self._enable_download = enable_download
 
@@ -58,13 +58,18 @@ class CardHashManager:
             return True
 
         # 1. 查询缺失Hash的卡牌
-        all_missing = self._repo.get_cards_without_hash(set_code)
+        with session_scope() as session:
+            all_missing = [
+                (card.id, card.number)
+                for card in CardRepository(session).get_cards_without_hash(set_code)
+                if card.id is not None
+            ]
 
         # 2. 过滤掉已下载失败的卡牌（内存缓存，避免重复尝试）
         missing_cards = [
-            card
-            for card in all_missing
-            if f"{set_code}/{card.number:03d}" not in self._failed_downloads
+            (card_id, number)
+            for card_id, number in all_missing
+            if f"{set_code}/{number:03d}" not in self._failed_downloads
         ]
 
         skipped_count = len(all_missing) - len(missing_cards)
@@ -84,28 +89,22 @@ class CardHashManager:
                 )
 
                 # 3. 下载缺失卡牌的图片
-                card_numbers = [card.number for card in missing_cards]
+                card_numbers = [number for _, number in missing_cards]
                 downloaded = self._downloader.download_cards_batch(  # type: ignore
                     set_code, card_numbers
                 )
 
                 # 4. 计算Hash并更新数据库
                 success_count = 0
-                for card in missing_cards:
-                    if card.number in downloaded:
-                        # 类型断言：从数据库查询的card一定有id
-                        assert card.id is not None, (
-                            "Card ID should not be None for existing card"
-                        )
-                        if self._compute_and_save_hash(
-                            card.id, downloaded[card.number]
-                        ):
+                for card_id, number in missing_cards:
+                    if number in downloaded:
+                        if self._compute_and_save_hash(card_id, downloaded[number]):
                             success_count += 1
                     else:
                         # 下载失败，记录到内存缓存，本次运行不再尝试
-                        self._failed_downloads.add(f"{set_code}/{card.number:03d}")
+                        self._failed_downloads.add(f"{set_code}/{number:03d}")
                         logger.warning(
-                            f"卡牌 {set_code}/{card.number:03d} 下载失败，已标记为失败（本次运行不再尝试）"
+                            f"卡牌 {set_code}/{number:03d} 下载失败，已标记为失败（本次运行不再尝试）"
                         )
 
                 logger.info(
@@ -131,7 +130,8 @@ class CardHashManager:
             hash_str = encode_hash_to_base64(hash_arr)
 
             # 更新数据库
-            return self._repo.update_card_hash(card_id, hash_str)
+            with session_scope() as session:
+                return CardRepository(session).update_card_hash(card_id, hash_str)
         except Exception as e:
             logger.error(f"计算卡牌 {card_id} Hash失败: {e}")
             return False
@@ -141,7 +141,8 @@ class CardHashManager:
         if set_code in self._loaded_sets:
             return
 
-        hash_data = self._repo.get_cards_with_hash_by_set(set_code)
+        with session_scope() as session:
+            hash_data = CardRepository(session).get_cards_with_hash_by_set(set_code)
 
         self._series_cache[set_code] = {
             number: decode_hash_from_base64(hash_str)
@@ -161,10 +162,10 @@ class CardHashManager:
             return True
 
         # 获取所有系列
-        all_sets = self._repo.get_all_sets()
+        with session_scope() as session:
+            all_set_codes = [item.code for item in CardRepository(session).get_all_sets()]
 
-        for card_set in all_sets:
-            set_code = card_set.code
+        for set_code in all_set_codes:
             # 排除 PROMO 系列
             if exclude_promo and set_code.upper().startswith("PROMO"):
                 logger.debug(f"[HashManager] 加载全局Hash时跳过 PROMO 系列: {set_code}")

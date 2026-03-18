@@ -13,6 +13,7 @@ from typing import Optional, cast
 
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
     AccountRepository,
@@ -179,6 +180,21 @@ class SendCardDailyTask(StatefulTask):
         self.state_del("action.filter_keyword_input")
         self.state_set("filter_modal_stay_rounds", 0)
 
+    def _load_record(self):
+        """按当前上下文重新加载送卡记录。"""
+        record_id = cast(Optional[int], self.state_get("record_id"))
+        target_friend_id = cast(Optional[str], self.state_get("target_friend_id"))
+        target_account_id = cast(Optional[int], self.state_get("target_account_id"))
+        if record_id is None or self.account.id is None or not target_friend_id:
+            return None
+        return GiftRecordService.ensure_daily_record(
+            account_id=self.account.id,
+            target_friend_id=target_friend_id,
+            target_account_id=target_account_id,
+            card_set_code=FIXED_CARD_SET_CODE,
+            card_number=FIXED_CARD_NUMBER,
+        )
+
     def on_start(self):
         """任务启动初始化。"""
         self.state.reset()
@@ -187,7 +203,7 @@ class SendCardDailyTask(StatefulTask):
                 "target_friend_id": None,
                 "target_account_id": None,
                 "fixed_card_id": None,
-                "record": None,
+                "record_id": None,
                 "card_stable_rounds": 0,
                 "last_card_signature": None,
                 "before_count": None,
@@ -225,43 +241,46 @@ class SendCardDailyTask(StatefulTask):
             self.skip("无可用送卡目标")
             return
 
-        self.state_set("target_friend_id", pair.target_friend_id)
-        self.state_set("target_account_id", pair.target_account_id)
-        if pair.target_account_id is not None:
-            target_account = AccountRepository().get_by_id(pair.target_account_id)
-            if target_account:
+        target_friend_id = pair.target_friend_id
+        target_account_id = pair.target_account_id
+        self.state_set("target_friend_id", target_friend_id)
+        self.state_set("target_account_id", target_account_id)
+        if target_account_id is not None:
+            with session_scope() as session:
+                target_account = AccountRepository(session).get_by_id(
+                    target_account_id
+                )
+                target_account_nickname = target_account.nickname if target_account else None
+            if target_account_nickname:
                 friend_flow = cast(FriendSelectionFlow, self.state_get("friend_flow"))
-                friend_flow.nickname = target_account.nickname
+                friend_flow.nickname = target_account_nickname
 
-        target_friend_id = cast(Optional[str], self.state_get("target_friend_id"))
         if not target_friend_id:
             self.mark_completed_without_timestamp("目标 friend_id 为空")
             self.complete()
             return
 
-        fixed_card = CardRepository().get_card_by_set_and_number(
-            FIXED_CARD_SET_CODE,
-            FIXED_CARD_NUMBER,
-        )
-        self.state_set("fixed_card_id", fixed_card.id if fixed_card else None)
+        with session_scope() as session:
+            fixed_card = CardRepository(session).get_card_by_set_and_number(
+                FIXED_CARD_SET_CODE,
+                FIXED_CARD_NUMBER,
+            )
+            fixed_card_id = fixed_card.id if fixed_card else None
+        self.state_set("fixed_card_id", fixed_card_id)
 
         if GiftRecordService.is_daily_success(self.account.id, target_friend_id):
             self.mark_completed_without_timestamp("今日已送卡成功")
             self.complete()
             return
 
-        self.state_set(
-            "record",
-            GiftRecordService.ensure_daily_record(
-                account_id=self.account.id,
-                target_friend_id=target_friend_id,
-                target_account_id=cast(
-                    Optional[int], self.state_get("target_account_id")
-                ),
-                card_set_code=FIXED_CARD_SET_CODE,
-                card_number=FIXED_CARD_NUMBER,
-            ),
+        record = GiftRecordService.ensure_daily_record(
+            account_id=self.account.id,
+            target_friend_id=target_friend_id,
+            target_account_id=cast(Optional[int], self.state_get("target_account_id")),
+            card_set_code=FIXED_CARD_SET_CODE,
+            card_number=FIXED_CARD_NUMBER,
         )
+        self.state_set("record_id", record.id)
 
         self._init_friend_helper()
         self._maybe_complete_for_pair_ordering()
@@ -288,23 +307,25 @@ class SendCardDailyTask(StatefulTask):
 
     def _on_friend_verified(self):
         """好友验证成功回调。"""
-        record = self.state_get("record")
+        record = self._load_record()
         if record:
             GiftRecordService.update_status(record, status="target_found")
 
     def _on_nickname_found(self, account_id: int, friend_id: str, nickname: str):
         """发现 nickname 回调：持久化到好友关系。"""
-        FriendshipRepository().update_nickname(
-            account_id=account_id,
-            friend_id=friend_id,
-            nickname=nickname,
-        )
+        with session_scope() as session:
+            FriendshipRepository(session).update_nickname(
+                account_id=account_id,
+                friend_id=friend_id,
+                nickname=nickname,
+            )
 
     def _on_scroll_exhausted(self, reason: str) -> ActionResult:
         """滑动耗尽回调：删除好友关系后跳过。"""
         target_friend_id = cast(Optional[str], self.state_get("target_friend_id"))
         if self.account.id and target_friend_id:
-            FriendshipRepository().delete(self.account.id, target_friend_id)
+            with session_scope() as session:
+                FriendshipRepository(session).delete(self.account.id, target_friend_id)
             logger.info(
                 "好友关系已删除: account=%s, friend_id=%s",
                 self.account.id,
@@ -354,36 +375,6 @@ class SendCardDailyTask(StatefulTask):
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         return ActionResult.wait(0.8)
 
-    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
-        return self._handle_home(page_info)
-
-    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
-        return self._handle_home(page_info)
-
-    def _handle_community_page(self, page_info: dict) -> ActionResult:
-        return self._handle_community(page_info)
-
-    def _handle_gift_choose_friend(self, page_info: dict) -> ActionResult:
-        return self._handle_choose_friend(page_info)
-
-    def _handle_gift_select_card(self, page_info: dict) -> ActionResult:
-        return self._handle_select_card(page_info)
-
-    def _handle_gift_filter_modal(self, page_info: dict) -> ActionResult:
-        return self._handle_filter_modal(page_info)
-
-    def _handle_gift_target_page(self, page_info: dict) -> ActionResult:
-        return self._handle_target_page(page_info)
-
-    def _handle_gift_confirm_popup(self, page_info: dict) -> ActionResult:
-        return self._handle_confirm_popup(page_info)
-
-    def _handle_gift_confirm_last_popup(self, page_info: dict) -> ActionResult:
-        return self._handle_confirm_popup(page_info)
-
-    def _handle_gift_swipe_page(self, page_info: dict) -> ActionResult:
-        return self._handle_swipe_page(page_info)
-
     def _complete_without_send(
         self,
         complete_reason: str,
@@ -393,7 +384,7 @@ class SendCardDailyTask(StatefulTask):
         """以完成态收敛任务。"""
         self.complete(complete_reason)
         logger.info("send_card_daily 完成收敛: %s", complete_reason)
-        record = self.state_get("record")
+        record = self._load_record()
         if record:
             GiftRecordService.update_status(
                 record,
@@ -412,7 +403,7 @@ class SendCardDailyTask(StatefulTask):
         """以跳过态收敛任务。"""
         self.skip(skip_reason)
         logger.info("send_card_daily 跳过收敛: %s", skip_reason)
-        record = self.state_get("record")
+        record = self._load_record()
         if record and record_status:
             GiftRecordService.update_status(
                 record,
@@ -449,7 +440,7 @@ class SendCardDailyTask(StatefulTask):
             get_text_patterns("gift_tab_send"),
             wait=1.0,
         )
-        return result if result else ActionResult.wait(0.8)
+        return result or ActionResult.wait(0.8)
 
     def _handle_gift_page_main(self, page_info: dict) -> ActionResult:
         """分送主页面点击下方分送按钮。"""
@@ -530,17 +521,16 @@ class SendCardDailyTask(StatefulTask):
 
     def _handle_select_card(self, page_info: dict) -> ActionResult:
         """选卡页面：必须先筛选，再通过扫描定位固定卡牌。"""
-        if not bool(
-            self.state_get("filter_applied", False)
-        ) and not self.is_action_done("open_filter_clicked"):
+        filter_applied = bool(self.state_get("filter_applied", False))
+        if not filter_applied and not self.is_action_done("open_filter_clicked"):
             result = tap_template(self.adb, self.page_detector, "icon_search", wait=1.0)
             if result:
                 self.state_set("filter_opened", True)
                 self.mark_action_done("open_filter_clicked")
                 return result
-            return result if result else ActionResult.wait(0.6)
+            return ActionResult.wait(0.6)
 
-        if not bool(self.state_get("filter_applied", False)):
+        if not filter_applied:
             return ActionResult.wait(0.6)
 
         detected = self.card_recognizer.scan(
@@ -548,7 +538,7 @@ class SendCardDailyTask(StatefulTask):
         )
         scan_tap_result = self._tap_target_card_by_scan(detected)
         if scan_tap_result:
-            record = self.state_get("record")
+            record = self._load_record()
             if record:
                 GiftRecordService.update_status(record, status="card_selected")
             return scan_tap_result
@@ -597,19 +587,15 @@ class SendCardDailyTask(StatefulTask):
     def _handle_filter_modal(self, page_info: dict) -> ActionResult:
         """筛选弹窗：清空 -> 输入关键字 -> 确认。"""
         ocr_results = page_info.get("ocr_results", [])
+        stay_rounds = int(self.state_get("filter_modal_stay_rounds", 0))
 
         if self.is_action_done("filter_keyword_input"):
-            self.state_set(
-                "filter_modal_stay_rounds",
-                int(self.state_get("filter_modal_stay_rounds", 0)) + 1,
-            )
+            stay_rounds += 1
         else:
-            self.state_set("filter_modal_stay_rounds", 0)
+            stay_rounds = 0
+        self.state_set("filter_modal_stay_rounds", stay_rounds)
 
-        if (
-            int(self.state_get("filter_modal_stay_rounds", 0))
-            >= MAX_FILTER_MODAL_STAY_ROUNDS
-        ):
+        if stay_rounds >= MAX_FILTER_MODAL_STAY_ROUNDS:
             self._reset_filter_input_state()
 
         if not self.is_action_done("filter_clear_clicked"):
@@ -624,12 +610,18 @@ class SendCardDailyTask(StatefulTask):
                 return clear_button
 
         if not self.is_action_done("filter_keyword_input"):
-            focus_point = self._get_filter_search_focus_point()
-            if focus_point is not None:
+            focus_box = self.page_detector.find_template("icon_search", threshold=0.8)
+            if focus_box is None:
+                match = self.page_detector.find_template_with_scale(
+                    "icon_search", scale=1.0, threshold=0.8
+                )
+                if match is not None:
+                    focus_box = match.box
+            if focus_box is not None:
                 clear_text(
                     self.adb,
-                    focus_point[0],
-                    focus_point[1],
+                    self.adb.center_x(),
+                    (focus_box[1] + focus_box[3]) // 2,
                     max_chars=40,
                     wait=0.2,
                 )
@@ -648,27 +640,19 @@ class SendCardDailyTask(StatefulTask):
             return ok_result
         return ActionResult.wait(0.6)
 
-    def _get_filter_search_focus_point(self) -> Optional[tuple[int, int]]:
-        """根据 icon_search 计算筛选输入框点击点。"""
-        box = self.page_detector.find_template("icon_search", threshold=0.8)
-        if not box:
-            match = self.page_detector.find_template_with_scale(
-                "icon_search", scale=1.0, threshold=0.8
-            )
-            if match:
-                box = match.box
-        if not box:
-            return None
-        return self.adb.center_x(), (box[1] + box[3]) // 2
-
     def _handle_target_page(self, page_info: dict) -> ActionResult:
         """目标确认页：解析持有数量并点击分送。"""
         ocr_results = page_info.get("ocr_results", [])
-        if (
-            self.state_get("before_count") is None
-            or self.state_get("after_count") is None
-        ):
-            self._extract_hold_counts(ocr_results)
+        before_count = self.state_get("before_count")
+        after_count = self.state_get("after_count")
+        if before_count is None or after_count is None:
+            for item in ocr_results:
+                text = str(item.get("text", ""))
+                before_count, after_count = GiftRecordService.parse_count_transition(text)
+                if before_count is not None and after_count is not None:
+                    self.state_set("before_count", before_count)
+                    self.state_set("after_count", after_count)
+                    break
 
         if not is_text_visible(
             ocr_results,
@@ -684,26 +668,16 @@ class SendCardDailyTask(StatefulTask):
             wait=0.8,
         )
         if send_result:
-            record = self.state_get("record")
+            record = self._load_record()
             if record:
                 GiftRecordService.update_status(record, status="confirming")
             return send_result
         return ActionResult.wait(0.6)
 
-    def _extract_hold_counts(self, ocr_results: list[dict]):
-        """从 OCR 文本中提取持有数量变化。"""
-        for item in ocr_results:
-            text = str(item.get("text", ""))
-            before_count, after_count = GiftRecordService.parse_count_transition(text)
-            if before_count is not None and after_count is not None:
-                self.state_set("before_count", before_count)
-                self.state_set("after_count", after_count)
-                return
-
     def _handle_confirm_popup(self, page_info: dict) -> ActionResult:
         """确认弹窗点击 OK。"""
         result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.8)
-        return result if result else ActionResult.wait(0.6)
+        return result or ActionResult.wait(0.6)
 
     def _handle_swipe_page(self, page_info: dict) -> ActionResult:
         """送卡成功页：执行上滑并落库。"""
@@ -719,28 +693,52 @@ class SendCardDailyTask(StatefulTask):
         self.complete()
         return ActionResult.ok(wait=0.8)
 
+    (
+        _handle_home_with_community_icon,
+        _handle_game_home_main,
+        _handle_community_page,
+        _handle_gift_choose_friend,
+        _handle_gift_select_card,
+        _handle_gift_filter_modal,
+        _handle_gift_target_page,
+        _handle_gift_confirm_popup,
+        _handle_gift_confirm_last_popup,
+        _handle_gift_swipe_page,
+    ) = (
+        _handle_home,
+        _handle_home,
+        _handle_community,
+        _handle_choose_friend,
+        _handle_select_card,
+        _handle_filter_modal,
+        _handle_target_page,
+        _handle_confirm_popup,
+        _handle_confirm_popup,
+        _handle_swipe_page,
+    )
+
     def _finalize_success(self):
         """任务成功后的记录与库存同步。"""
-        record = self.state_get("record")
+        record = self._load_record()
         if not record:
             return
-        self.state_set(
-            "record",
-            GiftRecordService.mark_success_and_sync_count(
-                record=record,
-                card_id=cast(Optional[int], self.state_get("fixed_card_id")),
-                before_count=cast(Optional[int], self.state_get("before_count")),
-                after_count=cast(Optional[int], self.state_get("after_count")),
-            ),
+        fixed_card_id = cast(Optional[int], self.state_get("fixed_card_id"))
+        before_count = cast(Optional[int], self.state_get("before_count"))
+        after_count = cast(Optional[int], self.state_get("after_count"))
+        GiftRecordService.mark_success_and_sync_count(
+            record=record,
+            card_id=fixed_card_id,
+            before_count=before_count,
+            after_count=after_count,
         )
         self.state_set("gift_sent_success", True)
 
     def _maybe_complete_for_pair_ordering(self):
         """根据双向配对库存与当日执行情况决定是否等待对方先送。"""
-        record = self.state_get("record")
+        record_id = self.state_get("record_id")
         target_account_id = self.state_get("target_account_id")
         target_friend_id = cast(Optional[str], self.state_get("target_friend_id"))
-        if not record or not isinstance(target_account_id, int):
+        if record_id is None or not isinstance(target_account_id, int):
             return
         if not target_friend_id or self.account.id is None:
             return
@@ -800,7 +798,8 @@ class SendCardDailyTask(StatefulTask):
         fixed_card_id = cast(Optional[int], self.state_get("fixed_card_id"))
         if fixed_card_id is None:
             return 0
-        row = AccountCardRepository().get(account_id, fixed_card_id)
+        with session_scope() as session:
+            row = AccountCardRepository(session).get(account_id, fixed_card_id)
         if row is None:
             return 0
         return max(int(row.count), 0)

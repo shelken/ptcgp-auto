@@ -13,11 +13,15 @@ from typing import Optional, cast
 
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
-from ptcgp_auto_v2.db.models import ExchangeCardRequest
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+from ptcgp_auto_v2.db.repositories.exchange_card_request_repository import (
+    ExchangeCardRequestRepository,
+    ExchangeCardRequestSnapshot,
+)
 from ptcgp_auto_v2.db.repositories import (
     AccountCardRepository,
     CardRepository,
-    ExchangeCardRequestRepository,
     FriendshipRepository,
 )
 from ptcgp_auto_v2.hooks import ExchangeDelayPostHook
@@ -206,9 +210,6 @@ class ExchangeCardsTask(StatefulTask):
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
-        self._request_repo = ExchangeCardRequestRepository()
-        self._account_card_repo = AccountCardRepository()
-        self._card_repo = CardRepository()
         self._icon_detector = IconGroupDetector()
         self._card_recognizer = YoloCardRecognizer(
             adb=adb,
@@ -220,13 +221,20 @@ class ExchangeCardsTask(StatefulTask):
         self._filter_state = FilterPanelState()
         self._friend_helper: Optional[FriendSelectionHelper] = None
 
-    def _req(self) -> Optional[ExchangeCardRequest]:
+    def _req(self) -> Optional[ExchangeCardRequestSnapshot]:
         """获取当前请求。"""
-        return cast(Optional[ExchangeCardRequest], self.state_get("request"))
+        return cast(Optional[ExchangeCardRequestSnapshot], self.state_get("request"))
 
     def _friend_flow(self) -> FriendSelectionFlow:
         """获取好友选择流程状态。"""
         return cast(FriendSelectionFlow, self.state_get("friend_flow"))
+
+    def _update_request_fields(self, request_id: int, **fields) -> bool:
+        """按 ID 更新交换请求字段。"""
+        with session_scope() as session:
+            return ExchangeCardRequestRepository(session).update_fields_by_id(
+                request_id, **fields
+            )
 
     def _done(self, reason: str = "", skip: bool = False):
         """按原语义收敛任务。"""
@@ -247,7 +255,9 @@ class ExchangeCardsTask(StatefulTask):
             self._done("账号ID为空")
             return
 
-        request = self._request_repo.get_active_by_account(self.account.id)
+        with session_scope() as session:
+            request_repo = ExchangeCardRequestRepository(session)
+            request = request_repo.get_active_by_account_data(self.account.id)
         if request is None:
             self.mark_completed_without_timestamp("无活跃交换请求")
             self._done("无活跃交换请求")
@@ -256,16 +266,20 @@ class ExchangeCardsTask(StatefulTask):
         now = datetime.now()
         if request.expire_at and now >= request.expire_at:
             if request.status == "sending":
-                self._request_repo.mark_canceled(
-                    request, reason="交换请求已过期（未送出）"
-                )
+                with session_scope() as session:
+                    ExchangeCardRequestRepository(session).mark_canceled(
+                        request.id, reason="交换请求已过期（未送出）"
+                    )
                 self.mark_completed_without_timestamp("交换请求已过期（未送出）")
                 self._done("交换请求已过期（未送出）")
                 return
             if request.status == "sended" and not request.cancel_reason:
                 request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
                 request.updated_at = now
-                self._request_repo.update(request)
+                with session_scope() as session:
+                    ExchangeCardRequestRepository(session).set_cancel_reason(
+                        request.id, request.cancel_reason
+                    )
 
         if request.cancel_reason:
             logger.debug(
@@ -280,13 +294,17 @@ class ExchangeCardsTask(StatefulTask):
             return self._fail("账号未过14天冷静期", preserve_last_completed_at=True)
 
         if request.status == "sending":
-            account_card = self._account_card_repo.get(
-                self.account.id, request.target_card_id
-            )
+            with session_scope() as session:
+                account_card_repo = AccountCardRepository(session)
+                account_card = account_card_repo.get(
+                    self.account.id, request.target_card_id
+                )
             if account_card is None or account_card.count < 1:
                 return self._fail("目标卡牌库存不足", preserve_last_completed_at=True)
 
-        card = self._card_repo.get_by_id(request.target_card_id)
+        with session_scope() as session:
+            card_repo = CardRepository(session)
+            card = card_repo.get_by_id(request.target_card_id)
         rarity_code = (request.target_card_rarity or "").upper()
 
         if request.status not in {"sending", "sended"}:
@@ -310,9 +328,11 @@ class ExchangeCardsTask(StatefulTask):
 
         nickname = getattr(request, "to_nickname", None)
         if not nickname:
-            friendship = FriendshipRepository().get_friendship(
-                self.account.id, request.to_friend_id
-            )
+            with session_scope() as session:
+                friendship_repo = FriendshipRepository(session)
+                friendship = friendship_repo.get_friendship(
+                    self.account.id, request.to_friend_id
+                )
             if friendship and friendship.friend_nickname:
                 nickname = friendship.friend_nickname
                 logger.info(
@@ -353,18 +373,22 @@ class ExchangeCardsTask(StatefulTask):
 
     def _on_nickname_found(self, account_id: int, friend_id: str, nickname: str):
         """发现 nickname 回调：持久化并同步运行态。"""
-        FriendshipRepository().update_nickname(
-            account_id=account_id,
-            friend_id=friend_id,
-            nickname=nickname,
-        )
+        with session_scope() as session:
+            friendship_repo = FriendshipRepository(session)
+            friendship_repo.update_nickname(
+                account_id=account_id,
+                friend_id=friend_id,
+                nickname=nickname,
+            )
         self.state_set("friend_nickname", nickname)
 
     def _on_scroll_exhausted(self, reason: str) -> ActionResult:
         """滑动耗尽回调：删除好友关系后失败。"""
         request = self._req()
         if request and self.account.id and request.to_friend_id:
-            FriendshipRepository().delete(self.account.id, request.to_friend_id)
+            with session_scope() as session:
+                friendship_repo = FriendshipRepository(session)
+                friendship_repo.delete(self.account.id, request.to_friend_id)
             logger.info(
                 "好友关系已删除: account=%s, friend_id=%s",
                 self.account.id,
@@ -392,10 +416,6 @@ class ExchangeCardsTask(StatefulTask):
         """返回交换任务后置 Hook。"""
         return [ExchangeDelayPostHook()]
 
-    def is_completed(self) -> bool:
-        """判断任务是否已收敛。"""
-        return super().is_completed()
-
     def handle_page(self, page_name: str, page_info: dict) -> ActionResult:
         """补充恢复状态切换后交给基类纯分发。"""
         request = self._req()
@@ -421,8 +441,7 @@ class ExchangeCardsTask(StatefulTask):
         """主页点击社群入口。"""
         return tap_community_icon(self.adb, self.page_detector)
 
-    _handle_home_with_community_icon = _handle_home
-    _handle_game_home_main = _handle_home
+    _handle_home_with_community_icon = _handle_game_home_main = _handle_home
 
     def _handle_community_page(self, page_info: dict) -> ActionResult:
         """社群页面进入交换入口。"""
@@ -589,6 +608,7 @@ class ExchangeCardsTask(StatefulTask):
             return ActionResult.wait(0.6)
 
         rarity_code = (request.target_card_rarity or "").upper()
+        filter_action_cache = cast(dict[str, bool], self.state_get("filter_action_cache", {}))
         result = handle_filter_panel(
             adb=self.adb,
             page_detector=self.page_detector,
@@ -596,13 +616,7 @@ class ExchangeCardsTask(StatefulTask):
             page_info=page_info,
             rarity_codes=[rarity_code] if rarity_code else [],
             state=self._filter_state,
-            action_cache=cast(
-                dict[str, bool], self.state_get("filter_action_cache", {})
-            ),
-        )
-
-        filter_action_cache = cast(
-            dict[str, bool], self.state_get("filter_action_cache", {})
+            action_cache=filter_action_cache,
         )
         if filter_action_cache.get("filter_selected") and filter_action_cache.get(
             "filter_ok_scrolled"
@@ -651,9 +665,13 @@ class ExchangeCardsTask(StatefulTask):
         if not result.success:
             return result
 
+        with session_scope() as session:
+            ExchangeCardRequestRepository(session).mark_sended(request.id, None)
         request.expire_at = None
         request.cancel_reason = None
-        self._request_repo.mark_sended(request, next_check_at=None)
+        request.failed_reason = None
+        request.next_check_at = None
+        request.status = "sended"
         self.state_set("request", request)
         logger.info("交换已送出，进入 5 分钟等待窗口")
         return ActionResult.ok(wait=1.0)
@@ -684,14 +702,14 @@ class ExchangeCardsTask(StatefulTask):
         if not self.is_action_done("window_started"):
             request.expire_at = now + timedelta(seconds=EXCHANGE_WINDOW_SECONDS)
             request.updated_at = now
-            self._request_repo.update(request)
+            self._update_request_fields(request.id, expire_at=request.expire_at)
             self.mark_action_done("window_started")
             logger.info("进入等待页，启动5分钟交换窗口: request_id=%s", request.id)
 
         if not cancel_reason and request.expire_at and now >= request.expire_at:
             request.cancel_reason = "等待对方回应超时（5分钟），自动取消"
             request.updated_at = now
-            self._request_repo.update(request)
+            self._update_request_fields(request.id, cancel_reason=request.cancel_reason)
             logger.info("等待窗口超时: request_id=%s", request.id)
 
         if request.cancel_reason:
@@ -732,17 +750,24 @@ class ExchangeCardsTask(StatefulTask):
                 request.expire_at = None
                 request.next_check_at = None
                 request.updated_at = datetime.now()
-                self._request_repo.update(request)
+                self._update_request_fields(
+                    request.id,
+                    cancel_reason=None,
+                    expire_at=None,
+                    next_check_at=None,
+                )
                 self.state_set("request", request)
                 self.mark_action_done("recover_clicked")
                 logger.info("旧提议已取消，等待页面退出后继续重发")
             return ActionResult.ok(wait=1.0)
 
         reason = request.cancel_reason or "交换已取消"
-        if "超时" in reason:
-            self._request_repo.mark_failed(request, reason)
-        else:
-            self._request_repo.mark_canceled(request, reason=reason)
+        with session_scope() as session:
+            request_repo = ExchangeCardRequestRepository(session)
+            if "超时" in reason:
+                request_repo.mark_failed(request.id, reason)
+            else:
+                request_repo.mark_canceled(request.id, reason=reason)
         self._done("交换超时失败" if "超时" in reason else "交换已取消")
         return result
 
@@ -787,16 +812,23 @@ class ExchangeCardsTask(StatefulTask):
         if request is None or self.account.id is None:
             return
 
-        self._request_repo.mark_completed(request)
-        row = self._account_card_repo.get(self.account.id, request.target_card_id)
-        if row:
-            self._account_card_repo.upsert(
-                account_id=self.account.id,
-                card_id=request.target_card_id,
-                count=max(int(row.count) - 1, 0),
-                yolo_conf=getattr(row, "yolo_conf", None),
-                hash_similarity=getattr(row, "hash_similarity", None),
-            )
+        with session_scope() as session:
+            repos = RepositoryFactory(session)
+            repos.exchange_card_requests().mark_completed(request.id)
+            row = repos.account_cards().get(self.account.id, request.target_card_id)
+            if row:
+                repos.account_cards().upsert(
+                    account_id=self.account.id,
+                    card_id=request.target_card_id,
+                    count=max(int(row.count) - 1, 0),
+                    yolo_conf=getattr(row, "yolo_conf", None),
+                    hash_similarity=getattr(row, "hash_similarity", None),
+                )
+        request.status = "completed"
+        request.next_check_at = None
+        request.failed_reason = None
+        request.cancel_reason = None
+        request.expire_at = None
 
     def _fail(
         self, reason: str, preserve_last_completed_at: bool = False
@@ -804,7 +836,8 @@ class ExchangeCardsTask(StatefulTask):
         """标记请求失败并结束任务。"""
         request = self._req()
         if request:
-            self._request_repo.mark_failed(request, reason)
+            with session_scope() as session:
+                ExchangeCardRequestRepository(session).mark_failed(request.id, reason)
         if preserve_last_completed_at:
             self.mark_completed_without_timestamp(reason)
         self._done(reason)

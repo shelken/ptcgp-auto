@@ -8,6 +8,7 @@
 """
 
 from ptcgp_auto_v2.core.hooks import Hook, HookContext, HookResult
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.services import GiftRecordService
 
@@ -23,12 +24,13 @@ class ClaimGiftsPreHook(Hook):
             }
 
         account_id = int(context.account.id)
-        repo = TaskInstanceRepository()
-        repo.get_or_create(
-            account_id=account_id,
-            task_type="claim_gifts",
-            reset_type="daily",
-        )
+        with session_scope() as session:
+            repo = TaskInstanceRepository(session)
+            repo.get_or_create(
+                account_id=account_id,
+                task_type="claim_gifts",
+                reset_type="daily",
+            )
 
         return HookResult.INSERT_TASK, {
             "task_type": "claim_gifts",

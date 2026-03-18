@@ -23,7 +23,9 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import PackRecordType
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.locales import get_config_value, get_text_patterns
 from ptcgp_auto_v2.tasks.pack_opening_task_base import (
     PACK_RESULT_MODE_TEN,
@@ -139,13 +141,6 @@ class OpenPackTask(PackOpeningTaskBase):
     max_same_page_rounds = 25
     pages = _build_open_pack_pages()
 
-    def __init__(self, adb, recognizer, page_detector):
-        super().__init__(adb, recognizer, page_detector)
-
-        # 数据仓储（基类已初始化，此处仅用于类型提示）
-        self._pack_config_repo = None
-        self._account_stat_repo = None
-
     # ============================================================
     # 扩展点实现（PackOpeningTaskBase 要求）
     # ============================================================
@@ -174,15 +169,6 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def on_start(self):
         """任务开始前的初始化"""
-        from ptcgp_auto_v2.db.repositories import (
-            AccountPackConfigRepository,
-            AccountStatRepository,
-        )
-
-        self._init_repositories()
-        self._pack_config_repo = AccountPackConfigRepository()
-        self._account_stat_repo = AccountStatRepository()
-
         self.state.reset()
         self.state_update(
             {
@@ -209,51 +195,51 @@ class OpenPackTask(PackOpeningTaskBase):
             cast(int | None, self.state_get("pack_hourglass_count")),
         )
 
-        # 加载开包配置
-        config = self._pack_config_repo.get_by_account_and_type(
-            self.account.id, "daily"
-        )
+        with session_scope() as session:
+            factory = RepositoryFactory(session)
+            pack_config_repo = factory.account_pack_configs()
+            config = pack_config_repo.get_by_account_and_type(self.account.id, "daily")
 
-        if not config:
-            # 未配置时，自动选择卡包策略
-            logger.info(
-                f"账号 {self.account.display_name} 未配置开包目标，尝试自动选择"
-            )
-            settings = get_settings()
-            selected = select_pack_for_account(
-                account=self.account,
-                strategy=settings.pack_auto_strategy,
-                card_repo=self._card_repo,
-                record_repo=self._pack_record_repo,
-                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-            )
-            if not selected:
+            if not config:
+                # 未配置时，自动选择卡包策略
                 logger.info(
-                    f"账号 {self.account.display_name} 无法找到可用的开包目标，任务跳过"
+                    f"账号 {self.account.display_name} 未配置开包目标，尝试自动选择"
                 )
-                self.skip("无法找到可用的开包目标")
-                return
+                settings = get_settings()
+                selected = select_pack_for_account(
+                    account=self.account,
+                    strategy=settings.pack_auto_strategy,
+                    card_repo=factory.cards(),
+                    record_repo=factory.pack_records(),
+                    exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+                )
+                if not selected:
+                    logger.info(
+                        f"账号 {self.account.display_name} 无法找到可用的开包目标，任务跳过"
+                    )
+                    self.skip("无法找到可用的开包目标")
+                    return
 
-            self.state_set(
-                "target_pack",
-                {
-                    "set_code": selected["set_code"],
-                    "booster_name": selected["booster_name"],
-                },
-            )
-            logger.info(
-                "自动选择卡包: %s/%s (策略=%s, 候选=%s)",
-                selected["set_code"],
-                selected["booster_name"],
-                selected.get("strategy"),
-                selected.get("candidate_count"),
-            )
-        else:
-            self.state_set(
-                "target_pack",
-                {"set_code": config.set_code, "booster_name": config.booster_name},
-            )
-            logger.info(f"目标卡包: {config.set_code}/{config.booster_name}")
+                self.state_set(
+                    "target_pack",
+                    {
+                        "set_code": selected["set_code"],
+                        "booster_name": selected["booster_name"],
+                    },
+                )
+                logger.info(
+                    "自动选择卡包: %s/%s (策略=%s, 候选=%s)",
+                    selected["set_code"],
+                    selected["booster_name"],
+                    selected.get("strategy"),
+                    selected.get("candidate_count"),
+                )
+            else:
+                self.state_set(
+                    "target_pack",
+                    {"set_code": config.set_code, "booster_name": config.booster_name},
+                )
+                logger.info(f"目标卡包: {config.set_code}/{config.booster_name}")
 
         # 准备图片资源
         if self.should_prepare_pack_resources():
@@ -698,13 +684,16 @@ class OpenPackTask(PackOpeningTaskBase):
 
     def _load_pack_hourglass_count(self) -> int | None:
         """任务开始时读取一次当前账号沙漏数量。"""
-        if not self.account.id or self._account_stat_repo is None:
+        if not self.account.id:
             return None
 
         try:
-            stat = self._account_stat_repo.get_by_account_id(self.account.id)
-            if stat:
-                return stat.pack_hourglass_count
+            with session_scope() as session:
+                stat = RepositoryFactory(session).account_stats().get_by_account_id(
+                    self.account.id
+                )
+                if stat:
+                    return stat.pack_hourglass_count
         except Exception as e:
             logger.warning(f"  -> 获取沙漏数量失败: {e}")
 
@@ -721,16 +710,17 @@ class OpenPackTask(PackOpeningTaskBase):
                 "pack_hourglass_count", max(0, pack_hourglass_count - amount)
             )
 
-        if not self.account.id or self._account_stat_repo is None:
+        if not self.account.id:
             return
 
         try:
-            row = self._account_stat_repo.decrease_pack_hourglass_count(
-                self.account.id,
-                amount,
-            )
-            if row is not None and row.pack_hourglass_count is not None:
-                self.state_set("pack_hourglass_count", row.pack_hourglass_count)
+            with session_scope() as session:
+                row = RepositoryFactory(session).account_stats().decrease_pack_hourglass_count(
+                    self.account.id,
+                    amount,
+                )
+                if row is not None and row.pack_hourglass_count is not None:
+                    self.state_set("pack_hourglass_count", row.pack_hourglass_count)
         except Exception as e:
             logger.warning(f"  -> 扣减开包沙漏失败: {e}")
 

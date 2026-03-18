@@ -21,6 +21,7 @@ from ptcgp_auto_v2.config.constants import (  # noqa: E402
     PACK_AUTO_HRW_TARGET_RARITIES,
     PACK_SERIES_CODES,
 )
+from ptcgp_auto_v2.db.engine import session_scope  # noqa: E402
 from ptcgp_auto_v2.db.repositories import CardRepository  # noqa: E402
 from ptcgp_auto_v2.utils.pack_auto_selector import (  # noqa: E402
     get_hrw_distribution_snapshot,
@@ -29,12 +30,12 @@ from ptcgp_auto_v2.utils.pack_auto_selector import (  # noqa: E402
 
 def run_simulation() -> None:
     """运行并输出当前正式 HRW 分配快照。"""
-    card_repo = CardRepository()
-    snapshot = get_hrw_distribution_snapshot(
-        card_repo=card_repo,
-        exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-        force_rebuild=True,
-    )
+    with session_scope() as session:
+        snapshot = get_hrw_distribution_snapshot(
+            card_repo=CardRepository(session),
+            exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+            force_rebuild=True,
+        )
     if not snapshot:
         raise RuntimeError("未构建出 HRW 分配快照，请检查候选包与数据库数据")
 

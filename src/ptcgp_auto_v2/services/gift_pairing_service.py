@@ -5,16 +5,28 @@
 负责根据账号资产排序生成稳定送卡关系，并在任务执行前做增量补齐。
 """
 
+from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime, timedelta
 
 from sqlalchemy import case
-from sqlmodel import Session, col, func, select
+from sqlmodel import col, func, select
 
-from ptcgp_auto_v2.db.engine import get_engine
-from ptcgp_auto_v2.db.models import Account, AccountCard, Card, AccountGiftPair
-from ptcgp_auto_v2.db.repositories import AccountGiftPairRepository
+from ptcgp_auto_v2.db.engine import get_session, session_scope
+from ptcgp_auto_v2.db.models import Account, AccountCard, AccountGiftPair, Card
+from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
+
+
+@dataclass(slots=True, frozen=True)
+class GiftPairData:
+    """送卡配对纯数据。"""
+
+    id: int
+    account_id: int
+    target_account_id: int | None
+    target_friend_id: str
+    strategy: str
 
 
 class GiftPairingService:
@@ -34,10 +46,7 @@ class GiftPairingService:
         existing_pair_map: dict[int, int],
     ) -> list[tuple[int, int]]:
         """在既有稳定关系不变的前提下，为未配对账号生成补齐配对。"""
-        locked_account_ids: set[int] = set()
-        for account_id, target_id in existing_pair_map.items():
-            locked_account_ids.add(account_id)
-            locked_account_ids.add(target_id)
+        locked_account_ids = set(existing_pair_map) | set(existing_pair_map.values())
 
         unpaired: list[int] = [
             account_id
@@ -51,7 +60,7 @@ class GiftPairingService:
         return pairs
 
     @classmethod
-    def ensure_pairs_for_account(cls, account_id: int) -> Optional[AccountGiftPair]:
+    def ensure_pairs_for_account(cls, account_id: int) -> GiftPairData | None:
         """增量补齐送卡配对，并返回指定账号的当前有效配对。"""
         ranked_accounts = cls._load_ranked_accounts()
         friend_map = {
@@ -61,40 +70,57 @@ class GiftPairingService:
         }
         sorted_ids = [item["account_id"] for item in ranked_accounts]
 
-        pair_repo = AccountGiftPairRepository()
-        active_pairs = pair_repo.get_all_active()
-        active_map = {row.account_id: row for row in active_pairs}
+        with session_scope() as session:
+            pair_repo = RepositoryFactory(session).account_gift_pairs()
+            active_pairs = pair_repo.get_all_active()
+            active_map = {row.account_id: row for row in active_pairs}
 
-        existing_pair_map = cls._build_valid_existing_pair_map(active_map, friend_map)
+            existing_pair_map = cls._build_valid_existing_pair_map(
+                active_map,
+                friend_map,
+            )
 
-        # 对失效关系进行清理，确保后续补齐逻辑稳定。
-        for row in active_pairs:
-            if row.account_id not in existing_pair_map:
-                pair_repo.deactivate_active_pair(row.account_id)
+            for row in active_pairs:
+                if row.account_id not in existing_pair_map:
+                    pair_repo.deactivate_active_pair(row.account_id)
 
-        missing_pairs = cls.plan_missing_pairs(
-            sorted_account_ids=sorted_ids,
-            existing_pair_map=existing_pair_map,
+            missing_pairs = cls.plan_missing_pairs(
+                sorted_account_ids=sorted_ids,
+                existing_pair_map=existing_pair_map,
+            )
+            for left_id, right_id in missing_pairs:
+                left_friend_id = friend_map.get(left_id)
+                right_friend_id = friend_map.get(right_id)
+                if not left_friend_id or not right_friend_id:
+                    continue
+                pair_repo.upsert_active_pair(
+                    account_id=left_id,
+                    target_friend_id=right_friend_id,
+                    target_account_id=right_id,
+                    strategy=cls.STRATEGY_FIXED_A1_153,
+                )
+                pair_repo.upsert_active_pair(
+                    account_id=right_id,
+                    target_friend_id=left_friend_id,
+                    target_account_id=left_id,
+                    strategy=cls.STRATEGY_FIXED_A1_153,
+                )
+
+            pair = pair_repo.get_active_by_account(account_id)
+            return cls._pair_to_data(pair) if pair else None
+
+    @staticmethod
+    def _pair_to_data(pair: AccountGiftPair) -> GiftPairData:
+        """将送卡配对模型转成纯数据。"""
+        if pair.id is None:
+            raise RuntimeError("送卡配对 ID 为空，无法构造数据")
+        return GiftPairData(
+            id=pair.id,
+            account_id=pair.account_id,
+            target_account_id=pair.target_account_id,
+            target_friend_id=pair.target_friend_id,
+            strategy=pair.strategy,
         )
-        for left_id, right_id in missing_pairs:
-            left_friend_id = friend_map.get(left_id)
-            right_friend_id = friend_map.get(right_id)
-            if not left_friend_id or not right_friend_id:
-                continue
-            pair_repo.upsert_active_pair(
-                account_id=left_id,
-                target_friend_id=right_friend_id,
-                target_account_id=right_id,
-                strategy=cls.STRATEGY_FIXED_A1_153,
-            )
-            pair_repo.upsert_active_pair(
-                account_id=right_id,
-                target_friend_id=left_friend_id,
-                target_account_id=left_id,
-                strategy=cls.STRATEGY_FIXED_A1_153,
-            )
-
-        return pair_repo.get_active_by_account(account_id)
 
     @staticmethod
     def _build_valid_existing_pair_map(
@@ -142,7 +168,7 @@ class GiftPairingService:
             0,
         )
 
-        with Session(get_engine()) as session:
+        with get_session() as session:
             statement = (
                 select(
                     col(Account.id),
@@ -162,16 +188,12 @@ class GiftPairingService:
             )
             rows = session.exec(statement).all()
 
-        ranked_accounts: list[dict] = []
-        for account_id, friend_id, rarity_score_value in rows:
-            account_id_value = account_id if isinstance(account_id, int) else None
-            if account_id_value is None or not friend_id:
-                continue
-            ranked_accounts.append(
-                {
-                    "account_id": account_id_value,
-                    "friend_id": str(friend_id),
-                    "rarity_score": int(rarity_score_value or 0),
-                }
-            )
-        return ranked_accounts
+        return [
+            {
+                "account_id": account_id,
+                "friend_id": str(friend_id),
+                "rarity_score": int(rarity_score_value or 0),
+            }
+            for account_id, friend_id, rarity_score_value in rows
+            if isinstance(account_id, int) and friend_id
+        ]
