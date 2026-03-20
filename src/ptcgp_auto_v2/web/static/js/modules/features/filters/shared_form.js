@@ -395,8 +395,4 @@ export function syncSidebarRequestParams(button) {
         : null;
     const url = buildUrlWithFilters(baseUrl, filters, paramKeys);
     button.setAttribute('hx-get', url);
-
-    if (window.htmx && typeof window.htmx.process === 'function') {
-        window.htmx.process(button);
-    }
 }
