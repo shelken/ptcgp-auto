@@ -31,12 +31,7 @@
                     {{ item.target_pack_label }}{% if item.target_pack_auto %} ({{ t.label_auto or 'Auto' }}){% endif %}
                 </div>
             {% elif item.task_type == 'open_pack' %}
-                <div id="task-target-pack-{{ item.id }}"
-                     hx-get="/management/tasks/{{ item.id }}/target-pack?lang={{ current_lang }}"
-                     hx-trigger="load"
-                     hx-swap="innerHTML">
-                    <span class="text-xs text-muted whitespace-nowrap">{{ t.label_loading or '加载中' }}</span>
-                </div>
+                <div class="text-xs text-muted whitespace-nowrap">-</div>
             {% endif %}
         {% endset %}
         {% set status_cell %}
@@ -142,7 +137,7 @@
               hx-get="/api/tasks"
               hx-target="#task-table-body"
               hx-swap="innerHTML"
-              hx-trigger="change"
+              hx-trigger="change, submit"
               data-filter-cache-key="ptcgp_filter:tasks"
               data-action="save-tasks-filters"
               data-restore-trigger="true">
@@ -249,10 +244,7 @@
                 </span>
                 {% elif field.key == 'refresh' %}
                 <button class="brutal-btn table-action-btn"
-                        type="button"
-                        hx-get="/management/tasks?lang={{ current_lang }}"
-                        hx-target="#management-content"
-                        hx-include="#task-filter-form">
+                        type="submit">
                     {{ t.btn_refresh or 'Refresh' }}
                 </button>
                 {% endif %}

@@ -12,7 +12,6 @@ from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
-    AccountPackConfigRepository,
     CardRepository,
     PackRecordRepository,
     TaskPlanRepository,
@@ -76,6 +75,32 @@ def _serialize_account(
     return data
 
 
+def _resolve_auto_pack_map(
+    *,
+    session: Session,
+    accounts: list[Account],
+    pack_configs_map: dict[int, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """为未配置固定包的账号补齐自动选包结果。"""
+    settings = get_settings()
+    card_repo = CardRepository(session)
+    record_repo = PackRecordRepository(session)
+    auto_pack_map: dict[int, dict[str, Any]] = {}
+    for account in accounts:
+        if account.id is None or account.id in pack_configs_map:
+            continue
+        auto_pack = select_pack_for_account(
+            account=account,
+            strategy=settings.pack_auto_strategy,
+            card_repo=card_repo,
+            record_repo=record_repo,
+            exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+        )
+        if auto_pack:
+            auto_pack_map[account.id] = auto_pack
+    return auto_pack_map
+
+
 def build_accounts_list_context(
     *,
     session: Session,
@@ -115,8 +140,9 @@ def build_accounts_list_context(
     total = len(accounts)
     start = normalized_page * normalized_page_size
     end = start + normalized_page_size
+    page_accounts = accounts[start:end]
     accounts_page = [
-        _serialize_account(item, include_assocs=True) for item in accounts[start:end]
+        _serialize_account(item, include_assocs=True) for item in page_accounts
     ]
     has_prev = normalized_page > 0
     has_next = end < total
@@ -128,7 +154,11 @@ def build_accounts_list_context(
     return {
         "items": accounts_page,
         "pack_configs": pack_configs_map,
-        "auto_pack_map": {},
+        "auto_pack_map": _resolve_auto_pack_map(
+            session=session,
+            accounts=page_accounts,
+            pack_configs_map=pack_configs_map,
+        ),
         "q": q,
         "sort_by": normalized_sort_by,
         "sort_order": normalized_sort_order,
@@ -138,37 +168,6 @@ def build_accounts_list_context(
         "has_next": has_next,
         "total": total,
     }
-
-
-def build_account_target_pack_context(account_id: int) -> dict | None:
-    """构建账号目标包单元格上下文。"""
-    with session_scope() as session:
-        repo = AccountRepository(session)
-        account = repo.get_by_id(account_id)
-        if not account or account.id is None:
-            return None
-
-        config_repo = AccountPackConfigRepository(session)
-        config = config_repo.get_by_account_and_type(account.id, "daily")
-        auto_pack = None
-        if not config:
-            settings = get_settings()
-            card_repo = CardRepository(session)
-            record_repo = PackRecordRepository(session)
-            auto_pack = select_pack_for_account(
-                account=account,
-                strategy=settings.pack_auto_strategy,
-                card_repo=card_repo,
-                record_repo=record_repo,
-                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-            )
-
-        return {
-            "account_id": account.id,
-            "config": config.to_dict() if config else None,
-            "auto_pack": auto_pack,
-        }
-
 
 def build_account_edit_context(account_id: int) -> dict | None:
     """构建账号编辑弹窗数据。"""
