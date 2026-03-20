@@ -10,7 +10,6 @@ from ptcgp_auto_v2.core.task_ordering import (
 )
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.web.services.task_service import (
-    build_task_target_pack_context,
     build_task_list_render_context,
     list_task_filter_accounts,
     reset_completed_tasks_by_filters,
@@ -192,21 +191,6 @@ async def get_tasks(
         "partials/task_list.html",
         context,
     )
-
-
-@router.get(
-    "/management/tasks/{task_instance_id}/target-pack", response_class=HTMLResponse
-)
-async def get_task_target_pack_cell(
-    request: Request,
-    task_instance_id: int,
-):
-    """渲染任务目标包单元格。"""
-    context = build_task_target_pack_context(task_instance_id)
-    if not context:
-        return HTMLResponse("Task instance not found", status_code=404)
-    return render_template(request, "partials/task_target_pack_cell.html", context)
-
 
 @router.get("/api/tasks/account-options", response_class=HTMLResponse)
 async def get_task_account_options(

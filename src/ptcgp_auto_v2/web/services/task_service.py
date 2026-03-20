@@ -14,7 +14,6 @@ from ptcgp_auto_v2.core.task_plan_utils import (
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.db.repositories import (
-    AccountPackConfigRepository,
     CardRepository,
     PackRecordRepository,
     TaskInstanceRepository,
@@ -30,6 +29,35 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
 )
 from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
+
+
+def _resolve_open_pack_target(
+    *,
+    session: Session,
+    account: Account,
+    pack_configs_map: dict[int, AccountPackConfig],
+) -> tuple[str | None, bool]:
+    """返回开包任务目标包展示文案。"""
+    if account.id is None:
+        return None, False
+
+    config = pack_configs_map.get(account.id)
+    if config:
+        return f"{config.set_code}/{config.booster_name}", False
+
+    settings = get_settings()
+    card_repo = CardRepository(session)
+    record_repo = PackRecordRepository(session)
+    auto_pack = select_pack_for_account(
+        account=account,
+        strategy=settings.pack_auto_strategy,
+        card_repo=card_repo,
+        record_repo=record_repo,
+        exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
+    )
+    if not auto_pack:
+        return None, False
+    return f"{auto_pack['set_code']}/{auto_pack['booster_name']}", True
 
 
 def _build_tasks_page_url(
@@ -152,9 +180,13 @@ def build_tasks_list_context(
             rows.append(row_data)
             continue
 
-        config = pack_configs_map.get(account.id)
-        if config:
-            row_data["target_pack_label"] = f"{config.set_code}/{config.booster_name}"
+        target_pack_label, target_pack_auto = _resolve_open_pack_target(
+            session=session,
+            account=account,
+            pack_configs_map=pack_configs_map,
+        )
+        row_data["target_pack_label"] = target_pack_label
+        row_data["target_pack_auto"] = target_pack_auto
 
         rows.append(row_data)
 
@@ -287,50 +319,6 @@ def build_task_list_render_context(
     context["selected_sort_order"] = sort_order
     context["table_only"] = table_only
     return context
-
-
-def build_task_target_pack_context(task_instance_id: int) -> dict | None:
-    """构建任务目标包单元格上下文。"""
-    with session_scope() as session:
-        repo = TaskInstanceRepository(session)
-        instance = repo.get_by_id(task_instance_id)
-        if not instance or not instance.account or instance.account_id is None:
-            return None
-
-        if instance.task_type != "open_pack":
-            return {
-                "task_instance_id": task_instance_id,
-                "target_pack_label": None,
-                "target_pack_auto": False,
-            }
-
-        target_pack_label = None
-        target_pack_auto = False
-        config_repo = AccountPackConfigRepository(session)
-        config = config_repo.get_by_account_and_type(instance.account_id, "daily")
-        if config:
-            target_pack_label = f"{config.set_code}/{config.booster_name}"
-        else:
-            settings = get_settings()
-            card_repo = CardRepository(session)
-            record_repo = PackRecordRepository(session)
-            auto_pack = select_pack_for_account(
-                account=instance.account,
-                strategy=settings.pack_auto_strategy,
-                card_repo=card_repo,
-                record_repo=record_repo,
-                exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-            )
-            if auto_pack:
-                target_pack_label = f"{auto_pack['set_code']}/{auto_pack['booster_name']}"
-                target_pack_auto = True
-
-        return {
-            "task_instance_id": task_instance_id,
-            "target_pack_label": target_pack_label,
-            "target_pack_auto": target_pack_auto,
-        }
-
 
 def reset_completed_tasks_by_filters(
     session: Session,

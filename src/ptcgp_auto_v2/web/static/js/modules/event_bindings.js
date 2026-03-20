@@ -145,7 +145,6 @@ function handleFilterCacheOnForm(form) {
 function saveFilterCacheForElement(element) {
     if (!(element instanceof Element)) return;
     saveFilterCacheByElement(element);
-    syncManagementSidebarRequestUrls();
 }
 
 function observeCustomSelectRoots(observer) {
@@ -289,7 +288,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         initExchangeCards(evt.detail.elt);
         initPlans(evt.detail.elt);
         initTasks(evt.detail.elt);
-        syncManagementSidebarRequestUrls();
         syncPartialState(evt.detail.elt);
     });
 
@@ -372,7 +370,6 @@ export function bindAppEventHandlers(restoreRecordFilterPanelState) {
         const newContent = evt.detail.elt || evt.detail.target;
         if (newContent) {
             updateRelativeTimes(newContent);
-            syncManagementSidebarRequestUrls();
             syncPartialState(newContent);
             observeCustomSelectRoots(window.customSelectObserver);
         }

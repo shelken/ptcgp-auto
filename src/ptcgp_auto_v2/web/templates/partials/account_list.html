@@ -90,12 +90,7 @@
                     <span class="text-xs text-muted">{{ auto_pack.booster_name }} ({{ t.label_auto or 'Auto' }})</span>
                 </div>
                 {% else %}
-                <div id="account-target-pack-{{ item.id }}"
-                     hx-get="/management/accounts/{{ item.id }}/target-pack?lang={{ current_lang }}"
-                     hx-trigger="load"
-                     hx-swap="innerHTML">
-                    <span class="text-muted">{{ t.label_loading or '加载中' }}</span>
-                </div>
+                <span class="text-muted">-</span>
                 {% endif %}
             {% endset %}
             {% set actions_cell %}
