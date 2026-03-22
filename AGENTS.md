@@ -4,6 +4,7 @@
 
 ### 运行
 
+- 禁止`using-git-worktrees`
 - 修复bug时不要写任何测试，直接修改代码。
 - 不允许使用`py_compile`来检查语法，使用`uv run ruff check`
 - 如果在工作目录出错后，使用direnv exec运行（目录无法执行时先`direnv allow`）,任何python命令，使用uv跑
