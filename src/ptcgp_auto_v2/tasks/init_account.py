@@ -403,6 +403,9 @@ class InitAccountTask(PackOpeningTaskBase):
 
     def _assign_base_plan(self):
         """为完成的账号分配 base 计划"""
+        from ptcgp_auto_v2.core.scheduling_service import (
+            recompute_and_sync_account_scheduling,
+        )
         from ptcgp_auto_v2.db.engine import session_scope
         from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 
@@ -419,6 +422,10 @@ class InitAccountTask(PackOpeningTaskBase):
                 account_id=account_id,
                 plan_id=base_plan.id,
                 priority=0,
+            )
+            recompute_and_sync_account_scheduling(
+                session=session,
+                account_id=account_id,
             )
             logger.info(
                 f"账号 {self.account.nickname or self.account.game_id} 已自动分配 base 计划"
