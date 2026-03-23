@@ -3,6 +3,7 @@ from typing import Any, cast
 
 from sqlalchemy.orm import selectinload
 
+from ptcgp_auto_v2.core.scheduling_service import recompute_and_sync_account_scheduling
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
@@ -17,7 +18,6 @@ from ptcgp_auto_v2.db.repositories import (
     TaskPlanRepository,
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
-from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_query_text,
     normalize_page,
@@ -245,13 +245,7 @@ def update_account_plans(account_id: int, data: list[dict]) -> None:
         account = repo.get_by_id(account_id)
         if not account:
             return
-        task_types: set[str] = set()
-        for assoc in account.task_plan_associations or []:
-            if not assoc.is_active or not assoc.task_plan:
-                continue
-            task_types.update(assoc.task_plan.task_types_list)
-        recompute_next_run_at_for_account(
-            account,
-            list(task_types),
+        recompute_and_sync_account_scheduling(
             session=session,
+            account=account,
         )

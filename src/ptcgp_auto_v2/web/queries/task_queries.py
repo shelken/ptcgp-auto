@@ -6,7 +6,7 @@ from sqlalchemy import update
 from sqlmodel import Session, select, col, func
 from sqlalchemy.orm import selectinload
 
-from ptcgp_auto_v2.core.task_ordering import build_task_instance_order_by
+from ptcgp_auto_v2.core.scheduling_service import build_task_instance_order_by
 from ptcgp_auto_v2.db.models.task_instance import TaskInstance
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
@@ -108,5 +108,6 @@ def reset_completed_task_instances(
         updated_at=datetime.now(),
     )
     result = session.exec(statement)
+
     session.commit()
     return result.rowcount or 0

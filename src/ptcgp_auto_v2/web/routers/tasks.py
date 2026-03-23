@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request, Query
 from fastapi.responses import HTMLResponse
 from sqlmodel import Session
 
-from ptcgp_auto_v2.core.task_ordering import (
+from ptcgp_auto_v2.core.scheduling_service import (
     TASK_SORT_BY_DISPATCH_PRIORITY,
     normalize_task_sort,
 )
@@ -191,6 +191,7 @@ async def get_tasks(
         "partials/task_list.html",
         context,
     )
+
 
 @router.get("/api/tasks/account-options", response_class=HTMLResponse)
 async def get_task_account_options(
