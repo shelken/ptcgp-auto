@@ -109,7 +109,7 @@ src/ptcgp_auto_v2/web/
   - i18n 与模板初始化在 `utils/` 中集中管理
   - Jinja2 过滤器：`datetime` 用于格式化日期
 - **routers/**: 路由层，仅处理参数解析与响应拼装
-- **services/**: 业务层，负责视图模型与业务拼装
+- **services/**: 业务层，负责视图模型与业务拼装；任务列表只消费 `core/scheduling_service.py` 提供的统一调度摘要，不得在 Web 层复制调度规则
 - **queries/**: 查询层，负责 SQL 构造与分页过滤
 
 ### 前端 (HTMX + ES6 Modules)
@@ -153,9 +153,9 @@ src/ptcgp_auto_v2/web/
 
 ### 静态文件缓存
 
-- 修改 `static/css/*` 或 `static/js/main.js` 后
-- 必须同步更新 `templates/index.html` 中的版本号参数（如 `?v=2.3` → `?v=2.4`）
-- 强制浏览器加载最新文件而非缓存版本
+- **开发环境（`./scripts/web_dev.sh`）**：已默认关闭 `/static/*` 缓存，修改 `static/css/*` 或 `static/js/*` 后普通刷新即可生效
+- **生产环境**：保持版本号缓存策略，发布静态资源变更时仍需同步更新 `templates/index.html` 中的版本号参数
+- 仅做 HTMX 局部刷新时不会重载 `<head>` 资源；涉及全局 CSS/JS 变更需整页刷新一次
 
 ### 多主题适配（严格禁止硬编码颜色）
 
@@ -303,7 +303,7 @@ src/ptcgp_auto_v2/web/
 - **metadata 动作状态透传原则**：自动刷新与局部请求必须同时透传 `current_action`，否则会出现“节点正确但动作回退”的隐性状态错位。
 - **metadata 刷新模型原则**：metadata 属于强交互流程页，不应启用被动 `data-auto-refresh`；所有请求必须由用户显式动作触发（节点选择/检查/预览/执行）。
 - **metadata 收敛执行基线**：涉及 metadata 控制台与 Web 统一规范收敛时，统一以 `docs/plans/2026-02-27-metadata-sync-management-design.md` 中“待办回填（合并版，一字不漏）+ Phase1~Phase5 + 合并验收清单（待办）”作为唯一执行与验收基线，禁止并行维护第二套待办口径。
-- 调试（chrome-devtools）时没有特别说明时端口一般在8000
+- 调试（playwright-cli）时没有特别说明时端口一般在8000
 
 ## UI 设计决策记录
 
