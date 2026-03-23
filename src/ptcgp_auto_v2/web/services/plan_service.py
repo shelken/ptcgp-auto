@@ -3,11 +3,11 @@ from typing import Any
 
 from sqlmodel import Session
 
+from ptcgp_auto_v2.core.scheduling_service import recompute_and_sync_account_scheduling
 from ptcgp_auto_v2.core.task_base import TaskRegistry, ResetType
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
-from ptcgp_auto_v2.web.services.task_service import recompute_next_run_at_for_account
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_query_text,
@@ -175,10 +175,11 @@ def upsert_plan_from_form(form) -> str | None:
             account_repo = AccountRepository(session)
             accounts = account_repo.list_accounts_by_plan_id(plan.id)
             for account in accounts:
-                recompute_next_run_at_for_account(
-                    account,
-                    plan.task_types_list,
+                if account.id is None:
+                    continue
+                recompute_and_sync_account_scheduling(
                     session=session,
+                    account_id=account.id,
                 )
 
     return None
@@ -187,5 +188,18 @@ def upsert_plan_from_form(form) -> str | None:
 def delete_plan_by_id(plan_id: int) -> None:
     """删除任务计划。"""
     with session_scope() as session:
+        account_repo = AccountRepository(session)
+        affected_account_ids = [
+            account.id
+            for account in account_repo.list_accounts_by_plan_id(plan_id)
+            if account.id is not None
+        ]
+
         repo = TaskPlanRepository(session)
         repo.delete(plan_id)
+
+        for account_id in affected_account_ids:
+            recompute_and_sync_account_scheduling(
+                session=session,
+                account_id=account_id,
+            )

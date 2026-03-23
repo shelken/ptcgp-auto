@@ -38,11 +38,22 @@
             {{ status_chip(item.status, t, reason=item.error_message or '') }}
         {% endset %}
         {% set dispatch_cell %}
-            {% if item.reset_type == 'once' %}
-                <span class="brutal-tag text-xs">{{ t.label_dispatch_once_first or 'Once First' }}</span>
-            {% else %}
-                <span class="text-xs text-muted">{{ t.label_dispatch_time_order or 'By Time' }}</span>
+            {% set dispatch_text = t[item.dispatch_label_key] %}
+            {% if not dispatch_text %}
+                {% if item.dispatch_category == 'once' %}
+                    {% set dispatch_text = t.label_dispatch_once_first or '一次性优先' %}
+                {% elif item.dispatch_category == 'immediate' %}
+                    {% set dispatch_text = t.label_dispatch_immediate or '立即执行' %}
+                {% else %}
+                    {% set dispatch_text = t.label_dispatch_scheduled or '按时间调度' %}
+                {% endif %}
             {% endif %}
+            <div class="flex flex-col gap-1">
+                <span class="{{ item.dispatch_css_class }}">{{ dispatch_text }}</span>
+                {% if item.dispatch_rank and item.dispatch_rank_total %}
+                    <span class="text-xs text-muted font-mono">#{{ item.dispatch_rank }}/{{ item.dispatch_rank_total }}</span>
+                {% endif %}
+            </div>
         {% endset %}
         {% set last_completed_cell %}
                 {% if item.last_completed_at %}
@@ -139,8 +150,10 @@
               hx-swap="innerHTML"
               hx-trigger="change, submit"
               data-filter-cache-key="ptcgp_filter:tasks"
-              data-action="save-tasks-filters"
-              data-restore-trigger="true">
+              data-restore-url="/management/tasks"
+              data-restore-params="status,task_type,account_id,sort_by,sort_order,page,page_size,account_q"
+              data-restore-check-params="status,task_type,account_id,sort_by,sort_order,page,account_q"
+              data-action="save-tasks-filters">
             <div class="table-title-row mb-4">
                 <h2 class="text-3xl font-bold uppercase tracking-tight">{{ t.title_tasks or 'TASKS' }}</h2>
             </div>
@@ -259,15 +272,7 @@
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_account or 'Account' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_task or 'Task' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">{{ t.col_status or 'Status' }}</th>
-                        <th class="p-3 font-bold uppercase text-sm">
-                            <button type="button"
-                                    class="task-sort-btn flex items-center gap-1"
-                                    data-sort-by="dispatch_priority"
-                                    data-default-order="asc">
-                                <span>{{ t.col_dispatch_priority or 'Dispatch Priority' }}</span>
-                                <span class="task-sort-arrow" aria-hidden="true"></span>
-                            </button>
-                        </th>
+                        <th class="p-3 font-bold uppercase text-sm">{{ t.col_dispatch_priority or 'Dispatch Priority' }}</th>
                         <th class="p-3 font-bold uppercase text-sm">
                             <button type="button"
                                     class="task-sort-btn flex items-center gap-1"
