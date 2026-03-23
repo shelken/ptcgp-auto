@@ -157,7 +157,8 @@ uv run python main_v2.py --web --notify-key "xxxx"
 
 v2 版本采用 `Scheduler` (调度器) + `Executor` (执行器) 架构：
 
-- **Scheduler**: 负责生成任务、监控设备状态、分发任务。
+- **Scheduler**: 负责任务生成、账号批次挑选、设备分配与执行编排，不再维护计划聚合、任务顺序、前置任务等调度规则细节。
+- **Scheduling Service**: `core/scheduling_service.py` 是调度规则单一来源，统一维护计划聚合、任务顺序、reset/next_run 计算、调度摘要、任务列表调度顺位与调度字段回写。
 - **Executor**: 运行在具体设备线程中，负责执行原子任务逻辑（如 OCR 识别、点击操作）。
 - **Database**: SQLite (`data/ptcgp_v2.db`) 存储所有状态，确保数据安全。
 
@@ -203,6 +204,7 @@ ptcgp-auto/
 ├── src/
 │   ├── ptcgp_auto_v2/          # v2 核心代码
 │   │   ├── core/               # 核心框架 (调度器、执行器、任务基类)
+│   │   │   ├── scheduling_service.py  # 调度规则统一服务（计划聚合/排序/reset/next_run/调度摘要/调度字段回写）
 │   │   ├── tasks/              # 任务实现 (开包、送卡、交换等)
 │   │   │   ├── pack_opening_task_base.py  # 统一开包流程基类
 │   │   │   └── utils/          # 任务级共用逻辑
