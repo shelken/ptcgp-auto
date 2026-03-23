@@ -8,7 +8,7 @@
 - 修复bug时不要写任何测试，直接修改代码。
 - 不允许使用`py_compile`来检查语法，使用`uv run ruff check`
 - 如果在工作目录出错后，使用direnv exec运行（目录无法执行时先`direnv allow`）,任何python命令，使用uv跑
-- 如果没有数据调试，尝试`cp -r ~/Code/MyRepo/ptcgp-auto/data ./`, 没有启动web时启动`./scripts/web_dev.sh`，然后使用`devtools`自己调试web变更。
+- 如果没有数据调试，尝试`cp -r ~/Code/MyRepo/ptcgp-auto/data ./`, 没有启动web时启动`./scripts/web_dev.sh`，然后使用`playwright-cli`自己调试web变更。
 
 ### 对话规则
 
@@ -119,8 +119,9 @@
 src/ptcgp_auto_v2/
 ├── main_v2.py              # v2 入口文件（项目根目录）
 ├── core/                   # 核心调度模块
-│   ├── scheduler.py        # 任务调度器
+│   ├── scheduler.py        # 任务调度器（负责任务生成/账号批次挑选/设备分配，不再维护调度规则细节）
 │   ├── executor.py         # 任务执行器
+│   ├── scheduling_service.py  # 调度规则统一服务（计划聚合/排序/reset/next_run/调度摘要/调度顺位/调度字段回写）
 │   ├── task_base.py        # 任务基类与注册表
 │   ├── task_status.py      # 任务状态定义
 │   ├── hooks.py            # Hook 机制基础定义
