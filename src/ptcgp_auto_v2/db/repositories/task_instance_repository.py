@@ -7,7 +7,10 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select, update
 
-from ptcgp_auto_v2.core.task_ordering import build_task_instance_order_by
+from ptcgp_auto_v2.core.scheduling_service import (
+    build_due_pending_condition,
+    build_task_instance_order_by,
+)
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import Account, AccountTaskPlan, TaskInstance
 
@@ -18,15 +21,6 @@ _MISSING = object()
 
 class TaskInstanceRepository(BaseRepository):
     """任务实例数据访问层"""
-
-    @staticmethod
-    def _build_due_pending_condition(now: datetime):
-        """构建 pending 且到期可执行的查询条件。"""
-        next_run_at_col = col(TaskInstance.next_run_at)
-        return and_(
-            col(TaskInstance.status) == "pending",
-            or_(next_run_at_col.is_(None), next_run_at_col <= now),
-        )
 
     @staticmethod
     def _account_options() -> list[Any]:
@@ -82,7 +76,7 @@ class TaskInstanceRepository(BaseRepository):
         now = datetime.now()
         statement = (
             select(TaskInstance)
-            .where(self._build_due_pending_condition(now))
+            .where(build_due_pending_condition(now))
             .options(*self._account_options())
             .order_by(col(TaskInstance.created_at))
             .limit(1)
@@ -96,7 +90,7 @@ class TaskInstanceRepository(BaseRepository):
             select(TaskInstance)
             .where(
                 TaskInstance.account_id == account_id,
-                self._build_due_pending_condition(now),
+                build_due_pending_condition(now),
             )
             .options(*self._account_options())
         )
@@ -113,7 +107,7 @@ class TaskInstanceRepository(BaseRepository):
             select(TaskInstance)
             .where(
                 col(TaskInstance.account_id).in_(account_ids),
-                self._build_due_pending_condition(now),
+                build_due_pending_condition(now),
             )
             .options(*self._account_options())
             .order_by(*build_task_instance_order_by("dispatch_priority", "asc"))
@@ -151,7 +145,7 @@ class TaskInstanceRepository(BaseRepository):
         now = datetime.now()
         statement = (
             select(TaskInstance)
-            .where(self._build_due_pending_condition(now))
+            .where(build_due_pending_condition(now))
             .order_by(*build_task_instance_order_by("dispatch_priority", "asc"))
         )
         seen: set[int] = set()
@@ -232,31 +226,32 @@ class TaskInstanceRepository(BaseRepository):
         self._finish_write()
         return result.rowcount or 0
 
-    def list_by_account_and_task_types(
-        self, account_id: int, task_types: list[str]
-    ) -> list[TaskInstance]:
-        """按账号与任务类型列表获取任务实例。"""
-        if not task_types:
-            return []
-        statement = select(TaskInstance).where(
-            TaskInstance.account_id == account_id,
-            col(TaskInstance.task_type).in_(task_types),
-        )
+    def list_by_account(self, account_id: int) -> list[TaskInstance]:
+        """按账号获取全部任务实例。"""
+        statement = select(TaskInstance).where(TaskInstance.account_id == account_id)
         return list(self.session.exec(statement).all())
 
-    def update_next_run_at(self, instances: list[TaskInstance]) -> int:
-        """批量更新任务实例的 next_run_at。"""
+    def update_scheduling_fields(self, instances: list[TaskInstance]) -> int:
+        """批量更新任务实例调度字段。"""
         if not instances:
             return 0
+
+        now = datetime.now()
         count = 0
         for instance in instances:
             if instance.id is None:
                 continue
-            if self.update_runtime_state(
-                instance.id,
-                next_run_at=instance.next_run_at,
-            ):
-                count += 1
+            db_instance = self.session.get(TaskInstance, instance.id)
+            if db_instance is None:
+                continue
+            db_instance.reset_type = instance.reset_type
+            db_instance.next_run_at = instance.next_run_at
+            db_instance.updated_at = now
+            self.session.add(db_instance)
+            count += 1
+
+        if count > 0:
+            self._finish_write()
         return count
 
     def ensure_pending(
@@ -268,7 +263,10 @@ class TaskInstanceRepository(BaseRepository):
             task_type=task_type,
             reset_type=reset_type,
         )
-        if instance.status != TaskStatus.PENDING.value or instance.next_run_at is not None:
+        if (
+            instance.status != TaskStatus.PENDING.value
+            or instance.next_run_at is not None
+        ):
             if instance.id is None:
                 raise RuntimeError("任务实例 ID 为空，无法重置")
             instance.status = TaskStatus.PENDING.value
@@ -295,7 +293,9 @@ class TaskInstanceRepository(BaseRepository):
         else:
             if stale_timeout_seconds is None or skipped_timeout_seconds is None:
                 raise ValueError("未提供超时/冷却时间")
-            stale_threshold = datetime.fromtimestamp(now.timestamp() - stale_timeout_seconds)
+            stale_threshold = datetime.fromtimestamp(
+                now.timestamp() - stale_timeout_seconds
+            )
             skipped_threshold = datetime.fromtimestamp(
                 now.timestamp() - skipped_timeout_seconds
             )
@@ -311,7 +311,9 @@ class TaskInstanceRepository(BaseRepository):
             )
 
         if exclude_account_ids:
-            condition = and_(condition, col(TaskInstance.account_id).notin_(exclude_account_ids))
+            condition = and_(
+                condition, col(TaskInstance.account_id).notin_(exclude_account_ids)
+            )
 
         statement = (
             update(TaskInstance)

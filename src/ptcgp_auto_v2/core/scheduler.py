@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from math import ceil
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
@@ -22,9 +22,11 @@ from ptcgp_auto_v2.core.executor import (
     ExecutorConfig,
     TaskInstanceSnapshot,
 )
-from ptcgp_auto_v2.core.task_base import ResetType, TaskRegistry
-from ptcgp_auto_v2.core.task_schedule import (
+from ptcgp_auto_v2.core.task_base import TaskRegistry
+from ptcgp_auto_v2.core.scheduling_service import (
+    build_account_scheduling_context,
     get_effective_reset_type,
+    resolve_account_dispatch_plan,
     should_reset_task,
 )
 from ptcgp_auto_v2.core.task_status import TaskStatus
@@ -38,9 +40,6 @@ from ptcgp_auto_v2.utils.bluestacks_manager import (
     stop_bluestacks_instance,
 )
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
-
-if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account, TaskInstance
 
 from ptcgp_auto_v2.core.account_creation import check_and_trigger_account_creation
 
@@ -67,6 +66,7 @@ class SchedulerConfig:
     stale_task_check_interval: float = DEFAULT_STALE_CHECK_INTERVAL
     init_first: bool = False  # 是否优先执行 init_account 任务
     executor_config: ExecutorConfig = field(default_factory=ExecutorConfig)
+
 
 class Scheduler:
     """
@@ -239,9 +239,7 @@ class Scheduler:
             idle_at = device.became_idle_at
             if idle_at is None:
                 continue
-            if (
-                now - idle_at
-            ).total_seconds() < self._settings.auto_scale_idle_seconds:
+            if (now - idle_at).total_seconds() < self._settings.auto_scale_idle_seconds:
                 continue
 
             candidates.append(device)
@@ -364,11 +362,11 @@ class Scheduler:
                 accounts = repos.accounts().get_all()
                 task_instance_repo = repos.task_instances()
                 for account in accounts:
-                    task_configs = self._aggregate_account_plans(account)
-                    if not task_configs:
+                    scheduling_context = build_account_scheduling_context(account)
+                    if not scheduling_context.aggregated_config:
                         continue
 
-                    for task_type, config in task_configs.items():
+                    for task_type, config in scheduling_context.aggregated_config.items():
                         self._ensure_task_instance(
                             account,
                             task_type,
@@ -379,65 +377,9 @@ class Scheduler:
         except RuntimeError as e:
             logger.exception(f"生成任务失败: {e}")
 
-    def _aggregate_account_plans(self, account) -> dict[str, dict]:
-        """
-        聚合账号的所有任务计划配置
-
-        Returns:
-            Dict[task_type, config_dict] - 按优先级最高的 Plan 的任务顺序排列
-        """
-        aggregated = {}
-
-        if not account.task_plan_associations:
-            return aggregated
-
-        # 处理多 Plan
-        # 按优先级降序排序 (priority 越高越先处理，保证高优先级 Plan 的任务顺序优先)
-        associations = sorted(account.task_plan_associations, key=lambda x: -x.priority)
-
-        # 第一步：收集所有任务类型（按优先级从高到低）
-        all_task_types_ordered = []
-        for assoc in associations:
-            if not assoc.is_active:
-                continue
-            plan = assoc.task_plan
-            if not plan:
-                continue
-            # 高优先级 Plan 的任务排在前面
-            for task_type in plan.task_types_list:
-                if task_type not in all_task_types_ordered:
-                    all_task_types_ordered.append(task_type)
-
-        # 第二步：收集所有配置（低优先级先处理，但只更新配置不改变顺序）
-        # 反转顺序，让低优先级先处理
-        associations_low_to_high = list(reversed(associations))
-        for assoc in associations_low_to_high:
-            if not assoc.is_active:
-                continue
-            plan = assoc.task_plan
-            if not plan:
-                continue
-
-            for task_type in plan.task_types_list:
-                plan_config = plan.config_dict.get(task_type, {})
-                if task_type in aggregated:
-                    # 如果已存在，合并字典（新 Plan 覆盖旧的）
-                    aggregated[task_type].update(plan_config)
-                else:
-                    aggregated[task_type] = plan_config.copy()
-
-        # 第三步：按优先级最高的 Plan 的任务顺序重新排列字典
-        # 使用 Python 3.7+ 的字典有序特性
-        ordered_aggregated = {}
-        for task_type in all_task_types_ordered:
-            if task_type in aggregated:
-                ordered_aggregated[task_type] = aggregated[task_type]
-
-        return ordered_aggregated
-
     def _ensure_task_instance(
         self,
-        account: "Account",
+        account,
         task_type: str,
         config: dict[str, Any] | None = None,
         task_instance_repo=None,
@@ -469,46 +411,25 @@ class Scheduler:
         instance = task_instance_repo.get_or_create(
             account_id=account.id,
             task_type=task_type,
-            reset_type=reset_type.value,
+            reset_type=reset_type,
         )
 
         # 检查是否需要重置
-        if self._should_reset_task(instance, reset_type, config):
+        if should_reset_task(instance, reset_type, config):
             logger.info(
-                f"重置任务: {task_type} (账号: {account.nickname}, 规则: {reset_type.value})"
+                f"重置任务: {task_type} (账号: {account.nickname}, 规则: {reset_type})"
             )
             if instance.id is None:
                 raise RuntimeError("任务实例 ID 为空，无法重置")
             instance.status = TaskStatus.PENDING.value
             instance.next_run_at = None
-            instance.reset_type = reset_type.value
+            instance.reset_type = reset_type
             task_instance_repo.update_runtime_state(
                 instance.id,
                 status=TaskStatus.PENDING.value,
                 next_run_at=None,
-                reset_type=reset_type.value,
+                reset_type=reset_type,
             )
-
-    def _should_reset_task(
-        self,
-        instance: "TaskInstance",
-        reset_type: ResetType,
-        config: dict[str, Any] | None = None,
-    ) -> bool:
-        """
-        检查任务是否应该重置
-
-        Args:
-            instance: 任务实例
-            reset_type: 重置类型
-            config: 任务配置（可选，包含 interval_seconds 等）
-
-        Returns:
-            True 表示应该重置
-        """
-        if config is None:
-            config = {}
-        return should_reset_task(instance, reset_type, config)
 
     def _get_next_account_batch(
         self,
@@ -529,25 +450,15 @@ class Scheduler:
             if not account_ids:
                 return None
 
-            pending_tasks_map = task_instance_repo.get_pending_by_account_ids(account_ids)
-            running_account_ids = task_instance_repo.get_running_account_ids(account_ids)
+            pending_tasks_map = task_instance_repo.get_pending_by_account_ids(
+                account_ids
+            )
+            running_account_ids = task_instance_repo.get_running_account_ids(
+                account_ids
+            )
             accounts_map = account_repo.get_by_ids(account_ids)
 
-            init_account_ids: list[int] = []
-            other_account_ids: list[int] = []
             for account_id in account_ids:
-                pending_tasks = pending_tasks_map.get(account_id, [])
-                if not pending_tasks:
-                    continue
-                has_init = any(task.task_type == "init_account" for task in pending_tasks)
-                if has_init:
-                    init_account_ids.append(account_id)
-                else:
-                    other_account_ids.append(account_id)
-
-            ordered_account_ids = init_account_ids + other_account_ids
-
-            for account_id in ordered_account_ids:
                 if self._is_account_active(account_id):
                     continue
                 if account_id in running_account_ids:
@@ -561,76 +472,29 @@ class Scheduler:
                 if not pending_tasks:
                     continue
 
-                init_task = self._get_incomplete_init_task(pending_tasks)
-                if init_task:
-                    pending_tasks = [init_task]
-
-                pending_tasks = self._ensure_fetch_account_info(
+                scheduling_context = build_account_scheduling_context(account)
+                dispatch_plan = resolve_account_dispatch_plan(
                     account,
                     pending_tasks,
-                    task_instance_repo,
+                    scheduling_context,
                 )
-                ordered_tasks = self._order_tasks_by_plan(account, pending_tasks)
+                ordered_tasks = list(dispatch_plan.ordered_tasks)
+                prerequisite_task_type = dispatch_plan.missing_prerequisite_task_type
+                if prerequisite_task_type is not None:
+                    prerequisite_task = self._get_or_reset_prerequisite_instance(
+                        account_id=account_id,
+                        task_type=prerequisite_task_type,
+                        task_instance_repo=task_instance_repo,
+                    )
+                    ordered_tasks = [prerequisite_task, *ordered_tasks]
+
                 account_snapshot = AccountSnapshot.from_account(account)
                 task_snapshots = [
-                    TaskInstanceSnapshot.from_instance(task)
-                    for task in ordered_tasks
+                    TaskInstanceSnapshot.from_instance(task) for task in ordered_tasks
                 ]
                 return (account_snapshot, task_snapshots)
 
         return None
-
-    def _order_tasks_by_plan(
-        self, account: "Account", tasks: list[TaskInstanceSnapshot]
-    ) -> list[TaskInstanceSnapshot]:
-        """
-        按照账号的主任务计划顺序排列任务
-
-        主计划定义为优先级最高且启用的计划。
-
-        Args:
-            account: 账号
-            tasks: 待排序的任务列表
-
-        Returns:
-            按主计划 task_types 顺序排列的任务列表
-        """
-        if not account.task_plan_associations:
-            # 没有任务计划，按创建时间排序
-            return sorted(tasks, key=lambda x: x.created_at or datetime.min)
-
-        # 找到所有激活的计划
-        active_assocs = [a for a in account.task_plan_associations if a.is_active]
-        if not active_assocs:
-            return sorted(tasks, key=lambda x: x.created_at or datetime.min)
-
-        # 排序：优先级降序，ID 升序 (保证稳定性)
-        active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
-
-        # 【修复】合并所有 Plan 的 task_types 顺序（按优先级从高到低）
-        # 确保即使任务不在 primary_plan 中，也能按照包含它的 Plan 的顺序排列
-        merged_task_order = []
-        for assoc in active_assocs:
-            plan = assoc.task_plan
-            if not plan or not plan.task_types_list:
-                continue
-            for task_type in plan.task_types_list:
-                if task_type not in merged_task_order:
-                    merged_task_order.append(task_type)
-
-        if not merged_task_order:
-            return sorted(tasks, key=lambda x: x.created_at or datetime.min)
-
-        # 按照合并后的 task_types 顺序排列
-        plan_order = {task_type: idx for idx, task_type in enumerate(merged_task_order)}
-        # 不在任何计划中的任务排在最后，再按创建时间排序
-        return sorted(
-            tasks,
-            key=lambda x: (
-                plan_order.get(x.task_type, 999),
-                x.created_at or datetime.min,
-            ),
-        )
 
     def _dispatch_account_tasks(
         self, account: AccountSnapshot, task_instances: list[TaskInstanceSnapshot]
@@ -652,75 +516,19 @@ class Scheduler:
 
         self._submit_account_executor(device, account, task_instances)
 
-    def _ensure_fetch_account_info(
-        self,
-        account: "Account",
-        tasks: list[TaskInstanceSnapshot],
-        task_instance_repo,
-    ) -> list[TaskInstanceSnapshot]:
-        """确保任务列表包含 fetch_account_info 前置任务"""
-        from ptcgp_auto_v2.tasks.fetch_account_info import FetchAccountInfoTask
-
-        needs_fetch = getattr(FetchAccountInfoTask, "needs_fetch", None)
-        if needs_fetch is None:
-            raise RuntimeError("FetchAccountInfoTask.needs_fetch 未定义")
-        if not needs_fetch(account, tasks):
-            return tasks
-
-        has_fetch_task = any(t.task_type == "fetch_account_info" for t in tasks)
-        if has_fetch_task:
-            return tasks
-
-        prereq_instance = self._get_or_reset_prerequisite_instance(
-            account_id=account.id,
-            task_type="fetch_account_info",
-            task_instance_repo=task_instance_repo,
-        )
-
-        tasks.insert(0, prereq_instance)
-        logger.debug(
-            f"批量任务插入前置任务: fetch_account_info (账号: {account.nickname})"
-        )
-
-        return tasks
-
     def _get_or_reset_prerequisite_instance(
         self,
         account_id: int,
         task_type: str,
         task_instance_repo,
-    ) -> TaskInstanceSnapshot:
-        """获取前置任务实例并保证其为 pending 状态"""
+    ):
+        """获取前置任务实例并保证其为 pending 状态。"""
         task_class = TaskRegistry.get(task_type)
-        prerequisite = task_instance_repo.ensure_pending(
+        return task_instance_repo.ensure_pending(
             account_id=account_id,
             task_type=task_type,
             reset_type=task_class.reset_type.value,
         )
-        return TaskInstanceSnapshot.from_instance(prerequisite)
-
-    def _get_incomplete_init_task(
-        self, tasks: list[TaskInstanceSnapshot]
-    ) -> TaskInstanceSnapshot | None:
-        """
-        查找未完成的新号初始化任务
-
-        检查任务列表中是否存在状态非 completed/skipped 的 init_account 任务。
-        用于断点恢复：确保新号在初始化完成前只执行 init_account 任务。
-
-        Args:
-            tasks: 待检查的任务列表
-
-        Returns:
-            未完成的 init_account 任务，若不存在则返回 None
-        """
-        for task in tasks:
-            if task.task_type == "init_account" and task.status not in (
-                TaskStatus.COMPLETED.value,
-                TaskStatus.SKIPPED.value,
-            ):
-                return task
-        return None
 
     def _trigger_multi_device_creation(self):
         """
@@ -765,9 +573,7 @@ class Scheduler:
             raise RuntimeError("调度器线程池未初始化")
 
         for _ in range(create_count):
-            future = executor_pool.submit(
-                check_and_trigger_account_creation, self
-            )
+            future = executor_pool.submit(check_and_trigger_account_creation, self)
             future.add_done_callback(_creation_done_callback)
 
     def _build_executor_config(self) -> ExecutorConfig:
@@ -1016,14 +822,17 @@ class Scheduler:
                 reset_type=task_class.reset_type.value,
             )
 
-            tasks = self._ensure_fetch_account_info(
-                account,
-                [instance],
-                task_instance_repo,
-            )
-            task_ids = [
-                task.id for task in tasks if task.id is not None
-            ]
+            dispatch_plan = resolve_account_dispatch_plan(account, [instance])
+            tasks = list(dispatch_plan.ordered_tasks)
+            prerequisite_task_type = dispatch_plan.missing_prerequisite_task_type
+            if prerequisite_task_type is not None:
+                prerequisite_task = self._get_or_reset_prerequisite_instance(
+                    account_id=account_id,
+                    task_type=prerequisite_task_type,
+                    task_instance_repo=task_instance_repo,
+                )
+                tasks = [prerequisite_task, *tasks]
+            task_ids = [task.id for task in tasks if task.id is not None]
             if len(task_ids) != len(tasks):
                 raise RuntimeError("任务实例缺少 ID，无法执行")
             task_instance_repo.set_status_for_ids(
