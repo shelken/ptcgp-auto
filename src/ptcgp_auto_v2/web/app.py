@@ -62,6 +62,20 @@ async def set_request_lang_context(request, call_next):
     return response
 
 
+@app.middleware("http")
+async def set_static_cache_control_for_dev(request, call_next):
+    """开发模式下禁用静态资源缓存，避免修改后页面不生效。"""
+    response = await call_next(request)
+    if os.getenv("PTCGP_WEB_DEV") != "1":
+        return response
+    if not request.url.path.startswith("/static/"):
+        return response
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 # 路由挂载
 app.include_router(index.router)
 app.include_router(records.router)

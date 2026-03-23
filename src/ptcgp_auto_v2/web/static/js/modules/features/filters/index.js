@@ -8,6 +8,7 @@ export {
     clearFilterCacheByFormId,
     syncSidebarRequestParams,
     initCacheRestoreToUrl,
+    buildUrlWithFilters,
 } from './shared_form.js';
 
 export {

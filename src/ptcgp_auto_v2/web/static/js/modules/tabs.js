@@ -99,7 +99,14 @@ export function switchTab(tabName, options = {}) {
             }
             if (targetBtn) {
                 shouldRefreshSelectedTab = false;
-                targetBtn.click();
+                // 直接使用当前按钮已同步的 hx-get 发起请求，避免点击事件时序导致的请求参数漂移
+                updateSidebarState(targetBtn);
+                const requestUrl = targetBtn.getAttribute('hx-get');
+                const targetSelector = targetBtn.getAttribute('hx-target') || '#management-content';
+                const htmxInstance = window.htmx;
+                if (requestUrl && htmxInstance && typeof htmxInstance.ajax === 'function') {
+                    htmxInstance.ajax('GET', requestUrl, targetSelector);
+                }
             }
         }
     }
