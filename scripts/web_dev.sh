@@ -38,7 +38,7 @@ trap cleanup EXIT INT TERM
 
 echo "启动 Web 服务: http://127.0.0.1:8000"
 cd "$ROOT_DIR"
-PYTHONPATH=src uvicorn ptcgp_auto_v2.web.app:app --host 127.0.0.1 --port 8000 --reload "$@" &
+PTCGP_WEB_DEV=1 PYTHONPATH=src uvicorn ptcgp_auto_v2.web.app:app --host 127.0.0.1 --port 8000 --reload "$@" &
 WEB_PID=$!
 
 sleep 1
