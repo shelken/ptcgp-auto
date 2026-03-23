@@ -18,7 +18,7 @@ from ptcgp_auto_v2.config.pages.common import COMMON_PAGES
 from ptcgp_auto_v2.core.device_pool import Device, DevicePool
 from ptcgp_auto_v2.core.hooks import HookContext
 from ptcgp_auto_v2.core.task_base import Task, TaskRegistry, TaskResult
-from ptcgp_auto_v2.core.task_plan_utils import (
+from ptcgp_auto_v2.core.scheduling_service import (
     build_account_plan_cache,
     compute_next_run_for_instance,
 )
@@ -403,7 +403,9 @@ class BaseExecutor(ABC):
             update_kwargs["error_message"] = None
         task_instance.updated_at = datetime.now()
         with self._repository_scope() as repos:
-            repos.task_instances().update_runtime_state(task_instance.id, **update_kwargs)
+            repos.task_instances().update_runtime_state(
+                task_instance.id, **update_kwargs
+            )
 
         # 发送任务状态通知
         if status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
@@ -554,7 +556,9 @@ class BaseExecutor(ABC):
             update_kwargs["error_message"] = f"等待复查: {reason}"
         task_instance.updated_at = datetime.now()
         with self._repository_scope() as repos:
-            repos.task_instances().update_runtime_state(task_instance.id, **update_kwargs)
+            repos.task_instances().update_runtime_state(
+                task_instance.id, **update_kwargs
+            )
 
     def _handle_requeue_in_result(
         self,

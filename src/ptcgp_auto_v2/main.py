@@ -21,6 +21,7 @@ from ptcgp_auto_v2.config.settings import (
 )
 from ptcgp_auto_v2.core.executor import ExecutorConfig
 from ptcgp_auto_v2.core.scheduler import Scheduler, SchedulerConfig
+from ptcgp_auto_v2.core.scheduling_service import recompute_and_sync_account_scheduling
 from ptcgp_auto_v2.core.task_base import TaskRegistry
 from ptcgp_auto_v2.db.connection import get_database
 from ptcgp_auto_v2.db.engine import session_scope
@@ -278,6 +279,10 @@ def manage_account_plan(account_id: int, plan_identifier: str, action: str):
             return
 
         if success:
+            recompute_and_sync_account_scheduling(
+                session=session,
+                account_id=account.id,
+            )
             success_message = (
                 f"成功: 已{success_prefix}账号 {account.nickname} "
                 f"{success_verb}计划 '{plan.name}'"
