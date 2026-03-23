@@ -40,9 +40,34 @@ export function initTaskSortControls(context = document) {
     }
     if (!buttons.length) return;
 
+    const syncSortInputsWithUrl = () => {
+        const params = new URLSearchParams(window.location.search);
+        const urlSortBy = params.get('sort_by');
+        const urlSortOrder = params.get('sort_order');
+        const allowedSortBy = new Set([
+            'dispatch_priority',
+            'last_completed_at',
+            'last_duration_seconds',
+            'next_run_at',
+        ]);
+
+        if (urlSortBy && allowedSortBy.has(urlSortBy)) {
+            sortInput.value = urlSortBy;
+        }
+        if (sortInput.value === 'dispatch_priority') {
+            orderInput.value = 'asc';
+            return;
+        }
+        if (urlSortOrder === 'asc' || urlSortOrder === 'desc') {
+            orderInput.value = urlSortOrder;
+        }
+    };
+
     const updateArrows = () => {
         const currentSort = sortInput.value || 'dispatch_priority';
-        const currentOrder = orderInput.value === 'asc' ? 'asc' : 'desc';
+        const currentOrder = currentSort === 'dispatch_priority'
+            ? 'asc'
+            : (orderInput.value === 'asc' ? 'asc' : 'desc');
         buttons.forEach((button) => {
             const arrow = button.querySelector('.task-sort-arrow');
             if (!arrow) return;
@@ -58,9 +83,11 @@ export function initTaskSortControls(context = document) {
         sortInput.value = sortBy;
         orderInput.value = order;
         updateArrows();
+
         orderInput.dispatchEvent(new Event('change', { bubbles: true }));
     };
 
+    syncSortInputsWithUrl();
     updateArrows();
 
     buttons.forEach((button) => {
@@ -68,6 +95,10 @@ export function initTaskSortControls(context = document) {
         button.addEventListener('click', () => {
             const sortBy = button.dataset.sortBy || 'last_completed_at';
             const defaultOrder = button.dataset.defaultOrder || 'desc';
+            if (sortBy === 'dispatch_priority') {
+                setSort(sortBy, 'asc');
+                return;
+            }
             if (sortInput.value === sortBy) {
                 const nextOrder = orderInput.value === 'asc' ? 'desc' : 'asc';
                 setSort(sortBy, nextOrder);
@@ -77,4 +108,5 @@ export function initTaskSortControls(context = document) {
         });
         button.dataset.bound = 'true';
     });
+
 }
