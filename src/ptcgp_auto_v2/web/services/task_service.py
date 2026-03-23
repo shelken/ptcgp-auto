@@ -1,15 +1,17 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
+from sqlalchemy import String, cast as sa_cast
 from sqlmodel import Session, col, or_, select
 
 from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
 from ptcgp_auto_v2.config.settings import get_settings
-from ptcgp_auto_v2.db.engine import session_scope
-from ptcgp_auto_v2.core.task_plan_utils import (
+from ptcgp_auto_v2.core.scheduling_service import (
     build_account_plan_cache,
-    compute_next_run_for_instance,
+    build_account_scheduling_context,
+    build_task_scheduling_summary,
+    resolve_account_dispatch_plan,
 )
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
@@ -72,7 +74,11 @@ def _build_tasks_page_url(
 ) -> str:
     """构建任务分页 URL。"""
     current_lang = get_current_lang()
-    params = [("page", page), ("page_size", page_size), ("lang", current_lang)]
+    params: list[tuple[str, str | int]] = [
+        ("page", page),
+        ("page_size", page_size),
+        ("lang", current_lang),
+    ]
     for item in status:
         params.append(("status", item))
     for item in task_type:
@@ -97,16 +103,7 @@ def build_tasks_list_context(
     sort_by: str = "",
     sort_order: str = "asc",
 ) -> dict[str, Any]:
-    """构建任务列表视图上下文（统一列表协议）。
-
-    返回字段:
-        - items: 任务列表
-        - page: 当前页码
-        - page_size: 每页大小
-        - has_prev: 是否有上一页
-        - has_next: 是否有下一页
-        - total: 总数量（估算值，基于当前页数据）
-    """
+    """构建任务列表视图上下文（统一列表协议）。"""
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
 
@@ -123,11 +120,13 @@ def build_tasks_list_context(
         sort_order=sort_order,
     )
 
-    account_cache: dict[int, dict] = {}
+    account_cache: dict[int, dict[str, Any]] = {}
+    account_dispatch_plans: dict[int, Any | None] = {}
     pack_configs_map: dict[int, AccountPackConfig] = {}
-    account_ids = [
-        instance.account_id for instance in instances if instance.account_id is not None
-    ]
+    current_batch_tasks_map: dict[int, list[Any]] = {}
+    account_ids = sorted(
+        {instance.account_id for instance in instances if instance.account_id is not None}
+    )
     if account_ids:
         config_stm = select(AccountPackConfig).where(
             AccountPackConfig.type == "daily",
@@ -135,6 +134,10 @@ def build_tasks_list_context(
         )
         configs = session.exec(config_stm).all()
         pack_configs_map = {item.account_id: item for item in configs}
+        current_batch_tasks_map = TaskInstanceRepository(session).get_pending_by_account_ids(
+            account_ids
+        )
+
     rows: list[dict[str, Any]] = []
     now = datetime.now()
     for instance in instances:
@@ -144,15 +147,25 @@ def build_tasks_list_context(
 
         if account.id not in account_cache:
             account_cache[account.id] = build_account_plan_cache(account)
+            current_batch_tasks = current_batch_tasks_map.get(account.id, [])
+            if current_batch_tasks:
+                account_dispatch_plans[account.id] = resolve_account_dispatch_plan(
+                    account,
+                    current_batch_tasks,
+                    build_account_scheduling_context(account),
+                )
+            else:
+                account_dispatch_plans[account.id] = None
 
-        cache = account_cache[account.id]
-        _, effective_reset_type, interval_seconds, plan_source = (
-            compute_next_run_for_instance(instance, cache)
+        summary = build_task_scheduling_summary(
+            instance,
+            account_cache[account.id],
+            now,
+            account_dispatch_plans[account.id],
         )
-        # 手动重置后 next_run_at 为 None，不再 fallback 到计算值，确保显示为空
-        next_run_at = instance.next_run_at
-
-        next_run_at_is_past = next_run_at is not None and next_run_at <= now
+        next_run_at_is_past = (
+            summary.next_run_at is not None and summary.next_run_at <= now
+        )
 
         row_data: dict[str, Any] = {
             "id": instance.id,
@@ -160,18 +173,23 @@ def build_tasks_list_context(
             "account_name": account.nickname or account.display_name or str(account.id),
             "task_type": instance.task_type,
             "status": instance.status,
-            "reset_type": effective_reset_type.value,
+            "reset_type": summary.effective_reset_type,
             "last_completed_at": instance.last_completed_at,
             "last_completed_at_iso": format_datetime_iso(instance.last_completed_at),
             "last_duration_seconds": instance.last_duration_seconds,
             "updated_at": instance.updated_at,
             "error_message": instance.error_message,
-            "next_run_at": next_run_at,
-            "next_run_at_iso": format_datetime_iso(next_run_at),
+            "next_run_at": summary.next_run_at,
+            "next_run_at_iso": format_datetime_iso(summary.next_run_at),
             "next_run_at_is_past": next_run_at_is_past,
-            "interval_seconds": interval_seconds,
-            "plan_name": plan_source["name"] if plan_source else None,
-            "plan_priority": plan_source["priority"] if plan_source else None,
+            "interval_seconds": summary.interval_seconds,
+            "plan_name": summary.plan_name,
+            "plan_priority": summary.plan_priority,
+            "dispatch_category": summary.dispatch_category,
+            "dispatch_label_key": summary.dispatch_label_key,
+            "dispatch_css_class": summary.dispatch_css_class,
+            "dispatch_rank": summary.dispatch_rank,
+            "dispatch_rank_total": summary.dispatch_rank_total,
             "target_pack_label": None,
             "target_pack_auto": False,
         }
@@ -218,38 +236,6 @@ def build_tasks_list_context(
     }
 
 
-def recompute_next_run_at_for_account(
-    account: Account,
-    task_types: list[str] | None,
-    session: Session | None = None,
-) -> None:
-    """重算指定账号的任务 next_run_at。"""
-    if account.id is None:
-        return
-    account_cache = build_account_plan_cache(account)
-    if task_types is None:
-        task_types = list(account_cache["config"].keys())
-    if not task_types:
-        return
-    if session is not None:
-        repo = TaskInstanceRepository(session)
-        instances = repo.list_by_account_and_task_types(account.id, task_types)
-        if not instances:
-            return
-        for instance in instances:
-            next_run_at, _, _, _ = compute_next_run_for_instance(instance, account_cache)
-            instance.next_run_at = next_run_at
-        repo.update_next_run_at(instances)
-        return
-
-    with session_scope() as owned_session:
-        recompute_next_run_at_for_account(
-            account=account,
-            task_types=task_types,
-            session=owned_session,
-        )
-
-
 def list_task_filter_accounts(
     *,
     session: Session,
@@ -260,21 +246,22 @@ def list_task_filter_accounts(
     normalized_q = (q or "").strip()
     normalized_limit = min(max(limit, 1), 50)
 
-    statement = select(Account).order_by(Account.id).limit(normalized_limit)
+    statement = select(Account).order_by(col(Account.id)).limit(normalized_limit)
     if normalized_q:
         like_value = f"%{normalized_q}%"
-        filters = [
-            Account.nickname.ilike(like_value),
-            Account.friend_id.ilike(like_value),
-            Account.game_id.ilike(like_value),
+        filters: list[Any] = [
+            sa_cast(Account.nickname, String).ilike(like_value),
+            sa_cast(Account.friend_id, String).ilike(like_value),
+            sa_cast(Account.game_id, String).ilike(like_value),
         ]
         if normalized_q.isdigit():
-            filters.append(Account.id == int(normalized_q))
+            filters.append(col(Account.id) == int(normalized_q))
         statement = statement.where(or_(*filters))
 
+    accounts = session.exec(statement).all()
     return [
-        {**account.to_dict(), "display_name": account.display_name}
-        for account in session.exec(statement).all()
+        {**cast(dict[str, Any], account.to_dict()), "display_name": account.display_name}
+        for account in accounts
     ]
 
 
@@ -319,6 +306,7 @@ def build_task_list_render_context(
     context["selected_sort_order"] = sort_order
     context["table_only"] = table_only
     return context
+
 
 def reset_completed_tasks_by_filters(
     session: Session,
