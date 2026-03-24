@@ -113,6 +113,24 @@ def main() -> None:
     if build_check.returncode == 0:
         score += 15
 
+    generated_artifacts = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "src/ptcgp_auto_v2/web/frontend/src/*.js",
+            "src/ptcgp_auto_v2/web/frontend/src/**/*.js",
+            "src/ptcgp_auto_v2/web/frontend/*.tsbuildinfo",
+            "src/ptcgp_auto_v2/web/frontend/vite.config.js",
+            "src/ptcgp_auto_v2/web/frontend/vite.config.d.ts",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if generated_artifacts.returncode == 0 and not generated_artifacts.stdout.strip():
+        score += 20
+
     print(f"PARITY_SCORE={score:.2f}")
 
 
