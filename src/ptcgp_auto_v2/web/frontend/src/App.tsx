@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Navigate, NavLink, Route, Routes, useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -20,39 +19,31 @@ export default function App() {
   const bootstrap = useBootstrap(lang)
   const t = bootstrap.data?.t ?? {}
 
-  useEffect(() => {
-    // 迁移过渡期继续复用旧版事件绑定逻辑，避免局部交互回归。
-    const scriptId = 'legacy-web-main'
-    if (document.getElementById(scriptId)) {
-      return
-    }
-    const script = document.createElement('script')
-    script.id = scriptId
-    script.type = 'module'
-    script.src = '/static/js/main.js'
-    document.body.appendChild(script)
-  }, [])
-
   if (bootstrap.isLoading) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center p-4">
-        <div className="brutal-card p-4 text-sm text-muted">加载中...</div>
+      <main className="app-shell app-shell--center">
+        <div className="surface-card text-sm text-muted">{t.label_loading ?? 'Loading...'}</div>
       </main>
     )
   }
 
   if (bootstrap.isError || !bootstrap.data) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl items-center justify-center p-4">
-        <div className="brutal-card p-4 text-sm text-red-600">{(bootstrap.error as Error).message}</div>
+      <main className="app-shell app-shell--center">
+        <div className="surface-card text-sm text-danger">{(bootstrap.error as Error).message}</div>
       </main>
     )
   }
 
+  const assets = bootstrap.data.assets
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold tracking-widest">{t.app_title ?? 'PTCGP Auto Web'}</h1>
+    <main className="app-shell">
+      <header className="surface-card app-header">
+        <div>
+          <h1 className="app-title">{t.app_title ?? 'PTCGP Auto Web'}</h1>
+          <p className="text-xs text-muted">{t.loading_text ?? '自动化控制台'}</p>
+        </div>
         <div className="flex gap-2">
           <Button type="button" size="sm" variant={lang === 'en' ? 'default' : 'outline'} onClick={() => setLangParam('en', searchParams, setSearchParams)}>
             EN
@@ -63,24 +54,24 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="flex flex-wrap gap-2 brutal-card p-4">
+      <nav className="surface-card tab-nav">
         <NavLink to="/records">
           {({ isActive }) => (
-            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button">
+            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
               {t.tab_records ?? 'RECORDS'}
             </Button>
           )}
         </NavLink>
         <NavLink to="/owned-cards">
           {({ isActive }) => (
-            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button">
+            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
               {t.tab_owned_cards ?? 'OWNED CARDS'}
             </Button>
           )}
         </NavLink>
         <NavLink to="/management">
           {({ isActive }) => (
-            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button">
+            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
               {t.tab_management ?? 'MANAGEMENT'}
             </Button>
           )}
@@ -89,8 +80,8 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Navigate to="/records" replace />} />
-        <Route path="/records" element={<RecordsPage lang={lang} options={bootstrap.data.options} t={t} />} />
-        <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={bootstrap.data.options} t={t} />} />
+        <Route path="/records" element={<RecordsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
+        <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
         <Route path="/management/*" element={<ManagementPage lang={lang} t={t} />} />
       </Routes>
     </main>
