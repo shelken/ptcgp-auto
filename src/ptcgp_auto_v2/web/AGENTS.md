@@ -9,6 +9,15 @@
 ```
 src/ptcgp_auto_v2/web/
 ├── app.py                      # FastAPI 主应用入口（初始化与路由挂载）
+├── frontend/                   # React + TypeScript + Bun 前端工程（v2 主入口）
+│   ├── src/
+│   │   ├── pages/              # 路由页面（records / owned-cards / management）
+│   │   ├── components/         # 组件（含 shadcn/ui 与 HTML 片段容器）
+│   │   ├── hooks/              # TanStack Query hooks
+│   │   ├── lib/                # API 与工具
+│   │   └── main.tsx            # React 入口
+│   ├── index.html              # Vite HTML 模板
+│   └── package.json            # Bun 依赖与脚本
 ├── routers/                    # 路由层（参数解析/响应拼装）
 │   ├── index.py
 │   ├── records.py
@@ -112,12 +121,20 @@ src/ptcgp_auto_v2/web/
 - **services/**: 业务层，负责视图模型与业务拼装；任务列表只消费 `core/scheduling_service.py` 提供的统一调度摘要，不得在 Web 层复制调度规则
 - **queries/**: 查询层，负责 SQL 构造与分页过滤
 
-### 前端 (HTMX + ES6 Modules)
+### 前端 (React + TypeScript + TanStack Query + React Router + Bun)
 
-- **index.html**: 单页应用入口，包含所有 Tab 容器
-  - 使用 HTMX 进行局部页面更新
-  - Tab 切换通过 `hx-get` 加载 `partials/` 下的模板
-- **JS 架构**: ES6 模块化
+- **frontend/**: 前端主工程
+  - 使用 React Router 管理页面路由（records / owned-cards / management）
+  - 使用 TanStack Query 统一请求、缓存、刷新
+  - 使用 shadcn/ui 组件（源码入库）+ Tailwind
+  - 迁移期保留 HTMX 片段接口，React 通过 HTML 片段容器承接旧交互
+- **legacy JS（`static/js/modules/*`）**: 迁移期兼容层
+  - React 首屏会按需加载 `static/js/main.js`，复用旧版 `data-action` 事件逻辑
+  - 新功能优先写在 `frontend/src`，旧模块仅用于兼容
+
+- **旧版 index.html（`templates/index.html`）**: 迁移期保留
+  - `GET /legacy` 可访问旧版 HTMX 页面
+- **旧版 JS 架构**: ES6 模块化
   - `main.js`: 主入口，仅调用 `bootstrap.initApp()`
   - `modules/bootstrap.js`: 仅负责初始化编排，不承载动作分发细节
   - `modules/event_bindings.js`: 集中管理全局事件绑定与 HTMX 生命周期监听
@@ -125,7 +142,7 @@ src/ptcgp_auto_v2/web/
   - `modules/features/*`: 页面/业务域逻辑（daily-gift、exchange-cards、owned-cards、plans、tasks 等）
   - `modules/features/filters/*`: 按 records/owned/tasks 分拆筛选逻辑，`shared_form.js` 负责通用序列化/回填
   - `modules/utils.js`: 工具函数（toast、throttle、debounce、元素可见性检测）
-- **CSS 架构**: CSS 变量驱动主题
+- **CSS 架构**: CSS 变量驱动主题（React 与 legacy 共用）
   - `main.css` 仅维护模块导入顺序（索引用途）
   - 页面在 `index.html` 直接按顺序加载各模块 CSS（不使用 bundle 产物）
   - `tailwind.generated.css` 为 Tailwind 预构建结果（不再使用 Play CDN，生成文件不入库）

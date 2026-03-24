@@ -20,5 +20,7 @@ templates/packs_auto/
 runs/**
 output
 src/ptcgp_auto_v2/web/node_modules/
+src/ptcgp_auto_v2/web/frontend/node_modules/
+src/ptcgp_auto_v2/web/frontend/dist/
 src/ptcgp_auto_v2/web/static/css/tailwind.generated.css
 .playwright-cli/
