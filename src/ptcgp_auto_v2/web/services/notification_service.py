@@ -279,6 +279,8 @@ def build_notifications_context(
         page_size=normalized_page_size,
     )
 
+    from ptcgp_auto_v2.web.utils.i18n import get_current_lang
+
     accounts = [
         {**account.to_dict(), "display_name": account.display_name}
         for account in session.exec(select(Account).order_by(Account.id)).all()
@@ -295,13 +297,41 @@ def build_notifications_context(
         build_config_view(_to_notification_config_data(config))
         for config in config_repo.get_all()
     ]
-    notifications = [item.model_dump() for item in notifications]
+    scene_options = _build_scene_options()
+    scene_label_map = {
+        str(item["value"]): str(item["label"])
+        for item in scene_options
+        if isinstance(item, dict) and "value" in item and "label" in item
+    }
+    current_lang = get_current_lang()
+    image_payload_map = _build_notification_image_payloads(
+        notifications=notifications,
+        session=session,
+        lang=current_lang,
+    )
+
+    notifications_view = []
+    for item in notifications:
+        row = item.model_dump()
+        payload = image_payload_map.get(
+            item.id,
+            {
+                "image_url": _extract_image_url(item.content),
+                "image_webp_url": _build_image_webp_fallback_url(
+                    _extract_image_url(item.content)
+                ),
+            },
+        )
+        row["scene_label"] = scene_label_map.get(item.scene, item.scene)
+        row["image_url"] = payload.get("image_url")
+        row["image_webp_url"] = payload.get("image_webp_url")
+        notifications_view.append(row)
 
     return {
-        "notifications": notifications,
+        "notifications": notifications_view,
         "total": total,
         "unread_count": notification_repo.count_unread(),
-        "scene_options": _build_scene_options(),
+        "scene_options": scene_options,
         "selected_scene": normalized_scene,
         "selected_account_id": account_id,
         "selected_is_read": is_read,

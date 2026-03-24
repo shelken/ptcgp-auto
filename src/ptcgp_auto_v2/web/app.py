@@ -8,27 +8,14 @@ src_dir = os.path.abspath(os.path.join(current_dir, "../.."))
 sys.path.append(src_dir)
 
 from fastapi import FastAPI
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
 from ptcgp_auto_v2.web.routers import (
     index,
-    records,
-    owned_cards,
-    tasks,
-    management,
-    resources,
-    plans,
-    metadata,
-    pack_config,
-    friendship,
-    daily_gift,
-    exchange_card,
-    notifications,
+    react_api,
 )
 from ptcgp_auto_v2.web.utils.i18n import init_i18n, detect_lang, set_lang_context
-from ptcgp_auto_v2.web.utils.template_env import init_templates
-from ptcgp_auto_v2.web.utils.view_helpers import format_datetime
 
 # 导入任务模块以触发注册
 import ptcgp_auto_v2.tasks  # noqa: F401
@@ -37,20 +24,23 @@ import ptcgp_auto_v2.tasks  # noqa: F401
 app = FastAPI(title="PTCGP Auto Web")
 
 
-# 静态资源挂载
-static_path = os.path.join(current_dir, "static")
-app.mount("/static", StaticFiles(directory=static_path), name="static")
+# React 构建产物挂载（Vite 输出的 /assets/*）
+frontend_assets_path = os.path.join(current_dir, "frontend", "dist", "assets")
+app.mount(
+    "/assets",
+    StaticFiles(directory=frontend_assets_path, check_dir=False),
+    name="frontend-assets",
+)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """避免浏览器默认 favicon 请求产生 404 噪音。"""
+    return Response(status_code=204)
 
 # 多语言初始化（必须在模板初始化之前）
 locales_dir = os.path.join(current_dir, "locales")
 init_i18n(locales_dir)
-
-# 模板初始化
-templates_path = os.path.join(current_dir, "templates")
-templates = init_templates(templates_path)
-templates.env.filters["datetime"] = format_datetime
-templates.env.filters["rarity_display"] = get_rarity_display
-
 
 @app.middleware("http")
 async def set_request_lang_context(request, call_next):
@@ -64,11 +54,11 @@ async def set_request_lang_context(request, call_next):
 
 @app.middleware("http")
 async def set_static_cache_control_for_dev(request, call_next):
-    """开发模式下禁用静态资源缓存，避免修改后页面不生效。"""
+    """开发模式下禁用前端资源缓存，避免修改后页面不生效。"""
     response = await call_next(request)
     if os.getenv("PTCGP_WEB_DEV") != "1":
         return response
-    if not request.url.path.startswith("/static/"):
+    if not request.url.path.startswith("/assets/"):
         return response
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
@@ -78,18 +68,7 @@ async def set_static_cache_control_for_dev(request, call_next):
 
 # 路由挂载
 app.include_router(index.router)
-app.include_router(records.router)
-app.include_router(owned_cards.router)
-app.include_router(tasks.router)
-app.include_router(management.router)
-app.include_router(resources.router)
-app.include_router(plans.router)
-app.include_router(metadata.router)
-app.include_router(pack_config.router)
-app.include_router(friendship.router)
-app.include_router(daily_gift.router)
-app.include_router(exchange_card.router)
-app.include_router(notifications.router)
+app.include_router(react_api.router)
 
 
 if __name__ == "__main__":
