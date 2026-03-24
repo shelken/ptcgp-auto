@@ -6,30 +6,18 @@ WEB_DIR="$ROOT_DIR/src/ptcgp_auto_v2/web"
 WEB_PID=""
 STOPPING="0"
 
-if ! command -v npm >/dev/null 2>&1; then
-  echo "错误: 未找到 npm，请先安装 Node.js/npm。" >&2
-  exit 1
-fi
 if ! command -v bun >/dev/null 2>&1; then
   echo "错误: 未找到 bun，请先安装 bun。" >&2
   exit 1
 fi
 
-if [ ! -x "$WEB_DIR/node_modules/.bin/tailwindcss" ]; then
-  echo "安装 web 前端依赖..."
-  npm --prefix "$WEB_DIR" install
-fi
-if [ ! -f "$WEB_DIR/frontend/bun.lock" ]; then
+if [ ! -d "$WEB_DIR/frontend/node_modules" ]; then
   echo "安装 React 前端依赖..."
   bun install --cwd "$WEB_DIR/frontend"
 fi
 
-echo "构建 Tailwind CSS..."
-npm --prefix "$WEB_DIR" run build:css
 echo "构建 React 前端..."
 bun run --cwd "$WEB_DIR/frontend" build
-
-TAILWIND_BIN="./node_modules/.bin/tailwindcss"
 
 cleanup() {
   if [ "$STOPPING" = "1" ]; then
@@ -58,10 +46,4 @@ if ! kill -0 "$WEB_PID" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "启动 Tailwind watch..."
-cd "$WEB_DIR"
-"$TAILWIND_BIN" \
-  -c tailwind.config.js \
-  -i static/css/tailwind.input.css \
-  -o static/css/tailwind.generated.css \
-  --watch
+wait "$WEB_PID"
