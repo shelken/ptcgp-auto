@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import socket
 import subprocess
+import time
+import urllib.request
 from pathlib import Path
 
 
@@ -24,6 +28,81 @@ def has_all_dependencies(package_json: dict) -> bool:
         "tailwindcss",
     }
     return required_deps.issubset(deps) and required_dev_deps.issubset(dev_deps)
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def run_smoke_check(root: Path) -> bool:
+    """启动本地服务并验证关键页面可访问。"""
+    port = _find_free_port()
+    env = dict(os.environ)
+    env["PYTHONPATH"] = "src"
+    server = subprocess.Popen(
+        [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "uvicorn",
+            "ptcgp_auto_v2.web.app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=root,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        root_html = ""
+        bootstrap_json = ""
+        legacy_html = ""
+        accounts_html = ""
+        for _ in range(30):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2) as resp:
+                    root_html = resp.read().decode("utf-8", errors="ignore")
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/api/react/bootstrap?lang=zh_CN",
+                    timeout=2,
+                ) as resp:
+                    bootstrap_json = resp.read().decode("utf-8", errors="ignore")
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/legacy?lang=zh_CN",
+                    timeout=2,
+                ) as resp:
+                    legacy_html = resp.read().decode("utf-8", errors="ignore")
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/management/accounts?lang=zh_CN",
+                    timeout=2,
+                ) as resp:
+                    accounts_html = resp.read().decode("utf-8", errors="ignore")
+                break
+            except Exception:
+                time.sleep(0.2)
+
+        if not root_html or not bootstrap_json or not legacy_html or not accounts_html:
+            return False
+
+        return (
+            '<div id="root"></div>' in root_html
+            and '"options"' in bootstrap_json
+            and "htmx.org" in legacy_html
+            and len(accounts_html.strip()) > 100
+        )
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=5)
 
 
 def main() -> None:
@@ -129,6 +208,9 @@ def main() -> None:
         check=False,
     )
     if generated_artifacts.returncode == 0 and not generated_artifacts.stdout.strip():
+        score += 20
+
+    if run_smoke_check(root):
         score += 20
 
     print(f"PARITY_SCORE={score:.2f}")
