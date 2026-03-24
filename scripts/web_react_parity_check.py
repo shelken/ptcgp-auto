@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 
@@ -74,6 +75,43 @@ def main() -> None:
     bun_lock = frontend_root / "bun.lock"
     if bun_lock.exists():
         score += 10
+
+    index_router = root / "src" / "ptcgp_auto_v2" / "web" / "routers" / "index.py"
+    if index_router.exists():
+        router_content = index_router.read_text(encoding="utf-8")
+        if "/api/react/bootstrap" in router_content:
+            score += 15
+        if "frontend" in router_content and "dist" in router_content and "FileResponse" in router_content:
+            score += 10
+
+    page_files = [
+        frontend_root / "src" / "pages" / "records-page.tsx",
+        frontend_root / "src" / "pages" / "owned-cards-page.tsx",
+        frontend_root / "src" / "pages" / "management-page.tsx",
+        frontend_root / "src" / "components" / "html-fragment.tsx",
+    ]
+    if all(path.exists() for path in page_files):
+        score += 10
+
+    tracked_node_modules = subprocess.run(
+        ["git", "ls-files", "src/ptcgp_auto_v2/web/frontend/node_modules"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if tracked_node_modules.returncode == 0 and not tracked_node_modules.stdout.strip():
+        score += 10
+
+    build_check = subprocess.run(
+        ["bun", "run", "--cwd", str(frontend_root), "build"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if build_check.returncode == 0:
+        score += 15
 
     print(f"PARITY_SCORE={score:.2f}")
 
