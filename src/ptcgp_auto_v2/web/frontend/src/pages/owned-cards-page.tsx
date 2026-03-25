@@ -1,13 +1,16 @@
-import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
-import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
+import { applyImageFallback } from '@/lib/card-image-fallback'
+import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
+import { formatTime, parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
 import type { BootstrapOptions } from '@/types/api'
 
 interface OwnedCardsPageProps {
@@ -92,32 +95,6 @@ interface DetailNoticeState {
   text: string
 }
 
-// 预览卡牌回弹过渡：与 records 页面保持一致
-const PREVIEW_REBOUND_TRANSITION = 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1)'
-// 拖拽旋转角度上限，避免卡牌过度倾斜
-const PREVIEW_ROTATE_LIMIT = 45
-// 鼠标位移到旋转角度的转换系数
-const PREVIEW_ROTATE_STEP = 0.5
-
-function toggleItems(current: string[], value: string): string[] {
-  if (current.includes(value)) {
-    return current.filter((item) => item !== value)
-  }
-  return [...current, value]
-}
-
-function parseSearchList(params: URLSearchParams, key: string): string[] {
-  const values = params.getAll(key)
-  return values.map((item) => item.trim()).filter((item) => item.length > 0)
-}
-
-function formatTime(value: string | null) {
-  if (!value) {
-    return '-'
-  }
-  return value.replace('T', ' ').slice(0, 19)
-}
-
 function calculateDetailPageSize(): number {
   const availableHeight = window.innerHeight - 470
   const rowHeight = 44
@@ -164,14 +141,6 @@ async function copyText(value: string): Promise<boolean> {
   }
 }
 
-function reasonTitle(reason: string | null | undefined): string | undefined {
-  const text = (reason ?? '').trim()
-  if (!text || text === '-') {
-    return undefined
-  }
-  return text
-}
-
 function CardThumb({
   setCode,
   cardNumber,
@@ -191,21 +160,7 @@ function CardThumb({
       className="owned-thumb"
       loading="lazy"
       decoding="async"
-      onError={(event) => {
-        const image = event.currentTarget
-        if (image.dataset.webpTried === '1') {
-          image.src = urls.cdnPng
-          image.dataset.webpTried = '2'
-          return
-        }
-        if (image.dataset.webpTried === '2') {
-          image.src = urls.cdnWebp
-          image.dataset.webpTried = '3'
-          return
-        }
-        image.dataset.webpTried = '1'
-        image.src = urls.webp
-      }}
+      onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
     />
   )
 }
@@ -310,19 +265,14 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [detailPageSize, setDetailPageSize] = useState(() => restoreDetailPageSize())
   const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
   const [pendingExchangeAccountId, setPendingExchangeAccountId] = useState<number | null>(null)
-  const [detailPreviewDragging, setDetailPreviewDragging] = useState(false)
-  const detailPreviewCardRef = useRef<HTMLDivElement | null>(null)
-  const detailPreviewShineRef = useRef<HTMLDivElement | null>(null)
-  const detailPreviewWindowListenersAttachedRef = useRef(false)
-  const stopDetailPreviewDragRef = useRef<(withRebound?: boolean) => void>(() => {})
-  const detailPreviewDragStateRef = useRef({
-    dragging: false,
-    pointerId: -1,
-    lastX: 0,
-    lastY: 0,
-    rotateX: 0,
-    rotateY: 0
-  })
+  const {
+    cardRef: detailPreviewCardRef,
+    shineRef: detailPreviewShineRef,
+    dragging: detailPreviewDragging,
+    startDrag: startDetailPreviewDrag,
+    stopDrag: stopDetailPreviewDrag,
+    resetTransform: resetDetailPreviewTransform
+  } = useCardPreviewDrag()
   const [openFilterGroups, setOpenFilterGroups] = useState({
     rarity: true,
     type: false,
@@ -531,121 +481,6 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     }
   })
 
-  const applyDetailPreviewTransform = useCallback((x: number, y: number) => {
-    const cardEl = detailPreviewCardRef.current
-    if (cardEl) {
-      cardEl.style.transform = `rotateY(${y}deg) rotateX(${x}deg)`
-    }
-    const shineEl = detailPreviewShineRef.current
-    if (shineEl) {
-      shineEl.style.transform = `translateX(${-y * 1.4}px) translateY(${x * 1.4}px)`
-    }
-  }, [])
-
-  const setDetailPreviewTransition = useCallback((animated: boolean) => {
-    const transitionValue = animated ? PREVIEW_REBOUND_TRANSITION : 'none'
-    const cardEl = detailPreviewCardRef.current
-    if (cardEl) {
-      cardEl.style.transition = transitionValue
-    }
-    const shineEl = detailPreviewShineRef.current
-    if (shineEl) {
-      shineEl.style.transition = transitionValue
-    }
-  }, [])
-
-  const resetDetailPreviewTransform = useCallback((animated = false) => {
-    const state = detailPreviewDragStateRef.current
-    state.rotateX = 0
-    state.rotateY = 0
-    setDetailPreviewTransition(animated)
-    applyDetailPreviewTransform(0, 0)
-  }, [applyDetailPreviewTransform, setDetailPreviewTransition])
-
-  const onDetailPreviewPointerMove = useCallback(
-    (event: PointerEvent) => {
-      const state = detailPreviewDragStateRef.current
-      if (!state.dragging) {
-        return
-      }
-      if (state.pointerId !== -1 && event.pointerId !== state.pointerId) {
-        return
-      }
-      if (event.cancelable) {
-        event.preventDefault()
-      }
-      const deltaX = event.clientX - state.lastX
-      const deltaY = event.clientY - state.lastY
-      state.lastX = event.clientX
-      state.lastY = event.clientY
-      state.rotateX = Math.max(-PREVIEW_ROTATE_LIMIT, Math.min(PREVIEW_ROTATE_LIMIT, state.rotateX - deltaY * PREVIEW_ROTATE_STEP))
-      state.rotateY = Math.max(-PREVIEW_ROTATE_LIMIT, Math.min(PREVIEW_ROTATE_LIMIT, state.rotateY + deltaX * PREVIEW_ROTATE_STEP))
-      applyDetailPreviewTransform(state.rotateX, state.rotateY)
-    },
-    [applyDetailPreviewTransform]
-  )
-
-  const onDetailPreviewPointerEnd = useCallback(() => {
-    stopDetailPreviewDragRef.current()
-  }, [])
-
-  const attachDetailPreviewWindowListeners = useCallback(() => {
-    if (detailPreviewWindowListenersAttachedRef.current) {
-      return
-    }
-    detailPreviewWindowListenersAttachedRef.current = true
-    window.addEventListener('pointermove', onDetailPreviewPointerMove, { passive: false })
-    window.addEventListener('pointerup', onDetailPreviewPointerEnd)
-    window.addEventListener('pointercancel', onDetailPreviewPointerEnd)
-    window.addEventListener('blur', onDetailPreviewPointerEnd)
-  }, [onDetailPreviewPointerEnd, onDetailPreviewPointerMove])
-
-  const detachDetailPreviewWindowListeners = useCallback(() => {
-    if (!detailPreviewWindowListenersAttachedRef.current) {
-      return
-    }
-    detailPreviewWindowListenersAttachedRef.current = false
-    window.removeEventListener('pointermove', onDetailPreviewPointerMove)
-    window.removeEventListener('pointerup', onDetailPreviewPointerEnd)
-    window.removeEventListener('pointercancel', onDetailPreviewPointerEnd)
-    window.removeEventListener('blur', onDetailPreviewPointerEnd)
-  }, [onDetailPreviewPointerEnd, onDetailPreviewPointerMove])
-
-  const stopDetailPreviewDrag = useCallback((withRebound = true) => {
-    const state = detailPreviewDragStateRef.current
-    const wasDragging = state.dragging
-    state.dragging = false
-    state.pointerId = -1
-    setDetailPreviewDragging(false)
-    detachDetailPreviewWindowListeners()
-    if (withRebound && wasDragging) {
-      resetDetailPreviewTransform(true)
-    }
-  }, [detachDetailPreviewWindowListeners, resetDetailPreviewTransform])
-
-  useEffect(() => {
-    stopDetailPreviewDragRef.current = stopDetailPreviewDrag
-  }, [stopDetailPreviewDrag])
-
-  const startDetailPreviewDrag = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return
-      }
-      event.preventDefault()
-      stopDetailPreviewDrag(false)
-      setDetailPreviewTransition(false)
-      const state = detailPreviewDragStateRef.current
-      state.dragging = true
-      state.pointerId = event.pointerId
-      state.lastX = event.clientX
-      state.lastY = event.clientY
-      setDetailPreviewDragging(true)
-      attachDetailPreviewWindowListeners()
-    },
-    [attachDetailPreviewWindowListeners, setDetailPreviewTransition, stopDetailPreviewDrag]
-  )
-
   const openDetailModal = useCallback(
     (cardId: number) => {
       stopDetailPreviewDrag(false)
@@ -736,13 +571,6 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     return () => window.removeEventListener('keydown', onEscape)
   }, [closeDetailModal, detailCardId])
 
-  useEffect(
-    () => () => {
-      stopDetailPreviewDrag(false)
-    },
-    [stopDetailPreviewDrag]
-  )
-
   useEffect(() => {
     if (pendingExchangeAccountId === null) {
       return
@@ -825,7 +653,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
               onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, rarity: !prev.rarity }))}
               onToggleItem={(value) => {
                 setListPage(0)
-                setSelectedRarity((prev) => toggleItems(prev, value))
+                setSelectedRarity((prev) => toggleListItem(prev, value))
               }}
               onClear={() => {
                 setListPage(0)
@@ -842,7 +670,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
               onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, type: !prev.type }))}
               onToggleItem={(value) => {
                 setListPage(0)
-                setSelectedTypes((prev) => toggleItems(prev, value))
+                setSelectedTypes((prev) => toggleListItem(prev, value))
               }}
               onClear={() => {
                 setListPage(0)
@@ -859,7 +687,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
               onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, set: !prev.set }))}
               onToggleItem={(value) => {
                 setListPage(0)
-                setSelectedSetCodes((prev) => toggleItems(prev, value))
+                setSelectedSetCodes((prev) => toggleListItem(prev, value))
               }}
               onClear={() => {
                 setListPage(0)
@@ -876,7 +704,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
               onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, pack: !prev.pack }))}
               onToggleItem={(value) => {
                 setListPage(0)
-                setSelectedPackNames((prev) => toggleItems(prev, value))
+                setSelectedPackNames((prev) => toggleListItem(prev, value))
               }}
               onClear={() => {
                 setListPage(0)
@@ -893,7 +721,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
               onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, element: !prev.element }))}
               onToggleItem={(value) => {
                 setListPage(0)
-                setSelectedElements((prev) => toggleItems(prev, value))
+                setSelectedElements((prev) => toggleListItem(prev, value))
               }}
               onClear={() => {
                 setListPage(0)
@@ -1028,21 +856,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                             className="owned-card-image"
                             loading="lazy"
                             decoding="async"
-                            onError={(event) => {
-                              const image = event.currentTarget
-                              if (image.dataset.webpTried === '1') {
-                                image.src = urls.cdnPng
-                                image.dataset.webpTried = '2'
-                                return
-                              }
-                              if (image.dataset.webpTried === '2') {
-                                image.src = urls.cdnWebp
-                                image.dataset.webpTried = '3'
-                                return
-                              }
-                              image.dataset.webpTried = '1'
-                              image.src = urls.webp
-                            }}
+                            onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
                           />
                         </div>
                         {showCounts ? (
@@ -1183,23 +997,11 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                           decoding="async"
                           draggable={false}
                           onError={(event) => {
-                            const image = event.currentTarget
                             const urls = getCardImageUrls(assets, {
                               setCode: detailQuery.data.card.set_code,
                               cardNumber: detailQuery.data.card.number
                             })
-                            if (image.dataset.webpTried === '1') {
-                              image.src = urls.cdnWebp
-                              image.dataset.webpTried = '2'
-                              return
-                            }
-                            if (image.dataset.webpTried === '2') {
-                              image.src = urls.png
-                              image.dataset.webpTried = '3'
-                              return
-                            }
-                            image.dataset.webpTried = '1'
-                            image.src = urls.webp
+                            applyImageFallback(event.currentTarget, [urls.webp, urls.cdnWebp, urls.png])
                           }}
                         />
                         <div ref={detailPreviewShineRef} className="owned-card-shine" />
