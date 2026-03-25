@@ -295,13 +295,59 @@ def _build_selected_context(
     selected_pack_name: str,
 ) -> dict[str, Any]:
     """构建当前选中节点上下文"""
-    node_type = (selected_node_type or "root").strip().lower()
-    node_id = (selected_node_id or "all").strip()
-
+    del sets_data
+    node_type, node_id = _normalize_selected_node(selected_node_type, selected_node_id)
     set_code = (selected_set_code or "").strip()
     pack_name = (selected_pack_name or "").strip()
     card_key = ""
+    node_type, node_id, set_code, pack_name, card_key = _resolve_selection_by_node(
+        repo=repo,
+        node_type=node_type,
+        node_id=node_id,
+        set_code=set_code,
+        pack_name=pack_name,
+    )
+    set_code, pack_name = _sanitize_set_and_pack(
+        packs_by_set=packs_by_set,
+        set_code=set_code,
+        pack_name=pack_name,
+    )
+    selected_pack_cards = _build_selected_pack_cards(
+        repo=repo,
+        set_code=set_code,
+        pack_name=pack_name,
+    )
 
+    return {
+        "selected_node_type": node_type,
+        "selected_node_id": node_id,
+        "selected_set_code": set_code,
+        "selected_pack_name": pack_name,
+        "selected_card_key": card_key,
+        "selected_pack_cards": selected_pack_cards,
+    }
+
+
+def _normalize_selected_node(
+    selected_node_type: str,
+    selected_node_id: str,
+) -> tuple[str, str]:
+    """规范化节点类型和节点标识。"""
+    node_type = (selected_node_type or "root").strip().lower()
+    node_id = (selected_node_id or "all").strip()
+    return node_type, node_id
+
+
+def _resolve_selection_by_node(
+    *,
+    repo: CardRepository,
+    node_type: str,
+    node_id: str,
+    set_code: str,
+    pack_name: str,
+) -> tuple[str, str, str, str, str]:
+    """根据节点类型推导选中 set/pack/card。"""
+    card_key = ""
     if node_type == "set":
         set_code = node_id
     elif node_type == "pack":
@@ -319,45 +365,56 @@ def _build_selected_context(
     elif node_type != "root":
         node_type = "root"
         node_id = "all"
+    return node_type, node_id, set_code, pack_name, card_key
 
+
+def _sanitize_set_and_pack(
+    *,
+    packs_by_set: dict[str, list[dict[str, Any]]],
+    set_code: str,
+    pack_name: str,
+) -> tuple[str, str]:
+    """清理非法 set/pack 选择。"""
     if set_code and set_code not in packs_by_set:
-        set_code = ""
+        return "", pack_name
     if set_code and pack_name:
         valid_pack_names = {item["name"] for item in packs_by_set.get(set_code, [])}
         if pack_name not in valid_pack_names:
-            pack_name = ""
+            return set_code, ""
+    return set_code, pack_name
+
+
+def _build_selected_pack_cards(
+    *,
+    repo: CardRepository,
+    set_code: str,
+    pack_name: str,
+) -> list[dict[str, Any]]:
+    """构建当前卡包下的卡牌列表。"""
+    if not set_code or not pack_name:
+        return []
+    from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
     selected_pack_cards: list[dict[str, Any]] = []
-    if set_code and pack_name:
-        from ptcgp_auto_v2.web.utils.i18n import resolve_label
+    cards = repo.get_cards_by_pack(pack_name=pack_name, set_code=set_code)
+    for card in cards:
+        card_data = parse_json_label(card.data)
+        localized_name = card_data.get("localized_name") if card_data else {}
+        if isinstance(localized_name, dict):
+            display_name = resolve_label(localized_name, fallback=card.name)
+        else:
+            display_name = resolve_label(card_data, fallback=card.name)
 
-        cards = repo.get_cards_by_pack(pack_name=pack_name, set_code=set_code)
-        for card in cards:
-            card_data = parse_json_label(card.data)
-            localized_name = card_data.get("localized_name") if card_data else {}
-            if isinstance(localized_name, dict):
-                display_name = resolve_label(localized_name, fallback=card.name)
-            else:
-                display_name = resolve_label(card_data, fallback=card.name)
-
-            selected_pack_cards.append(
-                {
-                    "set_code": card.set_code,
-                    "number": card.number,
-                    "name": card.name,
-                    "display_name": display_name,
-                    "key": f"{card.set_code}-{card.number:03d}",
-                }
-            )
-
-    return {
-        "selected_node_type": node_type,
-        "selected_node_id": node_id,
-        "selected_set_code": set_code,
-        "selected_pack_name": pack_name,
-        "selected_card_key": card_key,
-        "selected_pack_cards": selected_pack_cards,
-    }
+        selected_pack_cards.append(
+            {
+                "set_code": card.set_code,
+                "number": card.number,
+                "name": card.name,
+                "display_name": display_name,
+                "key": f"{card.set_code}-{card.number:03d}",
+            }
+        )
+    return selected_pack_cards
 
 
 def _parse_card_key(card_key: str) -> tuple[str, int] | None:

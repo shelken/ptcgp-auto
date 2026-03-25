@@ -37,6 +37,7 @@ from ptcgp_auto_v2.web.queries.notification_queries import (
     normalize_notification_sort,
 )
 from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data, resolve_label_json
+from ptcgp_auto_v2.web.utils.serialization import serialize_account
 
 SCENE_OPTIONS = list(NOTIFICATION_SCENE_OPTIONS)
 TASK_STATUS_OPTIONS = list(NOTIFICATION_TASK_STATUS_OPTIONS)
@@ -282,7 +283,7 @@ def build_notifications_context(
     from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 
     accounts = [
-        {**account.to_dict(), "display_name": account.display_name}
+        serialize_account(account)
         for account in session.exec(select(Account).order_by(Account.id)).all()
     ]
     account_name_map = {
@@ -310,22 +311,11 @@ def build_notifications_context(
         lang=current_lang,
     )
 
-    notifications_view = []
-    for item in notifications:
-        row = item.model_dump()
-        payload = image_payload_map.get(
-            item.id,
-            {
-                "image_url": _extract_image_url(item.content),
-                "image_webp_url": _build_image_webp_fallback_url(
-                    _extract_image_url(item.content)
-                ),
-            },
-        )
-        row["scene_label"] = scene_label_map.get(item.scene, item.scene)
-        row["image_url"] = payload.get("image_url")
-        row["image_webp_url"] = payload.get("image_webp_url")
-        notifications_view.append(row)
+    notifications_view = _build_notification_list_rows(
+        notifications=notifications,
+        image_payload_map=image_payload_map,
+        scene_label_map=scene_label_map,
+    )
 
     return {
         "notifications": notifications_view,
@@ -349,6 +339,33 @@ def build_notifications_context(
         "task_status_options": TASK_STATUS_OPTIONS,
         "rarity_codes": list_rarity_codes(session),
     }
+
+
+def _build_default_image_payload(content: str) -> dict[str, str | None]:
+    """构建通知默认图片 payload。"""
+    image_url = _extract_image_url(content)
+    return {
+        "image_url": image_url,
+        "image_webp_url": _build_image_webp_fallback_url(image_url),
+    }
+
+
+def _build_notification_list_rows(
+    *,
+    notifications: list[Notification],
+    image_payload_map: dict[int, dict[str, str | None]],
+    scene_label_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    """构建通知列表视图行。"""
+    rows: list[dict[str, Any]] = []
+    for item in notifications:
+        row = item.model_dump()
+        payload = image_payload_map.get(item.id, _build_default_image_payload(item.content))
+        row["scene_label"] = scene_label_map.get(item.scene, item.scene)
+        row["image_url"] = payload.get("image_url")
+        row["image_webp_url"] = payload.get("image_webp_url")
+        rows.append(row)
+    return rows
 
 
 def build_recent_notifications_context(
@@ -383,95 +400,24 @@ def build_notification_panel_context(
 
     normalized_page = max(page, 0)
     normalized_page_size = min(max(page_size, 1), 50)
-
-    # 查询未读优先的通知列表
-    # 使用两阶段查询：先获取未读，再获取已读
-    unread_stmt = (
-        select(Notification)
-        .where(Notification.is_read == False)  # noqa: E712
-        .order_by(col(Notification.created_at).desc())
+    notifications, unread_count, total_count = _list_panel_notifications(
+        session=session,
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
-
-    read_stmt = (
-        select(Notification)
-        .where(Notification.is_read == True)  # noqa: E712
-        .order_by(col(Notification.created_at).desc())
-    )
-
-    # 计算分页偏移
-    offset = normalized_page * normalized_page_size
-
-    # 获取未读数量，用于判断分页边界
-    unread_count_stmt = select(func.count()).select_from(unread_stmt.subquery())
-    unread_count = int(session.exec(unread_count_stmt).one())
-
-    # 根据分页位置，从两个查询中组合数据
-    notifications = []
-
-    if offset < unread_count:
-        # 当前页起始位置在未读区域内
-        unread_offset = offset
-        unread_limit = min(normalized_page_size, unread_count - unread_offset)
-        unread_rows = list(
-            session.exec(unread_stmt.offset(unread_offset).limit(unread_limit)).all()
-        )
-        notifications.extend(unread_rows)
-
-        # 如果未读数据不够，从已读数据补充
-        remaining = normalized_page_size - len(notifications)
-        if remaining > 0:
-            read_rows = list(session.exec(read_stmt.limit(remaining)).all())
-            notifications.extend(read_rows)
-    else:
-        # 当前页起始位置在已读区域内
-        read_offset = offset - unread_count
-        read_rows = list(
-            session.exec(
-                read_stmt.offset(read_offset).limit(normalized_page_size)
-            ).all()
-        )
-        notifications.extend(read_rows)
-
-    # 计算总数和是否还有更多
-    total_count_stmt = select(func.count()).select_from(Notification)
-    total_count = int(session.exec(total_count_stmt).one())
     has_more = (normalized_page + 1) * normalized_page_size < total_count
     next_page = normalized_page + 1 if has_more else normalized_page
 
-    # 转换为字典并添加相对时间文本和图片URL
     current_lang = get_current_lang()
     image_payload_map = _build_notification_image_payloads(
         notifications=notifications,
         session=session,
         lang=current_lang,
     )
-    notification_dicts = []
-    for n in notifications:
-        image_payload = image_payload_map.get(
-            n.id,
-            {
-                "image_url": _extract_image_url(n.content),
-                "image_webp_url": _build_image_webp_fallback_url(
-                    _extract_image_url(n.content)
-                ),
-            },
-        )
-
-        notification_dicts.append(
-            {
-                "id": n.id,
-                "scene": n.scene,
-                "title": n.title,
-                "content": n.content,
-                "image_url": image_payload["image_url"],
-                "image_webp_url": image_payload["image_webp_url"],
-                "related_account_id": n.related_account_id,
-                "related_task_instance_id": n.related_task_instance_id,
-                "is_read": n.is_read,
-                "created_at": n.created_at,
-                "relative_time": _format_relative_time(n.created_at),
-            }
-        )
+    notification_dicts = _build_panel_notification_rows(
+        notifications=notifications,
+        image_payload_map=image_payload_map,
+    )
 
     return {
         "notifications": notification_dicts,
@@ -481,6 +427,79 @@ def build_notification_panel_context(
         "page": normalized_page,
         "page_size": normalized_page_size,
     }
+
+
+def _list_panel_notifications(
+    *,
+    session: Session,
+    page: int,
+    page_size: int,
+) -> tuple[list[Notification], int, int]:
+    """按未读优先规则查询面板通知。"""
+    unread_stmt = (
+        select(Notification)
+        .where(Notification.is_read.is_(False))
+        .order_by(col(Notification.created_at).desc())
+    )
+    read_stmt = (
+        select(Notification)
+        .where(Notification.is_read.is_(True))
+        .order_by(col(Notification.created_at).desc())
+    )
+    offset = page * page_size
+    unread_count_stmt = select(func.count()).select_from(unread_stmt.subquery())
+    unread_count = int(session.exec(unread_count_stmt).one())
+
+    notifications: list[Notification] = []
+    if offset < unread_count:
+        unread_offset = offset
+        unread_limit = min(page_size, unread_count - unread_offset)
+        unread_rows = list(
+            session.exec(unread_stmt.offset(unread_offset).limit(unread_limit)).all()
+        )
+        notifications.extend(unread_rows)
+        remaining = page_size - len(notifications)
+        if remaining > 0:
+            notifications.extend(list(session.exec(read_stmt.limit(remaining)).all()))
+    else:
+        read_offset = offset - unread_count
+        notifications.extend(
+            list(session.exec(read_stmt.offset(read_offset).limit(page_size)).all())
+        )
+
+    total_count_stmt = select(func.count()).select_from(Notification)
+    total_count = int(session.exec(total_count_stmt).one())
+    return notifications, unread_count, total_count
+
+
+def _build_panel_notification_rows(
+    *,
+    notifications: list[Notification],
+    image_payload_map: dict[int, dict[str, str | None]],
+) -> list[dict[str, Any]]:
+    """构建通知面板行数据。"""
+    rows: list[dict[str, Any]] = []
+    for notification in notifications:
+        image_payload = image_payload_map.get(
+            notification.id,
+            _build_default_image_payload(notification.content),
+        )
+        rows.append(
+            {
+                "id": notification.id,
+                "scene": notification.scene,
+                "title": notification.title,
+                "content": notification.content,
+                "image_url": image_payload["image_url"],
+                "image_webp_url": image_payload["image_webp_url"],
+                "related_account_id": notification.related_account_id,
+                "related_task_instance_id": notification.related_task_instance_id,
+                "is_read": notification.is_read,
+                "created_at": notification.created_at,
+                "relative_time": _format_relative_time(notification.created_at),
+            }
+        )
+    return rows
 
 
 def _extract_image_url(content: str) -> str | None:
@@ -543,11 +562,7 @@ def _build_notification_image_payloads(
     card_id_map: dict[int, int] = {}
 
     for notification in notifications:
-        image_url = _extract_image_url(notification.content)
-        payload_map[notification.id] = {
-            "image_url": image_url,
-            "image_webp_url": _build_image_webp_fallback_url(image_url),
-        }
+        payload_map[notification.id] = _build_default_image_payload(notification.content)
         if notification.scene != "rare_card_obtained":
             continue
         if notification.related_card_id:
@@ -557,31 +572,63 @@ def _build_notification_image_payloads(
         if parsed:
             parsed_map[notification.id] = parsed
 
-    if card_id_map:
-        card_ids = sorted(set(card_id_map.values()))
-        cards = list(session.exec(select(Card).where(col(Card.id).in_(card_ids))).all())
-        card_by_id = {card.id: card for card in cards if card.id is not None}
-        for notification_id, card_id in card_id_map.items():
-            card = card_by_id.get(card_id)
-            if card is None or not card.set_code or card.number is None:
-                continue
-            image_url, image_webp_url = build_card_image_urls(
-                set_code=card.set_code,
-                card_number=card.number,
-                lang=lang,
-                width=400,
-            )
-            payload_map[notification_id] = {
-                "image_url": image_url,
-                "image_webp_url": image_webp_url,
-            }
+    _apply_related_card_id_payloads(
+        payload_map=payload_map,
+        card_id_map=card_id_map,
+        session=session,
+        lang=lang,
+    )
+    _apply_parsed_card_payloads(
+        payload_map=payload_map,
+        parsed_map=parsed_map,
+        session=session,
+        lang=lang,
+    )
+    return payload_map
 
+
+def _apply_related_card_id_payloads(
+    *,
+    payload_map: dict[int, dict[str, str | None]],
+    card_id_map: dict[int, int],
+    session: Session,
+    lang: str,
+) -> None:
+    """按 related_card_id 覆盖通知图片 payload。"""
+    if not card_id_map:
+        return
+    card_ids = sorted(set(card_id_map.values()))
+    cards = list(session.exec(select(Card).where(col(Card.id).in_(card_ids))).all())
+    card_by_id = {card.id: card for card in cards if card.id is not None}
+    for notification_id, card_id in card_id_map.items():
+        card = card_by_id.get(card_id)
+        if card is None or not card.set_code or card.number is None:
+            continue
+        image_url, image_webp_url = build_card_image_urls(
+            set_code=card.set_code,
+            card_number=card.number,
+            lang=lang,
+            width=400,
+        )
+        payload_map[notification_id] = {
+            "image_url": image_url,
+            "image_webp_url": image_webp_url,
+        }
+
+
+def _apply_parsed_card_payloads(
+    *,
+    payload_map: dict[int, dict[str, str | None]],
+    parsed_map: dict[int, tuple[str, str]],
+    session: Session,
+    lang: str,
+) -> None:
+    """按通知文案解析结果覆盖通知图片 payload。"""
     if not parsed_map:
-        return payload_map
-
+        return
     card_names = sorted({card_name for card_name, _ in parsed_map.values()})
     if not card_names:
-        return payload_map
+        return
 
     cards = list(session.exec(select(Card).where(col(Card.name).in_(card_names))).all())
     cards_by_name: dict[str, list[Card]] = {}
@@ -594,11 +641,7 @@ def _build_notification_image_payloads(
             (card for card in candidates if card.rarity == rarity_code),
             candidates[0] if candidates else None,
         )
-        if (
-            target_card is None
-            or not target_card.set_code
-            or target_card.number is None
-        ):
+        if target_card is None or not target_card.set_code or target_card.number is None:
             continue
         image_url, image_webp_url = build_card_image_urls(
             set_code=target_card.set_code,
@@ -610,8 +653,6 @@ def _build_notification_image_payloads(
             "image_url": image_url,
             "image_webp_url": image_webp_url,
         }
-
-    return payload_map
 
 
 def _extract_card_name_and_rarity(content: str) -> tuple[str, str] | None:
