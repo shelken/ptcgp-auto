@@ -879,7 +879,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
       {editingAccount && (
         <div className="dialog-overlay" onClick={() => setEditingAccount(null)}>
-          <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card dialog-card--sm section-stack" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">{tr(t, 'modal_title_edit_account', 'Edit Account')} #{toText(editingAccount.id, t)}</div>
             <label className="section-subtitle">{tr(t, 'label_nickname', 'Nickname')}</label>
             <input
@@ -905,7 +905,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
       {editingPlans && (
         <div className="dialog-overlay" onClick={() => setEditingPlans(null)}>
-          <div className="dialog-card section-stack plan-editor-dialog" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card dialog-card--md section-stack plan-editor-dialog account-plan-assoc-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">{tr(t, 'btn_edit_plans', 'Plans')} #{editingPlans.accountId}</div>
             <div className="section-subtitle">{tr(t, 'label_active_plans', 'Active Plans')}</div>
             <div className="filter-row">
@@ -994,7 +994,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
       {editingPackConfig && (
         <div className="dialog-overlay" onClick={() => setEditingPackConfig(null)}>
-          <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card dialog-card--sm section-stack" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">{tr(t, 'btn_pack_config_title', 'Pack Config')} #{editingPackConfig.accountId}</div>
             <label className="section-subtitle">{tr(t, 'label_target_series', 'Target Series')}</label>
             <SearchableSelect
@@ -1052,6 +1052,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [taskOrder, setTaskOrder] = useState<string[]>([])
   const [taskConfigMap, setTaskConfigMap] = useState<Record<string, PlanTaskConfigState>>({})
   const [draggingTask, setDraggingTask] = useState<string | null>(null)
+  const draggingTaskRef = useRef<string | null>(null)
   const [dragOverTask, setDragOverTask] = useState<string | null>(null)
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const [pendingDeletePlan, setPendingDeletePlan] = useState<{ id: number; name: string } | null>(null)
@@ -1307,7 +1308,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 
       {isPlanEditorOpen && (
         <div className="dialog-overlay" onClick={() => { setEditingPlanId(null); setIsPlanEditorOpen(false) }}>
-          <div className="dialog-card section-stack plan-editor-dialog" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card dialog-card--lg section-stack plan-editor-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">
               {editingPlanId ? `${tr(t, 'btn_edit', 'Edit')} #${editingPlanId}` : tr(t, 'modal_title_new_plan', 'New Plan')}
             </div>
@@ -1329,23 +1330,37 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                   <div
                     key={task}
                     className={`surface-card section-stack plan-editor-task-item ${dragOverTask === task ? 'is-drag-over' : ''}`}
+                    draggable={orderedTasks.length > 1}
+                    onDragStart={(event) => {
+                      draggingTaskRef.current = task
+                      setDraggingTask(task)
+                      setDragOverTask(null)
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData('text/plain', task)
+                    }}
+                    onDragEnd={() => {
+                      draggingTaskRef.current = null
+                      setDraggingTask(null)
+                      setDragOverTask(null)
+                    }}
                     onDragOver={(event) => {
-                      if (!draggingTask || draggingTask === task) {
-                        return
-                      }
                       event.preventDefault()
-                      if (dragOverTask !== task) {
+                      const sourceTask = draggingTaskRef.current || event.dataTransfer.getData('text/plain') || draggingTask
+                      if (sourceTask && sourceTask !== task && dragOverTask !== task) {
                         setDragOverTask(task)
                       }
                     }}
                     onDrop={(event) => {
                       event.preventDefault()
-                      const sourceTask = event.dataTransfer.getData('text/plain') || draggingTask
+                      const sourceTask = draggingTaskRef.current || event.dataTransfer.getData('text/plain') || draggingTask
                       if (!sourceTask || sourceTask === task) {
+                        draggingTaskRef.current = null
                         setDragOverTask(null)
+                        setDraggingTask(null)
                         return
                       }
                       reorderTaskByDrag(sourceTask, task)
+                      draggingTaskRef.current = null
                       setDraggingTask(null)
                       setDragOverTask(null)
                     }}
@@ -1366,25 +1381,6 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                         <span className="plan-editor-task-name">{taskTypeLabel(t, task)}</span>
                       </label>
                       <div className="plan-editor-task-actions">
-                        <button
-                          type="button"
-                          className="plan-editor-drag-handle"
-                          draggable={orderedTasks.length > 1}
-                          title={tr(t, 'label_drag_reorder', '拖拽排序')}
-                          aria-label={tr(t, 'label_drag_reorder', '拖拽排序')}
-                          onDragStart={(event) => {
-                            setDraggingTask(task)
-                            setDragOverTask(null)
-                            event.dataTransfer.effectAllowed = 'move'
-                            event.dataTransfer.setData('text/plain', task)
-                          }}
-                          onDragEnd={() => {
-                            setDraggingTask(null)
-                            setDragOverTask(null)
-                          }}
-                        >
-                          ⋮⋮
-                        </button>
                         <Button
                           type="button"
                           size="sm"
@@ -4015,7 +4011,7 @@ function NotificationsSection({
             }
           }}
         >
-          <div className="dialog-card notification-picker-dialog" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="dialog-card dialog-card--xl notification-picker-dialog" onMouseDown={(event) => event.stopPropagation()}>
             <div className="pagination-row">
               <div className="section-title">{tr(t, 'btn_select_cards', 'Select Cards')}</div>
               <Button type="button" size="sm" variant="outline" onClick={() => setCardPickerOpen(false)}>
