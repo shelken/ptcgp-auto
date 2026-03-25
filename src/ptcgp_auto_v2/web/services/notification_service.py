@@ -36,6 +36,11 @@ from ptcgp_auto_v2.web.queries.notification_queries import (
     normalize_card_picker_sort,
     normalize_notification_sort,
 )
+from ptcgp_auto_v2.web.utils.filter_utils import (
+    normalize_choice,
+    normalize_page,
+    normalize_page_size,
+)
 from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data, resolve_label_json
 from ptcgp_auto_v2.web.utils.serialization import serialize_account
 
@@ -127,9 +132,7 @@ def build_config_view(config: NotificationConfigData) -> dict[str, Any]:
 
 def normalize_scene(scene: str | None) -> str:
     """标准化通知场景参数。"""
-    if scene in SCENE_OPTIONS:
-        return scene
-    return ""
+    return normalize_choice(scene, allowed=set(SCENE_OPTIONS), default="")
 
 
 def list_rarity_codes(session: Session) -> list[str]:
@@ -186,8 +189,8 @@ def build_notification_card_selector_context(
     page_size: int = 24,
 ) -> dict[str, Any]:
     """构建通知配置卡牌选择器上下文。"""
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 60)
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size, max_size=60)
     normalized_sort_by, normalized_sort_order = normalize_card_picker_sort(
         sort_by, sort_order
     )
@@ -265,8 +268,8 @@ def build_notifications_context(
     normalized_sort_by, normalized_sort_order = normalize_notification_sort(
         sort_by, sort_order
     )
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 100)
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
 
     notifications, total = list_notifications(
         session=session,
@@ -360,7 +363,10 @@ def _build_notification_list_rows(
     rows: list[dict[str, Any]] = []
     for item in notifications:
         row = item.model_dump()
-        payload = image_payload_map.get(item.id, _build_default_image_payload(item.content))
+        payload = image_payload_map.get(
+            item.id,
+            _build_default_image_payload(item.content),
+        )
         row["scene_label"] = scene_label_map.get(item.scene, item.scene)
         row["image_url"] = payload.get("image_url")
         row["image_webp_url"] = payload.get("image_webp_url")
@@ -398,8 +404,8 @@ def build_notification_panel_context(
     """
     from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 50)
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size, max_size=50)
     notifications, unread_count, total_count = _list_panel_notifications(
         session=session,
         page=normalized_page,
@@ -562,7 +568,9 @@ def _build_notification_image_payloads(
     card_id_map: dict[int, int] = {}
 
     for notification in notifications:
-        payload_map[notification.id] = _build_default_image_payload(notification.content)
+        payload_map[notification.id] = _build_default_image_payload(
+            notification.content
+        )
         if notification.scene != "rare_card_obtained":
             continue
         if notification.related_card_id:
