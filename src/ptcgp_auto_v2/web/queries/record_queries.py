@@ -8,6 +8,10 @@ from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
 from ptcgp_auto_v2.db.models.pack_card import PackCard
 from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.models.account_pack_point import AccountPackPoint
+from ptcgp_auto_v2.web.queries._query_helpers import (
+    fetch_window_rows,
+    normalize_pagination,
+)
 
 # 展示实体类型标识（用于记录分页的实体键类型）
 DISPLAY_ENTITY_TYPE_TEN_PACK = "ten_pack"
@@ -33,6 +37,11 @@ def fetch_records(
     card_type: list[str],
 ) -> tuple[list[PackRecord], bool]:
     """查询开包记录（支持筛选与分页）并返回是否还有下一页。"""
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=100,
+    )
     query = (
         select(PackRecord)
         .options(
@@ -44,13 +53,12 @@ def fetch_records(
     )
 
     query = _apply_pack_record_filters(query, rarity, card_type)
-
-    offset = page * page_size
-    query = query.offset(offset).limit(page_size + 1)
-    rows = list(session.exec(query).all())
-    has_next = len(rows) > page_size
-    if has_next:
-        rows = rows[:page_size]
+    rows, has_next = fetch_window_rows(
+        session=session,
+        statement=query,
+        page=normalized_page,
+        page_size=normalized_page_size,
+    )
     return rows, has_next
 
 
@@ -62,6 +70,11 @@ def fetch_display_entity_records(
     card_type: list[str],
 ) -> tuple[list[PackRecord], bool]:
     """按展示实体分页查询开包记录（十连包按批次聚合）。"""
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=100,
+    )
     # 处理流程：按展示实体键分页 -> 回查代表记录 -> 按实体顺序重建结果列表
     ten_pack_stmt = (
         select(
@@ -87,7 +100,6 @@ def fetch_display_entity_records(
 
     entity_stmt = union_all(ten_pack_stmt, single_stmt).subquery()
 
-    offset = page * page_size
     page_stmt = (
         select(
             entity_stmt.c.entity_type,
@@ -96,13 +108,13 @@ def fetch_display_entity_records(
             entity_stmt.c.sort_id,
         )
         .order_by(desc(entity_stmt.c.sort_time), desc(entity_stmt.c.sort_id))
-        .offset(offset)
-        .limit(page_size + 1)
     )
-    rows = list(session.exec(page_stmt).all())
-    has_next = len(rows) > page_size
-    if has_next:
-        rows = rows[:page_size]
+    rows, has_next = fetch_window_rows(
+        session=session,
+        statement=page_stmt,
+        page=normalized_page,
+        page_size=normalized_page_size,
+    )
     if not rows:
         return [], False
 

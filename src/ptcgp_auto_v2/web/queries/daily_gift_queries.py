@@ -11,14 +11,30 @@ from sqlalchemy import and_, case, func, or_
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.models import Account, AccountGiftPair, AccountGiftRecord
+from ptcgp_auto_v2.web.queries._query_helpers import (
+    count_rows,
+    fetch_window_rows,
+    normalize_pagination,
+    normalize_sort_params,
+    resolve_sort_column,
+)
+
+
+RECORD_SORT_FIELDS = {
+    "updated_at": col(AccountGiftRecord.updated_at),
+    "account_id": col(AccountGiftRecord.account_id),
+    "status": col(AccountGiftRecord.status),
+}
 
 
 def _normalize_record_sort(sort_by: str, sort_order: str) -> tuple[str, str]:
     """规范化送卡记录排序字段。"""
-    allowed_sort = {"updated_at", "account_id", "status"}
-    normalized_sort_by = sort_by if sort_by in allowed_sort else "updated_at"
-    normalized_sort_order = "asc" if sort_order == "asc" else "desc"
-    return normalized_sort_by, normalized_sort_order
+    return normalize_sort_params(
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields=RECORD_SORT_FIELDS,
+        default_field="updated_at",
+    )
 
 
 def _build_record_query(
@@ -94,55 +110,42 @@ def fetch_daily_gift_records_page(
     page_size: int,
 ) -> tuple[list[AccountGiftRecord], bool, int]:
     """查询每日送卡记录分页数据。"""
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=100,
+    )
     statement = _build_record_query(
         biz_date_local=biz_date_local,
         account_id=account_id,
     )
-    total_statement = _build_record_query(
-        biz_date_local=biz_date_local,
-        account_id=account_id,
-    )
-
-    total = int(
-        session.exec(
-            select(func.count()).select_from(total_statement.subquery())
-        ).one()
-        or 0
-    )
+    total = count_rows(session, statement)
 
     normalized_sort_by, normalized_sort_order = _normalize_record_sort(
         sort_by,
         sort_order,
     )
-    reverse = normalized_sort_order == "desc"
-
-    if normalized_sort_by == "account_id":
-        primary_order = col(AccountGiftRecord.account_id).desc() if reverse else col(
-            AccountGiftRecord.account_id
-        ).asc()
-    elif normalized_sort_by == "status":
-        primary_order = col(AccountGiftRecord.status).desc() if reverse else col(
-            AccountGiftRecord.status
-        ).asc()
-    else:
-        primary_order = col(AccountGiftRecord.updated_at).desc() if reverse else col(
-            AccountGiftRecord.updated_at
-        ).asc()
-
-    offset = page * page_size
-    rows = list(
-        session.exec(
-            statement.order_by(
-                primary_order,
-                col(AccountGiftRecord.id).desc() if reverse else col(AccountGiftRecord.id).asc(),
-            )
-            .offset(offset)
-            .limit(page_size + 1)
-        ).all()
+    sort_column = resolve_sort_column(
+        sort_by=normalized_sort_by,
+        fields=RECORD_SORT_FIELDS,
+        default_field="updated_at",
     )
-    has_next = len(rows) > page_size
-    if has_next:
-        rows = rows[:page_size]
+    if normalized_sort_order == "asc":
+        ordered_statement = statement.order_by(
+            sort_column.asc(),
+            col(AccountGiftRecord.id).asc(),
+        )
+    else:
+        ordered_statement = statement.order_by(
+            sort_column.desc(),
+            col(AccountGiftRecord.id).desc(),
+        )
+    rows, has_next = fetch_window_rows(
+        session=session,
+        statement=ordered_statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
+    )
     return rows, has_next, total
 
 
