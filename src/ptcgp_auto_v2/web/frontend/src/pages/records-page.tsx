@@ -6,7 +6,7 @@ import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson } from '@/lib/api'
-import { applyImageFallback } from '@/lib/card-image-fallback'
+import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, toggleListItem } from '@/lib/list-utils'
@@ -79,6 +79,8 @@ interface PreviewState {
   cardNumber: number
 }
 
+const RECORDS_PAGE_SIZE = 10
+
 function resolveLayoutByCount(cardCount: number): string {
   if (cardCount === 6) {
     return 'layout-6'
@@ -104,6 +106,19 @@ function resolveRecordSetCode(item: RecordListItem): string {
   return ''
 }
 
+function resolveCardImageMeta(card: {
+  set_code?: string
+  card_number?: number
+  card?: {
+    set_code?: string
+    number?: number
+  }
+}): { setCode: string; cardNumber: number; hasImage: boolean } {
+  const setCode = card.set_code ?? card.card?.set_code ?? ''
+  const cardNumber = Number(card.card_number ?? card.card?.number ?? 0)
+  return { setCode, cardNumber, hasImage: setCode.length > 0 && cardNumber > 0 }
+}
+
 function RecordCardTile({
   card,
   assets,
@@ -115,9 +130,7 @@ function RecordCardTile({
   t: Record<string, string>
   onPreview: (card: PreviewState) => void
 }) {
-  const setCode = card.set_code ?? card.card?.set_code ?? ''
-  const cardNumber = Number(card.card_number ?? card.card?.number ?? 0)
-  const hasImage = setCode.length > 0 && cardNumber > 0
+  const { setCode, cardNumber, hasImage } = resolveCardImageMeta(card)
 
   const urls = getCardImageUrls(assets, {
     setCode,
@@ -145,7 +158,7 @@ function RecordCardTile({
             className="record-card-image"
             loading="lazy"
             decoding="async"
-            onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
+            onError={(event) => applyCardListImageFallback(event.currentTarget, urls)}
           />
         ) : (
           <div className="record-card-fallback">{tr(t, 'no_image', 'No Image')}</div>
@@ -174,9 +187,7 @@ function BatchOverviewTile({
   onSelect: (packIndex: number) => void
 }) {
   const cover = pack.cover_card ?? null
-  const setCode = cover?.set_code ?? cover?.card?.set_code ?? ''
-  const cardNumber = Number(cover?.card_number ?? cover?.card?.number ?? 0)
-  const hasImage = setCode.length > 0 && cardNumber > 0
+  const { setCode, cardNumber, hasImage } = resolveCardImageMeta(cover ?? {})
   const urls = getCardImageUrls(assets, { setCode, cardNumber })
 
   return (
@@ -188,7 +199,7 @@ function BatchOverviewTile({
           className="record-card-image"
           loading="lazy"
           decoding="async"
-          onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
+          onError={(event) => applyCardListImageFallback(event.currentTarget, urls)}
         />
       ) : (
         <div className="record-batch-pack-fallback">{pack.max_rarity || '☆'}</div>
@@ -221,6 +232,10 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     stopDrag: stopPreviewDrag,
     resetTransform: resetPreviewTransform
   } = useCardPreviewDrag()
+  const resetPreviewState = useCallback(() => {
+    stopPreviewDrag(false)
+    resetPreviewTransform(false)
+  }, [resetPreviewTransform, stopPreviewDrag])
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -240,28 +255,25 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   }, [viewMode])
 
   const closePreview = useCallback(() => {
-    stopPreviewDrag(false)
-    resetPreviewTransform(false)
+    resetPreviewState()
     setPreviewCard(null)
-  }, [resetPreviewTransform, stopPreviewDrag])
+  }, [resetPreviewState])
 
   const openPreview = useCallback(
     (card: PreviewState) => {
-      stopPreviewDrag(false)
-      resetPreviewTransform(false)
+      resetPreviewState()
       setPreviewCard(card)
     },
-    [resetPreviewTransform, stopPreviewDrag]
+    [resetPreviewState]
   )
 
   useEffect(() => {
     if (!previewCard) {
-      stopPreviewDrag(false)
-      resetPreviewTransform(false)
+      resetPreviewState()
       return
     }
     resetPreviewTransform(false)
-  }, [previewCard, resetPreviewTransform, stopPreviewDrag])
+  }, [previewCard, resetPreviewState, resetPreviewTransform])
 
   useEffect(() => {
     if (!previewCard) {
@@ -277,33 +289,36 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     return () => window.removeEventListener('keydown', onEscape)
   }, [closePreview, previewCard])
 
-  const queryBaseString = useMemo(
-    () =>
-      buildQuery({
-        page_size: 10,
-        lang,
-        rarity: selectedRarity,
-        card_type: selectedTypes
-      }),
+  const recordsQueryBaseParams = useMemo(
+    () => ({
+      page_size: RECORDS_PAGE_SIZE,
+      lang,
+      rarity: selectedRarity,
+      card_type: selectedTypes
+    }),
     [lang, selectedRarity, selectedTypes]
   )
+  const queryBaseString = useMemo(() => buildQuery(recordsQueryBaseParams), [recordsQueryBaseParams])
 
   const query = useInfiniteQuery({
     queryKey: ['records', queryBaseString],
     queryFn: ({ pageParam }) =>
       fetchJson<RecordsResponse>(
         `/api/react/records?${buildQuery({
-          page: pageParam,
-          page_size: 10,
-          lang,
-          rarity: selectedRarity,
-          card_type: selectedTypes
+          ...recordsQueryBaseParams,
+          page: pageParam
         })}`
       ),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
     refetchInterval: 60000
   })
+  const previewImageUrls = previewCard
+    ? getCardImageUrls(assets, {
+        setCode: previewCard.setCode,
+        cardNumber: previewCard.cardNumber
+      })
+    : null
 
   const pages = query.data?.pages ?? []
   const records = pages.flatMap((page) => page.items)
@@ -553,18 +568,14 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
             >
               <div className="card-preview-front">
                 <img
-                  src={getCardImageUrls(assets, {
-                    setCode: previewCard.setCode,
-                    cardNumber: previewCard.cardNumber
-                  }).cdnPng}
+                  src={previewImageUrls?.cdnPng ?? ''}
                   alt={previewCard.title}
                   className="card-preview-image"
                   onError={(event) => {
-                    const urls = getCardImageUrls(assets, {
-                      setCode: previewCard.setCode,
-                      cardNumber: previewCard.cardNumber
-                    })
-                    applyImageFallback(event.currentTarget, [urls.webp, urls.cdnWebp, urls.png])
+                    if (!previewImageUrls) {
+                      return
+                    }
+                    applyCardPreviewImageFallback(event.currentTarget, previewImageUrls)
                   }}
                 />
                 <div ref={previewShineRef} className="card-preview-shine" />
