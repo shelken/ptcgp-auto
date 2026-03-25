@@ -96,6 +96,10 @@
   --clay-motion-fast: 180ms;
   --clay-motion-base: 220ms;
   --clay-motion-slow: 280ms;
+  --clay-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --clay-ease-press: cubic-bezier(0.32, 0, 0.67, 0);
+  --clay-lift-y: -1px;
+  --clay-press-y: 2px;
   --font-ui: 'Nunito', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
   --font-heading: 'Fredoka', 'Nunito', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
   --font-mono: 'Fira Code', 'Space Mono', 'JetBrains Mono', 'SFMono-Regular', monospace;
@@ -126,6 +130,9 @@
   --clay-bg-grad-start: #F4EFFF;
   --clay-bg-grad-mid: #EAF2FF;
   --clay-bg-grad-end: #FDF3FF;
+  --clay-overlay-scrim: rgba(44, 30, 88, 0.58);
+  --clay-row-hover: color-mix(in srgb, var(--accent) 18%, var(--paper));
+  --clay-row-active: color-mix(in srgb, var(--brand) 20%, var(--paper));
 }
 
 :root[data-theme='clay_vibrant'][data-theme-scheme='dark'] {
@@ -153,6 +160,9 @@
   --clay-bg-grad-start: #0F0F23;
   --clay-bg-grad-mid: #161636;
   --clay-bg-grad-end: #23234A;
+  --clay-overlay-scrim: rgba(6, 6, 18, 0.72);
+  --clay-row-hover: color-mix(in srgb, var(--brand) 20%, var(--paper-soft));
+  --clay-row-active: color-mix(in srgb, var(--accent) 22%, var(--paper-soft));
 }
 
 :root[data-theme='retro'] {
@@ -217,34 +227,85 @@
     inset 0 2px 0 var(--clay-shadow-inner-top),
     inset 0 -7px 0 var(--clay-shadow-inner-bottom);
   transition:
-    transform var(--clay-motion-base) ease,
-    box-shadow var(--clay-motion-base) ease,
-    background-color var(--clay-motion-base) ease,
-    border-color var(--clay-motion-base) ease;
+    transform var(--clay-motion-base) var(--clay-ease-out),
+    box-shadow var(--clay-motion-base) var(--clay-ease-out),
+    background-color var(--clay-motion-base) var(--clay-ease-out),
+    border-color var(--clay-motion-base) var(--clay-ease-out);
 }
 
+:root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='border-[color:var(--line)]'],
 :root[data-theme='clay_vibrant'] .icon-button,
 :root[data-theme='clay_vibrant'] .theme-mode-pill,
 :root[data-theme='clay_vibrant'] .field-input,
 :root[data-theme='clay_vibrant'] .field-select,
 :root[data-theme='clay_vibrant'] .field-textarea,
-:root[data-theme='clay_vibrant'] .metadata-node-btn {
+:root[data-theme='clay_vibrant'] .table-control,
+:root[data-theme='clay_vibrant'] .metadata-node-btn,
+:root[data-theme='clay_vibrant'] .owned-filter-toggle,
+:root[data-theme='clay_vibrant'] .owned-filter-clear,
+:root[data-theme='clay_vibrant'] .owned-scope-btn,
+:root[data-theme='clay_vibrant'] .owned-cols-btn,
+:root[data-theme='clay_vibrant'] .owned-card-modal-close,
+:root[data-theme='clay_vibrant'] button.text-xs {
+  border-style: solid;
+  border-color: var(--line);
   border-width: var(--clay-border-width);
   border-radius: var(--clay-radius-md);
   background: var(--clay-control-bg);
+  color: var(--ink);
   box-shadow: var(--clay-control-shadow);
   transition:
-    transform var(--clay-motion-fast) ease,
-    box-shadow var(--clay-motion-fast) ease,
-    background-color var(--clay-motion-base) ease,
-    color var(--clay-motion-fast) ease;
+    transform var(--clay-motion-fast) var(--clay-ease-out),
+    box-shadow var(--clay-motion-fast) var(--clay-ease-out),
+    background-color var(--clay-motion-base) var(--clay-ease-out),
+    color var(--clay-motion-fast) var(--clay-ease-out),
+    border-color var(--clay-motion-base) var(--clay-ease-out);
 }
 
+:root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='bg-[color:var(--brand)]'] {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+:root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='bg-[color:var(--paper)]'] {
+  background: var(--clay-control-bg);
+  color: var(--ink);
+}
+
+:root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='border-[color:var(--line)]']:hover,
 :root[data-theme='clay_vibrant'] .icon-button:hover,
 :root[data-theme='clay_vibrant'] .theme-mode-pill:hover,
-:root[data-theme='clay_vibrant'] .metadata-node-btn:hover {
+:root[data-theme='clay_vibrant'] .metadata-node-btn:hover,
+:root[data-theme='clay_vibrant'] .owned-filter-toggle:hover,
+:root[data-theme='clay_vibrant'] .owned-filter-clear:hover,
+:root[data-theme='clay_vibrant'] .owned-scope-btn:hover,
+:root[data-theme='clay_vibrant'] .owned-cols-btn:hover,
+:root[data-theme='clay_vibrant'] .owned-card-modal-close:hover,
+:root[data-theme='clay_vibrant'] button.text-xs:hover {
   background: var(--clay-control-bg-hover);
-  transform: translateY(-1px);
+  transform: translateY(var(--clay-lift-y));
+}
+
+:root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='border-[color:var(--line)]']:active,
+:root[data-theme='clay_vibrant'] .icon-button:active,
+:root[data-theme='clay_vibrant'] .theme-mode-pill:active,
+:root[data-theme='clay_vibrant'] .metadata-node-btn:active,
+:root[data-theme='clay_vibrant'] .owned-filter-toggle:active,
+:root[data-theme='clay_vibrant'] .owned-filter-clear:active,
+:root[data-theme='clay_vibrant'] .owned-scope-btn:active,
+:root[data-theme='clay_vibrant'] .owned-cols-btn:active,
+:root[data-theme='clay_vibrant'] .owned-card-modal-close:active,
+:root[data-theme='clay_vibrant'] button.text-xs:active {
+  transform: translateY(var(--clay-press-y));
+  box-shadow:
+    0 3px 0 color-mix(in srgb, var(--line) 88%, #000),
+    0 8px 12px color-mix(in srgb, var(--line) 30%, transparent),
+    inset 0 1px 0 var(--clay-shadow-inner-top),
+    inset 0 -2px 0 var(--clay-shadow-inner-bottom);
+}
+
+:root[data-theme='clay_vibrant'] .pagination-row .filter-row > button[class*='font-semibold'][class*='border-[color:var(--line)]'] {
+  min-width: 6.2rem;
 }
 
 :root[data-theme='clay_vibrant'] .grid-table th {
@@ -255,14 +316,138 @@
     inset 0 2px 0 var(--clay-shadow-inner-top),
     inset 0 -4px 0 color-mix(in srgb, var(--clay-header-bg) 72%, #000);
   transition:
-    background-color var(--clay-motion-base) ease,
-    color var(--clay-motion-base) ease;
+    background-color var(--clay-motion-base) var(--clay-ease-out),
+    color var(--clay-motion-base) var(--clay-ease-out);
+}
+
+:root[data-theme='clay_vibrant'] .grid-table td {
+  border-width: var(--clay-border-width);
+  background: color-mix(in srgb, var(--paper) 92%, var(--paper-soft));
+  transition:
+    background-color var(--clay-motion-fast) var(--clay-ease-out),
+    box-shadow var(--clay-motion-fast) var(--clay-ease-out),
+    color var(--clay-motion-fast) var(--clay-ease-out);
+}
+
+:root[data-theme='clay_vibrant'] .grid-table tbody tr:hover td {
+  background: var(--clay-row-hover);
+}
+
+:root[data-theme='clay_vibrant'] .grid-table tbody tr:focus-within td,
+:root[data-theme='clay_vibrant'] .grid-table tbody tr:active td {
+  background: var(--clay-row-active);
+}
+
+:root[data-theme='clay_vibrant'] .grid-table th[role='button']:hover {
+  background: color-mix(in srgb, var(--accent) 26%, var(--clay-header-bg));
+}
+
+:root[data-theme='clay_vibrant'] .grid-table th[role='button']:active {
+  background: color-mix(in srgb, var(--brand) 24%, var(--clay-header-bg));
+}
+
+:root[data-theme='clay_vibrant'] .field-select {
+  appearance: none;
+  padding-right: 1.75rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%),
+    linear-gradient(currentColor, currentColor);
+  background-position:
+    calc(100% - 0.78rem) calc(50% - 0.12rem),
+    calc(100% - 0.56rem) calc(50% - 0.12rem),
+    calc(100% - 1.18rem) 50%;
+  background-size: 0.23rem 0.23rem, 0.23rem 0.23rem, 1px 50%;
+  background-repeat: no-repeat;
+}
+
+:root[data-theme='clay_vibrant'] .field-input::placeholder,
+:root[data-theme='clay_vibrant'] .field-textarea::placeholder {
+  color: color-mix(in srgb, var(--muted) 84%, var(--ink));
+}
+
+:root[data-theme='clay_vibrant'] .field-input:hover,
+:root[data-theme='clay_vibrant'] .field-select:hover,
+:root[data-theme='clay_vibrant'] .field-textarea:hover {
+  background: var(--clay-control-bg-hover);
+}
+
+:root[data-theme='clay_vibrant'] .tag,
+:root[data-theme='clay_vibrant'] .owned-filter-chip,
+:root[data-theme='clay_vibrant'] .records-metric-chip,
+:root[data-theme='clay_vibrant'] .owned-stat-chip {
+  border-width: var(--clay-border-width);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--paper));
+  box-shadow:
+    0 4px 0 color-mix(in srgb, var(--line) 80%, #000),
+    inset 0 2px 0 var(--clay-shadow-inner-top),
+    inset 0 -2px 0 var(--clay-shadow-inner-bottom);
+}
+
+:root[data-theme='clay_vibrant'] .theme-popover-react,
+:root[data-theme='clay_vibrant'] .dialog-card {
+  border-width: var(--clay-border-width);
+  border-radius: var(--clay-radius-lg);
+  box-shadow:
+    var(--shadow),
+    inset 0 2px 0 var(--clay-shadow-inner-top),
+    inset 0 -8px 0 var(--clay-shadow-inner-bottom);
+}
+
+:root[data-theme='clay_vibrant'] .dialog-overlay,
+:root[data-theme='clay_vibrant'] .notification-drawer-backdrop {
+  background: var(--clay-overlay-scrim);
+}
+
+:root[data-theme='clay_vibrant'] .record-card-tile,
+:root[data-theme='clay_vibrant'] .record-batch-pack,
+:root[data-theme='clay_vibrant'] .owned-card,
+:root[data-theme='clay_vibrant'] .notification-picker-card,
+:root[data-theme='clay_vibrant'] .owned-filter-group,
+:root[data-theme='clay_vibrant'] .owned-scope-segmented,
+:root[data-theme='clay_vibrant'] .owned-cols-segmented,
+:root[data-theme='clay_vibrant'] .metadata-step-card,
+:root[data-theme='clay_vibrant'] .metadata-action-card,
+:root[data-theme='clay_vibrant'] .metadata-summary-card {
+  border-width: var(--clay-border-width);
+  border-radius: var(--clay-radius-md);
+  box-shadow:
+    0 6px 0 color-mix(in srgb, var(--line) 84%, #000),
+    0 12px 16px color-mix(in srgb, var(--line) 20%, transparent),
+    inset 0 2px 0 var(--clay-shadow-inner-top),
+    inset 0 -4px 0 var(--clay-shadow-inner-bottom);
+  transition:
+    transform var(--clay-motion-fast) var(--clay-ease-out),
+    box-shadow var(--clay-motion-fast) var(--clay-ease-out),
+    background-color var(--clay-motion-base) var(--clay-ease-out),
+    border-color var(--clay-motion-base) var(--clay-ease-out);
+}
+
+:root[data-theme='clay_vibrant'] .record-card-tile:hover,
+:root[data-theme='clay_vibrant'] .record-card-tile:focus-within,
+:root[data-theme='clay_vibrant'] .record-batch-pack:hover,
+:root[data-theme='clay_vibrant'] .record-batch-pack:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-card:hover,
+:root[data-theme='clay_vibrant'] .owned-card:focus-visible,
+:root[data-theme='clay_vibrant'] .notification-picker-card:hover,
+:root[data-theme='clay_vibrant'] .notification-picker-card:focus-visible,
+:root[data-theme='clay_vibrant'] .management-side-btn:hover {
+  transform: translateY(var(--clay-lift-y));
+}
+
+:root[data-theme='clay_vibrant'] .record-batch-pack:active,
+:root[data-theme='clay_vibrant'] .owned-card:active,
+:root[data-theme='clay_vibrant'] .notification-picker-card:active {
+  transform: translateY(var(--clay-press-y));
 }
 
 :root[data-theme='clay_vibrant'] .table-wrap {
   border-width: var(--clay-border-width);
 }
 
+:root[data-theme='clay_vibrant'] .owned-scope-btn.is-active,
+:root[data-theme='clay_vibrant'] .owned-cols-btn.is-active,
 :root[data-theme='clay_vibrant'] .theme-mode-pill.is-active,
 :root[data-theme='clay_vibrant'] .icon-button.is-active {
   background: var(--brand);
@@ -273,32 +458,74 @@
     inset 0 2px 0 color-mix(in srgb, var(--brand-ink) 30%, transparent);
 }
 
+:root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='border-[color:var(--line)]']:focus-visible,
 :root[data-theme='clay_vibrant'] .icon-button:focus-visible,
 :root[data-theme='clay_vibrant'] .theme-mode-pill:focus-visible,
 :root[data-theme='clay_vibrant'] .field-input:focus-visible,
 :root[data-theme='clay_vibrant'] .field-select:focus-visible,
 :root[data-theme='clay_vibrant'] .field-textarea:focus-visible,
-:root[data-theme='clay_vibrant'] .metadata-node-btn:focus-visible {
+:root[data-theme='clay_vibrant'] .metadata-node-btn:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-filter-toggle:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-filter-clear:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-scope-btn:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-cols-btn:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-card-modal-close:focus-visible,
+:root[data-theme='clay_vibrant'] .record-batch-pack:focus-visible,
+:root[data-theme='clay_vibrant'] .owned-card:focus-visible,
+:root[data-theme='clay_vibrant'] .notification-picker-card:focus-visible,
+:root[data-theme='clay_vibrant'] .grid-table th[role='button']:focus-visible,
+:root[data-theme='clay_vibrant'] button.text-xs:focus-visible {
   outline: var(--clay-border-width) solid var(--accent);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root[data-theme='clay_vibrant'] .surface-card,
+  :root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='border-[color:var(--line)]'],
   :root[data-theme='clay_vibrant'] .icon-button,
   :root[data-theme='clay_vibrant'] .theme-mode-pill,
   :root[data-theme='clay_vibrant'] .field-input,
   :root[data-theme='clay_vibrant'] .field-select,
   :root[data-theme='clay_vibrant'] .field-textarea,
+  :root[data-theme='clay_vibrant'] .table-control,
   :root[data-theme='clay_vibrant'] .metadata-node-btn,
-  :root[data-theme='clay_vibrant'] .grid-table th {
+  :root[data-theme='clay_vibrant'] .owned-filter-toggle,
+  :root[data-theme='clay_vibrant'] .owned-filter-clear,
+  :root[data-theme='clay_vibrant'] .owned-scope-btn,
+  :root[data-theme='clay_vibrant'] .owned-cols-btn,
+  :root[data-theme='clay_vibrant'] .owned-card-modal-close,
+  :root[data-theme='clay_vibrant'] .grid-table th,
+  :root[data-theme='clay_vibrant'] .grid-table td,
+  :root[data-theme='clay_vibrant'] .record-card-tile,
+  :root[data-theme='clay_vibrant'] .record-batch-pack,
+  :root[data-theme='clay_vibrant'] .owned-card,
+  :root[data-theme='clay_vibrant'] .notification-picker-card,
+  :root[data-theme='clay_vibrant'] .owned-filter-group,
+  :root[data-theme='clay_vibrant'] .owned-scope-segmented,
+  :root[data-theme='clay_vibrant'] .owned-cols-segmented,
+  :root[data-theme='clay_vibrant'] .metadata-step-card,
+  :root[data-theme='clay_vibrant'] .metadata-action-card,
+  :root[data-theme='clay_vibrant'] .metadata-summary-card,
+  :root[data-theme='clay_vibrant'] button.text-xs {
     transition: none;
     animation: none;
   }
 
+  :root[data-theme='clay_vibrant'] button[class*='font-semibold'][class*='border-[color:var(--line)]']:hover,
   :root[data-theme='clay_vibrant'] .icon-button:hover,
   :root[data-theme='clay_vibrant'] .theme-mode-pill:hover,
-  :root[data-theme='clay_vibrant'] .metadata-node-btn:hover {
+  :root[data-theme='clay_vibrant'] .metadata-node-btn:hover,
+  :root[data-theme='clay_vibrant'] .owned-filter-toggle:hover,
+  :root[data-theme='clay_vibrant'] .owned-filter-clear:hover,
+  :root[data-theme='clay_vibrant'] .owned-scope-btn:hover,
+  :root[data-theme='clay_vibrant'] .owned-cols-btn:hover,
+  :root[data-theme='clay_vibrant'] .owned-card-modal-close:hover,
+  :root[data-theme='clay_vibrant'] .record-card-tile:hover,
+  :root[data-theme='clay_vibrant'] .record-batch-pack:hover,
+  :root[data-theme='clay_vibrant'] .owned-card:hover,
+  :root[data-theme='clay_vibrant'] .notification-picker-card:hover,
+  :root[data-theme='clay_vibrant'] .management-side-btn:hover,
+  :root[data-theme='clay_vibrant'] button.text-xs:hover {
     transform: none;
   }
 }
