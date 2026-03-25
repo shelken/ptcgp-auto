@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
@@ -45,6 +45,8 @@ interface ManagementPageProps {
   assets: CardImageAssets
 }
 
+type SortOrder = 'asc' | 'desc'
+
 interface ColumnDef {
   key: string
   label: string
@@ -76,6 +78,92 @@ const sections = [
   { key: 'notifications', labelKey: 'menu_notifications', fallback: 'Notifications' }
 ] as const
 
+function stringKey(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function prefixedLabel(t: Record<string, string>, prefix: string, value: unknown): string {
+  const key = stringKey(value)
+  if (!key) {
+    return '-'
+  }
+  return tr(t, `${prefix}_${key}`, key)
+}
+
+function disabledReasonLabel(
+  t: Record<string, string>,
+  messageKey: string,
+  fallback: string,
+  status: unknown,
+  formatStatusLabel: (t: Record<string, string>, value: unknown) => string
+): string {
+  return `${tr(t, messageKey, fallback)} (${formatStatusLabel(t, status)})`
+}
+
+function moveItemByOffset<T>(items: T[], index: number, offset: -1 | 1): T[] {
+  const targetIndex = index + offset
+  if (targetIndex < 0 || targetIndex >= items.length) {
+    return items
+  }
+  const nextItems = [...items]
+  const current = nextItems[index]
+  nextItems[index] = nextItems[targetIndex]
+  nextItems[targetIndex] = current
+  return nextItems
+}
+
+function moveItemToIndex<T>(items: T[], sourceIndex: number, targetIndex: number): T[] {
+  if (
+    sourceIndex < 0 ||
+    targetIndex < 0 ||
+    sourceIndex >= items.length ||
+    targetIndex >= items.length ||
+    sourceIndex === targetIndex
+  ) {
+    return items
+  }
+  const nextItems = [...items]
+  const [moved] = nextItems.splice(sourceIndex, 1)
+  nextItems.splice(targetIndex, 0, moved)
+  return nextItems
+}
+
+function moveTaskOrderWithFallback(
+  currentOrder: string[],
+  fallbackOrder: string[],
+  index: number,
+  offset: -1 | 1
+): string[] {
+  const sourceOrder = currentOrder.length > 0 ? [...currentOrder] : [...fallbackOrder]
+  const nextOrder = moveItemByOffset(sourceOrder, index, offset)
+  if (nextOrder === sourceOrder) {
+    return currentOrder.length > 0 ? currentOrder : sourceOrder
+  }
+  return nextOrder
+}
+
+function useHeaderSort({
+  sortBy,
+  setPage,
+  setSortBy,
+  setSortOrder
+}: {
+  sortBy: string
+  setPage: Dispatch<SetStateAction<number>>
+  setSortBy: Dispatch<SetStateAction<string>>
+  setSortOrder: Dispatch<SetStateAction<SortOrder>>
+}) {
+  return useCallback((nextSortBy: string) => {
+    setPage(0)
+    if (sortBy === nextSortBy) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortBy(nextSortBy)
+    setSortOrder('asc')
+  }, [setPage, setSortBy, setSortOrder, sortBy])
+}
+
 function renderRelativeTime(value: unknown, lang: string, t: Record<string, string>) {
   const absolute = formatAbsoluteDateTime(value)
   return (
@@ -86,19 +174,11 @@ function renderRelativeTime(value: unknown, lang: string, t: Record<string, stri
 }
 
 function giftStatusLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `gift_status_${key}`, key)
+  return prefixedLabel(t, 'gift_status', value)
 }
 
 function pairProgressLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `gift_pair_progress_${key}`, key)
+  return prefixedLabel(t, 'gift_pair_progress', value)
 }
 
 function taskTypesListLabel(t: Record<string, string>, value: unknown): string {
@@ -115,19 +195,11 @@ function taskTypesListLabel(t: Record<string, string>, value: unknown): string {
 }
 
 function requestTypeLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `friend_request_type_${key}`, key)
+  return prefixedLabel(t, 'friend_request_type', value)
 }
 
 function requestStatusLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `friend_request_status_${key}`, key)
+  return prefixedLabel(t, 'friend_request_status', value)
 }
 
 function SortableHeaderCell({
@@ -141,7 +213,7 @@ function SortableHeaderCell({
   label: string
   sortKey: string
   sortBy: string
-  sortOrder: 'asc' | 'desc'
+  sortOrder: SortOrder
   onToggle: (sortKey: string) => void
   className?: string
 }) {
@@ -167,21 +239,27 @@ function SortableHeaderCell({
 }
 
 function exchangeStatusLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `exchange_request_status_${key}`, key)
+  return prefixedLabel(t, 'exchange_request_status', value)
 }
 
 function exchangeCancelDisabledReason(t: Record<string, string>, status: unknown): string {
-  const statusText = exchangeStatusLabel(t, status)
-  return `${tr(t, 'msg_exchange_request_cancel_failed', 'Only sending/sended requests can be cancelled')} (${statusText})`
+  return disabledReasonLabel(
+    t,
+    'msg_exchange_request_cancel_failed',
+    'Only sending/sended requests can be cancelled',
+    status,
+    exchangeStatusLabel
+  )
 }
 
 function requestCancelDisabledReason(t: Record<string, string>, status: unknown): string {
-  const statusText = requestStatusLabel(t, status)
-  return `${tr(t, 'msg_request_cancel_failed', 'Only pending request records can be removed')} (${statusText})`
+  return disabledReasonLabel(
+    t,
+    'msg_request_cancel_failed',
+    'Only pending request records can be removed',
+    status,
+    requestStatusLabel
+  )
 }
 
 function reasonTitle(reason: string | null | undefined): string | undefined {
@@ -257,7 +335,7 @@ function DataGrid({
   columns: ColumnDef[]
   t: Record<string, string>
   sortBy?: string
-  sortOrder?: 'asc' | 'desc'
+  sortOrder?: SortOrder
   onSortChange?: (sortKey: string) => void
 }) {
   return (
@@ -308,7 +386,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   const [q, setQ] = usePersistedState<string>(managementStateKey('accounts', 'q'), '')
   const [page, setPage] = usePersistedState<number>(managementStateKey('accounts', 'page'), 0)
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('accounts', 'sort_by'), 'id')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('accounts', 'sort_order'), 'asc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('accounts', 'sort_order'), 'asc')
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('accounts', 'page_size'), 10)
   const [editingAccount, setEditingAccount] = useState<Record<string, unknown> | null>(null)
   const [editingPlans, setEditingPlans] = useState<{ accountId: number; items: AccountPlanItemState[] } | null>(null)
@@ -337,15 +415,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/accounts?${queryString}`)
   })
 
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    setPage(0)
-    if (sortBy === nextSortBy) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortBy(nextSortBy)
-    setSortOrder('asc')
-  }, [sortBy])
+  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
 
   const saveAccountMutation = useMutation({
     mutationFn: (payload: { accountId: number; nickname: string; remark: string }) =>
@@ -459,6 +529,19 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     ],
     [boosterOptions, t]
   )
+
+  const moveEditingPlanItem = useCallback((index: number, offset: -1 | 1) => {
+    setEditingPlans((prev) => {
+      if (!prev) {
+        return prev
+      }
+      const nextItems = moveItemByOffset(prev.items, index, offset)
+      if (nextItems === prev.items) {
+        return prev
+      }
+      return { ...prev, items: nextItems }
+    })
+  }, [])
 
   return (
     <section className="section-stack">
@@ -640,18 +723,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                         size="sm"
                         variant="outline"
                         disabled={isFirst}
-                        onClick={() => {
-                          setEditingPlans((prev) => {
-                            if (!prev || isFirst) {
-                              return prev
-                            }
-                            const nextItems = [...prev.items]
-                            const temp = nextItems[index - 1]
-                            nextItems[index - 1] = nextItems[index]
-                            nextItems[index] = temp
-                            return { ...prev, items: nextItems }
-                          })
-                        }}
+                        onClick={() => moveEditingPlanItem(index, -1)}
                       >
                         ↑
                       </Button>
@@ -660,18 +732,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                         size="sm"
                         variant="outline"
                         disabled={isLast}
-                        onClick={() => {
-                          setEditingPlans((prev) => {
-                            if (!prev || isLast) {
-                              return prev
-                            }
-                            const nextItems = [...prev.items]
-                            const temp = nextItems[index + 1]
-                            nextItems[index + 1] = nextItems[index]
-                            nextItems[index] = temp
-                            return { ...prev, items: nextItems }
-                          })
-                        }}
+                        onClick={() => moveEditingPlanItem(index, 1)}
                       >
                         ↓
                       </Button>
@@ -737,7 +798,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [q, setQ] = usePersistedState<string>(managementStateKey('plans', 'q'), '')
   const [page, setPage] = usePersistedState<number>(managementStateKey('plans', 'page'), 0)
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('plans', 'sort_by'), 'id')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('plans', 'sort_order'), 'asc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('plans', 'sort_order'), 'asc')
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('plans', 'page_size'), 10)
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null)
   const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false)
@@ -763,27 +824,18 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/plans?${queryString}`)
   })
 
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    setPage(0)
-    if (sortBy === nextSortBy) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortBy(nextSortBy)
-    setSortOrder('asc')
-  }, [sortBy])
+  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
 
   const reorderTaskByDrag = useCallback((sourceTask: string, targetTask: string) => {
     setTaskOrder((prev) => {
       const sourceOrder = prev.length > 0 ? [...prev] : [...taskOptions]
       const sourceIndex = sourceOrder.indexOf(sourceTask)
       const targetIndex = sourceOrder.indexOf(targetTask)
-      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+      const nextOrder = moveItemToIndex(sourceOrder, sourceIndex, targetIndex)
+      if (nextOrder === sourceOrder) {
         return prev.length > 0 ? prev : sourceOrder
       }
-      const [moved] = sourceOrder.splice(sourceIndex, 1)
-      sourceOrder.splice(targetIndex, 0, moved)
-      return sourceOrder
+      return nextOrder
     })
   }, [taskOptions])
 
@@ -869,6 +921,9 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
   const totalRecords = toTotalCount(query.data?.total, items.length)
   const orderedTasks: string[] = taskOrder.length > 0 ? taskOrder : taskOptions
+  const moveTaskOrder = useCallback((index: number, offset: -1 | 1) => {
+    setTaskOrder((prev) => moveTaskOrderWithFallback(prev, orderedTasks, index, offset))
+  }, [orderedTasks])
 
   return (
     <section className="section-stack">
@@ -1082,19 +1137,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                           size="sm"
                           variant="outline"
                           disabled={isFirst}
-                          onClick={() => {
-                            setTaskOrder((prev) => {
-                              const sourceOrder = prev.length > 0 ? [...prev] : [...orderedTasks]
-                              if (isFirst) {
-                                return prev.length > 0 ? prev : sourceOrder
-                              }
-                              const next = sourceOrder
-                              const temp = next[index - 1]
-                              next[index - 1] = next[index]
-                              next[index] = temp
-                              return next
-                            })
-                          }}
+                          onClick={() => moveTaskOrder(index, -1)}
                         >
                           ↑
                         </Button>
@@ -1103,19 +1146,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                           size="sm"
                           variant="outline"
                           disabled={isLast}
-                          onClick={() => {
-                            setTaskOrder((prev) => {
-                              const sourceOrder = prev.length > 0 ? [...prev] : [...orderedTasks]
-                              if (isLast) {
-                                return prev.length > 0 ? prev : sourceOrder
-                              }
-                              const next = sourceOrder
-                              const temp = next[index + 1]
-                              next[index + 1] = next[index]
-                              next[index] = temp
-                              return next
-                            })
-                          }}
+                          onClick={() => moveTaskOrder(index, 1)}
                         >
                           ↓
                         </Button>
@@ -1199,7 +1230,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
   const [page, setPage] = usePersistedState<number>(managementStateKey('resources', 'page'), 0)
   const [view, setView] = usePersistedState<string>(managementStateKey('resources', 'view'), 'stats')
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('resources', 'sort_by'), 'id')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('resources', 'sort_order'), 'asc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('resources', 'sort_order'), 'asc')
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('resources', 'page_size'), 20)
 
   const queryString = useMemo(
@@ -1211,15 +1242,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/resources?${queryString}`)
   })
 
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    setPage(0)
-    if (sortBy === nextSortBy) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortBy(nextSortBy)
-    setSortOrder('asc')
-  }, [sortBy])
+  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
   const seriesList = (((query.data?.series_list as unknown[]) ?? []) as string[])
@@ -1457,7 +1480,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [taskType, setTaskType] = usePersistedState<string>(managementStateKey('tasks', 'task_type'), '')
   const [accountKeyword, setAccountKeyword] = usePersistedState<string>(managementStateKey('tasks', 'account_keyword'), '')
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('tasks', 'sort_by'), 'dispatch_priority')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('tasks', 'sort_order'), 'asc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('tasks', 'sort_order'), 'asc')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
@@ -1495,15 +1518,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/tasks?${queryString}`)
   })
 
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    setPage(0)
-    if (sortBy === nextSortBy) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortBy(nextSortBy)
-    setSortOrder('asc')
-  }, [sortBy])
+  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
 
   const resetMutation = useMutation({
     mutationFn: () =>
@@ -2240,7 +2255,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'page_size'), 10)
   const [pairPageSize, setPairPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'pair_page_size'), 10)
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('daily-gift', 'sort_by'), 'updated_at')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('daily-gift', 'sort_order'), 'desc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('daily-gift', 'sort_order'), 'desc')
   const [date, setDate] = usePersistedState<string>(managementStateKey('daily-gift', 'date'), '')
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('daily-gift', 'account_id'), '')
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
@@ -2515,7 +2530,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   const [page, setPage] = usePersistedState<number>(managementStateKey('friendships', 'page'), 0)
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('friendships', 'page_size'), 10)
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('friendships', 'sort_by'), 'created_at')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('friendships', 'sort_order'), 'desc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('friendships', 'sort_order'), 'desc')
   const [q, setQ] = usePersistedState<string>(managementStateKey('friendships', 'q'), '')
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('friendships', 'account_id'), '')
   const [fromAccountId, setFromAccountId] = usePersistedState<string>(managementStateKey('friendships', 'from_account_id'), '')
@@ -2804,7 +2819,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   const [page, setPage] = usePersistedState<number>(managementStateKey('exchange-cards', 'page'), 0)
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('exchange-cards', 'page_size'), 10)
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('exchange-cards', 'sort_by'), 'created_at')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('exchange-cards', 'sort_order'), 'desc')
+  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('exchange-cards', 'sort_order'), 'desc')
   const [q, setQ] = usePersistedState<string>(managementStateKey('exchange-cards', 'q'), '')
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('exchange-cards', 'account_id'), '')
   const [status, setStatus] = usePersistedState<string>(managementStateKey('exchange-cards', 'status'), '')
