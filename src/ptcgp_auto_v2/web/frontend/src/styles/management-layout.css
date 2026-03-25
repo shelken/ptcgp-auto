@@ -8,13 +8,13 @@
 .management-sidebar {
   position: sticky;
   top: 0.7rem;
-  padding: 0.6rem;
+  padding: 0.7rem;
 }
 
 .management-sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.56rem;
 }
 
 .management-sidebar-nav a {
@@ -23,6 +23,11 @@
 
 .management-side-btn {
   width: 100%;
+  min-height: 2.4rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+  line-height: 1.25;
+  white-space: normal;
   justify-content: flex-start;
 }
 
@@ -130,7 +135,7 @@
   .management-sidebar-nav {
     flex-direction: column;
     flex-wrap: nowrap;
-    gap: 0.45rem;
+    gap: 0.52rem;
   }
 
   .management-side-btn {

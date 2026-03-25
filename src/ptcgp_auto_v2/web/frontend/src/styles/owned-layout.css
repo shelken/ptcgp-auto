@@ -232,19 +232,26 @@
 
 .owned-scope-segmented {
   display: inline-flex;
+  align-items: stretch;
   border: 2px solid var(--line);
+  border-radius: 0.62rem;
+  background: var(--paper);
   overflow: hidden;
 }
 
 .owned-scope-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-right: 2px solid var(--line);
   background: var(--paper);
   color: var(--ink);
   min-width: 4rem;
-  min-height: 2rem;
-  padding: 0 0.55rem;
+  min-height: 2.15rem;
+  padding: 0.34rem 0.62rem;
   font-size: 0.7rem;
+  line-height: 1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
@@ -262,19 +269,26 @@
 
 .owned-cols-segmented {
   display: inline-flex;
+  align-items: stretch;
   border: 2px solid var(--line);
+  border-radius: 0.62rem;
+  background: var(--paper);
   overflow: hidden;
 }
 
 .owned-cols-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-right: 2px solid var(--line);
   background: var(--paper);
   color: var(--ink);
-  min-width: 2.25rem;
-  min-height: 2rem;
-  padding: 0 0.55rem;
+  min-width: 2.4rem;
+  min-height: 2.15rem;
+  padding: 0.34rem 0.62rem;
   font-size: 0.72rem;
+  line-height: 1;
   font-weight: 800;
   cursor: pointer;
 }
@@ -286,6 +300,24 @@
 .owned-cols-btn.is-active {
   background: var(--brand);
   color: var(--brand-ink);
+}
+
+:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn,
+:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn:hover,
+:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn:hover,
+:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn:active,
+:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn:active {
+  transform: none;
+}
+
+:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn.is-active,
+:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn.is-active {
+  box-shadow: none;
 }
 
 .owned-stats-bar {
