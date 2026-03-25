@@ -13,6 +13,12 @@ import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson, requestFormJson, requestJson } from '@/lib/api'
 import { type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
+import {
+  formatAbsoluteDateTime,
+  formatDurationExact,
+  formatDurationShort,
+  formatRelativeDateTime
+} from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
 
@@ -102,11 +108,13 @@ function toText(value: unknown, t?: Record<string, string>): string {
   return JSON.stringify(value)
 }
 
-function formatTime(value: unknown): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    return '-'
-  }
-  return value.replace('T', ' ').slice(0, 19)
+function renderRelativeTime(value: unknown, lang: string, t: Record<string, string>) {
+  const absolute = formatAbsoluteDateTime(value)
+  return (
+    <span title={absolute === '-' ? undefined : absolute}>
+      {formatRelativeDateTime(value, lang, t)}
+    </span>
+  )
 }
 
 function statusLabel(t: Record<string, string>, value: unknown): string {
@@ -961,7 +969,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
       {editingPackConfig && (
         <div className="dialog-overlay" onClick={() => setEditingPackConfig(null)}>
-          <div className="dialog-card dialog-card--sm section-stack" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card dialog-card--sm section-stack pack-config-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">{tr(t, 'btn_pack_config_title', 'Pack Config')} #{editingPackConfig.accountId}</div>
             <label className="section-subtitle">{tr(t, 'label_target_series', 'Target Series')}</label>
             <SearchableSelect
@@ -1639,7 +1647,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                     <td className="mono">
                       {Number.isFinite(hourglass) ? accountNumber.format(hourglass) : '-'}
                     </td>
-                    <td className="mono">{formatTime(row.updated_at)}</td>
+                    <td className="mono">{renderRelativeTime(row.updated_at, lang, t)}</td>
                   </tr>
                 )
               })}
@@ -1973,18 +1981,19 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             key: 'last_completed_at_iso',
             label: tr(t, 'col_last_completed', 'Last Completed'),
             sortKey: 'last_completed_at',
-            render: (row) => formatTime(row.last_completed_at_iso)
+            render: (row) => renderRelativeTime(row.last_completed_at_iso, lang, t)
           },
           {
             key: 'last_duration_seconds',
             label: tr(t, 'col_last_duration', 'Last Duration'),
             sortKey: 'last_duration_seconds',
             render: (row) => {
-              const duration = Number(row.last_duration_seconds ?? 0)
-              if (!Number.isFinite(duration) || duration <= 0) {
-                return '-'
+              const text = formatDurationShort(row.last_duration_seconds)
+              if (text === '-') {
+                return text
               }
-              return `${duration.toFixed(1)}s`
+              const exact = formatDurationExact(row.last_duration_seconds)
+              return <span title={exact}>{text}</span>
             }
           },
           {
@@ -2002,7 +2011,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             key: 'next_run_at_iso',
             label: tr(t, 'col_next_run', 'Next Run'),
             sortKey: 'next_run_at',
-            render: (row) => formatTime(row.next_run_at_iso)
+            render: (row) => renderRelativeTime(row.next_run_at_iso, lang, t)
           },
           { key: 'plan_name', label: tr(t, 'col_plan', 'Plan') },
           { key: 'plan_priority', label: tr(t, 'label_priority', 'Priority') },
@@ -2720,7 +2729,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
                     {' -> '}
                     {Number.isFinite(afterCount) ? String(afterCount) : '-'}
                   </td>
-                  <td className="mono">{formatTime(row.updated_at)}</td>
+                  <td className="mono">{renderRelativeTime(row.updated_at, lang, t)}</td>
                 </tr>
               )
             })}
@@ -2978,7 +2987,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                   </td>
                   <td>{requestTypeLabel(t, row.request_type)}</td>
                   <td>{renderBadge(requestStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
-                  <td className="mono">{formatTime(row.updated_at)}</td>
+                  <td className="mono">{renderRelativeTime(row.updated_at, lang, t)}</td>
                   <td>
                     {canCancel ? (
                       <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>
@@ -3034,7 +3043,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                       <div className="text-xs text-muted">#{rowFriendAccountId} {accountNameMap[String(rowFriendAccountId)] ?? ''}</div>
                     )}
                   </td>
-                  <td className="mono">{formatTime(row.created_at)}</td>
+                  <td className="mono">{renderRelativeTime(row.created_at, lang, t)}</td>
                   <td>
                     <Button
                       type="button"
@@ -3188,7 +3197,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
                 <td className="mono">{toText(row.to_friend_id, t)}</td>
                 <td>{toText(row.target_card_id, t)}</td>
                 <td>{renderBadge(exchangeStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
-                <td className="mono">{formatTime(row.created_at)}</td>
+                <td className="mono">{renderRelativeTime(row.created_at, lang, t)}</td>
                 <td>
                   {Boolean(row.can_cancel) ? (
                     <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
@@ -3234,9 +3243,9 @@ function JsonSection({ endpoint, title, lang, t }: { endpoint: string; title: st
     return Object.keys(rows[0]).slice(0, 8).map((key) => ({
       key,
       label: key,
-      render: (row) => (key.includes('at') ? formatTime(row[key]) : toText(row[key]))
+      render: (row) => (key.includes('at') ? renderRelativeTime(row[key], lang, t) : toText(row[key]))
     }))
-  }, [rows])
+  }, [lang, rows, t])
 
   return (
     <section className="surface-card section-stack">
