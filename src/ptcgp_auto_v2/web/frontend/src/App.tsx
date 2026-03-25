@@ -12,14 +12,13 @@ import {
   alignThemeToMode,
   applyThemePreference,
   cycleThemeMode,
-  DARK_THEMES,
-  LIGHT_THEMES,
+  listThemesByAvailability,
   THEME_MODES,
   loadThemePreference,
   mapThemeToMode,
+  type ThemeAvailability,
   type ThemeMode,
   saveThemePreference,
-  type ThemeName,
   type ThemePreference
 } from '@/lib/theme'
 import { ManagementPage } from '@/pages/management-page'
@@ -60,6 +59,12 @@ export default function App() {
     light: t.theme_mode_light ?? 'Light',
     dark: t.theme_mode_dark ?? 'Dark'
   }
+  const allThemeGroups = [
+    { availability: 'light', label: t.theme_group_light ?? 'Light Themes', themes: listThemesByAvailability('light') },
+    { availability: 'dark', label: t.theme_group_dark ?? 'Dark Themes', themes: listThemesByAvailability('dark') },
+    { availability: 'both', label: t.theme_group_dual ?? 'Dual Themes', themes: listThemesByAvailability('both') }
+  ] satisfies Array<{ availability: ThemeAvailability; label: string; themes: ReturnType<typeof listThemesByAvailability> }>
+  const themeGroups = allThemeGroups.filter((group) => group.themes.length > 0)
 
   const notificationCountQuery = useQuery({
     queryKey: ['notification-count', lang],
@@ -224,50 +229,30 @@ export default function App() {
                 ))}
               </div>
               <div className="theme-popover-grid">
-                <div className="theme-section">
-                  <div className="theme-section-title">{t.theme_group_light ?? 'Light Themes'}</div>
-                  <div className="theme-options">
-                    {LIGHT_THEMES.map((theme) => (
-                      <Button
-                        key={theme}
-                        type="button"
-                        size="sm"
-                        className="theme-option-button"
-                        variant={themePreference.theme === theme ? 'default' : 'outline'}
-                        onClick={() =>
-                          setThemePreference({
-                            mode: mapThemeToMode(theme),
-                            theme: theme as ThemeName
-                          })
-                        }
-                      >
-                        {themeLabels[theme] ?? theme}
-                      </Button>
-                    ))}
+                {themeGroups.map((group) => (
+                  <div className="theme-section" key={group.availability}>
+                    <div className="theme-section-title">{group.label}</div>
+                    <div className="theme-options">
+                      {group.themes.map((theme) => (
+                        <Button
+                          key={theme}
+                          type="button"
+                          size="sm"
+                          className="theme-option-button"
+                          variant={themePreference.theme === theme ? 'default' : 'outline'}
+                          onClick={() =>
+                            setThemePreference((prev) => ({
+                              mode: mapThemeToMode(theme, prev.mode),
+                              theme
+                            }))
+                          }
+                        >
+                          {themeLabels[theme] ?? theme}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="theme-section">
-                  <div className="theme-section-title">{t.theme_group_dark ?? 'Dark Themes'}</div>
-                  <div className="theme-options">
-                    {DARK_THEMES.map((theme) => (
-                      <Button
-                        key={theme}
-                        type="button"
-                        size="sm"
-                        className="theme-option-button"
-                        variant={themePreference.theme === theme ? 'default' : 'outline'}
-                        onClick={() =>
-                          setThemePreference({
-                            mode: mapThemeToMode(theme),
-                            theme: theme as ThemeName
-                          })
-                        }
-                      >
-                        {themeLabels[theme] ?? theme}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           )}
