@@ -11,13 +11,7 @@ from ptcgp_auto_v2.db.models import Account
 from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.services import ExchangeCardService as CoreExchangeCardService
 from ptcgp_auto_v2.web.queries.exchange_card_queries import list_exchange_requests
-
-
-def _serialize_account(account: Account) -> dict[str, Any]:
-    """把账号转成模板可直接消费的纯数据。"""
-    data = account.to_dict()
-    data["display_name"] = account.display_name
-    return data
+from ptcgp_auto_v2.web.utils.serialization import serialize_account
 
 
 def create_exchange_request_with_task(
@@ -76,7 +70,9 @@ def build_exchange_card_context(
     else:
         requests = result
         total_items = len(requests)
-    accounts = [_serialize_account(account) for account in session.exec(select(Account)).all()]
+    accounts = [
+        serialize_account(account) for account in session.exec(select(Account)).all()
+    ]
     account_name_map = {
         account["id"]: (
             account["nickname"] or account["game_id"] or f"#{account['id']}"

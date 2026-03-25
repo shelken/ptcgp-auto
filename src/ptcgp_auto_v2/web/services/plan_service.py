@@ -15,14 +15,12 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page_size,
     normalize_sort_order,
 )
+from ptcgp_auto_v2.web.utils.serialization import serialize_task_plan
 
 
 def _serialize_plan(plan: TaskPlan) -> dict[str, Any]:
     """把计划转成模板可直接使用的纯数据。"""
-    data = plan.to_dict()
-    data["task_types_list"] = data["task_types"]
-    data["config_dict"] = data["configuration"]
-    return data
+    return serialize_task_plan(plan)
 
 
 def build_plans_list_context(
@@ -98,78 +96,22 @@ def upsert_plan_from_form(form) -> str | None:
     plan_id = safe_get_string(form, "plan_id")
     name = safe_get_string(form, "name") or ""
     description = safe_get_string(form, "description")
-
-    task_order_str = safe_get_string(form, "task_order")
-    task_order = []
-    if task_order_str:
-        try:
-            task_order = json.loads(task_order_str)
-        except (json.JSONDecodeError, TypeError):
-            task_order = []
-
-    configuration = {}
-    enabled_task_types = set()
-
-    for key in form:
-        if key.startswith("task_enabled_"):
-            task_type = key.replace("task_enabled_", "")
-            enabled_task_types.add(task_type)
-
-            reset_type = safe_get_string(form, f"task_reset_{task_type}")
-            interval = safe_get_string(form, f"task_interval_{task_type}")
-
-            task_config = {}
-            if reset_type and isinstance(reset_type, str) and reset_type != "default":
-                task_config["reset_type"] = reset_type
-                if reset_type == "interval" and interval and isinstance(interval, str):
-                    try:
-                        task_config["interval_seconds"] = int(interval)
-                    except ValueError:
-                        pass
-
-            if task_config:
-                configuration[task_type] = task_config
-
-    if task_order:
-        task_types = [item for item in task_order if item in enabled_task_types]
-    else:
-        task_types = []
-        for key in form:
-            if key.startswith("task_enabled_"):
-                task_type = key.replace("task_enabled_", "")
-                task_types.append(task_type)
+    task_order = _parse_task_order(form)
+    enabled_task_types, configuration = _collect_enabled_tasks_and_config(form)
+    task_types = _build_task_types_from_form(form, task_order, enabled_task_types)
 
     with session_scope() as session:
         repo = TaskPlanRepository(session)
-        plan = None
-        if plan_id:
-            val = plan_id
-            if isinstance(val, str) and val.isdigit():
-                plan = repo.get_by_id(int(val))
-            if plan:
-                if plan.name != name:
-                    existing = repo.get_by_name(name)
-                    if existing and existing.id != plan.id:
-                        return name
-                plan.name = name
-                plan.description = description
-                plan.task_types = json.dumps(task_types)
-                plan.configuration = json.dumps(configuration)
-                if not repo.update(plan):
-                    pid_str = val if isinstance(val, str) else str(plan_id)
-                    print(f"ERROR: Failed to update plan {pid_str}")
-
-        if not plan:
-            existing = repo.get_by_name(name)
-            if existing:
-                return name
-            plan = TaskPlan(
-                name=name,
-                description=description,
-                task_types=json.dumps(task_types),
-                configuration=json.dumps(configuration),
-            )
-            plan = repo.create(plan)
+        plan = _upsert_plan_entity(
+            repo=repo,
+            plan_id=plan_id,
+            name=name,
+            description=description,
+            task_types=task_types,
+            configuration=configuration,
+        )
+        if isinstance(plan, str):
+            return plan
 
         if plan and plan.id is not None:
             account_repo = AccountRepository(session)
@@ -183,6 +125,127 @@ def upsert_plan_from_form(form) -> str | None:
                 )
 
     return None
+
+
+def _parse_task_order(form) -> list[Any]:
+    """解析任务顺序 JSON。"""
+    task_order_str = safe_get_string(form, "task_order")
+    if not task_order_str:
+        return []
+    try:
+        task_order = json.loads(task_order_str)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(task_order, list):
+        return []
+    return task_order
+
+
+def _collect_enabled_tasks_and_config(
+    form,
+) -> tuple[set[str], dict[str, dict[str, Any]]]:
+    """收集启用任务与任务配置。"""
+    enabled_task_types: set[str] = set()
+    configuration: dict[str, dict[str, Any]] = {}
+    for key in form:
+        if not key.startswith("task_enabled_"):
+            continue
+        task_type = key.replace("task_enabled_", "")
+        enabled_task_types.add(task_type)
+        task_config = _build_single_task_config(form, task_type)
+        if task_config:
+            configuration[task_type] = task_config
+    return enabled_task_types, configuration
+
+
+def _build_single_task_config(form, task_type: str) -> dict[str, Any]:
+    """构建单个任务配置。"""
+    reset_type = safe_get_string(form, f"task_reset_{task_type}")
+    interval = safe_get_string(form, f"task_interval_{task_type}")
+    task_config: dict[str, Any] = {}
+    if not reset_type or not isinstance(reset_type, str) or reset_type == "default":
+        return task_config
+    task_config["reset_type"] = reset_type
+    if reset_type != "interval" or not interval or not isinstance(interval, str):
+        return task_config
+    try:
+        task_config["interval_seconds"] = int(interval)
+    except ValueError:
+        return task_config
+    return task_config
+
+
+def _build_task_types_from_form(
+    form,
+    task_order: list[Any],
+    enabled_task_types: set[str],
+) -> list[Any]:
+    """按顺序生成最终 task_types 列表。"""
+    if task_order:
+        return [item for item in task_order if item in enabled_task_types]
+    task_types: list[str] = []
+    for key in form:
+        if key.startswith("task_enabled_"):
+            task_types.append(key.replace("task_enabled_", ""))
+    return task_types
+
+
+def _upsert_plan_entity(
+    *,
+    repo: TaskPlanRepository,
+    plan_id: str | None,
+    name: str,
+    description: str | None,
+    task_types: list[Any],
+    configuration: dict[str, dict[str, Any]],
+) -> TaskPlan | str:
+    """更新或创建计划，冲突时返回冲突名称。"""
+    plan = _resolve_existing_plan(repo, plan_id)
+    if plan is not None:
+        if plan.name != name and _plan_name_exists_for_other(repo, name, plan.id):
+            return name
+        plan.name = name
+        plan.description = description
+        plan.task_types = json.dumps(task_types)
+        plan.configuration = json.dumps(configuration)
+        if not repo.update(plan):
+            pid_str = plan_id if isinstance(plan_id, str) else str(plan_id)
+            print(f"ERROR: Failed to update plan {pid_str}")
+        return plan
+
+    if _plan_name_exists_for_other(repo, name, None):
+        return name
+    new_plan = TaskPlan(
+        name=name,
+        description=description,
+        task_types=json.dumps(task_types),
+        configuration=json.dumps(configuration),
+    )
+    return repo.create(new_plan)
+
+
+def _resolve_existing_plan(
+    repo: TaskPlanRepository,
+    plan_id: str | None,
+) -> TaskPlan | None:
+    """根据 plan_id 解析已存在计划。"""
+    if not plan_id or not isinstance(plan_id, str) or not plan_id.isdigit():
+        return None
+    return repo.get_by_id(int(plan_id))
+
+
+def _plan_name_exists_for_other(
+    repo: TaskPlanRepository,
+    name: str,
+    current_plan_id: int | None,
+) -> bool:
+    """检查名称是否被其他计划占用。"""
+    existing = repo.get_by_name(name)
+    if existing is None:
+        return False
+    if current_plan_id is None:
+        return True
+    return existing.id != current_plan_id
 
 
 def delete_plan_by_id(plan_id: int) -> None:

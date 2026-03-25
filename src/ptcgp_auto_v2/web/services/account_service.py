@@ -7,7 +7,6 @@ from ptcgp_auto_v2.core.scheduling_service import recompute_and_sync_account_sch
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
-from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
@@ -23,6 +22,10 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page,
     normalize_page_size,
     normalize_sort_order,
+)
+from ptcgp_auto_v2.web.utils.serialization import (
+    serialize_account,
+    serialize_task_plan,
 )
 
 
@@ -42,21 +45,13 @@ def _match_account(item: Account, query: str) -> bool:
     )
 
 
-def _serialize_task_plan(plan: TaskPlan) -> dict[str, Any]:
-    """把任务计划转成模板可直接使用的纯数据。"""
-    data = plan.to_dict()
-    return {
-        **data,
-        "task_types_list": data["task_types"],
-        "config_dict": data["configuration"],
-    }
-
-
 def _serialize_account_task_plan_assoc(assoc: AccountTaskPlan) -> dict[str, Any]:
     """把账号计划关联转成纯数据。"""
     return {
         **assoc.model_dump(),
-        "task_plan": _serialize_task_plan(assoc.task_plan) if assoc.task_plan else None,
+        "task_plan": (
+            serialize_task_plan(assoc.task_plan) if assoc.task_plan else None
+        ),
     }
 
 
@@ -66,7 +61,7 @@ def _serialize_account(
     include_assocs: bool = False,
 ) -> dict[str, Any]:
     """把账号转成纯数据。"""
-    data = {**account.to_dict(), "display_name": account.display_name}
+    data = serialize_account(account)
     if include_assocs:
         data["task_plan_associations"] = [
             _serialize_account_task_plan_assoc(assoc)
@@ -212,7 +207,8 @@ def build_account_plans_context(session: Session, account_id: int) -> dict | Non
         for item in sorted(account.task_plan_associations, key=lambda item: -item.priority)
     ]
     available_plans = [
-        _serialize_task_plan(item) for item in plan_repo.list_unassigned_for_account(account_id)
+        serialize_task_plan(item)
+        for item in plan_repo.list_unassigned_for_account(account_id)
     ]
 
     return {
