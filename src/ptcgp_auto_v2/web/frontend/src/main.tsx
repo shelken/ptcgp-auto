@@ -5,6 +5,9 @@ import { HashRouter } from 'react-router-dom'
 
 import App from '@/App'
 import '@/index.css'
+import '@/styles/records-layout.css'
+import '@/styles/owned-layout.css'
+import '@/styles/management-layout.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
