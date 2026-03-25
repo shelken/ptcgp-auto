@@ -529,6 +529,13 @@
   perspective: 800px;
 }
 
+.owned-card-preview-motion {
+  display: grid;
+  place-items: center;
+  transform-origin: center center;
+  transform-style: preserve-3d;
+}
+
 .owned-card-preview {
   aspect-ratio: 2 / 3;
 }

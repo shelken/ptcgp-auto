@@ -348,6 +348,15 @@
   cursor: grabbing;
 }
 
+.card-preview-motion {
+  width: 400px;
+  height: 560px;
+  display: grid;
+  place-items: center;
+  transform-origin: center center;
+  transform-style: preserve-3d;
+}
+
 .card-preview-surface {
   --preview-pointer-x: 50%;
   --preview-pointer-y: 50%;

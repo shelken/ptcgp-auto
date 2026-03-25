@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,9 @@ import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
+import { buildCardPreviewVisualVars, resolveCardPreviewEffectId } from '@/lib/card-preview-effects'
+import { getDefaultThemeRgb, resolveCardThemeColor } from '@/lib/card-theme-color'
+import { playCardFlipEntrance, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
@@ -283,11 +286,17 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [detailPageSize, setDetailPageSize] = useState(() => restoreDetailPageSize())
   const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
   const [pendingExchangeAccountId, setPendingExchangeAccountId] = useState<number | null>(null)
+  const [detailPreviewOriginRect, setDetailPreviewOriginRect] = useState<PreviewRectLike | null>(null)
+  const [detailPreviewThemeRgb, setDetailPreviewThemeRgb] = useState<[number, number, number]>(getDefaultThemeRgb)
+  const detailPreviewAnimatedKeyRef = useRef('')
+  const detailPreviewMotionRef = useRef<HTMLDivElement | null>(null)
   const {
     cardRef: detailPreviewCardRef,
     shineRef: detailPreviewShineRef,
     dragging: detailPreviewDragging,
     startDrag: startDetailPreviewDrag,
+    onPointerMove: onDetailPreviewPointerMove,
+    onPointerLeave: onDetailPreviewPointerLeave,
     stopDrag: stopDetailPreviewDrag,
     resetTransform: resetDetailPreviewTransform
   } = useCardPreviewDrag()
@@ -504,9 +513,15 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     setDetailQ('')
     setDetailSortBy('account_id')
     setDetailSortOrder('asc')
+    if (cardId === null) {
+      setDetailPreviewOriginRect(null)
+      detailPreviewAnimatedKeyRef.current = ''
+    }
   }, [resetDetailPreviewTransform, stopDetailPreviewDrag])
-  const openDetailModal = useCallback((cardId: number) => {
+  const openDetailModal = useCallback((cardId: number, originEl?: HTMLElement | null) => {
     resetDetailModalState(cardId)
+    setDetailPreviewOriginRect(snapshotElementRect(originEl))
+    detailPreviewAnimatedKeyRef.current = ''
   }, [resetDetailModalState])
   const closeDetailModal = useCallback(() => {
     resetDetailModalState(null)
@@ -539,6 +554,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     if (detailCardId === null) {
       stopDetailPreviewDrag(false)
       resetDetailPreviewTransform(false)
+      setDetailPreviewThemeRgb(getDefaultThemeRgb())
       return
     }
     resetDetailPreviewTransform(false)
@@ -612,6 +628,62 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         cardNumber: detailQuery.data.card.number
       })
     : null
+  const detailPreviewImageUrl = detailPreviewImageUrls?.cdnPng ?? ''
+
+  useEffect(() => {
+    if (!detailQuery.data || detailPreviewImageUrl.length === 0) {
+      setDetailPreviewThemeRgb(getDefaultThemeRgb())
+      return
+    }
+    let cancelled = false
+    void resolveCardThemeColor({
+      cacheKey: `${detailQuery.data.card.set_code}-${detailQuery.data.card.number}`,
+      imageUrl: detailPreviewImageUrl
+    }).then((result) => {
+      if (!cancelled) {
+        setDetailPreviewThemeRgb(result.rgb)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setDetailPreviewThemeRgb(getDefaultThemeRgb())
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [detailQuery.data, detailPreviewImageUrl])
+
+  const detailPreviewVisualVars = useMemo(
+    () =>
+      buildCardPreviewVisualVars({
+        rarity: detailQuery.data?.card.rarity ?? '',
+        rgb: detailPreviewThemeRgb
+      }),
+    [detailQuery.data?.card.rarity, detailPreviewThemeRgb]
+  )
+  const detailPreviewEffectId = useMemo(
+    () => resolveCardPreviewEffectId(detailQuery.data?.card.rarity ?? ''),
+    [detailQuery.data?.card.rarity]
+  )
+  const detailPreviewStyle = useMemo(
+    () => detailPreviewVisualVars as CSSProperties,
+    [detailPreviewVisualVars]
+  )
+
+  useEffect(() => {
+    if (detailCardId === null || !detailQuery.data || !detailPreviewMotionRef.current) {
+      return
+    }
+    const animationKey = `${detailCardId}-${detailQuery.data.card.id}`
+    if (detailPreviewAnimatedKeyRef.current === animationKey) {
+      return
+    }
+    detailPreviewAnimatedKeyRef.current = animationKey
+    void playCardFlipEntrance({
+      fromRect: detailPreviewOriginRect,
+      to: detailPreviewMotionRef.current
+    })
+  }, [detailCardId, detailPreviewMotionRef, detailPreviewOriginRect, detailQuery.data])
 
   const gridCards = (gridQuery.data?.pages ?? []).flatMap((page) => page.items)
   const cards = viewMode === 'grid' ? gridCards : (listQuery.data?.items ?? [])
@@ -871,7 +943,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                         key={item.card.id}
                         type="button"
                         className={`owned-card ${item.ownership_state === 'missing' ? 'owned-card--missing' : ''}`}
-                        onClick={() => openDetailModal(item.card.id)}
+                        onClick={(event) => openDetailModal(item.card.id, event.currentTarget)}
                       >
                         <div className="owned-card-media">
                           <img
@@ -944,7 +1016,11 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => openDetailModal(item.card.id)}
+                          onClick={(event) => {
+                            const row = event.currentTarget.closest('tr')
+                            const thumb = row?.querySelector('.owned-thumb')
+                            openDetailModal(item.card.id, (thumb as HTMLElement | null) ?? event.currentTarget)
+                          }}
                         >
                           {tr(t, 'label_detail', 'Detail')}
                         </Button>
@@ -1003,26 +1079,34 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                       <span className="tag">{detailQuery.data.card.rarity}</span>
                     </div>
                     <div className="owned-card-preview-wrap">
-                      <div
-                        ref={detailPreviewCardRef}
-                        className={`owned-card-preview owned-card-draggable ${ownershipScope === 'missing' ? 'owned-card-preview--missing' : ''} ${detailPreviewDragging ? 'dragging' : ''}`}
-                        onPointerDown={startDetailPreviewDrag}
-                      >
-                        <img
-                          src={detailPreviewImageUrls?.cdnPng ?? ''}
-                          alt={detailQuery.data.card_display_name}
-                          className="owned-card-preview-image"
-                          loading="lazy"
-                          decoding="async"
-                          draggable={false}
-                          onError={(event) => {
-                            if (!detailPreviewImageUrls) {
-                              return
-                            }
-                            applyCardPreviewImageFallback(event.currentTarget, detailPreviewImageUrls)
-                          }}
-                        />
-                        <div ref={detailPreviewShineRef} className="owned-card-shine" />
+                      <div ref={detailPreviewMotionRef} className="owned-card-preview-motion">
+                        <div
+                          ref={detailPreviewCardRef}
+                          className={`owned-card-preview card-preview-surface owned-card-draggable ${ownershipScope === 'missing' ? 'owned-card-preview--missing' : ''} ${detailPreviewDragging ? 'dragging' : ''}`}
+                          style={detailPreviewStyle}
+                          data-preview-effect={detailPreviewEffectId}
+                          onPointerDown={startDetailPreviewDrag}
+                          onPointerMove={onDetailPreviewPointerMove}
+                          onPointerLeave={onDetailPreviewPointerLeave}
+                        >
+                          <img
+                            src={detailPreviewImageUrls?.cdnPng ?? ''}
+                            alt={detailQuery.data.card_display_name}
+                            className="owned-card-preview-image card-preview-image"
+                            loading="lazy"
+                            decoding="async"
+                            draggable={false}
+                            onError={(event) => {
+                              if (!detailPreviewImageUrls) {
+                                return
+                              }
+                              applyCardPreviewImageFallback(event.currentTarget, detailPreviewImageUrls)
+                            }}
+                          />
+                          <div className="card-preview-layer card-preview-layer--foil" />
+                          <div ref={detailPreviewShineRef} className="card-preview-layer card-preview-layer--glare owned-card-shine" />
+                          <div className="card-preview-layer card-preview-layer--spark" />
+                        </div>
                       </div>
                     </div>
                     <div className="text-xs text-muted text-center">{tr(t, 'card_preview_hint', '拖动旋转查看')}</div>
