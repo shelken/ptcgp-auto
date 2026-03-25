@@ -26,7 +26,8 @@
           packages = with pkgs; [
             python312
             uv
-            android-tools  # adb
+            bun
+            android-tools # adb
             sqlit-tui
           ];
 
