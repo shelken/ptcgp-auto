@@ -9,7 +9,104 @@ from ptcgp_auto_v2.db.repositories import (
     ExchangeCardRequestRepository,
 )
 from ptcgp_auto_v2.services import ExchangeCardService
+from ptcgp_auto_v2.web.utils.filter_utils import (
+    normalize_choice,
+    normalize_page,
+    normalize_page_size,
+    normalize_sort_order,
+)
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n, resolve_card_name_from_data
+
+OWNERSHIP_SCOPES = {"owned", "missing", "all"}
+EXCHANGE_ACCOUNT_SORT_FIELDS = {
+    "account_id",
+    "friend_id",
+    "nickname",
+    "count",
+    "exchange_points",
+}
+
+
+def _normalize_ownership_scope(value: str | None) -> str:
+    """归一化卡牌拥有状态筛选值。"""
+    return normalize_choice(value, allowed=OWNERSHIP_SCOPES, default="owned")
+
+
+def _build_owned_card_filters(
+    *,
+    account_id: str | None,
+    rarity: list[str] | None,
+    card_type: list[str] | None,
+    set_code: list[str] | None,
+    pack_name: list[str] | None,
+    element: list[str] | None,
+    ownership_scope: str,
+) -> dict[str, Any]:
+    """构建仓储查询参数。"""
+    return {
+        "account_query": account_id,
+        "rarities": rarity or [],
+        "card_types": card_type or [],
+        "set_codes": set_code or [],
+        "pack_names": pack_name or [],
+        "elements": element or [],
+        "ownership_scope": ownership_scope,
+    }
+
+
+def _attach_card_display_names(items: list[dict[str, Any]]) -> None:
+    """为卡牌列表补齐当前语言展示名。"""
+    for item in items:
+        card = item.get("card") if isinstance(item, dict) else None
+        if isinstance(card, Card):
+            item["card_display_name"] = resolve_card_name_from_data(
+                card.data,
+                fallback=card.name,
+            )
+
+
+def _normalize_exchange_account_sort(
+    sort_by: str,
+    sort_order: str,
+) -> tuple[str, str]:
+    """归一化交换账号表格排序参数。"""
+    normalized_sort_by = (
+        sort_by if sort_by in EXCHANGE_ACCOUNT_SORT_FIELDS else "account_id"
+    )
+    return normalized_sort_by, normalize_sort_order(sort_order)
+
+
+def _matches_exchange_account_keyword(item: dict[str, Any], keyword: str) -> bool:
+    """判断账号行是否命中关键词。"""
+    if not keyword:
+        return True
+    account_id = str(item.get("account_id") or "").lower()
+    friend_id = str(item.get("friend_id") or "").lower()
+    nickname = str(item.get("nickname") or "").lower()
+    return keyword in account_id or keyword in friend_id or keyword in nickname
+
+
+def _sort_exchange_account_rows(
+    rows: list[dict[str, Any]],
+    *,
+    sort_by: str,
+    sort_order: str,
+) -> None:
+    """按目标字段排序交换账号行。"""
+    reverse = sort_order == "desc"
+    if sort_by == "friend_id":
+        rows.sort(key=lambda x: str(x.get("friend_id") or ""), reverse=reverse)
+        return
+    if sort_by == "nickname":
+        rows.sort(key=lambda x: str(x.get("nickname") or ""), reverse=reverse)
+        return
+    if sort_by == "count":
+        rows.sort(key=lambda x: int(x.get("count") or 0), reverse=reverse)
+        return
+    if sort_by == "exchange_points":
+        rows.sort(key=lambda x: int(x.get("exchange_points") or -1), reverse=reverse)
+        return
+    rows.sort(key=lambda x: int(x.get("account_id") or 0), reverse=reverse)
 
 
 def build_owned_cards_list_context(
@@ -36,26 +133,25 @@ def build_owned_cards_list_context(
         - has_next: 是否有下一页
         - total: 总数量
     """
-    from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
-
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
-    normalized_scope = (
-        ownership_scope if ownership_scope in {"owned", "missing", "all"} else "owned"
+    normalized_scope = _normalize_ownership_scope(ownership_scope)
+    filters = _build_owned_card_filters(
+        account_id=account_id,
+        rarity=rarity,
+        card_type=card_type,
+        set_code=set_code,
+        pack_name=pack_name,
+        element=element,
+        ownership_scope=normalized_scope,
     )
 
     repo = AccountCardRepository(session)
     items = repo.list_owned_cards(
         page=normalized_page,
         page_size=normalized_page_size,
-        account_query=account_id,
-        rarities=rarity or [],
-        card_types=card_type or [],
-        set_codes=set_code or [],
-        pack_names=pack_name or [],
-        elements=element or [],
+        **filters,
         sort_by=sort_by,
-        ownership_scope=normalized_scope,
     )
 
     has_next = len(items) > normalized_page_size
@@ -63,22 +159,9 @@ def build_owned_cards_list_context(
     has_prev = normalized_page > 0
 
     total = repo.count_cards_by_scope(
-        account_query=account_id,
-        rarities=rarity or [],
-        card_types=card_type or [],
-        set_codes=set_code or [],
-        pack_names=pack_name or [],
-        elements=element or [],
-        ownership_scope=normalized_scope,
+        **filters,
     )
-
-    for item in items:
-        card = item.get("card") if isinstance(item, dict) else None
-        if isinstance(card, Card):
-            item["card_display_name"] = resolve_card_name_from_data(
-                card.data,
-                fallback=card.name,
-            )
+    _attach_card_display_names(items)
 
     return {
         "items": items,
@@ -102,20 +185,19 @@ def build_owned_cards_progress_context(
     ownership_scope: str = "owned",
 ) -> dict[str, Any]:
     """构建拥有卡牌页顶部统计上下文。"""
-    normalized_scope = (
-        ownership_scope if ownership_scope in {"owned", "missing", "all"} else "owned"
+    normalized_scope = _normalize_ownership_scope(ownership_scope)
+    filters = _build_owned_card_filters(
+        account_id=account_id,
+        rarity=rarity,
+        card_type=card_type,
+        set_code=set_code,
+        pack_name=pack_name,
+        element=element,
+        ownership_scope=normalized_scope,
     )
     with session_scope() as session:
         repo = AccountCardRepository(session)
-        filtered_cards_count = repo.count_cards_by_scope(
-            account_query=account_id,
-            rarities=rarity or [],
-            card_types=card_type or [],
-            set_codes=set_code or [],
-            pack_names=pack_name or [],
-            elements=element or [],
-            ownership_scope=normalized_scope,
-        )
+        filtered_cards_count = repo.count_cards_by_scope(**filters)
         rarity_progress = repo.get_high_rarity_progress()
         return {
             "filtered_cards_count": filtered_cards_count,
@@ -152,9 +234,7 @@ def build_owned_card_modal_context(
             fallback=card.name,
         ),
         "ownership_state": (
-            ownership_state
-            if ownership_state in {"owned", "missing", "all"}
-            else "owned"
+            _normalize_ownership_scope(ownership_state)
         ),
         "exchange_blocked": exchange_blocked,
         "total_accounts": table_context["total_items"],
@@ -213,17 +293,12 @@ def build_owned_card_exchange_accounts_context(
     sort_order: str = "asc",
 ) -> dict[str, Any]:
     """构建已拥有卡牌弹窗中的交换账号分页表格上下文。"""
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 50)
-    allowed_sort = {
-        "account_id",
-        "friend_id",
-        "nickname",
-        "count",
-        "exchange_points",
-    }
-    normalized_sort_by = sort_by if sort_by in allowed_sort else "account_id"
-    normalized_sort_order = "desc" if sort_order == "desc" else "asc"
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size, max_size=50)
+    normalized_sort_by, normalized_sort_order = _normalize_exchange_account_sort(
+        sort_by,
+        sort_order,
+    )
 
     card = session.get(Card, card_id)
     if not card:
@@ -246,19 +321,11 @@ def build_owned_card_exchange_accounts_context(
     data = repo.get_owned_card_accounts(card_id)
     exchangeable = ExchangeCardService.is_exchangeable(card.rarity)
 
-    filtered = []
+    keyword = q.lower()
+    filtered: list[dict[str, Any]] = []
     for item in data["accounts"]:
-        if q:
-            keyword = q.lower()
-            account_id = str(item.get("account_id") or "").lower()
-            friend_id = str(item.get("friend_id") or "").lower()
-            nickname = str(item.get("nickname") or "").lower()
-            if (
-                keyword not in account_id
-                and keyword not in friend_id
-                and keyword not in nickname
-            ):
-                continue
+        if not _matches_exchange_account_keyword(item, keyword):
+            continue
         row = dict(item)
         account_id = row.get("account_id")
         row["has_active_request"] = bool(
@@ -267,20 +334,11 @@ def build_owned_card_exchange_accounts_context(
         row["exchange_action"] = _build_exchange_action(card, row)
         filtered.append(row)
 
-    reverse = normalized_sort_order == "desc"
-    if normalized_sort_by == "friend_id":
-        filtered.sort(key=lambda x: str(x.get("friend_id") or ""), reverse=reverse)
-    elif normalized_sort_by == "nickname":
-        filtered.sort(key=lambda x: str(x.get("nickname") or ""), reverse=reverse)
-    elif normalized_sort_by == "count":
-        filtered.sort(key=lambda x: int(x.get("count") or 0), reverse=reverse)
-    elif normalized_sort_by == "exchange_points":
-        filtered.sort(
-            key=lambda x: int(x.get("exchange_points") or -1),
-            reverse=reverse,
-        )
-    else:
-        filtered.sort(key=lambda x: int(x.get("account_id") or 0), reverse=reverse)
+    _sort_exchange_account_rows(
+        filtered,
+        sort_by=normalized_sort_by,
+        sort_order=normalized_sort_order,
+    )
 
     total_items = len(filtered)
     start = normalized_page * normalized_page_size

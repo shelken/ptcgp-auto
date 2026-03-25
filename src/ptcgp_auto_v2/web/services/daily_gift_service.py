@@ -209,6 +209,52 @@ def _build_record_rows(
     return rows
 
 
+def _build_account_name_map(accounts: list[Any]) -> dict[int, str]:
+    """构建账号 ID 到展示名映射。"""
+    return {
+        account.id: account.display_name
+        for account in accounts
+        if isinstance(account.id, int)
+    }
+
+
+def _build_pair_section(
+    *,
+    session: Session,
+    selected_date: str,
+    account_id: int | None,
+    account_name_map: dict[int, str],
+    pair_page: int,
+    pair_page_size: int,
+) -> dict[str, Any]:
+    """构建互送进度区块。"""
+    active_pairs = list_active_gift_pairs(session=session, account_id=account_id)
+    pair_cards = _build_pair_cards(
+        pairs=active_pairs,
+        account_name_map=account_name_map,
+    )
+    pair_records = list_daily_gift_pair_records(
+        session=session,
+        biz_date_local=selected_date,
+        account_id=account_id,
+    )
+    pair_rows_all = _build_pair_send_status_rows(
+        records=pair_records,
+        pair_cards=pair_cards,
+    )
+    rows, has_prev, has_next, total = _paginate_rows(
+        pair_rows_all,
+        page=pair_page,
+        page_size=pair_page_size,
+    )
+    return {
+        "pair_send_status_rows": rows,
+        "pair_total": total,
+        "pair_has_prev": has_prev,
+        "pair_has_next": has_next,
+    }
+
+
 def build_daily_gift_context(
     session: Session,
     biz_date_local: str | None = None,
@@ -230,11 +276,7 @@ def build_daily_gift_context(
     normalized_pair_page_size = normalize_page_size(pair_page_size)
 
     accounts = list_all_accounts(session=session)
-    account_name_map = {
-        account.id: account.display_name
-        for account in accounts
-        if isinstance(account.id, int)
-    }
+    account_name_map = _build_account_name_map(accounts)
 
     stats = fetch_daily_gift_stats(
         session=session,
@@ -251,24 +293,13 @@ def build_daily_gift_context(
         page_size=normalized_page_size,
     )
 
-    active_pairs = list_active_gift_pairs(session=session, account_id=account_id)
-    pair_cards = _build_pair_cards(
-        pairs=active_pairs,
-        account_name_map=account_name_map,
-    )
-    pair_records = list_daily_gift_pair_records(
+    pair_section = _build_pair_section(
         session=session,
-        biz_date_local=selected_date,
+        selected_date=selected_date,
         account_id=account_id,
-    )
-    pair_send_status_rows_all = _build_pair_send_status_rows(
-        records=pair_records,
-        pair_cards=pair_cards,
-    )
-    pair_send_status_rows, pair_has_prev, pair_has_next, pair_total = _paginate_rows(
-        pair_send_status_rows_all,
-        page=normalized_pair_page,
-        page_size=normalized_pair_page_size,
+        account_name_map=account_name_map,
+        pair_page=normalized_pair_page,
+        pair_page_size=normalized_pair_page_size,
     )
 
     return {
@@ -286,12 +317,12 @@ def build_daily_gift_context(
         "has_next": has_next,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "pair_send_status_rows": pair_send_status_rows,
-        "pair_total": pair_total,
+        "pair_send_status_rows": pair_section["pair_send_status_rows"],
+        "pair_total": pair_section["pair_total"],
         "pair_page": normalized_pair_page,
         "pair_page_size": normalized_pair_page_size,
-        "pair_has_prev": pair_has_prev,
-        "pair_has_next": pair_has_next,
+        "pair_has_prev": pair_section["pair_has_prev"],
+        "pair_has_next": pair_section["pair_has_next"],
         "stats": stats,
         "selected_biz_date_local": selected_date,
         "current_biz_date_local": current_biz_date_local,
