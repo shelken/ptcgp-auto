@@ -1,17 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { tr } from '@/lib/i18n'
 
 interface PlaceholderPageProps {
   title: string
+  t?: Record<string, string>
 }
 
-export function PlaceholderPage({ title }: PlaceholderPageProps) {
+export function PlaceholderPage({ title, t }: PlaceholderPageProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-slate-600">迁移中：该页面将在后续实验中完成数据与交互对齐。</p>
+        <p className="text-sm text-slate-600">{tr(t ?? {}, 'placeholder_migration_notice', 'Migration in progress: this page will be aligned in a future iteration.')}</p>
       </CardContent>
     </Card>
   )

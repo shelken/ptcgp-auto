@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { buildQuery, fetchJson } from '@/lib/api'
+import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { tr } from '@/lib/i18n'
 import type { BootstrapOptions } from '@/types/api'
 
@@ -202,49 +203,78 @@ function BatchOverviewThumb({
 }
 
 export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
+  const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'records_rarity'))
   const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseSearchList(searchParams, 'records_type'))
-  const [page, setPage] = useState(() => {
-    const pageValue = Number(searchParams.get('records_page') ?? 0)
-    return Number.isFinite(pageValue) && pageValue >= 0 ? pageValue : 0
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const stored = window.localStorage.getItem(RECORDS_VIEW_MODE_KEY)
+    return stored === 'list' ? 'list' : 'grid'
   })
   const [previewCard, setPreviewCard] = useState<PreviewState | null>(null)
+  const [previewRotate, setPreviewRotate] = useState({ x: 0, y: 0 })
+  const [previewDragging, setPreviewDragging] = useState(false)
   const [activeBatchPack, setActiveBatchPack] = useState<Record<string, number | null>>({})
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
     next.delete('records_rarity')
     next.delete('records_type')
-    next.delete('records_page')
+    next.delete('records_view')
     selectedRarity.forEach((item) => next.append('records_rarity', item))
     selectedTypes.forEach((item) => next.append('records_type', item))
-    next.set('records_page', String(page))
+    next.set('records_view', viewMode)
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true })
     }
-  }, [page, searchParams, selectedRarity, selectedTypes, setSearchParams])
+  }, [searchParams, selectedRarity, selectedTypes, setSearchParams, viewMode])
 
-  const queryString = useMemo(
+  useEffect(() => {
+    window.localStorage.setItem(RECORDS_VIEW_MODE_KEY, viewMode)
+  }, [viewMode])
+
+  const queryBaseString = useMemo(
     () =>
       buildQuery({
-        page,
         page_size: 10,
         lang,
         rarity: selectedRarity,
         card_type: selectedTypes
       }),
-    [lang, page, selectedRarity, selectedTypes]
+    [lang, selectedRarity, selectedTypes]
   )
 
-  const query = useQuery({
-    queryKey: ['records', queryString],
-    queryFn: () => fetchJson<RecordsResponse>(`/api/react/records?${queryString}`)
+  const query = useInfiniteQuery({
+    queryKey: ['records', queryBaseString],
+    queryFn: ({ pageParam }) =>
+      fetchJson<RecordsResponse>(
+        `/api/react/records?${buildQuery({
+          page: pageParam,
+          page_size: 10,
+          lang,
+          rarity: selectedRarity,
+          card_type: selectedTypes
+        })}`
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
+    refetchInterval: 60000
   })
 
-  const data = query.data
+  const pages = query.data?.pages ?? []
+  const records = pages.flatMap((page) => page.items)
+  const total = pages[0]?.total ?? 0
+  const hasNextPage = Boolean(pages[pages.length - 1]?.has_next)
+  const sentinelRef = useInfiniteTrigger({
+    enabled: hasNextPage && !query.isFetchingNextPage,
+    onLoadMore: useCallback(() => {
+      if (!query.isFetchingNextPage && query.hasNextPage) {
+        void query.fetchNextPage()
+      }
+    }, [query])
+  })
+
   const clearFilters = () => {
-    setPage(0)
     setSelectedRarity([])
     setSelectedTypes([])
   }
@@ -254,9 +284,20 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
       <div className="surface-card section-stack">
         <div className="pagination-row">
           <h2 className="section-title">{tr(t, 'filter_title', 'Filters')}</h2>
-          <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
-            {tr(t, 'clear_filters', 'Clear')}
-          </Button>
+          <div className="filter-row">
+            <Button type="button" size="sm" variant={viewMode === 'list' ? 'default' : 'outline'} onClick={() => setViewMode('list')}>
+              {tr(t, 'view_list', 'List')}
+            </Button>
+            <Button type="button" size="sm" variant={viewMode === 'grid' ? 'default' : 'outline'} onClick={() => setViewMode('grid')}>
+              {tr(t, 'view_grid', 'Grid')}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => query.refetch()}>
+              {tr(t, 'refresh', 'Refresh')}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
+              {tr(t, 'clear_filters', 'Clear')}
+            </Button>
+          </div>
         </div>
 
         <div className="section-stack">
@@ -269,7 +310,6 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
                 size="sm"
                 variant={selectedRarity.includes(rarity) ? 'default' : 'outline'}
                 onClick={() => {
-                  setPage(0)
                   setSelectedRarity((prev) => toggleItem(prev, rarity))
                 }}
               >
@@ -289,7 +329,6 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
                 size="sm"
                 variant={selectedTypes.includes(cardType) ? 'default' : 'outline'}
                 onClick={() => {
-                  setPage(0)
                   setSelectedTypes((prev) => toggleItem(prev, cardType))
                 }}
               >
@@ -303,11 +342,11 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
       {query.isLoading && <div className="surface-card text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
       {query.isError && <div className="surface-card text-sm text-danger">{(query.error as Error).message}</div>}
 
-      {data && (
+      {pages.length > 0 && (
         <>
-          {data.items.length === 0 && <div className="surface-card text-sm text-muted">{tr(t, 'end_of_records', 'No records')}</div>}
-          <div className="layout-grid">
-            {data.items.map((item, index) => (
+          {records.length === 0 && <div className="surface-card text-sm text-muted">{tr(t, 'end_of_records', 'No records')}</div>}
+          <div className={`layout-grid ${viewMode === 'list' ? 'layout-grid--list' : ''}`}>
+            {records.map((item, index) => (
               <article key={`${item.opened_at}-${index}`} className="card-item">
                 <div className="section-stack">
                   <div className="section-title">{item.account_name}</div>
@@ -398,38 +437,87 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
             ))}
           </div>
 
-          <div className="surface-card pagination-row">
-            <div className="text-xs text-muted">{tr(t, 'total_text', 'Total')}: {data.total}</div>
-            <div className="filter-row">
-              <Button type="button" size="sm" variant="outline" disabled={!data.has_prev} onClick={() => setPage((prev) => Math.max(prev - 1, 0))}>
-                {tr(t, 'btn_prev_page', 'Previous')}
-              </Button>
-              <span className="text-xs mono px-2 py-1">{page + 1}</span>
-              <Button type="button" size="sm" variant="outline" disabled={!data.has_next} onClick={() => setPage((prev) => prev + 1)}>
-                {tr(t, 'btn_next_page', 'Next')}
-              </Button>
-            </div>
+          <div className="surface-card section-stack">
+            <div className="text-xs text-muted">{tr(t, 'total_text', 'Total')}: {total}</div>
+            {query.isFetchingNextPage && (
+              <div className="text-xs text-muted">{tr(t, 'label_loading_more', 'Loading more...')}</div>
+            )}
+            {!hasNextPage && records.length > 0 && (
+              <div className="text-xs text-muted">{tr(t, 'label_reach_end', 'Reached the end')}</div>
+            )}
+            <div ref={sentinelRef} className="infinite-sentinel" />
           </div>
         </>
       )}
 
       {previewCard && (
-        <div className="dialog-overlay" onClick={() => setPreviewCard(null)}>
+        <div className="dialog-overlay" onClick={() => {
+          setPreviewCard(null)
+          setPreviewRotate({ x: 0, y: 0 })
+          setPreviewDragging(false)
+        }}>
           <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
             <div className="pagination-row">
               <div className="section-title">{previewCard.title}</div>
-              <Button type="button" size="sm" variant="outline" onClick={() => setPreviewCard(null)}>
+              <Button type="button" size="sm" variant="outline" onClick={() => {
+                setPreviewCard(null)
+                setPreviewRotate({ x: 0, y: 0 })
+                setPreviewDragging(false)
+              }}>
                 {tr(t, 'label_close', 'Close')}
               </Button>
             </div>
-            <img
-              src={getCardImageUrls(assets, {
-                setCode: previewCard.setCode,
-                cardNumber: previewCard.cardNumber
-              }).png}
-              alt={previewCard.title}
-              className="record-preview-image"
-            />
+            <div
+              className={`record-preview-card ${previewDragging ? 'is-dragging' : ''}`}
+              style={{ transform: `rotateX(${previewRotate.x}deg) rotateY(${previewRotate.y}deg)` }}
+              onPointerDown={(event) => {
+                const target = event.currentTarget
+                target.dataset.dragging = '1'
+                target.dataset.lastX = String(event.clientX)
+                target.dataset.lastY = String(event.clientY)
+                target.setPointerCapture(event.pointerId)
+                setPreviewDragging(true)
+              }}
+              onPointerMove={(event) => {
+                const target = event.currentTarget
+                if (target.dataset.dragging !== '1') {
+                  return
+                }
+                const lastX = Number(target.dataset.lastX ?? event.clientX)
+                const lastY = Number(target.dataset.lastY ?? event.clientY)
+                const deltaX = event.clientX - lastX
+                const deltaY = event.clientY - lastY
+                target.dataset.lastX = String(event.clientX)
+                target.dataset.lastY = String(event.clientY)
+                setPreviewRotate((prev) => ({
+                  x: Math.max(-45, Math.min(45, prev.x - deltaY * 0.28)),
+                  y: Math.max(-45, Math.min(45, prev.y + deltaX * 0.28))
+                }))
+              }}
+              onPointerUp={(event) => {
+                const target = event.currentTarget
+                target.dataset.dragging = '0'
+                target.releasePointerCapture(event.pointerId)
+                setPreviewDragging(false)
+                setPreviewRotate({ x: 0, y: 0 })
+              }}
+              onPointerCancel={(event) => {
+                const target = event.currentTarget
+                target.dataset.dragging = '0'
+                target.releasePointerCapture(event.pointerId)
+                setPreviewDragging(false)
+                setPreviewRotate({ x: 0, y: 0 })
+              }}
+            >
+              <img
+                src={getCardImageUrls(assets, {
+                  setCode: previewCard.setCode,
+                  cardNumber: previewCard.cardNumber
+                }).png}
+                alt={previewCard.title}
+                className="record-preview-image"
+              />
+            </div>
             <div className="filter-row">
               <span className="tag">{previewCard.rarity}</span>
               <span className="tag">{previewCard.setCode}</span>
