@@ -44,7 +44,10 @@ from ptcgp_auto_v2.web.services.metadata_service import (
 )
 from ptcgp_auto_v2.web.services.notification_service import (
     TASK_STATUS_OPTIONS,
+    build_notification_card_selector_context,
+    build_notification_panel_context,
     build_notifications_context,
+    get_unread_notification_count,
     get_notification_by_id,
     get_task_type_options,
     list_rarity_codes,
@@ -89,6 +92,58 @@ router = APIRouter(prefix="/api/react", tags=["react-api"])
 def _json(payload: Any) -> JSONResponse:
     """统一 JSON 输出。"""
     return JSONResponse(content=jsonable_encoder(payload))
+
+
+def _parse_unique_int_ids(values: list[str]) -> list[int]:
+    """解析并去重整数 ID 列表，保留原顺序。"""
+    parsed_ids: list[int] = []
+    for item in values:
+        if not str(item).isdigit():
+            continue
+        parsed = int(item)
+        if parsed not in parsed_ids:
+            parsed_ids.append(parsed)
+    return parsed_ids
+
+
+@router.get("/notifications/count")
+async def get_notifications_count():
+    """获取顶部通知未读数量。"""
+    return _json({"unread_count": get_unread_notification_count()})
+
+
+@router.get("/notifications/panel")
+async def get_notifications_panel(
+    page: int = Query(default=0),
+    page_size: int = Query(default=10),
+    session: Session = Depends(get_fastapi_session),
+):
+    """获取顶部通知抽屉数据。"""
+    return _json(
+        build_notification_panel_context(
+            session=session,
+            page=max(page, 0),
+            page_size=min(max(page_size, 1), 50),
+        )
+    )
+
+
+@router.post("/notifications/{notification_id}/mark-read")
+async def post_mark_notification_read_for_panel(notification_id: int):
+    """顶部通知抽屉：标记单条已读。"""
+    mark_notification_as_read(notification_id)
+    return _json({"ok": True})
+
+
+@router.post("/notifications/mark-all-read")
+async def post_mark_all_notifications_read_for_panel(request: Request):
+    """顶部通知抽屉：批量标记已读。"""
+    body = await request.json()
+    count = mark_all_notifications_as_read(
+        scene=normalize_scene(body.get("scene")) or None,
+        account_id=parse_optional_int(body.get("account_id")),
+    )
+    return _json({"ok": True, "count": count})
 
 
 @router.get("/records")
@@ -839,6 +894,38 @@ async def post_notification_config(
     )
 
 
+@router.get("/management/notifications/card-picker")
+async def get_management_notification_card_picker(
+    request: Request,
+    scene: str = Query(default="rare_card_obtained"),
+    card_selector_q: str = Query(default=""),
+    card_selector_rarity: str = Query(default=""),
+    card_selector_set_code: str = Query(default=""),
+    card_selector_pack_name: str = Query(default=""),
+    card_selector_sort_by: str = Query(default="id"),
+    card_selector_sort_order: str = Query(default="asc"),
+    card_selector_page: int = Query(default=0),
+    card_selector_page_size: int = Query(default=24),
+    session: Session = Depends(get_fastapi_session),
+):
+    """获取通知配置卡牌选择器数据。"""
+    selected_ids = _parse_unique_int_ids(request.query_params.getlist("notify_card_ids"))
+    context = build_notification_card_selector_context(
+        session=session,
+        scene=normalize_scene(scene) or "rare_card_obtained",
+        selected_card_ids=selected_ids,
+        q=card_selector_q,
+        rarity=card_selector_rarity,
+        set_code=card_selector_set_code,
+        pack_name=card_selector_pack_name,
+        sort_by=card_selector_sort_by,
+        sort_order=card_selector_sort_order,
+        page=max(card_selector_page, 0),
+        page_size=min(max(card_selector_page_size, 1), 60),
+    )
+    return _json(context)
+
+
 @router.post("/management/notifications/test-webhook")
 async def post_notification_test_webhook(
     request: Request,
@@ -847,14 +934,38 @@ async def post_notification_test_webhook(
     """发送通知测试 Webhook。"""
     body = await request.json()
     notification_id = parse_optional_int(body.get("notification_id"))
+    scene = normalize_scene(body.get("scene")) or None
+    account_id = parse_optional_int(body.get("account_id"))
+    is_read_raw = str(body.get("is_read") or "").strip().lower()
+    q = str(body.get("q") or "")
+    sort_by = str(body.get("sort_by") or "created_at")
+    sort_order = str(body.get("sort_order") or "desc")
+    page = parse_optional_int(body.get("page")) or 0
+    page_size = parse_optional_int(body.get("page_size")) or 10
 
     _, t = get_current_i18n()
     notification = None
     if notification_id is not None:
         notification = get_notification_by_id(notification_id)
 
+    parsed_is_read: bool | None = None
+    if is_read_raw == "true":
+        parsed_is_read = True
+    if is_read_raw == "false":
+        parsed_is_read = False
+
     if notification is None:
-        context = build_notifications_context(session=session, page=0, page_size=1)
+        context = build_notifications_context(
+            session=session,
+            scene=scene,
+            account_id=account_id,
+            is_read=parsed_is_read,
+            q=q,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            page=max(page, 0),
+            page_size=min(max(page_size, 1), 100),
+        )
         notifications = context.get("notifications") or []
         notification = notifications[0] if notifications else None
 
