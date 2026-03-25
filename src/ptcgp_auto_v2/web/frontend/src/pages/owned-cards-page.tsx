@@ -2,6 +2,8 @@ import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { Tooltip } from '@/components/ui/tooltip'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
@@ -1226,20 +1228,24 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                       }}
                       placeholder={tr(t, 'exchange_search_accounts', 'Search Account ID / nickname / friend id')}
                     />
-                    <select
-                      className="field-select"
-                      value={detailSortBy}
-                      onChange={(event) => {
+                    <Select
+                      value={encodeSelectValue(detailSortBy)}
+                      onValueChange={(value) => {
                         setDetailPage(0)
-                        setDetailSortBy(event.target.value as DetailSortField)
+                        setDetailSortBy(decodeSelectValue(value) as DetailSortField)
                       }}
                     >
-                      <option value="account_id">{tr(t, 'col_account_id', 'Account ID')}</option>
-                      <option value="friend_id">{tr(t, 'col_friend_id', 'Friend ID')}</option>
-                      <option value="nickname">{tr(t, 'col_nickname', 'Nickname')}</option>
-                      <option value="count">{tr(t, 'col_count', 'Count')}</option>
-                      <option value="exchange_points">{tr(t, 'col_exchange_points', 'Exchange Points')}</option>
-                    </select>
+                      <SelectTrigger className="field-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="account_id">{tr(t, 'col_account_id', 'Account ID')}</SelectItem>
+                        <SelectItem value="friend_id">{tr(t, 'col_friend_id', 'Friend ID')}</SelectItem>
+                        <SelectItem value="nickname">{tr(t, 'col_nickname', 'Nickname')}</SelectItem>
+                        <SelectItem value="count">{tr(t, 'col_count', 'Count')}</SelectItem>
+                        <SelectItem value="exchange_points">{tr(t, 'col_exchange_points', 'Exchange Points')}</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
                       size="sm"
@@ -1363,26 +1369,36 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                                       </Button>
                                     </div>
                                   ) : (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={!row.exchange_action.enabled || exchangeMutation.isPending}
-                                      onClick={() => {
-                                        setPendingExchangeAccountId(row.account_id)
-                                        setDetailNotice(null)
-                                      }}
-                                    >
-                                      {tr(t, 'exchange_entry_action', 'Exchange')}
-                                    </Button>
+                                    row.exchange_action.enabled ? (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={exchangeMutation.isPending}
+                                        onClick={() => {
+                                          setPendingExchangeAccountId(row.account_id)
+                                          setDetailNotice(null)
+                                        }}
+                                      >
+                                        {tr(t, 'exchange_entry_action', 'Exchange')}
+                                      </Button>
+                                    ) : (
+                                      <Tooltip
+                                        content={row.exchange_action.reason_text ?? tr(t, 'exchange_entry_blocked_rarity', 'Not exchangeable')}
+                                        focusable
+                                      >
+                                        <span>
+                                          <Button type="button" size="sm" variant="outline" disabled>
+                                            {tr(t, 'exchange_entry_action', 'Exchange')}
+                                          </Button>
+                                        </span>
+                                      </Tooltip>
+                                    )
                                   )}
                                   {isPendingRow && normalizedFriendId.length === 0 && (
                                     <div className="text-xs text-danger mt-1">
                                       {tr(t, 'exchange_friend_id_required', '请先填写目标好友ID')}
                                     </div>
-                                  )}
-                                  {!row.exchange_action.enabled && (
-                                    <div className="text-xs text-danger mt-1">{row.exchange_action.reason_text ?? tr(t, 'exchange_entry_blocked_rarity', 'Not exchangeable')}</div>
                                   )}
                                 </td>
                               </tr>
