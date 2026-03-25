@@ -1,9 +1,9 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
+import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { tr } from '@/lib/i18n'
@@ -83,6 +83,20 @@ interface ExchangeAccountsResponse {
 
 const OWNED_DETAIL_PAGE_SIZE_KEY = 'ptcgp_owned_modal_page_size'
 const OWNED_GRID_COLS_KEY = 'ptcgp_owned_cols'
+type DetailSortField = 'account_id' | 'friend_id' | 'nickname' | 'count' | 'exchange_points'
+type DetailNoticeLevel = 'success' | 'error'
+
+interface DetailNoticeState {
+  level: DetailNoticeLevel
+  text: string
+}
+
+// 预览卡牌回弹过渡：与 records 页面保持一致
+const PREVIEW_REBOUND_TRANSITION = 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1)'
+// 拖拽旋转角度上限，避免卡牌过度倾斜
+const PREVIEW_ROTATE_LIMIT = 45
+// 鼠标位移到旋转角度的转换系数
+const PREVIEW_ROTATE_STEP = 0.5
 
 function toggleItems(current: string[], value: string): string[] {
   if (current.includes(value)) {
@@ -137,15 +151,15 @@ function restoreOwnedGridCols(): number {
   return normalizeOwnedGridCols(value)
 }
 
-async function copyText(value: string, fallbackMessage: string) {
+async function copyText(value: string): Promise<boolean> {
   if (!value) {
-    return
+    return false
   }
   try {
     await navigator.clipboard.writeText(value)
-    alert(fallbackMessage)
+    return true
   } catch {
-    alert(fallbackMessage)
+    return false
   }
 }
 
@@ -187,9 +201,80 @@ function CardThumb({
   )
 }
 
+interface OwnedFilterOption {
+  value: string
+  label: string
+}
+
+interface OwnedFilterGroupProps {
+  title: string
+  clearLabel: string
+  options: OwnedFilterOption[]
+  selected: string[]
+  open: boolean
+  onToggleOpen: () => void
+  onToggleItem: (value: string) => void
+  onClear: () => void
+}
+
+function OwnedFilterGroup({
+  title,
+  clearLabel,
+  options,
+  selected,
+  open,
+  onToggleOpen,
+  onToggleItem,
+  onClear
+}: OwnedFilterGroupProps) {
+  return (
+    <div className={`owned-filter-group ${open ? 'is-open' : ''}`}>
+      <div className="owned-filter-header">
+        <button type="button" className="owned-filter-toggle" onClick={onToggleOpen}>
+          <span>{title}</span>
+          <span className="owned-filter-chevron">▾</span>
+        </button>
+        <button
+          type="button"
+          className="owned-filter-clear"
+          onClick={onClear}
+          disabled={selected.length === 0}
+        >
+          {clearLabel}
+        </button>
+      </div>
+      <div className={`owned-filter-summary ${selected.length > 0 ? 'has-items' : ''}`}>
+        {selected.map((value) => {
+          const option = options.find((item) => item.value === value)
+          return (
+            <span key={`${title}-${value}`} className="owned-filter-chip">
+              {option?.label ?? value}
+            </span>
+          )
+        })}
+      </div>
+      <div className="owned-filter-content">
+        <div className="filter-row">
+          {options.map((item) => (
+            <Button
+              key={`${title}-${item.value}`}
+              type="button"
+              size="sm"
+              variant={selected.includes(item.value) ? 'default' : 'outline'}
+              onClick={() => onToggleItem(item.value)}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps) {
   const queryClient = useQueryClient()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams()
 
   const [accountQuery, setAccountQuery] = useState(() => searchParams.get('owned_account') ?? '')
   const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'owned_rarity'))
@@ -211,9 +296,57 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [friendInputByAccount, setFriendInputByAccount] = useState<Record<number, string>>({})
   const [detailPage, setDetailPage] = useState(0)
   const [detailQ, setDetailQ] = useState('')
-  const [detailSortBy, setDetailSortBy] = useState('account_id')
+  const [detailSortBy, setDetailSortBy] = useState<DetailSortField>('account_id')
   const [detailSortOrder, setDetailSortOrder] = useState<'asc' | 'desc'>('asc')
   const [detailPageSize, setDetailPageSize] = useState(() => restoreDetailPageSize())
+  const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
+  const [pendingExchangeAccountId, setPendingExchangeAccountId] = useState<number | null>(null)
+  const [detailPreviewDragging, setDetailPreviewDragging] = useState(false)
+  const detailPreviewCardRef = useRef<HTMLDivElement | null>(null)
+  const detailPreviewShineRef = useRef<HTMLDivElement | null>(null)
+  const detailPreviewWindowListenersAttachedRef = useRef(false)
+  const stopDetailPreviewDragRef = useRef<(withRebound?: boolean) => void>(() => {})
+  const detailPreviewDragStateRef = useRef({
+    dragging: false,
+    pointerId: -1,
+    lastX: 0,
+    lastY: 0,
+    rotateX: 0,
+    rotateY: 0
+  })
+  const [openFilterGroups, setOpenFilterGroups] = useState({
+    rarity: true,
+    type: false,
+    set: false,
+    pack: false,
+    element: false
+  })
+
+  const filterOptions = useMemo(
+    () => ({
+      rarity: options.rarities.map((rarity) => ({
+        value: rarity,
+        label: t[`rarity_${rarity}`] ?? rarity
+      })),
+      type: options.card_types.map((cardType) => ({
+        value: cardType,
+        label: t[`type_${cardType}`] ?? cardType
+      })),
+      set: options.card_sets.map((item) => ({
+        value: item.code,
+        label: item.display_name
+      })),
+      pack: options.packs.map((item) => ({
+        value: item.name,
+        label: item.display_name
+      })),
+      element: options.elements.map((element) => ({
+        value: element,
+        label: t[`element_${element}`] ?? element
+      }))
+    }),
+    [options.card_sets, options.card_types, options.elements, options.packs, options.rarities, t]
+  )
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -373,11 +506,197 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         body: payload
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setDetailNotice({
+        level: 'success',
+        text: result.message
+      })
+      setPendingExchangeAccountId(null)
       queryClient.invalidateQueries({ queryKey: ['owned-detail', detailCardId, lang] })
       queryClient.invalidateQueries({ queryKey: ['owned-detail-table', detailCardId] })
+    },
+    onError: (error) => {
+      setDetailNotice({
+        level: 'error',
+        text: error instanceof Error ? error.message : tr(t, 'label_request_failed', 'Request failed')
+      })
     }
   })
+
+  const applyDetailPreviewTransform = useCallback((x: number, y: number) => {
+    const cardEl = detailPreviewCardRef.current
+    if (cardEl) {
+      cardEl.style.transform = `rotateY(${y}deg) rotateX(${x}deg)`
+    }
+    const shineEl = detailPreviewShineRef.current
+    if (shineEl) {
+      shineEl.style.transform = `translateX(${-y * 1.4}px) translateY(${x * 1.4}px)`
+    }
+  }, [])
+
+  const setDetailPreviewTransition = useCallback((animated: boolean) => {
+    const transitionValue = animated ? PREVIEW_REBOUND_TRANSITION : 'none'
+    const cardEl = detailPreviewCardRef.current
+    if (cardEl) {
+      cardEl.style.transition = transitionValue
+    }
+    const shineEl = detailPreviewShineRef.current
+    if (shineEl) {
+      shineEl.style.transition = transitionValue
+    }
+  }, [])
+
+  const resetDetailPreviewTransform = useCallback((animated = false) => {
+    const state = detailPreviewDragStateRef.current
+    state.rotateX = 0
+    state.rotateY = 0
+    setDetailPreviewTransition(animated)
+    applyDetailPreviewTransform(0, 0)
+  }, [applyDetailPreviewTransform, setDetailPreviewTransition])
+
+  const onDetailPreviewPointerMove = useCallback(
+    (event: PointerEvent) => {
+      const state = detailPreviewDragStateRef.current
+      if (!state.dragging) {
+        return
+      }
+      if (state.pointerId !== -1 && event.pointerId !== state.pointerId) {
+        return
+      }
+      if (event.cancelable) {
+        event.preventDefault()
+      }
+      const deltaX = event.clientX - state.lastX
+      const deltaY = event.clientY - state.lastY
+      state.lastX = event.clientX
+      state.lastY = event.clientY
+      state.rotateX = Math.max(-PREVIEW_ROTATE_LIMIT, Math.min(PREVIEW_ROTATE_LIMIT, state.rotateX - deltaY * PREVIEW_ROTATE_STEP))
+      state.rotateY = Math.max(-PREVIEW_ROTATE_LIMIT, Math.min(PREVIEW_ROTATE_LIMIT, state.rotateY + deltaX * PREVIEW_ROTATE_STEP))
+      applyDetailPreviewTransform(state.rotateX, state.rotateY)
+    },
+    [applyDetailPreviewTransform]
+  )
+
+  const onDetailPreviewPointerEnd = useCallback(() => {
+    stopDetailPreviewDragRef.current()
+  }, [])
+
+  const attachDetailPreviewWindowListeners = useCallback(() => {
+    if (detailPreviewWindowListenersAttachedRef.current) {
+      return
+    }
+    detailPreviewWindowListenersAttachedRef.current = true
+    window.addEventListener('pointermove', onDetailPreviewPointerMove, { passive: false })
+    window.addEventListener('pointerup', onDetailPreviewPointerEnd)
+    window.addEventListener('pointercancel', onDetailPreviewPointerEnd)
+    window.addEventListener('blur', onDetailPreviewPointerEnd)
+  }, [onDetailPreviewPointerEnd, onDetailPreviewPointerMove])
+
+  const detachDetailPreviewWindowListeners = useCallback(() => {
+    if (!detailPreviewWindowListenersAttachedRef.current) {
+      return
+    }
+    detailPreviewWindowListenersAttachedRef.current = false
+    window.removeEventListener('pointermove', onDetailPreviewPointerMove)
+    window.removeEventListener('pointerup', onDetailPreviewPointerEnd)
+    window.removeEventListener('pointercancel', onDetailPreviewPointerEnd)
+    window.removeEventListener('blur', onDetailPreviewPointerEnd)
+  }, [onDetailPreviewPointerEnd, onDetailPreviewPointerMove])
+
+  const stopDetailPreviewDrag = useCallback((withRebound = true) => {
+    const state = detailPreviewDragStateRef.current
+    const wasDragging = state.dragging
+    state.dragging = false
+    state.pointerId = -1
+    setDetailPreviewDragging(false)
+    detachDetailPreviewWindowListeners()
+    if (withRebound && wasDragging) {
+      resetDetailPreviewTransform(true)
+    }
+  }, [detachDetailPreviewWindowListeners, resetDetailPreviewTransform])
+
+  useEffect(() => {
+    stopDetailPreviewDragRef.current = stopDetailPreviewDrag
+  }, [stopDetailPreviewDrag])
+
+  const startDetailPreviewDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return
+      }
+      event.preventDefault()
+      stopDetailPreviewDrag(false)
+      setDetailPreviewTransition(false)
+      const state = detailPreviewDragStateRef.current
+      state.dragging = true
+      state.pointerId = event.pointerId
+      state.lastX = event.clientX
+      state.lastY = event.clientY
+      setDetailPreviewDragging(true)
+      attachDetailPreviewWindowListeners()
+    },
+    [attachDetailPreviewWindowListeners, setDetailPreviewTransition, stopDetailPreviewDrag]
+  )
+
+  const openDetailModal = useCallback(
+    (cardId: number) => {
+      stopDetailPreviewDrag(false)
+      resetDetailPreviewTransform(false)
+      setDetailNotice(null)
+      setPendingExchangeAccountId(null)
+      setFriendInputByAccount({})
+      setDetailCardId(cardId)
+      setDetailPage(0)
+      setDetailQ('')
+      setDetailSortBy('account_id')
+      setDetailSortOrder('asc')
+    },
+    [resetDetailPreviewTransform, stopDetailPreviewDrag]
+  )
+
+  const closeDetailModal = useCallback(() => {
+    stopDetailPreviewDrag(false)
+    resetDetailPreviewTransform(false)
+    setDetailNotice(null)
+    setPendingExchangeAccountId(null)
+    setFriendInputByAccount({})
+    setDetailCardId(null)
+    setDetailPage(0)
+    setDetailQ('')
+    setDetailSortBy('account_id')
+    setDetailSortOrder('asc')
+  }, [resetDetailPreviewTransform, stopDetailPreviewDrag])
+
+  const applyDetailSort = useCallback(
+    (nextSortBy: DetailSortField) => {
+      setDetailPage(0)
+      if (detailSortBy === nextSortBy) {
+        setDetailSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+        return
+      }
+      setDetailSortBy(nextSortBy)
+      setDetailSortOrder('asc')
+    },
+    [detailSortBy]
+  )
+
+  const getDetailSortIndicator = useCallback(
+    (field: DetailSortField) => {
+      if (detailSortBy !== field) {
+        return ''
+      }
+      return detailSortOrder === 'asc' ? '↑' : '↓'
+    },
+    [detailSortBy, detailSortOrder]
+  )
+
+  useEffect(() => {
+    if (detailCardId === null) {
+      stopDetailPreviewDrag(false)
+      resetDetailPreviewTransform(false)
+      return
+    }
+    resetDetailPreviewTransform(false)
+  }, [detailCardId, resetDetailPreviewTransform, stopDetailPreviewDrag])
 
   useEffect(() => {
     if (detailCardId === null) {
@@ -393,6 +712,38 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     window.addEventListener('resize', syncPageSize)
     return () => window.removeEventListener('resize', syncPageSize)
   }, [detailCardId])
+
+  useEffect(() => {
+    if (detailCardId === null) {
+      return
+    }
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+      closeDetailModal()
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [closeDetailModal, detailCardId])
+
+  useEffect(
+    () => () => {
+      stopDetailPreviewDrag(false)
+    },
+    [stopDetailPreviewDrag]
+  )
+
+  useEffect(() => {
+    if (pendingExchangeAccountId === null) {
+      return
+    }
+    const rows = detailTableQuery.data?.accounts ?? []
+    const stillExists = rows.some((row) => row.account_id === pendingExchangeAccountId)
+    if (!stillExists) {
+      setPendingExchangeAccountId(null)
+    }
+  }, [detailTableQuery.data?.accounts, pendingExchangeAccountId])
 
   useEffect(() => {
     window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
@@ -433,156 +784,201 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   }
 
   return (
-    <section className="section-stack">
-      <div className="surface-card section-stack">
-        <div className="pagination-row">
-          <h2 className="section-title">{tr(t, 'filter_title', 'Filters')}</h2>
-          <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
-            {tr(t, 'clear_filters', 'Clear')}
-          </Button>
-        </div>
+    <section className="owned-page section-stack">
+      <div className="owned-page-layout">
+        <aside className="owned-page-sidebar">
+          <div className="surface-card section-stack">
+            <div className="pagination-row">
+              <h2 className="section-title">{tr(t, 'filter_title', 'Filters')}</h2>
+              <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
+                {tr(t, 'clear_filters', 'Clear')}
+              </Button>
+            </div>
 
-        <div className="filter-row">
-          <input
-            className="field-input"
-            value={accountQuery}
-            onChange={(event) => {
-              setListPage(0)
-              setAccountQuery(event.target.value)
-            }}
-            placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID')}
-          />
-        </div>
+            <div className="filter-row">
+              <input
+                className="field-input"
+                value={accountQuery}
+                onChange={(event) => {
+                  setListPage(0)
+                  setAccountQuery(event.target.value)
+                }}
+                placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID')}
+              />
+            </div>
 
-        <div className="filter-row">
-          <Button type="button" size="sm" variant={ownershipScope === 'owned' ? 'default' : 'outline'} onClick={() => { setListPage(0); setOwnershipScope('owned') }}>
-            {tr(t, 'owned_scope_owned', 'Owned')}
-          </Button>
-          <Button type="button" size="sm" variant={ownershipScope === 'missing' ? 'default' : 'outline'} onClick={() => { setListPage(0); setOwnershipScope('missing') }}>
-            {tr(t, 'owned_scope_missing', 'Missing')}
-          </Button>
-          <Button type="button" size="sm" variant={ownershipScope === 'all' ? 'default' : 'outline'} onClick={() => { setListPage(0); setOwnershipScope('all') }}>
-            {tr(t, 'owned_scope_all', 'All')}
-          </Button>
-        </div>
+            <OwnedFilterGroup
+              title={tr(t, 'filter_rarity', 'Rarity')}
+              clearLabel={tr(t, 'clear_filters', 'Clear')}
+              options={filterOptions.rarity}
+              selected={selectedRarity}
+              open={openFilterGroups.rarity}
+              onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, rarity: !prev.rarity }))}
+              onToggleItem={(value) => {
+                setListPage(0)
+                setSelectedRarity((prev) => toggleItems(prev, value))
+              }}
+              onClear={() => {
+                setListPage(0)
+                setSelectedRarity([])
+              }}
+            />
 
-        <div className="filter-row">
-          <Button type="button" size="sm" variant={sortBy === 'acquired' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('acquired') }}>
-            {tr(t, 'owned_sort_acquired', 'Acquired')}
-          </Button>
-          <Button type="button" size="sm" variant={sortBy === 'rarity' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('rarity') }}>
-            {tr(t, 'owned_sort_rarity', 'Rarity')}
-          </Button>
-          <Button type="button" size="sm" variant={sortBy === 'count' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('count') }}>
-            {tr(t, 'owned_sort_count', 'Count')}
-          </Button>
-        </div>
+            <OwnedFilterGroup
+              title={tr(t, 'filter_type', 'Type')}
+              clearLabel={tr(t, 'clear_filters', 'Clear')}
+              options={filterOptions.type}
+              selected={selectedTypes}
+              open={openFilterGroups.type}
+              onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, type: !prev.type }))}
+              onToggleItem={(value) => {
+                setListPage(0)
+                setSelectedTypes((prev) => toggleItems(prev, value))
+              }}
+              onClear={() => {
+                setListPage(0)
+                setSelectedTypes([])
+              }}
+            />
 
-        <div className="filter-row">
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            onClick={() => setViewMode('grid')}
-          >
-            {tr(t, 'view_grid', 'Grid')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            onClick={() => setViewMode('list')}
-          >
-            {tr(t, 'view_list', 'List')}
-          </Button>
-          {viewMode === 'grid' && (
-            <>
-              {[4, 5, 6].map((value) => (
-                <Button
-                  key={`grid-${value}`}
-                  type="button"
-                  size="sm"
-                  variant={gridCols === value ? 'default' : 'outline'}
-                  onClick={() => setGridCols(value)}
-                >
-                  {value} {tr(t, 'owned_cols_label', 'Cols')}
+            <OwnedFilterGroup
+              title={tr(t, 'filter_set', 'Set')}
+              clearLabel={tr(t, 'clear_filters', 'Clear')}
+              options={filterOptions.set}
+              selected={selectedSetCodes}
+              open={openFilterGroups.set}
+              onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, set: !prev.set }))}
+              onToggleItem={(value) => {
+                setListPage(0)
+                setSelectedSetCodes((prev) => toggleItems(prev, value))
+              }}
+              onClear={() => {
+                setListPage(0)
+                setSelectedSetCodes([])
+              }}
+            />
+
+            <OwnedFilterGroup
+              title={tr(t, 'filter_pack', 'Pack')}
+              clearLabel={tr(t, 'clear_filters', 'Clear')}
+              options={filterOptions.pack}
+              selected={selectedPackNames}
+              open={openFilterGroups.pack}
+              onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, pack: !prev.pack }))}
+              onToggleItem={(value) => {
+                setListPage(0)
+                setSelectedPackNames((prev) => toggleItems(prev, value))
+              }}
+              onClear={() => {
+                setListPage(0)
+                setSelectedPackNames([])
+              }}
+            />
+
+            <OwnedFilterGroup
+              title={tr(t, 'filter_element', 'Element')}
+              clearLabel={tr(t, 'clear_filters', 'Clear')}
+              options={filterOptions.element}
+              selected={selectedElements}
+              open={openFilterGroups.element}
+              onToggleOpen={() => setOpenFilterGroups((prev) => ({ ...prev, element: !prev.element }))}
+              onToggleItem={(value) => {
+                setListPage(0)
+                setSelectedElements((prev) => toggleItems(prev, value))
+              }}
+              onClear={() => {
+                setListPage(0)
+                setSelectedElements([])
+              }}
+            />
+          </div>
+        </aside>
+
+        <div className="owned-page-main section-stack">
+          <div className="surface-card owned-controls-panel">
+            <div className="owned-controls-row">
+              <div className="owned-scope-segmented" role="group" aria-label={tr(t, 'owned_scope_label', 'Scope')}>
+                {(['owned', 'missing', 'all'] as const).map((scope) => (
+                  <button
+                    key={`scope-${scope}`}
+                    type="button"
+                    className={`owned-scope-btn ${ownershipScope === scope ? 'is-active' : ''}`}
+                    onClick={() => {
+                      setListPage(0)
+                      setOwnershipScope(scope)
+                    }}
+                  >
+                    {tr(t, `owned_scope_${scope}`, scope)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="filter-row">
+                <span className="section-subtitle">{tr(t, 'owned_sort_label', 'Sort')}</span>
+                <Button type="button" size="sm" variant={sortBy === 'acquired' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('acquired') }}>
+                  {tr(t, 'owned_sort_acquired', 'Acquired')}
                 </Button>
+                <Button type="button" size="sm" variant={sortBy === 'rarity' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('rarity') }}>
+                  {tr(t, 'owned_sort_rarity', 'Rarity')}
+                </Button>
+                <Button type="button" size="sm" variant={sortBy === 'count' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('count') }}>
+                  {tr(t, 'owned_sort_count', 'Count')}
+                </Button>
+              </div>
+            </div>
+
+            <div className="owned-controls-row">
+              <div className="filter-row">
+                <Button type="button" size="sm" variant={viewMode === 'grid' ? 'default' : 'outline'} onClick={() => setViewMode('grid')}>
+                  {tr(t, 'view_grid', 'Grid')}
+                </Button>
+                <Button type="button" size="sm" variant={viewMode === 'list' ? 'default' : 'outline'} onClick={() => setViewMode('list')}>
+                  {tr(t, 'view_list', 'List')}
+                </Button>
+
+                {viewMode === 'grid' && (
+                  <div className="owned-cols-segmented">
+                    {[4, 5, 6].map((value) => (
+                      <button
+                        key={`grid-${value}`}
+                        type="button"
+                        className={`owned-cols-btn ${gridCols === value ? 'is-active' : ''}`}
+                        onClick={() => setGridCols(value)}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="filter-row">
+                <Button type="button" size="sm" variant="outline" onClick={() => viewMode === 'grid' ? gridQuery.refetch() : listQuery.refetch()}>
+                  {tr(t, 'refresh', 'Refresh')}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => setShowCounts((prev) => !prev)}>
+                  {showCounts
+                    ? tr(t, 'owned_counts_hide', 'Hide Counts')
+                    : tr(t, 'owned_counts_toggle', 'Show Counts')}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {statsQuery.data && (
+            <div className="owned-stats-bar surface-card">
+              <div className="owned-stat-chip owned-stat-chip--primary">
+                <span className="owned-stat-label">{tr(t, 'owned_filtered_cards_label', 'Filtered Cards')}</span>
+                <span className="owned-stat-value">{statsQuery.data.filtered_cards_count}</span>
+              </div>
+              {statsQuery.data.rarity_progress.map((item) => (
+                <div key={item.rarity} className="owned-stat-chip">
+                  <span className="owned-stat-label">{t[`rarity_${item.rarity}`] ?? item.rarity}</span>
+                  <span className="owned-stat-value">{item.owned_count}/{item.total_count}</span>
+                </div>
               ))}
-              <Button type="button" size="sm" variant="outline" onClick={() => setShowCounts((prev) => !prev)}>
-                {showCounts
-                  ? tr(t, 'owned_counts_hide', 'Hide Counts')
-                  : tr(t, 'owned_counts_toggle', 'Show Counts')}
-              </Button>
-            </>
+            </div>
           )}
-        </div>
-
-        <details>
-          <summary className="section-subtitle">{tr(t, 'filter_rarity', 'Rarity')}</summary>
-          <div className="filter-row mt-2">
-            {options.rarities.map((rarity) => (
-              <Button key={rarity} type="button" size="sm" variant={selectedRarity.includes(rarity) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedRarity((prev) => toggleItems(prev, rarity)) }}>
-                {t[`rarity_${rarity}`] ?? rarity}
-              </Button>
-            ))}
-          </div>
-        </details>
-
-        <details>
-          <summary className="section-subtitle">{tr(t, 'filter_type', 'Type')}</summary>
-          <div className="filter-row mt-2">
-            {options.card_types.map((cardType) => (
-              <Button key={cardType} type="button" size="sm" variant={selectedTypes.includes(cardType) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedTypes((prev) => toggleItems(prev, cardType)) }}>
-                {t[`type_${cardType}`] ?? cardType}
-              </Button>
-            ))}
-          </div>
-        </details>
-
-        <details>
-          <summary className="section-subtitle">{tr(t, 'filter_set', 'Set')}</summary>
-          <div className="filter-row mt-2">
-            {options.card_sets.map((item) => (
-              <Button key={item.code} type="button" size="sm" variant={selectedSetCodes.includes(item.code) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedSetCodes((prev) => toggleItems(prev, item.code)) }}>
-                {item.display_name}
-              </Button>
-            ))}
-          </div>
-        </details>
-
-        <details>
-          <summary className="section-subtitle">{tr(t, 'filter_pack', 'Pack')}</summary>
-          <div className="filter-row mt-2">
-            {options.packs.map((item) => (
-              <Button key={item.name} type="button" size="sm" variant={selectedPackNames.includes(item.name) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedPackNames((prev) => toggleItems(prev, item.name)) }}>
-                {item.display_name}
-              </Button>
-            ))}
-          </div>
-        </details>
-
-        <details>
-          <summary className="section-subtitle">{tr(t, 'filter_element', 'Element')}</summary>
-          <div className="filter-row mt-2">
-            {options.elements.map((item) => (
-              <Button key={item} type="button" size="sm" variant={selectedElements.includes(item) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedElements((prev) => toggleItems(prev, item)) }}>
-                {t[`element_${item}`] ?? item}
-              </Button>
-            ))}
-          </div>
-        </details>
-      </div>
-
-      {statsQuery.data && (
-        <div className="surface-card section-stack">
-          <div className="text-sm">{tr(t, 'owned_filtered_cards_label', 'Filtered Cards')}: <span className="mono">{statsQuery.data.filtered_cards_count}</span></div>
-          <div className="filter-row">
-            {statsQuery.data.rarity_progress.map((item) => (
-              <span key={item.rarity} className="tag">{item.rarity}: {item.owned_count}/{item.total_count}</span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {isListLoading && <div className="surface-card text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
       {isListError && <div className="surface-card text-sm text-danger">{listError?.message}</div>}
@@ -614,13 +1010,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                         key={item.card.id}
                         type="button"
                         className={`owned-card ${item.ownership_state === 'missing' ? 'owned-card--missing' : ''}`}
-                        onClick={() => {
-                          setDetailCardId(item.card.id)
-                          setDetailPage(0)
-                          setDetailQ('')
-                          setDetailSortBy('account_id')
-                          setDetailSortOrder('asc')
-                        }}
+                        onClick={() => openDetailModal(item.card.id)}
                       >
                         <div className="owned-card-media">
                           <img
@@ -709,13 +1099,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setDetailCardId(item.card.id)
-                            setDetailPage(0)
-                            setDetailQ('')
-                            setDetailSortBy('account_id')
-                            setDetailSortOrder('asc')
-                          }}
+                          onClick={() => openDetailModal(item.card.id)}
                         >
                           {tr(t, 'label_detail', 'Detail')}
                         </Button>
@@ -751,197 +1135,289 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         </>
       )}
 
+        </div>
+      </div>
+
       {detailCardId !== null && (
         <div
           className="dialog-overlay"
-          onClick={() => {
-            setDetailCardId(null)
-            setDetailPage(0)
-            setDetailQ('')
-            setDetailSortBy('account_id')
-            setDetailSortOrder('asc')
-          }}
+          onClick={closeDetailModal}
         >
-          <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
-            <div className="pagination-row">
-              <div className="section-title">{tr(t, 'owned_cards_detail_title', 'Card Detail')}</div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setDetailCardId(null)
-                  setDetailPage(0)
-                  setDetailQ('')
-                  setDetailSortBy('account_id')
-                  setDetailSortOrder('asc')
-                }}
-              >
-                {tr(t, 'label_close', 'Close')}
-              </Button>
-            </div>
-
+          <div className="dialog-card owned-detail-modal" onClick={(event) => event.stopPropagation()}>
             {detailQuery.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
             {detailQuery.isError && <div className="text-sm text-danger">{(detailQuery.error as Error).message}</div>}
 
             {detailQuery.data && (
-              <>
-                <div className="surface-card section-stack">
-                  <div className="section-title">{detailQuery.data.card_display_name}</div>
-                  <CardThumb
-                    setCode={detailQuery.data.card.set_code}
-                    cardNumber={detailQuery.data.card.number}
-                    name={detailQuery.data.card_display_name}
-                    assets={assets}
-                  />
-                  <div className="filter-row">
-                    <span className="tag">{detailQuery.data.card.set_code}</span>
-                    <span className="tag">#{String(detailQuery.data.card.number).padStart(3, '0')}</span>
-                    <span className="tag">{detailQuery.data.card.rarity}</span>
-                    <span className="tag">{tr(t, 'owned_accounts_total', 'Accounts')} {detailQuery.data.total_accounts}</span>
-                    <span className="tag">{tr(t, 'owned_count_total', 'Total Count')} {detailQuery.data.total_count}</span>
-                  </div>
-                </div>
-
-                <div className="table-wrap">
+              <div className="owned-card-modal-layout">
+                <aside className="owned-card-modal-left">
                   <div className="surface-card section-stack">
+                    <div className="section-title">{detailQuery.data.card_display_name}</div>
                     <div className="filter-row">
-                      <input
-                        className="field-input"
-                        value={detailQ}
-                        onChange={(event) => {
-                          setDetailPage(0)
-                          setDetailQ(event.target.value)
-                        }}
-                        placeholder={tr(t, 'exchange_search_accounts', 'Search Account ID / nickname / friend id')}
-                      />
-                      <select
-                        className="field-select"
-                        value={detailSortBy}
-                        onChange={(event) => {
-                          setDetailPage(0)
-                          setDetailSortBy(event.target.value)
-                        }}
-                      >
-                        <option value="account_id">{tr(t, 'col_account_id', 'Account ID')}</option>
-                        <option value="friend_id">{tr(t, 'col_friend_id', 'Friend ID')}</option>
-                        <option value="nickname">{tr(t, 'col_nickname', 'Nickname')}</option>
-                        <option value="count">{tr(t, 'col_count', 'Count')}</option>
-                        <option value="exchange_points">{tr(t, 'col_exchange_points', 'Exchange Points')}</option>
-                      </select>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setDetailPage(0)
-                          setDetailSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-                        }}
-                      >
-                        {detailSortOrder === 'asc' ? tr(t, 'sort_order_asc', 'Ascending') : tr(t, 'sort_order_desc', 'Descending')}
-                      </Button>
+                      <span className="tag">{detailQuery.data.card.set_code}</span>
+                      <span className="tag">#{String(detailQuery.data.card.number).padStart(3, '0')}</span>
+                      <span className="tag">{detailQuery.data.card.rarity}</span>
                     </div>
+                    <div className="owned-card-preview-wrap">
+                      <div
+                        ref={detailPreviewCardRef}
+                        className={`owned-card-preview owned-card-draggable ${ownershipScope === 'missing' ? 'owned-card-preview--missing' : ''} ${detailPreviewDragging ? 'dragging' : ''}`}
+                        onPointerDown={startDetailPreviewDrag}
+                      >
+                        <img
+                          src={getCardImageUrls(assets, {
+                            setCode: detailQuery.data.card.set_code,
+                            cardNumber: detailQuery.data.card.number
+                          }).cdnPng}
+                          alt={detailQuery.data.card_display_name}
+                          className="owned-card-preview-image"
+                          loading="lazy"
+                          decoding="async"
+                          draggable={false}
+                          onError={(event) => {
+                            const image = event.currentTarget
+                            const urls = getCardImageUrls(assets, {
+                              setCode: detailQuery.data.card.set_code,
+                              cardNumber: detailQuery.data.card.number
+                            })
+                            if (image.dataset.webpTried === '1') {
+                              image.src = urls.cdnWebp
+                              image.dataset.webpTried = '2'
+                              return
+                            }
+                            if (image.dataset.webpTried === '2') {
+                              image.src = urls.png
+                              image.dataset.webpTried = '3'
+                              return
+                            }
+                            image.dataset.webpTried = '1'
+                            image.src = urls.webp
+                          }}
+                        />
+                        <div ref={detailPreviewShineRef} className="owned-card-shine" />
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted text-center">{tr(t, 'card_preview_hint', '拖动旋转查看')}</div>
                   </div>
-                  <table className="grid-table">
-                    <thead>
-                      <tr>
-                        <th>{tr(t, 'col_account', 'Account')}</th>
-                        <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
-                        <th>{tr(t, 'col_count', 'Count')}</th>
-                        <th>{tr(t, 'col_exchange_points', 'Exchange Points')}</th>
-                        <th>{tr(t, 'col_actions', 'Actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(detailTableQuery.data?.accounts ?? []).length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="text-center text-muted">{tr(t, 'exchange_entry_no_available_accounts', 'No eligible accounts')}</td>
-                        </tr>
-                      )}
-                      {(detailTableQuery.data?.accounts ?? []).map((row) => {
-                        const defaultFriendId = friendInputByAccount[row.account_id] ?? row.friend_id ?? ''
-                        return (
-                          <tr key={row.account_id}>
-                            <td>{row.nickname || `#${row.account_id}`}</td>
-                            <td>
-                              <div className="filter-row">
-                                <input
-                                  className="field-input w-full"
-                                  value={defaultFriendId}
-                                  onChange={(event) =>
-                                    setFriendInputByAccount((prev) => ({
-                                      ...prev,
-                                      [row.account_id]: event.target.value
-                                    }))
-                                  }
-                                  placeholder={tr(t, 'exchange_input_friend_id', 'Target Friend ID')}
-                                />
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => copyText(defaultFriendId, tr(t, 'msg_copied', 'Copied'))}
-                                  disabled={defaultFriendId.trim().length === 0}
-                                >
-                                  {tr(t, 'label_copy', 'Copy')}
-                                </Button>
-                              </div>
-                            </td>
-                            <td className="mono">{row.count}</td>
-                            <td className="mono">{row.exchange_points ?? '-'}</td>
-                            <td>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                disabled={!row.exchange_action.enabled || exchangeMutation.isPending}
-                                onClick={() => {
-                                  exchangeMutation.mutate({
-                                    from_account_id: row.account_id,
-                                    to_account_id: null,
-                                    to_friend_id: (friendInputByAccount[row.account_id] ?? row.friend_id ?? '').trim(),
-                                    target_card_id: detailQuery.data.card.id,
-                                    target_card_rarity: detailQuery.data.card.rarity
-                                  })
-                                }}
-                              >
-                                {tr(t, 'exchange_entry_action', 'Exchange')}
-                              </Button>
-                              {!row.exchange_action.enabled && (
-                                <div className="text-xs text-danger mt-1">{row.exchange_action.reason_text ?? tr(t, 'exchange_entry_blocked_rarity', 'Not exchangeable')}</div>
-                              )}
-                            </td>
+                </aside>
+
+                <section className="owned-card-modal-right">
+                  <div className="owned-card-modal-head">
+                    <h4 className="section-title">{tr(t, 'owned_accounts_title', 'Owned Accounts')}</h4>
+                    <button type="button" className="owned-card-modal-close" onClick={closeDetailModal}>✕</button>
+                  </div>
+                  <div className="text-xs text-muted">
+                    {tr(t, 'owned_accounts_total', 'Accounts')}: {detailQuery.data.total_accounts}
+                    {' ｜ '}
+                    {tr(t, 'owned_count_total', 'Total Count')}: {detailQuery.data.total_count}
+                  </div>
+                  {detailNotice && (
+                    <div className={`surface-card text-sm ${detailNotice.level === 'error' ? 'text-danger' : 'text-muted'}`}>
+                      {detailNotice.text}
+                    </div>
+                  )}
+
+                  <div className="owned-modal-query-row">
+                    <input
+                      className="field-input"
+                      value={detailQ}
+                      onChange={(event) => {
+                        setDetailPage(0)
+                        setDetailQ(event.target.value)
+                      }}
+                      placeholder={tr(t, 'exchange_search_accounts', 'Search Account ID / nickname / friend id')}
+                    />
+                    <select
+                      className="field-select"
+                      value={detailSortBy}
+                      onChange={(event) => {
+                        setDetailPage(0)
+                        setDetailSortBy(event.target.value as DetailSortField)
+                      }}
+                    >
+                      <option value="account_id">{tr(t, 'col_account_id', 'Account ID')}</option>
+                      <option value="friend_id">{tr(t, 'col_friend_id', 'Friend ID')}</option>
+                      <option value="nickname">{tr(t, 'col_nickname', 'Nickname')}</option>
+                      <option value="count">{tr(t, 'col_count', 'Count')}</option>
+                      <option value="exchange_points">{tr(t, 'col_exchange_points', 'Exchange Points')}</option>
+                    </select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDetailPage(0)
+                        setDetailSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+                      }}
+                    >
+                      {detailSortOrder === 'asc' ? tr(t, 'sort_order_asc', 'Ascending') : tr(t, 'sort_order_desc', 'Descending')}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => detailTableQuery.refetch()}>
+                      {tr(t, 'refresh', 'Refresh')}
+                    </Button>
+                  </div>
+
+                  <div className="owned-card-modal-table-shell">
+                    <div className="owned-card-exchange-table-frame">
+                      <table className="grid-table">
+                        <thead>
+                          <tr>
+                            <th>
+                              <button type="button" className="text-xs" onClick={() => applyDetailSort('account_id')}>
+                                {tr(t, 'col_account', 'Account')} {getDetailSortIndicator('account_id')}
+                              </button>
+                            </th>
+                            <th>
+                              <button type="button" className="text-xs" onClick={() => applyDetailSort('friend_id')}>
+                                {tr(t, 'col_friend_id', 'Friend ID')} {getDetailSortIndicator('friend_id')}
+                              </button>
+                            </th>
+                            <th>
+                              <button type="button" className="text-xs" onClick={() => applyDetailSort('count')}>
+                                {tr(t, 'col_count', 'Count')} {getDetailSortIndicator('count')}
+                              </button>
+                            </th>
+                            <th>
+                              <button type="button" className="text-xs" onClick={() => applyDetailSort('exchange_points')}>
+                                {tr(t, 'col_exchange_points', 'Exchange Points')} {getDetailSortIndicator('exchange_points')}
+                              </button>
+                            </th>
+                            <th>{tr(t, 'col_actions', 'Actions')}</th>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                  <div className="surface-card pagination-row">
-                    <div className="text-xs text-muted">{tr(t, 'owned_accounts_total', 'Accounts')}: {detailTableQuery.data?.total_items ?? 0}</div>
-                    <div className="filter-row">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!detailTableQuery.data?.has_prev}
-                        onClick={() => setDetailPage((prev) => Math.max(prev - 1, 0))}
-                      >
-                        {tr(t, 'btn_prev_page', 'Previous')}
-                      </Button>
-                      <span className="text-xs mono px-2 py-1">{(detailTableQuery.data?.page ?? 0) + 1}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!detailTableQuery.data?.has_next}
-                        onClick={() => setDetailPage((prev) => prev + 1)}
-                      >
-                        {tr(t, 'btn_next_page', 'Next')}
-                      </Button>
+                        </thead>
+                        <tbody>
+                          {(detailTableQuery.data?.accounts ?? []).length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="text-center text-muted">{tr(t, 'exchange_entry_no_available_accounts', 'No eligible accounts')}</td>
+                            </tr>
+                          )}
+                          {(detailTableQuery.data?.accounts ?? []).map((row) => {
+                            const defaultFriendId = friendInputByAccount[row.account_id] ?? row.friend_id ?? ''
+                            const normalizedFriendId = defaultFriendId.trim()
+                            const isPendingRow = pendingExchangeAccountId === row.account_id
+                            return (
+                              <tr key={row.account_id}>
+                                <td>{row.nickname || `#${row.account_id}`}</td>
+                                <td>
+                                  <div className="filter-row">
+                                    <input
+                                      className="field-input w-full"
+                                      value={defaultFriendId}
+                                      onChange={(event) =>
+                                        setFriendInputByAccount((prev) => ({
+                                          ...prev,
+                                          [row.account_id]: event.target.value
+                                        }))
+                                      }
+                                      placeholder={tr(t, 'exchange_input_friend_id', 'Target Friend ID')}
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        void copyText(defaultFriendId).then((copied) => {
+                                          setDetailNotice({
+                                            level: copied ? 'success' : 'error',
+                                            text: copied
+                                              ? tr(t, 'msg_copied', 'Copied')
+                                              : tr(t, 'msg_copy_failed', 'Copy failed')
+                                          })
+                                        })
+                                      }}
+                                      disabled={defaultFriendId.trim().length === 0}
+                                    >
+                                      {tr(t, 'label_copy', 'Copy')}
+                                    </Button>
+                                  </div>
+                                </td>
+                                <td className="mono">{row.count}</td>
+                                <td className="mono">{row.exchange_points ?? '-'}</td>
+                                <td>
+                                  {isPendingRow ? (
+                                    <div className="filter-row">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="default"
+                                        disabled={normalizedFriendId.length === 0 || exchangeMutation.isPending}
+                                        onClick={() => {
+                                          exchangeMutation.mutate({
+                                            from_account_id: row.account_id,
+                                            to_account_id: null,
+                                            to_friend_id: normalizedFriendId,
+                                            target_card_id: detailQuery.data.card.id,
+                                            target_card_rarity: detailQuery.data.card.rarity
+                                          })
+                                        }}
+                                      >
+                                        {tr(t, 'label_confirm', '确认')}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={exchangeMutation.isPending}
+                                        onClick={() => setPendingExchangeAccountId(null)}
+                                      >
+                                        {tr(t, 'label_cancel', '取消')}
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={!row.exchange_action.enabled || exchangeMutation.isPending}
+                                      onClick={() => {
+                                        setPendingExchangeAccountId(row.account_id)
+                                        setDetailNotice(null)
+                                      }}
+                                    >
+                                      {tr(t, 'exchange_entry_action', 'Exchange')}
+                                    </Button>
+                                  )}
+                                  {isPendingRow && normalizedFriendId.length === 0 && (
+                                    <div className="text-xs text-danger mt-1">
+                                      {tr(t, 'exchange_friend_id_required', '请先填写目标好友ID')}
+                                    </div>
+                                  )}
+                                  {!row.exchange_action.enabled && (
+                                    <div className="text-xs text-danger mt-1">{row.exchange_action.reason_text ?? tr(t, 'exchange_entry_blocked_rarity', 'Not exchangeable')}</div>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="pagination-row">
+                      <div className="text-xs text-muted">{tr(t, 'owned_accounts_total', 'Accounts')}: {detailTableQuery.data?.total_items ?? 0}</div>
+                      <div className="filter-row">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!detailTableQuery.data?.has_prev}
+                          onClick={() => setDetailPage((prev) => Math.max(prev - 1, 0))}
+                        >
+                          {tr(t, 'btn_prev_page', 'Previous')}
+                        </Button>
+                        <span className="text-xs mono px-2 py-1">{(detailTableQuery.data?.page ?? 0) + 1}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!detailTableQuery.data?.has_next}
+                          onClick={() => setDetailPage((prev) => prev + 1)}
+                        >
+                          {tr(t, 'btn_next_page', 'Next')}
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </>
+                </section>
+              </div>
             )}
           </div>
         </div>
