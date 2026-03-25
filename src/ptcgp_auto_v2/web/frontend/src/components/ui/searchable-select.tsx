@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { cn } from '@/lib/utils'
 
 interface SearchableSelectOption {
@@ -70,28 +71,11 @@ export function SearchableSelect({
     setPage(0)
   }, [open, query])
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (target && rootRef.current && !rootRef.current.contains(target)) {
-        setOpen(false)
-      }
-    }
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-      }
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onEscape)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onEscape)
-    }
-  }, [open])
+  useDismissibleLayer({
+    open,
+    rootRef,
+    onDismiss: () => setOpen(false)
+  })
 
   useEffect(() => {
     if (open) {

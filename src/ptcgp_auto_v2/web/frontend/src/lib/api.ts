@@ -1,21 +1,29 @@
+async function ensureResponseOk(response: Response): Promise<void> {
+  if (response.ok) {
+    return
+  }
+  const text = await response.text()
+  throw new Error(text || `请求失败: ${response.status}`)
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  await ensureResponseOk(response)
+  return (await response.json()) as T
+}
+
 export async function fetchText(url: string): Promise<string> {
   const response = await fetch(url, {
     headers: {
       'X-Requested-With': 'XMLHttpRequest'
     }
   })
-  if (!response.ok) {
-    throw new Error(`请求失败: ${response.status}`)
-  }
+  await ensureResponseOk(response)
   return response.text()
 }
 
 export async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: { Accept: 'application/json' } })
-  if (!response.ok) {
-    throw new Error(`请求失败: ${response.status}`)
-  }
-  return (await response.json()) as T
+  return readJsonResponse<T>(response)
 }
 
 interface JsonRequestOptions {
@@ -32,11 +40,7 @@ export async function requestJson<T>(url: string, options: JsonRequestOptions = 
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   })
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `请求失败: ${response.status}`)
-  }
-  return (await response.json()) as T
+  return readJsonResponse<T>(response)
 }
 
 interface FormRequestOptions {
@@ -52,11 +56,7 @@ export async function requestFormJson<T>(url: string, options: FormRequestOption
     },
     body: options.body
   })
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || `请求失败: ${response.status}`)
-  }
-  return (await response.json()) as T
+  return readJsonResponse<T>(response)
 }
 
 export function buildQuery(params: Record<string, string | number | boolean | Array<string | number> | undefined | null>) {
