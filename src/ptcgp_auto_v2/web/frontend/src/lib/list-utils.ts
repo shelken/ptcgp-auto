@@ -10,13 +10,6 @@ export function parseSearchList(params: URLSearchParams, key: string): string[] 
   return values.map((item) => item.trim()).filter((item) => item.length > 0)
 }
 
-export function formatTime(value: string | null | undefined): string {
-  if (!value) {
-    return '-'
-  }
-  return value.replace('T', ' ').slice(0, 19)
-}
-
 export function reasonTitle(reason: string | null | undefined): string | undefined {
   const text = (reason ?? '').trim()
   if (!text || text === '-') {

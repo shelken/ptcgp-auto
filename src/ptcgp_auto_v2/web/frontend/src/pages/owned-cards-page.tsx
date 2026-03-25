@@ -10,7 +10,8 @@ import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { applyImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
-import { formatTime, parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
+import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
+import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 import type { BootstrapOptions } from '@/types/api'
 
 interface OwnedCardsPageProps {
@@ -334,7 +335,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
       next.set('owned_page', String(listPage))
     }
     if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true })
+      setSearchParams(next, { replace: true, preventScrollReset: true })
     }
   }, [
     accountQuery,
@@ -570,6 +571,25 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     window.addEventListener('keydown', onEscape)
     return () => window.removeEventListener('keydown', onEscape)
   }, [closeDetailModal, detailCardId])
+
+  useEffect(() => {
+    if (detailCardId === null) {
+      return
+    }
+    const previousOverflow = document.body.style.overflow
+    const previousPaddingRight = document.body.style.paddingRight
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    document.body.style.overflow = 'hidden'
+    if (scrollBarWidth > 0) {
+      document.body.style.paddingRight = `${scrollBarWidth}px`
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.body.style.paddingRight = previousPaddingRight
+    }
+  }, [detailCardId])
 
   useEffect(() => {
     if (pendingExchangeAccountId === null) {
@@ -916,7 +936,9 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                       <td>{item.card.rarity}</td>
                       <td className="mono">{item.total_count}</td>
                       <td className="mono">{item.owned_accounts_count}</td>
-                      <td className="mono">{formatTime(item.latest_acquired_at)}</td>
+                      <td className="mono" title={formatAbsoluteDateTime(item.latest_acquired_at)}>
+                        {formatRelativeDateTime(item.latest_acquired_at, lang, t)}
+                      </td>
                       <td>
                         <Button
                           type="button"
@@ -1077,22 +1099,22 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                         <thead>
                           <tr>
                             <th>
-                              <button type="button" className="text-xs" onClick={() => applyDetailSort('account_id')}>
+                              <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('account_id')}>
                                 {tr(t, 'col_account', 'Account')} {getDetailSortIndicator('account_id')}
                               </button>
                             </th>
                             <th>
-                              <button type="button" className="text-xs" onClick={() => applyDetailSort('friend_id')}>
+                              <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('friend_id')}>
                                 {tr(t, 'col_friend_id', 'Friend ID')} {getDetailSortIndicator('friend_id')}
                               </button>
                             </th>
                             <th>
-                              <button type="button" className="text-xs" onClick={() => applyDetailSort('count')}>
+                              <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('count')}>
                                 {tr(t, 'col_count', 'Count')} {getDetailSortIndicator('count')}
                               </button>
                             </th>
                             <th>
-                              <button type="button" className="text-xs" onClick={() => applyDetailSort('exchange_points')}>
+                              <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('exchange_points')}>
                                 {tr(t, 'col_exchange_points', 'Exchange Points')} {getDetailSortIndicator('exchange_points')}
                               </button>
                             </th>

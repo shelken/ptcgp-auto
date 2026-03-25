@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { tr } from '@/lib/i18n'
+import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 
 interface NotificationItem {
   id: number
@@ -16,6 +17,7 @@ interface NotificationItem {
   image_url: string | null
   image_webp_url: string | null
   is_read: boolean
+  created_at: string
   relative_time: string
 }
 
@@ -306,7 +308,9 @@ export function NotificationDrawer({
                       {!item.is_read && <span className="notification-dot" aria-hidden="true" />}
                     </div>
                     <div className="notification-body">{plainText || '-'}</div>
-                    <div className="notification-time">{item.relative_time || '-'}</div>
+                    <div className="notification-time" title={formatAbsoluteDateTime(item.created_at)}>
+                      {item.relative_time || formatRelativeDateTime(item.created_at, lang, t)}
+                    </div>
                   </div>
                 </button>
                 {expanded && (

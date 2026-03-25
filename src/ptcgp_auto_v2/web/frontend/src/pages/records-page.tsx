@@ -9,7 +9,8 @@ import { buildQuery, fetchJson } from '@/lib/api'
 import { applyImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
-import { formatTime, parseSearchList, toggleListItem } from '@/lib/list-utils'
+import { parseSearchList, toggleListItem } from '@/lib/list-utils'
+import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 import type { BootstrapOptions } from '@/types/api'
 
 interface RecordsPageProps {
@@ -230,7 +231,7 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     selectedTypes.forEach((item) => next.append('records_type', item))
     next.set('records_view', viewMode)
     if (next.toString() !== searchParams.toString()) {
-      setSearchParams(next, { replace: true })
+      setSearchParams(next, { replace: true, preventScrollReset: true })
     }
   }, [searchParams, selectedRarity, selectedTypes, setSearchParams, viewMode])
 
@@ -445,7 +446,9 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
                     <div className="records-divider" aria-hidden="true" />
 
                     <div className="records-meta-bottom">
-                      <div className="records-time" title={formatTime(item.opened_at)}>{formatTime(item.opened_at)}</div>
+                      <div className="records-time" title={formatAbsoluteDateTime(item.opened_at)}>
+                        {formatRelativeDateTime(item.opened_at, lang, t)}
+                      </div>
                       <div className="records-metric-row">
                         <span className="records-metric-chip">{cardCount} {tr(t, 'cards_count_suffix', 'Cards')}</span>
                         {item.current_points !== null && item.current_points !== undefined ? (
