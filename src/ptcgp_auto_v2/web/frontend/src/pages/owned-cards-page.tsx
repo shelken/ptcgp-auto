@@ -7,7 +7,7 @@ import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
-import { applyImageFallback } from '@/lib/card-image-fallback'
+import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
@@ -88,6 +88,14 @@ interface ExchangeAccountsResponse {
 
 const OWNED_DETAIL_PAGE_SIZE_KEY = 'ptcgp_owned_modal_page_size'
 const OWNED_GRID_COLS_KEY = 'ptcgp_owned_cols'
+const OWNED_PAGE_SIZE = 40
+const DETAIL_TABLE_ROW_HEIGHT = 44
+const DETAIL_MODAL_RESERVED_HEIGHT = 470
+const DETAIL_PAGE_SIZE_MIN = 6
+const DETAIL_PAGE_SIZE_MAX = 24
+const OWNED_GRID_COLS_MIN = 3
+const OWNED_GRID_COLS_MAX = 7
+const OWNED_GRID_COLS_DEFAULT = 5
 type DetailSortField = 'account_id' | 'friend_id' | 'nickname' | 'count' | 'exchange_points'
 type DetailNoticeLevel = 'success' | 'error'
 
@@ -97,10 +105,9 @@ interface DetailNoticeState {
 }
 
 function calculateDetailPageSize(): number {
-  const availableHeight = window.innerHeight - 470
-  const rowHeight = 44
-  const computed = Math.floor(availableHeight / rowHeight)
-  return Math.min(Math.max(computed, 6), 24)
+  const availableHeight = window.innerHeight - DETAIL_MODAL_RESERVED_HEIGHT
+  const computed = Math.floor(availableHeight / DETAIL_TABLE_ROW_HEIGHT)
+  return Math.min(Math.max(computed, DETAIL_PAGE_SIZE_MIN), DETAIL_PAGE_SIZE_MAX)
 }
 
 function restoreDetailPageSize(): number {
@@ -108,26 +115,36 @@ function restoreDetailPageSize(): number {
   if (!Number.isFinite(value) || value <= 0) {
     return calculateDetailPageSize()
   }
-  return Math.min(Math.max(Math.floor(value), 6), 24)
+  return Math.min(Math.max(Math.floor(value), DETAIL_PAGE_SIZE_MIN), DETAIL_PAGE_SIZE_MAX)
 }
 
 function normalizeOwnedGridCols(value: number): number {
   if (!Number.isFinite(value)) {
-    return 5
+    return OWNED_GRID_COLS_DEFAULT
   }
   const integerValue = Math.floor(value)
-  if (integerValue < 3) {
-    return 3
+  if (integerValue < OWNED_GRID_COLS_MIN) {
+    return OWNED_GRID_COLS_MIN
   }
-  if (integerValue > 7) {
-    return 7
+  if (integerValue > OWNED_GRID_COLS_MAX) {
+    return OWNED_GRID_COLS_MAX
   }
   return integerValue
 }
 
 function restoreOwnedGridCols(): number {
-  const value = Number(window.localStorage.getItem(OWNED_GRID_COLS_KEY) ?? 5)
+  const value = Number(window.localStorage.getItem(OWNED_GRID_COLS_KEY) ?? OWNED_GRID_COLS_DEFAULT)
   return normalizeOwnedGridCols(value)
+}
+
+function ownedEmptyText(ownershipScope: string, t: Record<string, string>): string {
+  if (ownershipScope === 'missing') {
+    return tr(t, 'owned_cards_missing_empty', 'No missing cards')
+  }
+  if (ownershipScope === 'all') {
+    return tr(t, 'owned_cards_all_empty', 'No cards')
+  }
+  return tr(t, 'owned_cards_empty', 'No owned cards')
 }
 
 async function copyText(value: string): Promise<boolean> {
@@ -161,7 +178,7 @@ function CardThumb({
       className="owned-thumb"
       loading="lazy"
       decoding="async"
-      onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
+      onError={(event) => applyCardListImageFallback(event.currentTarget, urls)}
     />
   )
 }
@@ -353,11 +370,10 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     sortBy
   ])
 
-  const baseParams = useMemo(
+  const baseFilterParams = useMemo(
     () => ({
       lang,
       account_id: accountQuery,
-      sort_by: sortBy,
       ownership_scope: ownershipScope,
       rarity: selectedRarity,
       card_type: selectedTypes,
@@ -365,7 +381,15 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
       set_code: selectedSetCodes,
       pack_name: selectedPackNames
     }),
-    [accountQuery, lang, ownershipScope, selectedElements, selectedPackNames, selectedRarity, selectedSetCodes, selectedTypes, sortBy]
+    [accountQuery, lang, ownershipScope, selectedElements, selectedPackNames, selectedRarity, selectedSetCodes, selectedTypes]
+  )
+
+  const baseParams = useMemo(
+    () => ({
+      ...baseFilterParams,
+      sort_by: sortBy
+    }),
+    [baseFilterParams, sortBy]
   )
 
   const listQueryString = useMemo(
@@ -373,25 +397,12 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
       buildQuery({
         ...baseParams,
         page: listPage,
-        page_size: 40
+        page_size: OWNED_PAGE_SIZE
       }),
     [baseParams, listPage]
   )
 
-  const statsQueryString = useMemo(
-    () =>
-      buildQuery({
-        lang,
-        account_id: accountQuery,
-        ownership_scope: ownershipScope,
-        rarity: selectedRarity,
-        card_type: selectedTypes,
-        element: selectedElements,
-        set_code: selectedSetCodes,
-        pack_name: selectedPackNames
-      }),
-    [accountQuery, lang, ownershipScope, selectedElements, selectedPackNames, selectedRarity, selectedSetCodes, selectedTypes]
-  )
+  const statsQueryString = useMemo(() => buildQuery(baseFilterParams), [baseFilterParams])
 
   const listQuery = useQuery({
     queryKey: ['owned-list', listQueryString],
@@ -407,7 +418,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         `/api/react/owned-cards?${buildQuery({
           ...baseParams,
           page: pageParam,
-          page_size: 40
+          page_size: OWNED_PAGE_SIZE
         })}`
       ),
     initialPageParam: 0,
@@ -482,34 +493,24 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     }
   })
 
-  const openDetailModal = useCallback(
-    (cardId: number) => {
-      stopDetailPreviewDrag(false)
-      resetDetailPreviewTransform(false)
-      setDetailNotice(null)
-      setPendingExchangeAccountId(null)
-      setFriendInputByAccount({})
-      setDetailCardId(cardId)
-      setDetailPage(0)
-      setDetailQ('')
-      setDetailSortBy('account_id')
-      setDetailSortOrder('asc')
-    },
-    [resetDetailPreviewTransform, stopDetailPreviewDrag]
-  )
-
-  const closeDetailModal = useCallback(() => {
+  const resetDetailModalState = useCallback((cardId: number | null) => {
     stopDetailPreviewDrag(false)
     resetDetailPreviewTransform(false)
     setDetailNotice(null)
     setPendingExchangeAccountId(null)
     setFriendInputByAccount({})
-    setDetailCardId(null)
+    setDetailCardId(cardId)
     setDetailPage(0)
     setDetailQ('')
     setDetailSortBy('account_id')
     setDetailSortOrder('asc')
   }, [resetDetailPreviewTransform, stopDetailPreviewDrag])
+  const openDetailModal = useCallback((cardId: number) => {
+    resetDetailModalState(cardId)
+  }, [resetDetailModalState])
+  const closeDetailModal = useCallback(() => {
+    resetDetailModalState(null)
+  }, [resetDetailModalState])
 
   const applyDetailSort = useCallback(
     (nextSortBy: DetailSortField) => {
@@ -605,6 +606,12 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   useEffect(() => {
     window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
   }, [gridCols])
+  const detailPreviewImageUrls = detailQuery.data
+    ? getCardImageUrls(assets, {
+        setCode: detailQuery.data.card.set_code,
+        cardNumber: detailQuery.data.card.number
+      })
+    : null
 
   const gridCards = (gridQuery.data?.pages ?? []).flatMap((page) => page.items)
   const cards = viewMode === 'grid' ? gridCards : (listQuery.data?.items ?? [])
@@ -625,6 +632,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const isListLoading = viewMode === 'list' ? listQuery.isLoading : gridQuery.isLoading
   const isListError = viewMode === 'list' ? listQuery.isError : gridQuery.isError
   const listError = (viewMode === 'list' ? listQuery.error : gridQuery.error) as Error | null
+  const emptyCardsText = ownedEmptyText(ownershipScope, t)
 
   const clearFilters = () => {
     setListPage(0)
@@ -846,11 +854,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
             <div className="surface-card">
               {cards.length === 0 ? (
                 <div className="text-center text-muted py-8">
-                  {ownershipScope === 'missing'
-                    ? tr(t, 'owned_cards_missing_empty', 'No missing cards')
-                    : ownershipScope === 'all'
-                      ? tr(t, 'owned_cards_all_empty', 'No cards')
-                      : tr(t, 'owned_cards_empty', 'No owned cards')}
+                  {emptyCardsText}
                 </div>
               ) : (
                 <div
@@ -876,7 +880,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                             className="owned-card-image"
                             loading="lazy"
                             decoding="async"
-                            onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
+                            onError={(event) => applyCardListImageFallback(event.currentTarget, urls)}
                           />
                         </div>
                         {showCounts ? (
@@ -911,11 +915,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                   {cards.length === 0 && (
                     <tr>
                       <td colSpan={7} className="text-center text-muted">
-                        {ownershipScope === 'missing'
-                          ? tr(t, 'owned_cards_missing_empty', 'No missing cards')
-                          : ownershipScope === 'all'
-                            ? tr(t, 'owned_cards_all_empty', 'No cards')
-                            : tr(t, 'owned_cards_empty', 'No owned cards')}
+                        {emptyCardsText}
                       </td>
                     </tr>
                   )}
@@ -1009,21 +1009,17 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                         onPointerDown={startDetailPreviewDrag}
                       >
                         <img
-                          src={getCardImageUrls(assets, {
-                            setCode: detailQuery.data.card.set_code,
-                            cardNumber: detailQuery.data.card.number
-                          }).cdnPng}
+                          src={detailPreviewImageUrls?.cdnPng ?? ''}
                           alt={detailQuery.data.card_display_name}
                           className="owned-card-preview-image"
                           loading="lazy"
                           decoding="async"
                           draggable={false}
                           onError={(event) => {
-                            const urls = getCardImageUrls(assets, {
-                              setCode: detailQuery.data.card.set_code,
-                              cardNumber: detailQuery.data.card.number
-                            })
-                            applyImageFallback(event.currentTarget, [urls.webp, urls.cdnWebp, urls.png])
+                            if (!detailPreviewImageUrls) {
+                              return
+                            }
+                            applyCardPreviewImageFallback(event.currentTarget, detailPreviewImageUrls)
                           }}
                         />
                         <div ref={detailPreviewShineRef} className="owned-card-shine" />
