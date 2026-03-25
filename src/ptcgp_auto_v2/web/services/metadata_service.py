@@ -123,7 +123,6 @@ def build_metadata_context(
 
         selected_context = _build_selected_context(
             repo=repo,
-            sets_data=sets_data,
             packs_by_set=packs_by_set,
             selected_node_type=selected_node_type,
             selected_node_id=selected_node_id,
@@ -287,7 +286,6 @@ def resolve_sync_request(
 
 def _build_selected_context(
     repo: CardRepository,
-    sets_data: list[dict[str, Any]],
     packs_by_set: dict[str, list[dict[str, Any]]],
     selected_node_type: str,
     selected_node_id: str,
@@ -295,13 +293,58 @@ def _build_selected_context(
     selected_pack_name: str,
 ) -> dict[str, Any]:
     """构建当前选中节点上下文"""
-    node_type = (selected_node_type or "root").strip().lower()
-    node_id = (selected_node_id or "all").strip()
-
+    node_type, node_id = _normalize_selected_node(selected_node_type, selected_node_id)
     set_code = (selected_set_code or "").strip()
     pack_name = (selected_pack_name or "").strip()
     card_key = ""
+    node_type, node_id, set_code, pack_name, card_key = _resolve_selection_by_node(
+        repo=repo,
+        node_type=node_type,
+        node_id=node_id,
+        set_code=set_code,
+        pack_name=pack_name,
+    )
+    set_code, pack_name = _sanitize_set_and_pack(
+        packs_by_set=packs_by_set,
+        set_code=set_code,
+        pack_name=pack_name,
+    )
+    selected_pack_cards = _build_selected_pack_cards(
+        repo=repo,
+        set_code=set_code,
+        pack_name=pack_name,
+    )
 
+    return {
+        "selected_node_type": node_type,
+        "selected_node_id": node_id,
+        "selected_set_code": set_code,
+        "selected_pack_name": pack_name,
+        "selected_card_key": card_key,
+        "selected_pack_cards": selected_pack_cards,
+    }
+
+
+def _normalize_selected_node(
+    selected_node_type: str,
+    selected_node_id: str,
+) -> tuple[str, str]:
+    """规范化节点类型和节点标识。"""
+    node_type = (selected_node_type or "root").strip().lower()
+    node_id = (selected_node_id or "all").strip()
+    return node_type, node_id
+
+
+def _resolve_selection_by_node(
+    *,
+    repo: CardRepository,
+    node_type: str,
+    node_id: str,
+    set_code: str,
+    pack_name: str,
+) -> tuple[str, str, str, str, str]:
+    """根据节点类型推导选中 set/pack/card。"""
+    card_key = ""
     if node_type == "set":
         set_code = node_id
     elif node_type == "pack":
@@ -319,45 +362,56 @@ def _build_selected_context(
     elif node_type != "root":
         node_type = "root"
         node_id = "all"
+    return node_type, node_id, set_code, pack_name, card_key
 
+
+def _sanitize_set_and_pack(
+    *,
+    packs_by_set: dict[str, list[dict[str, Any]]],
+    set_code: str,
+    pack_name: str,
+) -> tuple[str, str]:
+    """清理非法 set/pack 选择。"""
     if set_code and set_code not in packs_by_set:
-        set_code = ""
+        return "", pack_name
     if set_code and pack_name:
         valid_pack_names = {item["name"] for item in packs_by_set.get(set_code, [])}
         if pack_name not in valid_pack_names:
-            pack_name = ""
+            return set_code, ""
+    return set_code, pack_name
+
+
+def _build_selected_pack_cards(
+    *,
+    repo: CardRepository,
+    set_code: str,
+    pack_name: str,
+) -> list[dict[str, Any]]:
+    """构建当前卡包下的卡牌列表。"""
+    if not set_code or not pack_name:
+        return []
+    from ptcgp_auto_v2.web.utils.i18n import resolve_label
 
     selected_pack_cards: list[dict[str, Any]] = []
-    if set_code and pack_name:
-        from ptcgp_auto_v2.web.utils.i18n import resolve_label
+    cards = repo.get_cards_by_pack(pack_name=pack_name, set_code=set_code)
+    for card in cards:
+        card_data = parse_json_label(card.data)
+        localized_name = card_data.get("localized_name") if card_data else {}
+        if isinstance(localized_name, dict):
+            display_name = resolve_label(localized_name, fallback=card.name)
+        else:
+            display_name = resolve_label(card_data, fallback=card.name)
 
-        cards = repo.get_cards_by_pack(pack_name=pack_name, set_code=set_code)
-        for card in cards:
-            card_data = parse_json_label(card.data)
-            localized_name = card_data.get("localized_name") if card_data else {}
-            if isinstance(localized_name, dict):
-                display_name = resolve_label(localized_name, fallback=card.name)
-            else:
-                display_name = resolve_label(card_data, fallback=card.name)
-
-            selected_pack_cards.append(
-                {
-                    "set_code": card.set_code,
-                    "number": card.number,
-                    "name": card.name,
-                    "display_name": display_name,
-                    "key": f"{card.set_code}-{card.number:03d}",
-                }
-            )
-
-    return {
-        "selected_node_type": node_type,
-        "selected_node_id": node_id,
-        "selected_set_code": set_code,
-        "selected_pack_name": pack_name,
-        "selected_card_key": card_key,
-        "selected_pack_cards": selected_pack_cards,
-    }
+        selected_pack_cards.append(
+            {
+                "set_code": card.set_code,
+                "number": card.number,
+                "name": card.name,
+                "display_name": display_name,
+                "key": f"{card.set_code}-{card.number:03d}",
+            }
+        )
+    return selected_pack_cards
 
 
 def _parse_card_key(card_key: str) -> tuple[str, int] | None:
@@ -461,13 +515,12 @@ def _normalize_action_for_node(node_type: str, action: str) -> str:
 def _build_action_cards(available_actions: list[str]) -> list[dict[str, Any]]:
     """将动作列表转换为卡片展示结构。"""
     cards: list[dict[str, Any]] = []
-
     if "update_new_series" in available_actions:
         cards.append(
-            {
-                "title_key": "metadata_action_update_new_series",
-                "title_fallback": "更新新系列",
-                "buttons": [
+            _build_action_card(
+                title_key="metadata_action_update_new_series",
+                title_fallback="更新新系列",
+                buttons=[
                     {
                         "action": "update_new_series",
                         "label_key": "metadata_action_update_new_series",
@@ -475,63 +528,77 @@ def _build_action_cards(available_actions: list[str]) -> list[dict[str, Any]]:
                         "mode": "supplement",
                     }
                 ],
-            }
+            )
         )
 
-    data_buttons: list[dict[str, str]] = []
-    if "update_data_supplement" in available_actions:
-        data_buttons.append(
-            {
-                "action": "update_data_supplement",
-                "label_key": "metadata_mode_supplement",
-                "label_fallback": "补充",
-                "mode": "supplement",
-            }
-        )
-    if "update_data_force" in available_actions:
-        data_buttons.append(
-            {
-                "action": "update_data_force",
-                "label_key": "metadata_mode_force",
-                "label_fallback": "覆盖",
-                "mode": "force",
-            }
-        )
+    data_buttons = _build_mode_buttons(
+        available_actions=available_actions,
+        supplement_action="update_data_supplement",
+        force_action="update_data_force",
+    )
     if data_buttons:
         cards.append(
-            {
-                "title_key": "metadata_action_update_data",
-                "title_fallback": "更新数据",
-                "buttons": data_buttons,
-            }
+            _build_action_card(
+                title_key="metadata_action_update_data",
+                title_fallback="更新数据",
+                buttons=data_buttons,
+            )
         )
 
-    chinese_buttons: list[dict[str, str]] = []
-    if "update_chinese_supplement" in available_actions:
-        chinese_buttons.append(
+    chinese_buttons = _build_mode_buttons(
+        available_actions=available_actions,
+        supplement_action="update_chinese_supplement",
+        force_action="update_chinese_force",
+    )
+    if chinese_buttons:
+        cards.append(
+            _build_action_card(
+                title_key="metadata_action_update_chinese",
+                title_fallback="更新中文",
+                buttons=chinese_buttons,
+            )
+        )
+    return cards
+
+
+def _build_action_card(
+    *,
+    title_key: str,
+    title_fallback: str,
+    buttons: list[dict[str, str]],
+) -> dict[str, Any]:
+    """构建动作卡片视图。"""
+    return {
+        "title_key": title_key,
+        "title_fallback": title_fallback,
+        "buttons": buttons,
+    }
+
+
+def _build_mode_buttons(
+    *,
+    available_actions: list[str],
+    supplement_action: str,
+    force_action: str,
+) -> list[dict[str, str]]:
+    """构建补充/覆盖动作按钮。"""
+    buttons: list[dict[str, str]] = []
+    if supplement_action in available_actions:
+        buttons.append(
             {
-                "action": "update_chinese_supplement",
+                "action": supplement_action,
                 "label_key": "metadata_mode_supplement",
                 "label_fallback": "补充",
                 "mode": "supplement",
             }
         )
-    if "update_chinese_force" in available_actions:
-        chinese_buttons.append(
+    if force_action in available_actions:
+        buttons.append(
             {
-                "action": "update_chinese_force",
+                "action": force_action,
                 "label_key": "metadata_mode_force",
                 "label_fallback": "覆盖",
                 "mode": "force",
             }
         )
-    if chinese_buttons:
-        cards.append(
-            {
-                "title_key": "metadata_action_update_chinese",
-                "title_fallback": "更新中文",
-                "buttons": chinese_buttons,
-            }
-        )
-
-    return cards
+    return buttons

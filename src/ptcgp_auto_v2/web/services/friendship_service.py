@@ -13,13 +13,7 @@ from ptcgp_auto_v2.web.queries.friendship_queries import (
     list_friend_requests,
     list_friendships,
 )
-
-
-def _serialize_account(account) -> dict[str, object]:
-    """把账号转成模板可直接消费的纯数据。"""
-    data = account.to_dict()
-    data["display_name"] = account.display_name
-    return data
+from ptcgp_auto_v2.web.utils.serialization import serialize_account
 
 
 def build_friendship_context(
@@ -34,7 +28,7 @@ def build_friendship_context(
 ) -> dict:
     """构建好友管理页面所需上下文数据。"""
     account_repo = AccountRepository(session)
-    accounts = [_serialize_account(account) for account in account_repo.get_all()]
+    accounts = [serialize_account(account) for account in account_repo.get_all()]
 
     account_name_map: dict[int, str] = {}
     account_friend_id_map: dict[int, str] = {}

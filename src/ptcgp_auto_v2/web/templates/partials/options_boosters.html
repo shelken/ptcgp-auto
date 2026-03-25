@@ -1,3 +1,0 @@
-{% for booster in boosters %}
-<option value="{{ booster.name if booster.name is defined else booster }}">{{ booster.display_name if booster.display_name is defined else booster }}</option>
-{% endfor %}

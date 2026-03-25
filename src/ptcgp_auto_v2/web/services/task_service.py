@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlencode
 
 from sqlalchemy import String, cast as sa_cast
@@ -30,6 +30,7 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page_size,
 )
 from ptcgp_auto_v2.web.utils.i18n import get_current_lang
+from ptcgp_auto_v2.web.utils.serialization import serialize_account
 from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
 
 
@@ -259,10 +260,7 @@ def list_task_filter_accounts(
         statement = statement.where(or_(*filters))
 
     accounts = session.exec(statement).all()
-    return [
-        {**cast(dict[str, Any], account.to_dict()), "display_name": account.display_name}
-        for account in accounts
-    ]
+    return [serialize_account(account) for account in accounts]
 
 
 def build_task_list_render_context(

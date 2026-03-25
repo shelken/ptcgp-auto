@@ -54,7 +54,7 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 
 ### Web 管理界面
 
-内置现代化 Web UI，支持：
+内置现代化 Web UI（FastAPI 后端 + React/TypeScript 前端），支持：
 
 - **开包记录**：查看历史开包记录，支持稀有度/类型/系列筛选，网格/列表双视图
 - **卡牌收藏**：查看所有账号拥有的卡牌，支持多列布局切换
@@ -63,7 +63,6 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 - **任务监控**：实时查看任务执行状态，支持手动重置
 - **好友管理**：查看好友关系、配对状态
 - **交换记录**：查看交换请求状态，支持取消操作
-- **多主题切换**：支持 8 种主题风格，亮色/暗色模式自适应
 
 ### 系统特性
 
@@ -212,11 +211,11 @@ ptcgp-auto/
 │   │   ├── services/           # 业务服务层
 │   │   ├── infra/              # 基础设施 (ADB、OCR、YOLO识别等)
 │   │   ├── db/                 # 数据库层 (模型、仓库)
-│   │   ├── web/                # Web UI (FastAPI + HTMX)
+│   │   ├── web/                # Web UI (FastAPI + React/TypeScript)
 │   │   │   ├── routers/        # 路由层
 │   │   │   ├── services/       # 业务层
 │   │   │   ├── queries/        # 查询层
-│   │   │   ├── templates/      # Jinja2 模板
+│   │   │   ├── frontend/       # React + TypeScript + Bun 前端工程
 │   │   │   ├── static/         # 静态资源 (CSS/JS)
 │   │   │   └── locales/        # 多语言配置
 │   │   ├── config/             # 配置管理

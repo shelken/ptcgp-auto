@@ -156,6 +156,142 @@ def _build_batch_item_view(
     }
 
 
+def _build_label_maps(
+    card_repo: CardRepository,
+    records: list[PackRecord],
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """批量构建系列和卡包标签映射。"""
+    set_codes = sorted({record.set_code for record in records if record.set_code})
+    pack_names = sorted({record.pack_name for record in records if record.pack_name})
+    sets_map = {
+        code: parse_json_label(label_data)
+        for code, label_data in card_repo.get_set_labels_map(set_codes).items()
+    }
+    packs_map = {
+        pack_name: parse_json_label(label_data)
+        for pack_name, label_data in card_repo.get_pack_labels_map(pack_names).items()
+    }
+    return sets_map, packs_map
+
+
+def _resolve_single_layout(card_count: int) -> str:
+    """按卡牌数量返回布局类型。"""
+    if card_count == 6:
+        return "layout-6"
+    if card_count == 5:
+        return "layout-5"
+    if card_count == 4:
+        return "layout-4"
+    return "layout-3"
+
+
+def _resolve_series_and_points(
+    record: PackRecord,
+    points_map: dict[tuple[int, str], int],
+) -> tuple[str, int | None]:
+    """解析记录所属系列和点数。"""
+    current_points = None
+    series_code = ""
+    if record.set_code:
+        series_code = record.set_code
+        current_points = points_map.get((record.account_id, record.set_code))
+        return series_code, current_points
+
+    if record.pack_type and "/" in record.pack_type:
+        parts = record.pack_type.split("/")
+        if parts:
+            series_code = parts[0]
+            current_points = points_map.get((record.account_id, series_code))
+    return series_code, current_points
+
+
+def _build_single_item_view(
+    record: PackRecord,
+    points_map: dict[tuple[int, str], int],
+    sets_map: dict[str, dict[str, Any]],
+    packs_map: dict[str, dict[str, Any]],
+    translations: dict[str, Any],
+) -> dict[str, Any]:
+    """构建单包记录视图。"""
+    sorted_cards = sorted(record.cards, key=lambda card: card.position)
+    card_views = [_build_record_card_view(card) for card in sorted_cards]
+    series_code, current_points = _resolve_series_and_points(record, points_map)
+
+    set_name_display = series_code
+    if series_code in sets_map:
+        set_name_display = resolve_label(sets_map[series_code], fallback=series_code)
+
+    pack_name_display = record.pack_name or ""
+    if record.pack_name in packs_map:
+        pack_name_display = resolve_label(
+            packs_map[record.pack_name], fallback=record.pack_name
+        )
+
+    pack_type_display = str(
+        translations.get(record.pack_type, record.pack_type or "")
+    )
+    return {
+        "is_batch": False,
+        "record": record,
+        "cards": card_views,
+        "layout": _resolve_single_layout(len(card_views)),
+        "account_name": (record.account.nickname if record.account else "Unknown"),
+        "opened_at": record.opened_at,
+        "current_points": current_points,
+        "series": series_code,
+        "set_name_display": set_name_display,
+        "pack_name_display": pack_name_display,
+        "pack_type_display": pack_type_display,
+    }
+
+
+def _build_record_items(
+    *,
+    results: list[PackRecord],
+    batch_record_map: dict[str, list[PackRecord]],
+    points_map: dict[tuple[int, str], int],
+    sets_map: dict[str, dict[str, Any]],
+    packs_map: dict[str, dict[str, Any]],
+    translations: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """按展示规则构建记录列表项（十连聚合 + 单包）。"""
+    items: list[dict[str, Any]] = []
+    processed_batches: set[str] = set()
+    for record in results:
+        if (
+            record.pack_type == PackRecordType.TEN_PACK
+            and record.batch_id
+            and record.batch_id not in processed_batches
+        ):
+            processed_batches.add(record.batch_id)
+            batch_records = batch_record_map.get(record.batch_id, [])
+            items.append(
+                _build_batch_item_view(
+                    batch_id=record.batch_id,
+                    batch_records=batch_records,
+                    points_map=points_map,
+                    sets_map=sets_map,
+                    packs_map=packs_map,
+                    translations=translations,
+                )
+            )
+            continue
+
+        if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
+            continue
+
+        items.append(
+            _build_single_item_view(
+                record=record,
+                points_map=points_map,
+                sets_map=sets_map,
+                packs_map=packs_map,
+                translations=translations,
+            )
+        )
+    return items
+
+
 def build_records_list_context(
     *,
     session: Session,
@@ -179,111 +315,21 @@ def build_records_list_context(
     )
 
     card_repo = CardRepository(session)
-    set_codes = sorted({record.set_code for record in results if record.set_code})
-    pack_names = sorted({record.pack_name for record in results if record.pack_name})
-    sets_map = {
-        code: parse_json_label(label_data)
-        for code, label_data in card_repo.get_set_labels_map(set_codes).items()
-    }
-    packs_map = {
-        pack_name: parse_json_label(label_data)
-        for pack_name, label_data in card_repo.get_pack_labels_map(pack_names).items()
-    }
-
+    sets_map, packs_map = _build_label_maps(card_repo, results)
     points_map = fetch_pack_points_map(session, results)
-    items = []
     _, translations = get_current_i18n()
     batch_record_map = _fetch_batch_records_map(
         session,
         sorted({record.batch_id for record in results if record.batch_id}),
     )
-
-    # 用于追踪已处理的批次，避免重复展示
-    processed_batches: set[str] = set()
-
-    for record in results:
-        # 十连包批次处理：只处理每批的第一条记录，聚合整批
-        if (
-            record.pack_type == PackRecordType.TEN_PACK
-            and record.batch_id
-            and record.batch_id not in processed_batches
-        ):
-            processed_batches.add(record.batch_id)
-
-            batch_records = batch_record_map.get(record.batch_id, [])
-            items.append(
-                _build_batch_item_view(
-                    batch_id=record.batch_id,
-                    batch_records=batch_records,
-                    points_map=points_map,
-                    sets_map=sets_map,
-                    packs_map=packs_map,
-                    translations=translations,
-                )
-            )
-            continue
-
-        # 十连包的后续记录（同一批次的非第一条）跳过
-        if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
-            continue
-
-        # 单包处理（保持原有逻辑）
-        sorted_cards = sorted(record.cards, key=lambda card: card.position)
-        card_views = [_build_record_card_view(card) for card in sorted_cards]
-        card_count = len(card_views)
-        layout_type = "layout-3"
-
-        if card_count == 6:
-            layout_type = "layout-6"
-        elif card_count == 5:
-            layout_type = "layout-5"
-        elif card_count == 4:
-            layout_type = "layout-4"
-
-        current_points = None
-        series_code = ""
-        if record.set_code:
-            current_points = points_map.get((record.account_id, record.set_code))
-            series_code = record.set_code
-        elif record.pack_type and "/" in record.pack_type:
-            parts = record.pack_type.split("/")
-            if parts:
-                series = parts[0]
-                current_points = points_map.get((record.account_id, series))
-                series_code = series
-
-        set_name_display = series_code
-        if series_code in sets_map:
-            set_name_display = resolve_label(
-                sets_map[series_code], fallback=series_code
-            )
-
-        pack_name_display = record.pack_name or ""
-        if record.pack_name in packs_map:
-            pack_name_display = resolve_label(
-                packs_map[record.pack_name], fallback=record.pack_name
-            )
-        pack_type_display = str(
-            translations.get(record.pack_type, record.pack_type or "")
-        )
-
-        items.append(
-            {
-                "is_batch": False,
-                "record": record,
-                "cards": card_views,
-                "layout": layout_type,
-                "account_name": (
-                    record.account.nickname if record.account else "Unknown"
-                ),
-                "opened_at": record.opened_at,
-                "current_points": current_points,
-                "series": series_code,
-                "set_name_display": set_name_display,
-                "pack_name_display": pack_name_display,
-                "pack_type_display": pack_type_display,
-            }
-        )
+    items = _build_record_items(
+        results=results,
+        batch_record_map=batch_record_map,
+        points_map=points_map,
+        sets_map=sets_map,
+        packs_map=packs_map,
+        translations=translations,
+    )
 
     return {
         "items": items,
