@@ -363,8 +363,8 @@
 }
 
 .owned-detail-modal {
-  width: min(1100px, 96vw);
-  max-height: min(88vh, 860px);
+  --dialog-card-width: 980px;
+  --dialog-card-max-height: min(90vh, 900px);
   overflow: hidden;
   padding: 0.85rem;
 }
@@ -373,8 +373,8 @@
   display: flex;
   gap: 1rem;
   align-items: stretch;
-  min-height: min(82vh, 760px);
-  height: min(82vh, 760px);
+  min-height: min(76vh, 780px);
+  height: min(76vh, 780px);
 }
 
 .owned-card-modal-left {
@@ -523,9 +523,10 @@
   }
 
   .owned-detail-modal {
-    width: min(96vw, 960px);
-    max-height: 92vh;
+    --dialog-card-width: 100%;
+    --dialog-card-max-height: 92vh;
     overflow: auto;
+    padding: 0.7rem;
   }
 
   .owned-card-modal-layout {
