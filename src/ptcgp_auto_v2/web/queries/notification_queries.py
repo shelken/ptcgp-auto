@@ -3,10 +3,17 @@
 
 from typing import Optional
 
-from sqlalchemy import String, cast, func, or_
+from sqlalchemy import String, cast, or_
 from sqlmodel import Session, col, select
 
 from ptcgp_auto_v2.db.models import Card, CardPack, Notification
+from ptcgp_auto_v2.web.queries._query_helpers import (
+    apply_sort,
+    fetch_page_rows_with_total,
+    normalize_pagination,
+    normalize_sort_params,
+    resolve_sort_column,
+)
 
 
 SORT_FIELDS = {
@@ -18,9 +25,12 @@ SORT_FIELDS = {
 
 def normalize_notification_sort(sort_by: str, sort_order: str) -> tuple[str, str]:
     """标准化通知列表排序参数。"""
-    normalized_sort_by = sort_by if sort_by in SORT_FIELDS else "created_at"
-    normalized_sort_order = "asc" if sort_order == "asc" else "desc"
-    return normalized_sort_by, normalized_sort_order
+    return normalize_sort_params(
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields=SORT_FIELDS,
+        default_field="created_at",
+    )
 
 
 def list_notifications(
@@ -38,8 +48,11 @@ def list_notifications(
     normalized_sort_by, normalized_sort_order = normalize_notification_sort(
         sort_by, sort_order
     )
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 100)
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=100,
+    )
 
     statement = select(Notification)
     if scene:
@@ -59,21 +72,21 @@ def list_notifications(
             )
         )
 
-    sort_column = SORT_FIELDS[normalized_sort_by]
-    if normalized_sort_order == "asc":
-        statement = statement.order_by(sort_column.asc())
-    else:
-        statement = statement.order_by(sort_column.desc())
-
-    count_stmt = select(func.count()).select_from(statement.subquery())
-    total = int(session.exec(count_stmt).one())
-
-    rows = list(
-        session.exec(
-            statement.offset(normalized_page * normalized_page_size).limit(
-                normalized_page_size
-            )
-        ).all()
+    sort_column = resolve_sort_column(
+        sort_by=normalized_sort_by,
+        fields=SORT_FIELDS,
+        default_field="created_at",
+    )
+    statement = apply_sort(
+        statement,
+        sort_column=sort_column,
+        sort_order=normalized_sort_order,
+    )
+    rows, total = fetch_page_rows_with_total(
+        session=session,
+        statement=statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     return rows, total
 
@@ -98,9 +111,12 @@ CARD_SORT_FIELDS = {
 
 def normalize_card_picker_sort(sort_by: str, sort_order: str) -> tuple[str, str]:
     """标准化卡牌选择器排序参数。"""
-    normalized_sort_by = sort_by if sort_by in CARD_SORT_FIELDS else "id"
-    normalized_sort_order = "asc" if sort_order == "asc" else "desc"
-    return normalized_sort_by, normalized_sort_order
+    return normalize_sort_params(
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields=CARD_SORT_FIELDS,
+        default_field="id",
+    )
 
 
 def list_notification_selectable_cards(
@@ -115,8 +131,11 @@ def list_notification_selectable_cards(
     page_size: int = 24,
 ) -> tuple[list[Card], int]:
     """查询通知卡牌选择器数据（严格分页，不允许全量返回）。"""
-    normalized_page = max(page, 0)
-    normalized_page_size = min(max(page_size, 1), 60)
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=60,
+    )
     normalized_sort_by, normalized_sort_order = normalize_card_picker_sort(
         sort_by, sort_order
     )
@@ -143,20 +162,20 @@ def list_notification_selectable_cards(
         )
 
     statement = statement.distinct()
-    sort_column = CARD_SORT_FIELDS[normalized_sort_by]
-    if normalized_sort_order == "asc":
-        statement = statement.order_by(sort_column.asc())
-    else:
-        statement = statement.order_by(sort_column.desc())
-
-    total = int(
-        session.exec(select(func.count()).select_from(statement.subquery())).one()
+    sort_column = resolve_sort_column(
+        sort_by=normalized_sort_by,
+        fields=CARD_SORT_FIELDS,
+        default_field="id",
     )
-    rows = list(
-        session.exec(
-            statement.offset(normalized_page * normalized_page_size).limit(
-                normalized_page_size
-            )
-        ).all()
+    statement = apply_sort(
+        statement,
+        sort_column=sort_column,
+        sort_order=normalized_sort_order,
+    )
+    rows, total = fetch_page_rows_with_total(
+        session=session,
+        statement=statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     return rows, total
