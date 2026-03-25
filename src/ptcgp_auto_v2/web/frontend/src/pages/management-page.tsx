@@ -1,20 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { buildQuery, fetchJson, requestFormJson, requestJson } from '@/lib/api'
+import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 
 interface ManagementPageProps {
   lang: string
   t: Record<string, string>
+  assets: CardImageAssets
 }
 
 interface ColumnDef {
   key: string
   label: string
   render?: (row: Record<string, unknown>) => string
+}
+
+interface SortOption {
+  value: string
+  labelKey: string
+  fallback: string
 }
 
 interface AccountPlanItemState {
@@ -80,6 +89,22 @@ function statusLabel(t: Record<string, string>, value: unknown): string {
     return '-'
   }
   return tr(t, `status_${key}`, key)
+}
+
+function giftStatusLabel(t: Record<string, string>, value: unknown): string {
+  const key = typeof value === 'string' ? value : ''
+  if (!key) {
+    return '-'
+  }
+  return tr(t, `gift_status_${key}`, key)
+}
+
+function pairProgressLabel(t: Record<string, string>, value: unknown): string {
+  const key = typeof value === 'string' ? value : ''
+  if (!key) {
+    return '-'
+  }
+  return tr(t, `gift_pair_progress_${key}`, key)
 }
 
 function taskTypeLabel(t: Record<string, string>, value: unknown): string {
@@ -184,10 +209,73 @@ function DataGrid({
   )
 }
 
+function ListQueryControls({
+  sortBy,
+  sortOrder,
+  pageSize,
+  sortOptions,
+  pageSizeOptions,
+  onSortByChange,
+  onSortOrderChange,
+  onPageSizeChange,
+  t,
+  disableSortOrder = false
+}: {
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+  pageSize: number
+  sortOptions: SortOption[]
+  pageSizeOptions?: number[]
+  onSortByChange: (value: string) => void
+  onSortOrderChange: (value: 'asc' | 'desc') => void
+  onPageSizeChange: (value: number) => void
+  t: Record<string, string>
+  disableSortOrder?: boolean
+}) {
+  const options = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 20, 50, 100]
+  return (
+    <div className="filter-row">
+      <span className="text-xs text-muted">{tr(t, 'label_sort_by', 'Sort By')}</span>
+      <select className="field-select" value={sortBy} onChange={(event) => onSortByChange(event.target.value)}>
+        {sortOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {tr(t, option.labelKey, option.fallback)}
+          </option>
+        ))}
+      </select>
+      <span className="text-xs text-muted">{tr(t, 'label_sort_order', 'Order')}</span>
+      <select
+        className="field-select"
+        value={sortOrder}
+        disabled={disableSortOrder}
+        onChange={(event) => onSortOrderChange(event.target.value as 'asc' | 'desc')}
+      >
+        <option value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</option>
+        <option value="desc">{tr(t, 'sort_order_desc', 'Descending')}</option>
+      </select>
+      <span className="text-xs text-muted">{tr(t, 'label_page_size', 'Page Size')}</span>
+      <select
+        className="field-select"
+        value={String(pageSize)}
+        onChange={(event) => onPageSizeChange(Number(event.target.value))}
+      >
+        {options.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
+  const [sortBy, setSortBy] = useState('id')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [pageSize, setPageSize] = useState(10)
   const [editingAccount, setEditingAccount] = useState<Record<string, unknown> | null>(null)
   const [editingPlans, setEditingPlans] = useState<{ accountId: number; items: AccountPlanItemState[] } | null>(null)
   const [currentPlans, setCurrentPlans] = useState<Record<string, unknown>[]>([])
@@ -201,9 +289,11 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
         lang,
         q,
         page,
-        page_size: 10
+        page_size: pageSize,
+        sort_by: sortBy,
+        sort_order: sortOrder
       }),
-    [lang, page, q]
+    [lang, page, pageSize, q, sortBy, sortOrder]
   )
 
   const query = useQuery({
@@ -309,6 +399,29 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
             <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
           </div>
         </div>
+        <ListQueryControls
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          pageSize={pageSize}
+          sortOptions={[
+            { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+            { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
+            { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
+          ]}
+          onSortByChange={(value) => {
+            setPage(0)
+            setSortBy(value)
+          }}
+          onSortOrderChange={(value) => {
+            setPage(0)
+            setSortOrder(value)
+          }}
+          onPageSizeChange={(value) => {
+            setPage(0)
+            setPageSize(value)
+          }}
+          t={t}
+        />
 
         {query.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
         {query.isError && <div className="text-sm text-danger">{(query.error as Error).message}</div>}
@@ -541,6 +654,9 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const queryClient = useQueryClient()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
+  const [sortBy, setSortBy] = useState('id')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [pageSize, setPageSize] = useState(10)
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null)
   const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false)
   const [planName, setPlanName] = useState('')
@@ -550,7 +666,10 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [taskOrder, setTaskOrder] = useState<string[]>([])
   const [taskConfigMap, setTaskConfigMap] = useState<Record<string, PlanTaskConfigState>>({})
 
-  const queryString = useMemo(() => buildQuery({ lang, q, page, page_size: 10 }), [lang, page, q])
+  const queryString = useMemo(
+    () => buildQuery({ lang, q, page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder }),
+    [lang, page, pageSize, q, sortBy, sortOrder]
+  )
 
   const query = useQuery({
     queryKey: ['management-plans', queryString],
@@ -644,6 +763,28 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             <Button type="button" size="sm" onClick={() => openEditor(null)}>{tr(t, 'btn_new_plan', 'New')}</Button>
           </div>
         </div>
+        <ListQueryControls
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          pageSize={pageSize}
+          sortOptions={[
+            { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+            { value: 'name', labelKey: 'col_name', fallback: 'Name' }
+          ]}
+          onSortByChange={(value) => {
+            setPage(0)
+            setSortBy(value)
+          }}
+          onSortOrderChange={(value) => {
+            setPage(0)
+            setSortOrder(value)
+          }}
+          onPageSizeChange={(value) => {
+            setPage(0)
+            setPageSize(value)
+          }}
+          t={t}
+        />
 
         <DataGrid
           rows={items}
@@ -786,10 +927,10 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                       >
                         {resetTypeOptions.map((resetType) => (
                           <option key={resetType} value={resetType}>
-                            {resetType}
+                            {tr(t, `reset_type_${resetType}`, resetType)}
                           </option>
                         ))}
-                        {!resetTypeOptions.includes('default') && <option value="default">default</option>}
+                        {!resetTypeOptions.includes('default') && <option value="default">{tr(t, 'label_default', 'default')}</option>}
                       </select>
                       {config.resetType === 'interval' && (
                         <input
@@ -845,34 +986,197 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
   const [q, setQ] = useState('')
   const [page, setPage] = useState(0)
   const [view, setView] = useState('stats')
+  const [sortBy, setSortBy] = useState('id')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [pageSize, setPageSize] = useState(20)
 
-  const queryString = useMemo(() => buildQuery({ lang, q, page, page_size: 20, view }), [lang, page, q, view])
+  const queryString = useMemo(
+    () => buildQuery({ lang, q, page, page_size: pageSize, view, sort_by: sortBy, sort_order: sortOrder }),
+    [lang, page, pageSize, q, sortBy, sortOrder, view]
+  )
   const query = useQuery({
     queryKey: ['management-resources', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/resources?${queryString}`)
   })
 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
-  const columns = useMemo<ColumnDef[]>(() => {
-    if (items.length === 0) {
-      return []
+  const seriesList = (((query.data?.series_list as unknown[]) ?? []) as string[])
+  const accountNumber = new Intl.NumberFormat('en-US')
+  const sortOptions = useMemo<SortOption[]>(() => {
+    if (view === 'pack-points') {
+      return [
+        { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+        { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
+        { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
+        ...seriesList.map((seriesCode) => ({
+          value: `series:${seriesCode}`,
+          labelKey: `series_sort_${seriesCode}`,
+          fallback: `Series Points (${seriesCode})`
+        }))
+      ]
     }
-    const keys = Object.keys(items[0])
-    return keys.map((key) => ({ key, label: key }))
-  }, [items])
+    return [
+      { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+      { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
+      { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
+      { value: 'exchange_points', labelKey: 'col_exchange_points', fallback: 'Exchange Points' },
+      { value: 'pack_hourglass_count', labelKey: 'col_pack_hourglass', fallback: 'Pack Hourglass' },
+      { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' }
+    ]
+  }, [seriesList, view])
 
   return (
     <section className="surface-card section-stack">
       <div className="pagination-row">
         <div className="section-title">{tr(t, 'menu_resources', 'Resources')}</div>
         <div className="filter-row">
-          <Button type="button" size="sm" variant={view === 'stats' ? 'default' : 'outline'} onClick={() => { setView('stats'); setPage(0) }}>{tr(t, 'menu_resources', 'Resources')}</Button>
-          <Button type="button" size="sm" variant={view === 'pack-points' ? 'default' : 'outline'} onClick={() => { setView('pack-points'); setPage(0) }}>{tr(t, 'section_packs', 'Pack Points')}</Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={view === 'stats' ? 'default' : 'outline'}
+            onClick={() => {
+              setView('stats')
+              setSortBy('id')
+              setSortOrder('asc')
+              setPage(0)
+            }}
+          >
+            {tr(t, 'tab_resource_stats', 'Stats')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={view === 'pack-points' ? 'default' : 'outline'}
+            onClick={() => {
+              setView('pack-points')
+              setSortBy('id')
+              setSortOrder('asc')
+              setPage(0)
+            }}
+          >
+            {tr(t, 'tab_resource_pack_points', 'Pack Points')}
+          </Button>
           <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'filter_account_search_placeholder', 'Search account')} />
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
-      {columns.length > 0 && <DataGrid rows={items} columns={columns} t={t} />}
+      <ListQueryControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        pageSize={pageSize}
+        sortOptions={sortOptions.map((option) =>
+          option.value.startsWith('series:')
+            ? { ...option, fallback: `${tr(t, 'label_series_points', 'Series Points')} (${option.value.split(':')[1]})` }
+            : option
+        )}
+        onSortByChange={(value) => {
+          setPage(0)
+          setSortBy(value)
+        }}
+        onSortOrderChange={(value) => {
+          setPage(0)
+          setSortOrder(value)
+        }}
+        onPageSizeChange={(value) => {
+          setPage(0)
+          setPageSize(value)
+        }}
+        t={t}
+        pageSizeOptions={[10, 20, 50, 100]}
+      />
+
+      {view === 'stats' ? (
+        <div className="table-wrap">
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>{tr(t, 'col_account', 'Account')}</th>
+                <th>{tr(t, 'col_exchange_points', 'Exchange Points')}</th>
+                <th>{tr(t, 'col_pack_hourglass', 'Pack Hourglass')}</th>
+                <th>{tr(t, 'col_updated_at', 'Updated At')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center text-muted">{tr(t, 'empty_resource_stats', 'No resource data')}</td>
+                </tr>
+              )}
+              {items.map((row) => {
+                const accountId = Number(row.account_id ?? 0)
+                const nickname = toText(row.nickname, t)
+                const friendId = toText(row.friend_id, t)
+                const exchangePoints = Number(row.exchange_points)
+                const hourglass = Number(row.pack_hourglass_count)
+                return (
+                  <tr key={`resource-stats-${accountId}`}>
+                    <td>
+                      <div className="mono">#{accountId} {nickname}</div>
+                      {friendId !== '-' && (
+                        <div className="text-xs text-muted">{tr(t, 'col_friend_id', 'Friend ID')}: {friendId}</div>
+                      )}
+                    </td>
+                    <td className="mono">
+                      {Number.isFinite(exchangePoints) ? accountNumber.format(exchangePoints) : '-'}
+                    </td>
+                    <td className="mono">
+                      {Number.isFinite(hourglass) ? accountNumber.format(hourglass) : '-'}
+                    </td>
+                    <td className="mono">{formatTime(row.updated_at)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="grid-table resource-pack-table">
+            <thead>
+              <tr>
+                <th>{tr(t, 'col_account', 'Account')}</th>
+                {seriesList.map((series) => (
+                  <th key={`series-header-${series}`} className="mono">{series}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={Math.max(2, seriesList.length + 1)} className="text-center text-muted">
+                    {tr(t, 'empty_resource_pack_points', 'No pack point data')}
+                  </td>
+                </tr>
+              )}
+              {items.map((row) => {
+                const accountId = Number(row.account_id ?? 0)
+                const nickname = toText(row.nickname, t)
+                const friendId = toText(row.friend_id, t)
+                const seriesPoints = ((row.series_points as Record<string, unknown> | undefined) ?? {})
+                return (
+                  <tr key={`resource-points-${accountId}`}>
+                    <td>
+                      <div className="mono">#{accountId} {nickname}</div>
+                      {friendId !== '-' && (
+                        <div className="text-xs text-muted">{tr(t, 'col_friend_id', 'Friend ID')}: {friendId}</div>
+                      )}
+                    </td>
+                    {seriesList.map((series) => {
+                      const points = Number(seriesPoints[series] ?? NaN)
+                      return (
+                        <td key={`resource-points-${accountId}-${series}`} className="mono">
+                          {Number.isFinite(points) ? accountNumber.format(points) : '-'}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <Pager
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
@@ -888,6 +1192,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
 function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(20)
   const [status, setStatus] = useState<string[]>([])
   const [taskTypes, setTaskTypes] = useState<string[]>([])
   const [accountKeyword, setAccountKeyword] = useState('')
@@ -913,7 +1218,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
       buildQuery({
         lang,
         page,
-        page_size: 20,
+        page_size: pageSize,
         status,
         task_type: taskTypes,
         account_id: selectedAccountId || undefined,
@@ -921,7 +1226,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         sort_by: sortBy,
         sort_order: sortOrder
       }),
-    [lang, page, selectedAccountId, selectedAccountQuery, sortBy, sortOrder, status, taskTypes]
+    [lang, page, pageSize, selectedAccountId, selectedAccountQuery, sortBy, sortOrder, status, taskTypes]
   )
   const query = useQuery({
     queryKey: ['management-tasks', queryString],
@@ -1043,23 +1348,34 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         </div>
         <div className="section-stack">
           <div className="section-subtitle">{tr(t, 'filter_sort', 'Sort')}</div>
-          <div className="filter-row">
-            <Button type="button" size="sm" variant={sortBy === 'dispatch_priority' ? 'default' : 'outline'} onClick={() => { setSortBy('dispatch_priority'); setSortOrder('asc'); setPage(0) }}>
-              {tr(t, 'col_dispatch_priority', 'Dispatch Priority')}
-            </Button>
-            <Button type="button" size="sm" variant={sortBy === 'last_completed_at' ? 'default' : 'outline'} onClick={() => { setSortBy('last_completed_at'); setSortOrder('desc'); setPage(0) }}>
-              {tr(t, 'col_last_completed', 'Last Completed')}
-            </Button>
-            <Button type="button" size="sm" variant={sortBy === 'last_duration_seconds' ? 'default' : 'outline'} onClick={() => { setSortBy('last_duration_seconds'); setSortOrder('desc'); setPage(0) }}>
-              {tr(t, 'col_last_duration', 'Last Duration')}
-            </Button>
-            <Button type="button" size="sm" variant={sortBy === 'next_run_at' ? 'default' : 'outline'} onClick={() => { setSortBy('next_run_at'); setSortOrder('asc'); setPage(0) }}>
-              {tr(t, 'col_next_run', 'Next Run')}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => { setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc')); setPage(0) }}>
-              {sortOrder.toUpperCase()}
-            </Button>
-          </div>
+          <ListQueryControls
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            pageSize={pageSize}
+            sortOptions={[
+              { value: 'dispatch_priority', labelKey: 'col_dispatch_priority', fallback: 'Dispatch Priority' },
+              { value: 'last_completed_at', labelKey: 'col_last_completed', fallback: 'Last Completed' },
+              { value: 'last_duration_seconds', labelKey: 'col_last_duration', fallback: 'Last Duration' },
+              { value: 'next_run_at', labelKey: 'col_next_run', fallback: 'Next Run' }
+            ]}
+            onSortByChange={(value) => {
+              setPage(0)
+              setSortBy(value)
+              if (value === 'dispatch_priority') {
+                setSortOrder('asc')
+              }
+            }}
+            onSortOrderChange={(value) => {
+              setPage(0)
+              setSortOrder(value)
+            }}
+            onPageSizeChange={(value) => {
+              setPage(0)
+              setPageSize(value)
+            }}
+            t={t}
+            disableSortOrder={sortBy === 'dispatch_priority'}
+          />
         </div>
       </div>
 
@@ -1127,22 +1443,31 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 }
 
 function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> }) {
+  const [uiStep, setUiStep] = useState<1 | 2 | 3>(1)
   const [selectedNodeType, setSelectedNodeType] = useState('root')
   const [selectedNodeId, setSelectedNodeId] = useState('all')
+  const [selectedSetCode, setSelectedSetCode] = useState('')
+  const [selectedPackName, setSelectedPackName] = useState('')
   const [currentAction, setCurrentAction] = useState('update_new_series')
+  const [snapshotId, setSnapshotId] = useState('')
+  const [forceRefresh, setForceRefresh] = useState(false)
   const [previewResult, setPreviewResult] = useState<Record<string, unknown> | null>(null)
+  const [executeResult, setExecuteResult] = useState<Record<string, unknown> | null>(null)
   const [checkResult, setCheckResult] = useState<Record<string, unknown> | null>(null)
 
   const queryString = useMemo(
     () =>
       buildQuery({
         lang,
+        ui_step: uiStep,
         selected_node_type: selectedNodeType,
         selected_node_id: selectedNodeId,
+        selected_set_code: selectedSetCode || undefined,
+        selected_pack_name: selectedPackName || undefined,
         current_action: currentAction,
-        ui_step: 1
+        snapshot_id: snapshotId || undefined
       }),
-    [currentAction, lang, selectedNodeId, selectedNodeType]
+    [currentAction, lang, selectedNodeId, selectedNodeType, selectedPackName, selectedSetCode, snapshotId, uiStep]
   )
 
   const query = useQuery({
@@ -1151,17 +1476,24 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
   })
 
   const previewMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (action: string) =>
       requestJson<Record<string, unknown>>('/api/react/management/metadata/preview', {
         method: 'POST',
         body: {
-          action: currentAction,
+          action,
           node_type: selectedNodeType,
           node_id: selectedNodeId,
-          force_refresh: false
+          force_refresh: forceRefresh
         }
       }),
-    onSuccess: (result) => setPreviewResult(result)
+    onSuccess: (result, action) => {
+      const nextSnapshotId = typeof result.snapshot_id === 'string' ? result.snapshot_id : ''
+      setCurrentAction(action)
+      setPreviewResult(result)
+      setExecuteResult(null)
+      setSnapshotId(nextSnapshotId)
+      setUiStep(2)
+    }
   })
 
   const executeMutation = useMutation({
@@ -1169,12 +1501,12 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
       requestJson<Record<string, unknown>>('/api/react/management/metadata/execute', {
         method: 'POST',
         body: {
-          snapshot_id: previewResult?.snapshot_id
+          snapshot_id: snapshotId
         }
       }),
     onSuccess: (result) => {
+      setExecuteResult(result)
       alert(`${tr(t, 'label_success_records', 'Done')}: ${toText(result.status ?? 'ok', t)}`)
-      setPreviewResult(null)
     }
   })
 
@@ -1183,48 +1515,417 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
     onSuccess: (result) => setCheckResult(result)
   })
 
-  const availableActions = ((query.data?.available_actions as unknown[]) ?? []) as string[]
+  useEffect(() => {
+    const nextNodeType = query.data?.selected_node_type
+    if (typeof nextNodeType === 'string' && nextNodeType && nextNodeType !== selectedNodeType) {
+      setSelectedNodeType(nextNodeType)
+    }
+    const nextNodeId = query.data?.selected_node_id
+    if (typeof nextNodeId === 'string' && nextNodeId && nextNodeId !== selectedNodeId) {
+      setSelectedNodeId(nextNodeId)
+    }
+    const nextSetCode = query.data?.selected_set_code
+    if (typeof nextSetCode === 'string' && nextSetCode !== selectedSetCode) {
+      setSelectedSetCode(nextSetCode)
+    }
+    const nextPackName = query.data?.selected_pack_name
+    if (typeof nextPackName === 'string' && nextPackName !== selectedPackName) {
+      setSelectedPackName(nextPackName)
+    }
+    const nextAction = query.data?.current_action
+    if (typeof nextAction === 'string' && nextAction && nextAction !== currentAction) {
+      setCurrentAction(nextAction)
+    }
+    const nextSnapshotId = query.data?.snapshot_id
+    if (
+      typeof nextSnapshotId === 'string' &&
+      nextSnapshotId &&
+      nextSnapshotId !== snapshotId &&
+      previewResult === null
+    ) {
+      setSnapshotId(nextSnapshotId)
+    }
+  }, [currentAction, previewResult, query.data, selectedNodeId, selectedNodeType, selectedPackName, selectedSetCode, snapshotId])
+
+  const sets = useMemo(
+    () => (((query.data?.sets as unknown[]) ?? []) as Record<string, unknown>[]),
+    [query.data?.sets]
+  )
+  const packsBySet = (query.data?.packs_by_set as Record<string, unknown> | undefined) ?? {}
+  const packsForSet = (((packsBySet[selectedSetCode] as unknown[]) ?? []) as Record<string, unknown>[])
+  const packCards = (((query.data?.selected_pack_cards as unknown[]) ?? []) as Record<string, unknown>[])
+  const selectedCardKey = typeof query.data?.selected_card_key === 'string' ? query.data.selected_card_key : ''
+  const actionCards = useMemo(
+    () => (((query.data?.available_action_cards as unknown[]) ?? []) as Record<string, unknown>[]),
+    [query.data?.available_action_cards]
+  )
+  const effectivePreview = (previewResult ?? ((query.data?.sync_preview as Record<string, unknown> | undefined) ?? null))
+  const previewSummary = (effectivePreview?.summary as Record<string, unknown> | undefined) ?? {}
+  const previewPayload = (effectivePreview?.payload as Record<string, unknown> | undefined) ?? {}
+  const previewItems = ((effectivePreview?.items as unknown[]) ?? []) as Record<string, unknown>[]
+  const previewSnapshotId = (typeof effectivePreview?.snapshot_id === 'string' ? effectivePreview.snapshot_id : '') || snapshotId
+  const previewSyncKind =
+    typeof previewPayload.sync_kind === 'string'
+      ? previewPayload.sync_kind
+      : currentAction === 'update_new_series'
+        ? 'update_new_series'
+        : currentAction.includes('chinese')
+          ? 'update_chinese'
+          : 'update_data'
+
+  function resetToStep1() {
+    setUiStep(1)
+    setSnapshotId('')
+    setPreviewResult(null)
+    setExecuteResult(null)
+  }
+
+  function selectRoot() {
+    setUiStep(1)
+    setSelectedNodeType('root')
+    setSelectedNodeId('all')
+    setSelectedSetCode('')
+    setSelectedPackName('')
+    setSnapshotId('')
+    setPreviewResult(null)
+    setExecuteResult(null)
+  }
+
+  function selectSet(setCode: string) {
+    setUiStep(1)
+    setSelectedNodeType('set')
+    setSelectedNodeId(setCode)
+    setSelectedSetCode(setCode)
+    setSelectedPackName('')
+    setSnapshotId('')
+    setPreviewResult(null)
+    setExecuteResult(null)
+  }
+
+  function selectPack(setCode: string, packName: string) {
+    setUiStep(1)
+    setSelectedNodeType('pack')
+    setSelectedNodeId(packName)
+    setSelectedSetCode(setCode)
+    setSelectedPackName(packName)
+    setSnapshotId('')
+    setPreviewResult(null)
+    setExecuteResult(null)
+  }
+
+  function selectCard(cardKey: string) {
+    setUiStep(1)
+    setSelectedNodeType('card')
+    setSelectedNodeId(cardKey)
+    setSnapshotId('')
+    setPreviewResult(null)
+    setExecuteResult(null)
+  }
+
+  function toNumber(value: unknown): number {
+    const parsed = Number(value ?? 0)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
 
   return (
     <section className="surface-card section-stack">
-      <div className="section-title">{tr(t, 'menu_metadata', 'Metadata')}</div>
-      <div className="form-grid">
-        <div className="section-stack">
-          <label className="section-subtitle">{tr(t, 'metadata_label_mode', 'Node Type')}</label>
-          <select className="field-select" value={selectedNodeType} onChange={(event) => setSelectedNodeType(event.target.value)}>
-            <option value="root">root</option>
-            <option value="set">set</option>
-            <option value="pack">pack</option>
-            <option value="card">card</option>
-          </select>
+      <div className="pagination-row">
+        <div>
+          <div className="section-title">{tr(t, 'metadata_sync_console_title', 'Metadata Sync Console')}</div>
+          <div className="text-xs text-muted">{tr(t, 'metadata_sync_console_desc', 'Three steps: select -> preview -> execute')}</div>
         </div>
-        <div className="section-stack">
-          <label className="section-subtitle">{tr(t, 'metadata_label_source', 'Node ID')}</label>
-          <input className="field-input" value={selectedNodeId} onChange={(event) => setSelectedNodeId(event.target.value)} />
-        </div>
-        <div className="section-stack">
-          <label className="section-subtitle">{tr(t, 'metadata_label_action', 'Action')}</label>
-          <select className="field-select" value={currentAction} onChange={(event) => setCurrentAction(event.target.value)}>
-            {(availableActions.length > 0 ? availableActions : ['update_new_series']).map((action) => (
-              <option key={action} value={action}>{action}</option>
-            ))}
-          </select>
+        <div className="filter-row">
+          <Button type="button" size="sm" variant="outline" onClick={() => checkMutation.mutate()} disabled={checkMutation.isPending}>
+            {tr(t, 'btn_recheck_sources', 'Check Sources')}
+          </Button>
         </div>
       </div>
 
-      <div className="filter-row">
-        <Button type="button" size="sm" onClick={() => previewMutation.mutate()}>{tr(t, 'btn_refresh', 'Preview')}</Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => checkMutation.mutate()}>{tr(t, 'btn_recheck_sources', 'Check Sources')}</Button>
-        <Button type="button" size="sm" variant="outline" disabled={!previewResult?.snapshot_id} onClick={() => executeMutation.mutate()}>
-          {tr(t, 'metadata_label_result', 'Execute')}
-        </Button>
+      <div className="metadata-step-grid">
+        <div className={`metadata-step-card ${uiStep === 1 ? 'is-active' : ''}`}>
+          <div className="metadata-step-badge">{tr(t, 'metadata_step_badge_1', 'Step 1')}</div>
+          <div>{tr(t, 'metadata_step_select_object', 'Select Object')}</div>
+        </div>
+        <div className={`metadata-step-card ${uiStep === 2 ? 'is-active' : ''}`}>
+          <div className="metadata-step-badge">{tr(t, 'metadata_step_badge_2', 'Step 2')}</div>
+          <div>{tr(t, 'metadata_step_preview_diff', 'Preview Diff')}</div>
+        </div>
+        <div className={`metadata-step-card ${uiStep === 3 ? 'is-active' : ''}`}>
+          <div className="metadata-step-badge">{tr(t, 'metadata_step_badge_3', 'Step 3')}</div>
+          <div>{tr(t, 'metadata_step_execute', 'Confirm Execute')}</div>
+        </div>
       </div>
 
-      {previewResult && (
-        <pre className="surface-card text-xs mono">{JSON.stringify(previewResult, null, 2)}</pre>
-      )}
       {checkResult && (
-        <pre className="surface-card text-xs mono">{JSON.stringify(checkResult, null, 2)}</pre>
+        <details className="surface-card">
+          <summary className="section-subtitle">{tr(t, 'metadata_health_panel', 'Source Health')}</summary>
+          <pre className="text-xs mono">{JSON.stringify(checkResult, null, 2)}</pre>
+        </details>
+      )}
+
+      {query.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
+      {query.isError && <div className="text-sm text-danger">{(query.error as Error).message}</div>}
+
+      {uiStep === 1 && (
+        <div className="metadata-workspace">
+          <div className="metadata-tree-grid">
+            <div className="surface-card section-stack">
+              <div className="section-subtitle">{tr(t, 'metadata_col_sets', 'Sets')}</div>
+              <button type="button" className={`metadata-node-btn ${selectedNodeType === 'root' ? 'is-active' : ''}`} onClick={selectRoot}>
+                {tr(t, 'metadata_node_all', 'All')}
+              </button>
+              <div className="metadata-node-list">
+                {sets.map((setRow) => {
+                  const code = toText(setRow.code, t)
+                  const isActive = selectedNodeType === 'set' && selectedSetCode === code
+                  return (
+                    <button
+                      key={code}
+                      type="button"
+                      className={`metadata-node-btn ${isActive ? 'is-active' : ''}`}
+                      onClick={() => selectSet(code)}
+                    >
+                      {code} - {toText(setRow.display_name ?? setRow.name, t)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="surface-card section-stack">
+              <div className="section-subtitle">{tr(t, 'metadata_col_packs', 'Packs')}</div>
+              {selectedSetCode ? (
+                <div className="metadata-node-list">
+                  {packsForSet.map((packRow) => {
+                    const packName = toText(packRow.name, t)
+                    const isActive = selectedNodeType === 'pack' && selectedPackName === packName
+                    return (
+                      <button
+                        key={packName}
+                        type="button"
+                        className={`metadata-node-btn ${isActive ? 'is-active' : ''}`}
+                        onClick={() => selectPack(selectedSetCode, packName)}
+                      >
+                        {toText(packRow.display_name ?? packName, t)}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-muted">{tr(t, 'metadata_select_set_first', 'Select set first')}</div>
+              )}
+            </div>
+
+            <div className="surface-card section-stack">
+              <div className="section-subtitle">{tr(t, 'metadata_col_cards', 'Cards')}</div>
+              {selectedPackName ? (
+                <div className="metadata-node-list">
+                  {packCards.map((cardRow) => {
+                    const cardKey = toText(cardRow.key, t)
+                    const isActive = selectedNodeType === 'card' && selectedCardKey === cardKey
+                    return (
+                      <button
+                        key={cardKey}
+                        type="button"
+                        className={`metadata-node-btn ${isActive ? 'is-active' : ''}`}
+                        onClick={() => selectCard(cardKey)}
+                      >
+                        {cardKey} {toText(cardRow.display_name ?? cardRow.name, t)}
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-xs text-muted">{tr(t, 'metadata_select_pack_first', 'Select pack first')}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="surface-card section-stack">
+            <div className="section-title">{tr(t, 'metadata_action_panel_title', 'Node Actions')}</div>
+            <div className="text-xs">{tr(t, 'metadata_current_node', 'Current Node')}: {selectedNodeType} / <span className="mono">{selectedNodeId}</span></div>
+            <label className="filter-row">
+              <input
+                type="checkbox"
+                checked={forceRefresh}
+                onChange={(event) => setForceRefresh(event.target.checked)}
+              />
+              <span className="text-xs">{tr(t, 'btn_refresh', 'Force refresh remote cache')}</span>
+            </label>
+            {actionCards.map((actionCard, index) => {
+              const buttons = ((actionCard.buttons as unknown[]) ?? []) as Record<string, unknown>[]
+              return (
+                <div key={`action-card-${index}`} className="metadata-action-card">
+                  <div className="section-subtitle">{tr(t, toText(actionCard.title_key, t), toText(actionCard.title_fallback, t))}</div>
+                  <div className="filter-row">
+                    {buttons.map((button, buttonIndex) => {
+                      const action = toText(button.action, t)
+                      return (
+                        <Button
+                          key={`${action}-${buttonIndex}`}
+                          type="button"
+                          size="sm"
+                          variant={currentAction === action ? 'default' : 'outline'}
+                          disabled={previewMutation.isPending}
+                          onClick={() => previewMutation.mutate(action)}
+                        >
+                          {tr(t, toText(button.label_key, t), toText(button.label_fallback, t))}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {uiStep === 2 && (
+        <div className="surface-card section-stack">
+          <div className="section-title">{tr(t, 'metadata_step_preview_diff', 'Preview Diff')}</div>
+          <div className="text-xs text-muted">{tr(t, 'metadata_current_node', 'Current Node')}: {selectedNodeType} / {selectedNodeId}</div>
+          {effectivePreview && previewSnapshotId ? (
+            <>
+              <div className="metadata-summary-grid">
+                <div className="metadata-summary-card">
+                  <div className="section-subtitle">{tr(t, 'metadata_label_snapshot', 'Snapshot')}</div>
+                  <div className="mono text-xs">{previewSnapshotId}</div>
+                </div>
+                <div className="metadata-summary-card">
+                  <div className="section-subtitle">{tr(t, 'metadata_label_mode', 'Mode')}</div>
+                  <div>{toText(previewPayload.mode, t)}</div>
+                </div>
+                <div className="metadata-summary-card">
+                  <div className="section-subtitle">{tr(t, 'metadata_label_action', 'Action')}</div>
+                  <div>
+                    {previewSyncKind === 'update_new_series'
+                      ? tr(t, 'metadata_action_update_new_series', 'Update New Series')
+                      : previewSyncKind === 'update_chinese'
+                        ? tr(t, 'metadata_action_update_chinese', 'Update Chinese')
+                        : tr(t, 'metadata_action_update_data', 'Update Data')}
+                  </div>
+                </div>
+              </div>
+
+              <div className="metadata-summary-grid">
+                {previewSyncKind === 'update_chinese' ? (
+                  <>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_metric_sets_zh', 'Sets ZH')}</div><div>{toNumber(previewSummary.localization_sets)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_metric_packs_zh', 'Packs ZH')}</div><div>{toNumber(previewSummary.localization_packs)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_metric_cards_zh', 'Cards ZH')}</div><div>{toNumber(previewSummary.localization_cards)}</div></div>
+                  </>
+                ) : previewSyncKind === 'update_new_series' ? (
+                  <>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_metric_new_sets', 'New Sets')}</div><div>{toNumber(previewSummary.upsert_sets)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_label_source', 'Source')}</div><div>{toText(previewPayload.source, t)}</div></div>
+                  </>
+                ) : (
+                  <>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_col_sets', 'Sets')}</div><div>{toNumber(previewSummary.upsert_sets)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_col_packs', 'Packs')}</div><div>{toNumber(previewSummary.upsert_packs)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_col_cards', 'Cards')}</div><div>{toNumber(previewSummary.card_updates)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_metric_links_add', 'Links +')}</div><div>{toNumber(previewSummary.card_pack_links_to_add)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_metric_links_remove', 'Links -')}</div><div>{toNumber(previewSummary.card_pack_links_to_remove)}</div></div>
+                    <div className="metadata-summary-card"><div className="section-subtitle">{tr(t, 'metadata_label_source', 'Source')}</div><div>{toText(previewPayload.source, t)}</div></div>
+                  </>
+                )}
+              </div>
+
+              {previewItems.length > 0 && (
+                <div className="surface-card section-stack">
+                  <div className="section-subtitle">{tr(t, 'metadata_preview_items_title', 'Preview Items')}</div>
+                  <div className="metadata-node-list">
+                    {previewItems.map((item, index) => (
+                      <div key={`preview-item-${index}`} className="metadata-preview-item">
+                        <div className="mono text-xs">[{toText(item.type, t)}] {toText(item.id, t)} · {toText(item.name, t)} · {toText(item.action, t)}</div>
+                        {toText(item.changes, t) !== '-' && <div className="text-xs text-muted">{toText(item.changes, t)}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <details className="surface-card">
+                <summary className="section-subtitle">{tr(t, 'metadata_preview_detail', 'Preview JSON')}</summary>
+                <pre className="text-xs mono">{JSON.stringify(effectivePreview, null, 2)}</pre>
+              </details>
+            </>
+          ) : (
+            <div className="text-xs text-muted">{tr(t, 'metadata_preview_placeholder', 'Generate preview first')}</div>
+          )}
+
+          <div className="filter-row">
+            <Button type="button" size="sm" variant="outline" onClick={() => setUiStep(1)}>
+              {tr(t, 'metadata_back_select', 'Back to Selection')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!previewSnapshotId}
+              onClick={() => {
+                setSnapshotId(previewSnapshotId)
+                setUiStep(3)
+              }}
+            >
+              {tr(t, 'metadata_next_execute', 'Next: Confirm Execute')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {uiStep === 3 && (
+        <div className="surface-card section-stack">
+          <div className="section-title">{tr(t, 'metadata_step_execute', 'Confirm Execute')}</div>
+          <div className="text-xs text-muted">{tr(t, 'metadata_current_node', 'Current Node')}: {selectedNodeType} / {selectedNodeId}</div>
+          <div className="metadata-summary-card">
+            <div className="section-subtitle">{tr(t, 'metadata_label_snapshot_id', 'Snapshot ID')}</div>
+            <div className="mono text-xs">{snapshotId || '-'}</div>
+          </div>
+          {executeResult && (
+            <details className="surface-card" open>
+              <summary className="section-subtitle">{tr(t, 'metadata_label_result', 'Result')}</summary>
+              <pre className="text-xs mono">{JSON.stringify(executeResult, null, 2)}</pre>
+            </details>
+          )}
+          <div className="filter-row">
+            <Button type="button" size="sm" variant="outline" onClick={() => setUiStep(2)}>
+              {tr(t, 'btn_prev_page', 'Previous')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={resetToStep1}
+            >
+              {tr(t, 'metadata_back_select', 'Back to Selection')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!snapshotId || executeMutation.isPending}
+              onClick={() => executeMutation.mutate()}
+            >
+              {tr(t, 'metadata_confirm_execute', 'Execute')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {previewMutation.isPending && (
+        <div className="text-xs text-muted">{tr(t, 'metadata_preview_loading', 'Generating preview...')}</div>
+      )}
+      {previewMutation.isError && (
+        <div className="text-xs text-danger">{(previewMutation.error as Error).message}</div>
+      )}
+      {executeMutation.isError && (
+        <div className="text-xs text-danger">{(executeMutation.error as Error).message}</div>
+      )}
+      {checkMutation.isError && (
+        <div className="text-xs text-danger">{(checkMutation.error as Error).message}</div>
+      )}
+      {!query.isLoading && !query.isError && actionCards.length === 0 && (
+        <div className="text-xs text-muted">{tr(t, 'label_no_data', 'No data')}</div>
       )}
     </section>
   )
@@ -1233,12 +1934,27 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
 function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const [page, setPage] = useState(0)
   const [pairPage, setPairPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+  const [pairPageSize, setPairPageSize] = useState(10)
+  const [sortBy, setSortBy] = useState('updated_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [date, setDate] = useState('')
   const [accountId, setAccountId] = useState('')
 
   const queryString = useMemo(
-    () => buildQuery({ lang, page, pair_page: pairPage, biz_date_local: date || undefined, account_id: accountId || undefined }),
-    [accountId, date, lang, page, pairPage]
+    () =>
+      buildQuery({
+        lang,
+        page,
+        page_size: pageSize,
+        pair_page: pairPage,
+        pair_page_size: pairPageSize,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        biz_date_local: date || undefined,
+        account_id: accountId || undefined
+      }),
+    [accountId, date, lang, page, pageSize, pairPage, pairPageSize, sortBy, sortOrder]
   )
   const query = useQuery({
     queryKey: ['management-daily-gift', queryString],
@@ -1247,6 +1963,28 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
 
   const records = ((query.data?.records as unknown[]) ?? []) as Record<string, unknown>[]
   const pairs = ((query.data?.pair_send_status_rows as unknown[]) ?? []) as Record<string, unknown>[]
+  const stats = (query.data?.stats as Record<string, unknown> | undefined) ?? {}
+  const recentBizDates = (((query.data?.recent_biz_dates as unknown[]) ?? []) as string[])
+  const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
+  const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
+  const selectedAccountId = toText(query.data?.selected_account_id, t) === '-' ? '' : toText(query.data?.selected_account_id, t)
+
+  useEffect(() => {
+    const currentDate = toText(query.data?.selected_biz_date_local, t)
+    if (currentDate !== '-' && currentDate !== date) {
+      setDate(currentDate)
+    }
+    if (selectedAccountId !== accountId) {
+      setAccountId(selectedAccountId)
+    }
+  }, [accountId, date, query.data, selectedAccountId, t])
+
+  function accountDisplay(account: Record<string, unknown>): string {
+    const id = toText(account.id, t)
+    const name = toText(account.display_name, t)
+    const friendId = toText(account.friend_id, t)
+    return `${id} ${name} (${friendId})`
+  }
 
   return (
     <section className="surface-card section-stack">
@@ -1254,24 +1992,158 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         <div className="section-title">{tr(t, 'menu_daily_gift', 'Daily Gift')}</div>
         <div className="filter-row">
           <input className="field-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          <input className="field-input" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder={tr(t, 'account_id', 'Account ID')} />
+          <select
+            className="field-select"
+            value={accountId}
+            onChange={(event) => {
+              setAccountId(event.target.value)
+              setPage(0)
+              setPairPage(0)
+            }}
+          >
+            <option value="">{tr(t, 'label_all_accounts', 'All Accounts')}</option>
+            {accounts.map((account) => (
+              <option key={`daily-account-${toText(account.id, t)}`} value={toText(account.id, t)}>
+                {accountDisplay(account)}
+              </option>
+            ))}
+          </select>
           <Button type="button" size="sm" variant="outline" onClick={() => { setPage(0); setPairPage(0) }}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
 
-      <div className="section-subtitle">{tr(t, 'section_daily_gift_records', 'Gift Records')}</div>
-      <DataGrid
-        rows={records}
-        columns={[
-          { key: 'id', label: tr(t, 'col_id', 'ID') },
-          { key: 'account_name', label: tr(t, 'col_account', 'Account') },
-          { key: 'target_name', label: tr(t, 'col_to_account_id', 'Target Account') },
-          { key: 'card_label', label: tr(t, 'col_card', 'Card') },
-          { key: 'status', label: tr(t, 'col_status', 'Status'), render: (row) => statusLabel(t, row.status) },
-          { key: 'updated_at', label: tr(t, 'col_updated_at', 'Updated At'), render: (row) => formatTime(row.updated_at) }
+      {recentBizDates.length > 0 && (
+        <div className="filter-row">
+          {recentBizDates.map((item) => (
+            <Button
+              key={`daily-date-${item}`}
+              type="button"
+              size="sm"
+              variant={date === item ? 'default' : 'outline'}
+              onClick={() => {
+                setDate(item)
+                setPage(0)
+                setPairPage(0)
+              }}
+            >
+              {item}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      <div className="daily-gift-stats-grid">
+        <div className="surface-card daily-gift-stat-card">
+          <div className="section-subtitle">{tr(t, 'label_total_records', 'Total')}</div>
+          <div className="daily-gift-stat-value">{toText(stats.total, t)}</div>
+        </div>
+        <div className="surface-card daily-gift-stat-card status-success">
+          <div className="section-subtitle">{tr(t, 'label_success_records', 'Success')}</div>
+          <div className="daily-gift-stat-value">{toText(stats.success, t)}</div>
+        </div>
+        <div className="surface-card daily-gift-stat-card status-failed">
+          <div className="section-subtitle">{tr(t, 'label_failed_records', 'Failed')}</div>
+          <div className="daily-gift-stat-value">{toText(stats.failed, t)}</div>
+        </div>
+        <div className="surface-card daily-gift-stat-card status-waiting">
+          <div className="section-subtitle">{tr(t, 'label_waiting_records', 'Waiting')}</div>
+          <div className="daily-gift-stat-value">{toText(stats.waiting, t)}</div>
+        </div>
+      </div>
+
+      <ListQueryControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        pageSize={pageSize}
+        sortOptions={[
+          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+          { value: 'account_id', labelKey: 'col_account_id', fallback: 'Account ID' },
+          { value: 'status', labelKey: 'col_status', fallback: 'Status' }
         ]}
+        onSortByChange={(value) => {
+          setPage(0)
+          setSortBy(value)
+        }}
+        onSortOrderChange={(value) => {
+          setPage(0)
+          setSortOrder(value)
+        }}
+        onPageSizeChange={(value) => {
+          setPage(0)
+          setPageSize(value)
+        }}
         t={t}
       />
+      <div className="filter-row">
+        <span className="text-xs text-muted">{tr(t, 'label_pair_page_size', 'Pair Page Size')}</span>
+        <select
+          className="field-select"
+          value={String(pairPageSize)}
+          onChange={(event) => {
+            setPairPage(0)
+            setPairPageSize(Number(event.target.value))
+          }}
+        >
+          {[10, 20, 50, 100].map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="section-subtitle">{tr(t, 'section_daily_gift_records', 'Gift Records')}</div>
+      <div className="table-wrap">
+        <table className="grid-table">
+          <thead>
+            <tr>
+              <th>{tr(t, 'col_id', 'ID')}</th>
+              <th>{tr(t, 'col_account', 'Account')}</th>
+              <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
+              <th>{tr(t, 'col_card', 'Card')}</th>
+              <th>{tr(t, 'col_status', 'Status')}</th>
+              <th>{tr(t, 'col_count_change', 'Count Change')}</th>
+              <th>{tr(t, 'time_label', 'Time')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.length === 0 && (
+              <tr>
+                <td colSpan={7} className="text-center text-muted">{tr(t, 'empty_daily_gift_records', 'No gift records for this date')}</td>
+              </tr>
+            )}
+            {records.map((row) => {
+              const accountIdRow = Number(row.account_id ?? 0)
+              const targetAccountId = Number(row.target_account_id ?? 0)
+              const beforeCount = Number(row.before_count ?? NaN)
+              const afterCount = Number(row.after_count ?? NaN)
+              return (
+                <tr key={`daily-record-${toText(row.id, t)}`}>
+                  <td className="mono">#{toText(row.id, t)}</td>
+                  <td>
+                    <div>{toText(row.account_name, t)}</div>
+                    <div className="text-xs text-muted">#{accountIdRow}</div>
+                  </td>
+                  <td>
+                    <div className="mono">{toText(row.target_friend_id, t)}</div>
+                    {Number.isFinite(targetAccountId) && targetAccountId > 0 && (
+                      <div className="text-xs text-muted">#{targetAccountId} {accountNameMap[String(targetAccountId)] ?? toText(row.target_name, t)}</div>
+                    )}
+                  </td>
+                  <td className="mono">{toText(row.card_label, t)}</td>
+                  <td>{giftStatusLabel(t, row.status)}</td>
+                  <td className="mono">
+                    {Number.isFinite(beforeCount) ? String(beforeCount) : '-'}
+                    {' -> '}
+                    {Number.isFinite(afterCount) ? String(afterCount) : '-'}
+                  </td>
+                  <td className="mono">{formatTime(row.updated_at)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       <Pager
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
@@ -1281,18 +2153,39 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         t={t}
       />
 
-      <div className="section-subtitle">{tr(t, 'label_pair_link', 'Pair Status')}</div>
-      <DataGrid
-        rows={pairs}
-        columns={[
-          { key: 'left_name', label: tr(t, 'col_account', 'Account A') },
-          { key: 'right_name', label: tr(t, 'col_to_account_id', 'Account B') },
-          { key: 'left_to_right_status', label: tr(t, 'col_direction_left_to_right', 'A→B'), render: (row) => statusLabel(t, row.left_to_right_status) },
-          { key: 'right_to_left_status', label: tr(t, 'col_direction_right_to_left', 'B→A'), render: (row) => statusLabel(t, row.right_to_left_status) },
-          { key: 'pair_progress', label: tr(t, 'col_progress', 'Progress') }
-        ]}
-        t={t}
-      />
+      <div className="section-subtitle">{tr(t, 'section_daily_gift_pair_progress', 'Pair Send Progress')}</div>
+      <div className="table-wrap">
+        <table className="grid-table">
+          <thead>
+            <tr>
+              <th>{tr(t, 'col_pair', 'Pair')}</th>
+              <th>{tr(t, 'col_direction_left_to_right', 'A to B')}</th>
+              <th>{tr(t, 'col_direction_right_to_left', 'B to A')}</th>
+              <th>{tr(t, 'col_progress', 'Progress')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pairs.length === 0 && (
+              <tr>
+                <td colSpan={4} className="text-center text-muted">{tr(t, 'empty_daily_gift_pair_progress', 'No pair send status data')}</td>
+              </tr>
+            )}
+            {pairs.map((row, index) => (
+              <tr key={`daily-pair-${index}`}>
+                <td>
+                  <div>{toText(row.left_name, t)} ↔ {toText(row.right_name, t)}</div>
+                  <div className="text-xs text-muted">
+                    #{toText(row.left_account_id, t)} ↔ #{toText(row.right_account_id, t)}
+                  </div>
+                </td>
+                <td>{giftStatusLabel(t, row.left_to_right_status)}</td>
+                <td>{giftStatusLabel(t, row.right_to_left_status)}</td>
+                <td>{pairProgressLabel(t, row.pair_progress)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <Pager
         page={Number(query.data?.pair_page ?? 0)}
         hasPrev={Boolean(query.data?.pair_has_prev)}
@@ -1304,17 +2197,32 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
     </section>
   )
 }
-
 function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [q, setQ] = useState('')
   const [accountId, setAccountId] = useState('')
   const [fromAccountId, setFromAccountId] = useState('')
   const [targetAccountId, setTargetAccountId] = useState('')
   const [friendIdInput, setFriendIdInput] = useState('')
 
-  const queryString = useMemo(() => buildQuery({ lang, page, q, account_id: accountId || undefined, from_account_id: fromAccountId || undefined }), [accountId, fromAccountId, lang, page, q])
+  const queryString = useMemo(
+    () =>
+      buildQuery({
+        lang,
+        page,
+        page_size: pageSize,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        q,
+        account_id: accountId || undefined,
+        from_account_id: fromAccountId || undefined
+      }),
+    [accountId, fromAccountId, lang, page, pageSize, q, sortBy, sortOrder]
+  )
   const query = useQuery({
     queryKey: ['management-friendships', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/friendships?${queryString}`)
@@ -1337,13 +2245,13 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (payload?: { fromAccountId: number; toAccountId: number; friendId: string }) =>
       requestJson<{ ok: boolean; message: string }>('/api/react/management/friendships/delete', {
         method: 'POST',
         body: {
-          from_account_id: Number(fromAccountId || 0),
-          to_account_id: Number(targetAccountId || 0),
-          friend_id: friendIdInput
+          from_account_id: payload?.fromAccountId ?? Number(fromAccountId || 0),
+          to_account_id: payload?.toAccountId ?? Number(targetAccountId || 0),
+          friend_id: payload?.friendId ?? friendIdInput
         }
       }),
     onSuccess: (result) => {
@@ -1363,6 +2271,14 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   const requests = ((query.data?.requests as unknown[]) ?? []) as Record<string, unknown>[]
   const friendships = ((query.data?.friendships as unknown[]) ?? []) as Record<string, unknown>[]
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
+  const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
+
+  function accountDisplay(account: Record<string, unknown>): string {
+    const id = toText(account.id, t)
+    const name = toText(account.display_name, t)
+    const friendId = toText(account.friend_id, t)
+    return `${id} ${name} (${friendId})`
+  }
 
   return (
     <section className="surface-card section-stack">
@@ -1372,19 +2288,19 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         <select className="field-select" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
           <option value="">{tr(t, 'label_all_accounts', 'All Accounts')}</option>
           {accounts.map((item) => (
-            <option key={toText(item.id, t)} value={toText(item.id, t)}>{toText(item.display_name, t)}</option>
+            <option key={`friendship-filter-account-${toText(item.id, t)}`} value={toText(item.id, t)}>{accountDisplay(item)}</option>
           ))}
         </select>
         <select className="field-select" value={fromAccountId} onChange={(event) => setFromAccountId(event.target.value)}>
           <option value="">{tr(t, 'label_from_account', 'From Account')}</option>
           {accounts.map((item) => (
-            <option key={toText(item.id, t)} value={toText(item.id, t)}>{toText(item.display_name, t)}</option>
+            <option key={`friendship-filter-from-${toText(item.id, t)}`} value={toText(item.id, t)}>{accountDisplay(item)}</option>
           ))}
         </select>
         <select className="field-select" value={targetAccountId} onChange={(event) => setTargetAccountId(event.target.value)}>
           <option value="">{tr(t, 'label_target_account_optional', 'Target Account (optional)')}</option>
           {accounts.map((item) => (
-            <option key={toText(item.id, t)} value={toText(item.id, t)}>{toText(item.display_name, t)}</option>
+            <option key={`friendship-filter-target-${toText(item.id, t)}`} value={toText(item.id, t)}>{accountDisplay(item)}</option>
           ))}
         </select>
         <input className="field-input" value={friendIdInput} onChange={(event) => setFriendIdInput(event.target.value)} placeholder={tr(t, 'placeholder_friend_id', 'Friend ID (optional)')} />
@@ -1392,8 +2308,35 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
       <div className="filter-row">
         <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         <Button type="button" size="sm" onClick={() => addMutation.mutate()}>{tr(t, 'btn_create_add_request', 'Create Add Request')}</Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => deleteMutation.mutate()}>{tr(t, 'btn_create_delete_request', 'Create Delete Request')}</Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => deleteMutation.mutate(undefined)}>{tr(t, 'btn_create_delete_request', 'Create Delete Request')}</Button>
       </div>
+      <ListQueryControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        pageSize={pageSize}
+        sortOptions={[
+          { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+          { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' },
+          { value: 'to_friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
+          { value: 'status', labelKey: 'col_status', fallback: 'Status' },
+          { value: 'account_id', labelKey: 'col_account_id', fallback: 'Account ID' },
+          { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
+        ]}
+        onSortByChange={(value) => {
+          setPage(0)
+          setSortBy(value)
+        }}
+        onSortOrderChange={(value) => {
+          setPage(0)
+          setSortOrder(value)
+        }}
+        onPageSizeChange={(value) => {
+          setPage(0)
+          setPageSize(value)
+        }}
+        t={t}
+      />
 
       <div className="section-subtitle">{tr(t, 'section_friend_requests', 'Requests')}</div>
       <div className="table-wrap">
@@ -1401,9 +2344,9 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           <thead>
             <tr>
               <th>{tr(t, 'col_id', 'ID')}</th>
-              <th>{tr(t, 'col_type', 'Type')}</th>
-              <th>{tr(t, 'col_account', 'Account')}</th>
+              <th>{tr(t, 'label_from_account', 'From Account')}</th>
               <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
+              <th>{tr(t, 'col_type', 'Type')}</th>
               <th>{tr(t, 'col_status', 'Status')}</th>
               <th>{tr(t, 'label_created_time', 'Created')}</th>
               <th>{tr(t, 'col_actions', 'Actions')}</th>
@@ -1412,40 +2355,101 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           <tbody>
             {requests.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center text-muted">{tr(t, 'label_no_data', 'No data')}</td>
+                <td colSpan={7} className="text-center text-muted">{tr(t, 'empty_friend_requests', 'No friend requests')}</td>
               </tr>
             )}
-            {requests.map((row) => (
-              <tr key={toText(row.id, t)}>
-                <td className="mono">{toText(row.id, t)}</td>
-                <td>{requestTypeLabel(t, row.request_type)}</td>
-                <td>{toText(row.account_id, t)}</td>
-                <td className="mono">{toText(row.to_friend_id, t)}</td>
-                <td>{requestStatusLabel(t, row.status)}</td>
-                <td className="mono">{formatTime(row.created_at)}</td>
-                <td>
-                  <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>
-                    {tr(t, 'label_cancel', 'Cancel')}
-                  </Button>
-                </td>
-              </tr>
-            ))}
+            {requests.map((row) => {
+              const fromId = toText(row.from_account_id, t)
+              const toId = toText(row.to_account_id, t)
+              const canCancel = ['sending', 'sended', 'deleting'].includes(String(row.status ?? ''))
+              return (
+                <tr key={`friend-request-${toText(row.id, t)}`}>
+                  <td className="mono">#{toText(row.id, t)}</td>
+                  <td>
+                    <div>{accountNameMap[fromId] ?? fromId}</div>
+                    <div className="text-xs text-muted">#{fromId}</div>
+                  </td>
+                  <td>
+                    <div className="mono">{toText(row.to_friend_id, t)}</div>
+                    {toId !== '-' && <div className="text-xs text-muted">#{toId}</div>}
+                  </td>
+                  <td>{requestTypeLabel(t, row.request_type)}</td>
+                  <td>{requestStatusLabel(t, row.status)}</td>
+                  <td className="mono">{formatTime(row.updated_at)}</td>
+                  <td>
+                    {canCancel ? (
+                      <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>
+                        {tr(t, 'btn_remove_request', 'Delete Request')}
+                      </Button>
+                    ) : (
+                      <span className="text-muted">-</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
       <div className="section-subtitle">{tr(t, 'section_friendships', 'Friendships')}</div>
-      <DataGrid
-        rows={friendships}
-        columns={[
-          { key: 'id', label: tr(t, 'col_id', 'ID') },
-          { key: 'account_id', label: tr(t, 'col_account_id', 'Account ID') },
-          { key: 'friend_id', label: tr(t, 'col_friend_id', 'Friend ID') },
-          { key: 'friendship_status', label: tr(t, 'col_status', 'Status') },
-          { key: 'created_at', label: tr(t, 'label_created_time', 'Created'), render: (row) => formatTime(row.created_at) }
-        ]}
-        t={t}
-      />
+      <div className="table-wrap">
+        <table className="grid-table">
+          <thead>
+            <tr>
+              <th>{tr(t, 'col_id', 'ID')}</th>
+              <th>{tr(t, 'col_account_id', 'Account ID')}</th>
+              <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
+              <th>{tr(t, 'label_created_time', 'Created')}</th>
+              <th>{tr(t, 'col_actions', 'Actions')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {friendships.length === 0 && (
+              <tr>
+                <td colSpan={5} className="text-center text-muted">{tr(t, 'empty_friendships', 'No friendships')}</td>
+              </tr>
+            )}
+            {friendships.map((row) => {
+              const rowAccountId = Number(row.account_id ?? 0)
+              const rowFriendAccountId = Number(row.friend_account_id ?? 0)
+              const rowFriendId = toText(row.friend_id, t)
+              return (
+                <tr key={`friendship-${toText(row.id, t)}`}>
+                  <td className="mono">#{toText(row.id, t)}</td>
+                  <td>
+                    <div>{accountNameMap[String(rowAccountId)] ?? rowAccountId}</div>
+                    <div className="text-xs text-muted">#{rowAccountId}</div>
+                  </td>
+                  <td>
+                    <div className="mono">{rowFriendId}</div>
+                    {Number.isFinite(rowFriendAccountId) && rowFriendAccountId > 0 && (
+                      <div className="text-xs text-muted">#{rowFriendAccountId} {accountNameMap[String(rowFriendAccountId)] ?? ''}</div>
+                    )}
+                  </td>
+                  <td className="mono">{formatTime(row.created_at)}</td>
+                  <td>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        deleteMutation.mutate({
+                          fromAccountId: rowAccountId,
+                          toAccountId: Number.isFinite(rowFriendAccountId) ? rowFriendAccountId : 0,
+                          friendId: rowFriendId
+                        })
+                      }
+                    >
+                      {tr(t, 'btn_delete_friendship', 'Delete Relationship')}
+                    </Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
 
       <Pager
         page={Number(query.data?.page ?? 0)}
@@ -1458,15 +2462,30 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
     </section>
   )
 }
-
 function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [q, setQ] = useState('')
   const [accountId, setAccountId] = useState('')
   const [status, setStatus] = useState('')
 
-  const queryString = useMemo(() => buildQuery({ lang, page, q, account_id: accountId || undefined, status: status || undefined }), [accountId, lang, page, q, status])
+  const queryString = useMemo(
+    () =>
+      buildQuery({
+        lang,
+        page,
+        page_size: pageSize,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        q,
+        account_id: accountId || undefined,
+        status: status || undefined
+      }),
+    [accountId, lang, page, pageSize, q, sortBy, sortOrder, status]
+  )
   const query = useQuery({
     queryKey: ['management-exchange-cards', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/exchange-cards?${queryString}`)
@@ -1493,6 +2512,30 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
+      <ListQueryControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        pageSize={pageSize}
+        sortOptions={[
+          { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+          { value: 'target_card_id', labelKey: 'col_card', fallback: 'Card' },
+          { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' }
+        ]}
+        onSortByChange={(value) => {
+          setPage(0)
+          setSortBy(value)
+        }}
+        onSortOrderChange={(value) => {
+          setPage(0)
+          setSortOrder(value)
+        }}
+        onPageSizeChange={(value) => {
+          setPage(0)
+          setPageSize(value)
+        }}
+        t={t}
+      />
 
       <div className="table-wrap">
         <table className="grid-table">
@@ -1546,9 +2589,20 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   )
 }
 
-function NotificationsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
+function NotificationsSection({
+  lang,
+  t,
+  assets
+}: {
+  lang: string
+  t: Record<string, string>
+  assets: CardImageAssets
+}) {
   const queryClient = useQueryClient()
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [scene, setScene] = useState('')
   const [accountId, setAccountId] = useState('')
   const [isRead, setIsRead] = useState('')
@@ -1556,15 +2610,102 @@ function NotificationsSection({ lang, t }: { lang: string; t: Record<string, str
   const [configState, setConfigState] = useState<
     Record<string, { enabled: boolean; enabledWebhook: boolean; extraConfig: Record<string, unknown> }>
   >({})
+  const [cardPickerOpen, setCardPickerOpen] = useState(false)
+  const [cardPickerScene, setCardPickerScene] = useState('rare_card_obtained')
+  const [cardPickerQ, setCardPickerQ] = useState('')
+  const [cardPickerRarity, setCardPickerRarity] = useState('')
+  const [cardPickerSetCode, setCardPickerSetCode] = useState('')
+  const [cardPickerPackName, setCardPickerPackName] = useState('')
+  const [cardPickerSortBy, setCardPickerSortBy] = useState('id')
+  const [cardPickerSortOrder, setCardPickerSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [cardPickerPage, setCardPickerPage] = useState(0)
+  const [cardPickerPageSize, setCardPickerPageSize] = useState(24)
+  const [cardPickerSelectedIds, setCardPickerSelectedIds] = useState<number[]>([])
+  const [cardPickerCardsAccum, setCardPickerCardsAccum] = useState<Record<string, unknown>[]>([])
+  const cardPickerGridRef = useRef<HTMLDivElement | null>(null)
+  const [selectedCardNameMap, setSelectedCardNameMap] = useState<Record<number, string>>({})
 
   const queryString = useMemo(
-    () => buildQuery({ lang, page, scene: scene || undefined, account_id: accountId || undefined, is_read: isRead || undefined, q }),
-    [accountId, isRead, lang, page, q, scene]
+    () =>
+      buildQuery({
+        lang,
+        page,
+        page_size: pageSize,
+        sort_by: sortBy,
+        sort_order: sortOrder,
+        scene: scene || undefined,
+        account_id: accountId || undefined,
+        is_read: isRead || undefined,
+        q
+      }),
+    [accountId, isRead, lang, page, pageSize, q, scene, sortBy, sortOrder]
   )
 
   const query = useQuery({
     queryKey: ['management-notifications', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/notifications?${queryString}`)
+  })
+
+  const cardPickerQueryString = useMemo(
+    () =>
+      buildQuery({
+        lang,
+        scene: cardPickerScene,
+        card_selector_q: cardPickerQ || undefined,
+        card_selector_rarity: cardPickerRarity || undefined,
+        card_selector_set_code: cardPickerSetCode || undefined,
+        card_selector_pack_name: cardPickerPackName || undefined,
+        card_selector_sort_by: cardPickerSortBy,
+        card_selector_sort_order: cardPickerSortOrder,
+        card_selector_page: cardPickerPage,
+        card_selector_page_size: cardPickerPageSize,
+        notify_card_ids: cardPickerSelectedIds
+      }),
+    [
+      cardPickerPackName,
+      cardPickerPage,
+      cardPickerPageSize,
+      cardPickerQ,
+      cardPickerRarity,
+      cardPickerScene,
+      cardPickerSelectedIds,
+      cardPickerSetCode,
+      cardPickerSortBy,
+      cardPickerSortOrder,
+      lang
+    ]
+  )
+  const cardPickerFilterKey = useMemo(
+    () =>
+      buildQuery({
+        scene: cardPickerScene,
+        card_selector_q: cardPickerQ || undefined,
+        card_selector_rarity: cardPickerRarity || undefined,
+        card_selector_set_code: cardPickerSetCode || undefined,
+        card_selector_pack_name: cardPickerPackName || undefined,
+        card_selector_sort_by: cardPickerSortBy,
+        card_selector_sort_order: cardPickerSortOrder,
+        card_selector_page_size: cardPickerPageSize
+      }),
+    [
+      cardPickerPackName,
+      cardPickerPageSize,
+      cardPickerQ,
+      cardPickerRarity,
+      cardPickerScene,
+      cardPickerSetCode,
+      cardPickerSortBy,
+      cardPickerSortOrder
+    ]
+  )
+
+  const cardPickerQuery = useQuery({
+    enabled: cardPickerOpen,
+    queryKey: ['management-notification-card-picker', cardPickerQueryString],
+    queryFn: () =>
+      fetchJson<Record<string, unknown>>(
+        `/api/react/management/notifications/card-picker?${cardPickerQueryString}`
+      )
   })
 
   const markReadMutation = useMutation({
@@ -1608,7 +2749,15 @@ function NotificationsSection({ lang, t }: { lang: string; t: Record<string, str
       requestJson<{ ok: boolean; message: string }>('/api/react/management/notifications/test-webhook', {
         method: 'POST',
         body: {
-          notification_id: notificationId
+          notification_id: notificationId,
+          scene: scene || null,
+          account_id: accountId || null,
+          is_read: isRead || null,
+          q,
+          sort_by: sortBy,
+          sort_order: sortOrder,
+          page,
+          page_size: pageSize
         }
       }),
     onSuccess: (result) => alert(result.message)
@@ -1643,6 +2792,167 @@ function NotificationsSection({ lang, t }: { lang: string; t: Record<string, str
     () => ((query.data?.account_name_map as Record<string, string> | undefined) ?? {}),
     [query.data?.account_name_map]
   )
+  const cardPickerCards = cardPickerCardsAccum
+  const cardPickerRarityCodes = useMemo(
+    () => (((cardPickerQuery.data?.rarity_codes as unknown[]) ?? []) as string[]),
+    [cardPickerQuery.data?.rarity_codes]
+  )
+  const cardPickerSetOptions = useMemo(
+    () =>
+      (((cardPickerQuery.data?.set_codes as unknown[]) ?? []) as Array<{
+        value: string
+        display_name: string
+      }>),
+    [cardPickerQuery.data?.set_codes]
+  )
+  const cardPickerPackOptions = useMemo(
+    () =>
+      (((cardPickerQuery.data?.pack_names as unknown[]) ?? []) as Array<{
+        value: string
+        display_name: string
+      }>),
+    [cardPickerQuery.data?.pack_names]
+  )
+  const cardPickerSelectedRows = useMemo(
+    () => (((cardPickerQuery.data?.selected_cards as unknown[]) ?? []) as Record<string, unknown>[]),
+    [cardPickerQuery.data?.selected_cards]
+  )
+  const cardPickerHasNext = Boolean(cardPickerQuery.data?.card_selector_has_next)
+  const cardPickerLoadMore = useCallback(() => {
+    if (!cardPickerOpen || cardPickerQuery.isFetching || !cardPickerHasNext) {
+      return
+    }
+    setCardPickerPage((prev) => prev + 1)
+  }, [cardPickerHasNext, cardPickerOpen, cardPickerQuery.isFetching])
+  const cardPickerSentinelRef = useInfiniteTrigger({
+    enabled: cardPickerOpen && cardPickerHasNext && !cardPickerQuery.isFetching,
+    onLoadMore: cardPickerLoadMore,
+    root: cardPickerGridRef.current
+  })
+
+  function parseIdList(value: unknown): number[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+    return value
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item) && item > 0)
+  }
+
+  function openCardPicker(
+    sceneKey: string,
+    current: { enabled: boolean; enabledWebhook: boolean; extraConfig: Record<string, unknown> }
+  ) {
+    setCardPickerScene(sceneKey)
+    setCardPickerSelectedIds(parseIdList(current.extraConfig.notify_card_ids))
+    setCardPickerPage(0)
+    setCardPickerCardsAccum([])
+    setCardPickerOpen(true)
+  }
+
+  function toggleCardSelection(cardId: number, checked: boolean) {
+    setCardPickerSelectedIds((prev) => {
+      if (checked) {
+        if (prev.includes(cardId)) {
+          return prev
+        }
+        return [...prev, cardId]
+      }
+      return prev.filter((item) => item !== cardId)
+    })
+  }
+
+  function applyCardPickerSelection() {
+    setConfigState((prev) => {
+      const current = prev[cardPickerScene]
+      if (!current) {
+        return prev
+      }
+      return {
+        ...prev,
+        [cardPickerScene]: {
+          ...current,
+          extraConfig: {
+            ...current.extraConfig,
+            notify_card_ids: cardPickerSelectedIds
+          }
+        }
+      }
+    })
+    setCardPickerOpen(false)
+  }
+
+  useEffect(() => {
+    if (!cardPickerOpen) {
+      setCardPickerCardsAccum([])
+      return
+    }
+    setCardPickerPage(0)
+    setCardPickerCardsAccum([])
+  }, [cardPickerFilterKey, cardPickerOpen])
+
+  useEffect(() => {
+    if (!cardPickerOpen || !cardPickerQuery.data) {
+      return
+    }
+    const pageCards = (((cardPickerQuery.data.cards as unknown[]) ?? []) as Record<string, unknown>[])
+    setCardPickerCardsAccum((prev) => {
+      if (cardPickerPage <= 0) {
+        return pageCards
+      }
+      const existingIds = new Set(
+        prev
+          .map((row) => Number(row.id))
+          .filter((id) => Number.isFinite(id) && id > 0)
+      )
+      const next = [...prev]
+      for (const row of pageCards) {
+        const rowId = Number(row.id)
+        if (!Number.isFinite(rowId) || rowId <= 0 || existingIds.has(rowId)) {
+          continue
+        }
+        next.push(row)
+      }
+      return next
+    })
+  }, [cardPickerOpen, cardPickerPage, cardPickerQuery.data])
+
+  useEffect(() => {
+    if (!cardPickerOpen) {
+      return
+    }
+    const selectedRows = cardPickerSelectedRows
+    if (selectedRows.length === 0) {
+      return
+    }
+    setSelectedCardNameMap((prev) => {
+      const next = { ...prev }
+      for (const row of selectedRows) {
+        const rowId = Number(row.id)
+        if (!Number.isFinite(rowId) || rowId <= 0) {
+          continue
+        }
+        const label = toText(row.display_name ?? row.name, t)
+        if (label !== '-') {
+          next[rowId] = label
+        }
+      }
+      return next
+    })
+  }, [cardPickerOpen, cardPickerSelectedRows, t])
+
+  useEffect(() => {
+    if (!cardPickerOpen) {
+      return
+    }
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setCardPickerOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [cardPickerOpen])
 
   function updateExtraList(sceneKey: string, field: string, value: string, checked: boolean) {
     setConfigState((prev) => {
@@ -1723,7 +3033,32 @@ function NotificationsSection({ lang, t }: { lang: string; t: Record<string, str
           </select>
           <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'notification_search_placeholder', 'Search title/content/account')} />
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
-          <Button type="button" size="sm" onClick={() => markAllMutation.mutate()}>{tr(t, 'btn_mark_all_read', 'Mark All Read')}</Button>
+        </div>
+        <div className="filter-row">
+          <ListQueryControls
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            pageSize={pageSize}
+            sortOptions={[
+              { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+              { value: 'title', labelKey: 'col_title', fallback: 'Title' },
+              { value: 'scene', labelKey: 'col_scene', fallback: 'Scene' }
+            ]}
+            onSortByChange={(value) => {
+              setPage(0)
+              setSortBy(value)
+            }}
+            onSortOrderChange={(value) => {
+              setPage(0)
+              setSortOrder(value)
+            }}
+            onPageSizeChange={(value) => {
+              setPage(0)
+              setPageSize(value)
+            }}
+            t={t}
+          />
+          <Button type="button" size="sm" onClick={() => markAllMutation.mutate()}>{tr(t, 'mark_all_read', tr(t, 'btn_mark_all_read', 'Mark All Read'))}</Button>
           <Button type="button" size="sm" variant="outline" onClick={() => testWebhookMutation.mutate(null)}>{tr(t, 'btn_test_webhook', 'Test Webhook')}</Button>
         </div>
       </div>
@@ -1795,28 +3130,50 @@ function NotificationsSection({ lang, t }: { lang: string; t: Record<string, str
                       )
                     })}
                   </div>
-                  <input
-                    className="field-input"
-                    value={Array.isArray(current.extraConfig.notify_card_ids) ? current.extraConfig.notify_card_ids.map((item) => String(item)).join(',') : ''}
-                    placeholder={tr(t, 'label_notify_card_ids', 'Target Cards') + ' (1,2,3)'}
-                    onChange={(event) => {
-                      const values = event.target.value
-                        .split(',')
-                        .map((item) => item.trim())
-                        .filter((item) => /^\d+$/.test(item))
-                        .map((item) => Number(item))
-                      setConfigState((prev) => ({
-                        ...prev,
-                        [sceneKey]: {
-                          ...current,
-                          extraConfig: {
-                            ...current.extraConfig,
-                            notify_card_ids: values
+                  <div className="section-subtitle">{tr(t, 'label_notify_card_ids', 'Target Cards')}</div>
+                  <div className="filter-row">
+                    {parseIdList(current.extraConfig.notify_card_ids).length === 0 ? (
+                      <span className="text-xs text-muted">{tr(t, 'notification_empty', 'No notifications')}</span>
+                    ) : (
+                      parseIdList(current.extraConfig.notify_card_ids).map((id) => (
+                        <span key={`${sceneKey}-card-${id}`} className="tag">
+                          #{id} {selectedCardNameMap[id] ?? ''}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  <div className="filter-row">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openCardPicker(sceneKey, current)}
+                    >
+                      {tr(t, 'btn_select_cards', 'Select Cards')}
+                    </Button>
+                    <input
+                      className="field-input"
+                      value={parseIdList(current.extraConfig.notify_card_ids).join(',')}
+                      placeholder={tr(t, 'label_notify_card_ids', 'Target Cards') + ' (1,2,3)'}
+                      onChange={(event) => {
+                        const values = event.target.value
+                          .split(',')
+                          .map((item) => item.trim())
+                          .filter((item) => /^\d+$/.test(item))
+                          .map((item) => Number(item))
+                        setConfigState((prev) => ({
+                          ...prev,
+                          [sceneKey]: {
+                            ...current,
+                            extraConfig: {
+                              ...current.extraConfig,
+                              notify_card_ids: values
+                            }
                           }
-                        }
-                      }))
-                    }}
-                  />
+                        }))
+                      }}
+                    />
+                  </div>
                 </>
               )}
               {sceneKey === 'task_status' && (
@@ -1878,6 +3235,217 @@ function NotificationsSection({ lang, t }: { lang: string; t: Record<string, str
           )
         })}
       </div>
+
+      {cardPickerOpen && (
+        <div
+          className="dialog-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setCardPickerOpen(false)
+            }
+          }}
+        >
+          <div className="dialog-card notification-picker-dialog" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="pagination-row">
+              <div className="section-title">{tr(t, 'btn_select_cards', 'Select Cards')}</div>
+              <Button type="button" size="sm" variant="outline" onClick={() => setCardPickerOpen(false)}>
+                {tr(t, 'label_cancel', 'Cancel')}
+              </Button>
+            </div>
+
+            <div className="section-stack">
+              <div className="filter-row">
+                <input
+                  className="field-input"
+                  value={cardPickerQ}
+                  placeholder={tr(t, 'notification_card_search_placeholder', 'Search card name/number/set')}
+                  onChange={(event) => {
+                    setCardPickerQ(event.target.value)
+                    setCardPickerPage(0)
+                  }}
+                />
+                <select
+                  className="field-select"
+                  value={cardPickerRarity}
+                  onChange={(event) => {
+                    setCardPickerRarity(event.target.value)
+                    setCardPickerPage(0)
+                  }}
+                >
+                  <option value="">{tr(t, 'label_all_rarities', 'All Rarities')}</option>
+                  {cardPickerRarityCodes.map((code) => (
+                    <option key={`picker-rarity-${code}`} value={code}>
+                      {t[`rarity_${code}`] ?? code}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="field-select"
+                  value={cardPickerSetCode}
+                  onChange={(event) => {
+                    setCardPickerSetCode(event.target.value)
+                    setCardPickerPage(0)
+                  }}
+                >
+                  <option value="">{tr(t, 'label_all_sets', 'All Sets')}</option>
+                  {cardPickerSetOptions.map((option) => (
+                    <option key={`picker-set-${option.value}`} value={option.value}>
+                      {option.display_name || option.value}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="field-select"
+                  value={cardPickerPackName}
+                  onChange={(event) => {
+                    setCardPickerPackName(event.target.value)
+                    setCardPickerPage(0)
+                  }}
+                >
+                  <option value="">{tr(t, 'label_all_packs', 'All Packs')}</option>
+                  {cardPickerPackOptions.map((option) => (
+                    <option key={`picker-pack-${option.value}`} value={option.value}>
+                      {option.display_name || option.value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="filter-row">
+                <span className="text-xs text-muted">{tr(t, 'label_sort_by', 'Sort By')}</span>
+                <select
+                  className="field-select"
+                  value={cardPickerSortBy}
+                  onChange={(event) => {
+                    setCardPickerSortBy(event.target.value)
+                    setCardPickerPage(0)
+                  }}
+                >
+                  <option value="id">{tr(t, 'col_id', 'ID')}</option>
+                  <option value="number">{tr(t, 'col_number', 'Number')}</option>
+                  <option value="name">{tr(t, 'col_name', 'Name')}</option>
+                </select>
+                <span className="text-xs text-muted">{tr(t, 'label_sort_order', 'Order')}</span>
+                <select
+                  className="field-select"
+                  value={cardPickerSortOrder}
+                  onChange={(event) => {
+                    setCardPickerSortOrder(event.target.value as 'asc' | 'desc')
+                    setCardPickerPage(0)
+                  }}
+                >
+                  <option value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</option>
+                  <option value="desc">{tr(t, 'sort_order_desc', 'Descending')}</option>
+                </select>
+                <span className="text-xs text-muted">{tr(t, 'label_page_size', 'Page Size')}</span>
+                <select
+                  className="field-select"
+                  value={String(cardPickerPageSize)}
+                  onChange={(event) => {
+                    setCardPickerPageSize(Number(event.target.value))
+                    setCardPickerPage(0)
+                  }}
+                >
+                  {[24, 36, 48, 60].map((value) => (
+                    <option key={`picker-size-${value}`} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="text-xs text-muted">
+                {tr(t, 'total_items_label', 'Total')}: {toText(cardPickerQuery.data?.card_selector_total, t)}
+                {' · '}
+                {tr(t, 'selected_cards_count', 'Selected')}: {cardPickerSelectedIds.length}
+              </div>
+
+              {cardPickerQuery.isLoading && (
+                <div className="text-xs text-muted">{tr(t, 'label_loading', 'Loading...')}</div>
+              )}
+              {cardPickerQuery.isError && (
+                <div className="text-xs text-danger">{(cardPickerQuery.error as Error).message}</div>
+              )}
+
+              <div ref={cardPickerGridRef} className="owned-grid notification-picker-grid">
+                {cardPickerCards.map((row) => {
+                  const cardId = Number(row.id)
+                  if (!Number.isFinite(cardId) || cardId <= 0) {
+                    return null
+                  }
+                  const setCode = toText(row.set_code, t)
+                  const cardNumber = Number(row.number)
+                  const checked = cardPickerSelectedIds.includes(cardId)
+                  const imageUrls = getCardImageUrls(assets, {
+                    setCode,
+                    cardNumber: Number.isFinite(cardNumber) ? cardNumber : 0
+                  }, 240)
+                  return (
+                    <label
+                      key={`picker-card-${cardId}`}
+                      className={`owned-card notification-picker-card ${checked ? 'is-selected' : ''}`}
+                    >
+                      <input
+                        className="notification-picker-checkbox"
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => toggleCardSelection(cardId, event.target.checked)}
+                      />
+                      <div className="owned-card-media">
+                        <img
+                          src={imageUrls.png}
+                          alt={toText(row.display_name ?? row.name, t)}
+                          className="owned-card-image"
+                          loading="lazy"
+                          decoding="async"
+                          onError={(event) => {
+                            const image = event.currentTarget
+                            if (image.dataset.webpTried === '1') {
+                              image.src = imageUrls.cdnPng
+                              image.dataset.webpTried = '2'
+                              return
+                            }
+                            if (image.dataset.webpTried === '2') {
+                              image.src = imageUrls.cdnWebp
+                              image.dataset.webpTried = '3'
+                              return
+                            }
+                            image.dataset.webpTried = '1'
+                            image.src = imageUrls.webp
+                          }}
+                        />
+                      </div>
+                      <div className="notification-picker-meta mono">
+                        #{cardId} {setCode}-{String(Math.max(cardNumber, 0)).padStart(3, '0')}
+                      </div>
+                      <div className="owned-card-name">{toText(row.display_name ?? row.name, t)}</div>
+                    </label>
+                  )
+                })}
+                <div ref={cardPickerSentinelRef} className="infinite-sentinel" />
+              </div>
+
+              {cardPickerCards.length === 0 && (
+                <div className="text-xs text-muted">{tr(t, 'label_no_data', 'No data')}</div>
+              )}
+
+              <div className="pagination-row">
+                <div className="section-stack">
+                  {cardPickerQuery.isFetching && (
+                    <div className="text-xs text-muted">{tr(t, 'label_loading_more', 'Loading more...')}</div>
+                  )}
+                  {!cardPickerHasNext && cardPickerCards.length > 0 && (
+                    <div className="text-xs text-muted">{tr(t, 'label_reach_end', 'Reached the end')}</div>
+                  )}
+                </div>
+                <Button type="button" size="sm" onClick={applyCardPickerSelection}>
+                  {tr(t, 'btn_apply_selection', 'Apply Selection')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="table-wrap">
         <table className="grid-table">
@@ -2001,7 +3569,17 @@ function JsonSection({ endpoint, title, lang, t }: { endpoint: string; title: st
   )
 }
 
-function ManagementSectionRouter({ lang, sectionKey, t }: { lang: string; sectionKey: string; t: Record<string, string> }) {
+function ManagementSectionRouter({
+  lang,
+  sectionKey,
+  t,
+  assets
+}: {
+  lang: string
+  sectionKey: string
+  t: Record<string, string>
+  assets: CardImageAssets
+}) {
   if (sectionKey === 'accounts') {
     return <AccountsSection lang={lang} t={t} />
   }
@@ -2027,12 +3605,12 @@ function ManagementSectionRouter({ lang, sectionKey, t }: { lang: string; sectio
     return <ExchangeCardsSection lang={lang} t={t} />
   }
   if (sectionKey === 'notifications') {
-    return <NotificationsSection lang={lang} t={t} />
+    return <NotificationsSection lang={lang} t={t} assets={assets} />
   }
   return <JsonSection endpoint={sectionKey} title={sectionKey} lang={lang} t={t} />
 }
 
-export function ManagementPage({ lang, t }: ManagementPageProps) {
+export function ManagementPage({ lang, t, assets }: ManagementPageProps) {
   return (
     <section className="section-stack">
       <div className="surface-card tab-nav">
@@ -2050,7 +3628,11 @@ export function ManagementPage({ lang, t }: ManagementPageProps) {
       <Routes>
         <Route path="/" element={<Navigate to="/management/accounts" replace />} />
         {sections.map((section) => (
-          <Route key={section.key} path={section.key} element={<ManagementSectionRouter lang={lang} sectionKey={section.key} t={t} />} />
+          <Route
+            key={section.key}
+            path={section.key}
+            element={<ManagementSectionRouter lang={lang} sectionKey={section.key} t={t} assets={assets} />}
+          />
         ))}
       </Routes>
     </section>

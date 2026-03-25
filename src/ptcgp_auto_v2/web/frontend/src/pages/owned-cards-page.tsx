@@ -1,8 +1,9 @@
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { tr } from '@/lib/i18n'
@@ -201,7 +202,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => (searchParams.get('owned_view') === 'list' ? 'list' : 'grid'))
   const [gridCols, setGridCols] = useState(() => restoreOwnedGridCols())
   const [showCounts, setShowCounts] = useState(() => searchParams.get('owned_counts') !== 'hide')
-  const [page, setPage] = useState(() => {
+  const [listPage, setListPage] = useState(() => {
     const value = Number(searchParams.get('owned_page') ?? 0)
     return Number.isFinite(value) && value >= 0 ? value : 0
   })
@@ -237,7 +238,9 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     next.set('owned_scope', ownershipScope)
     next.set('owned_view', viewMode)
     next.set('owned_counts', showCounts ? 'show' : 'hide')
-    next.set('owned_page', String(page))
+    if (viewMode === 'list') {
+      next.set('owned_page', String(listPage))
+    }
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true })
     }
@@ -246,7 +249,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     ownershipScope,
     viewMode,
     showCounts,
-    page,
+    listPage,
     searchParams,
     selectedElements,
     selectedPackNames,
@@ -260,8 +263,6 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const baseParams = useMemo(
     () => ({
       lang,
-      page,
-      page_size: 40,
       account_id: accountQuery,
       sort_by: sortBy,
       ownership_scope: ownershipScope,
@@ -271,10 +272,18 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
       set_code: selectedSetCodes,
       pack_name: selectedPackNames
     }),
-    [accountQuery, lang, ownershipScope, page, selectedElements, selectedPackNames, selectedRarity, selectedSetCodes, selectedTypes, sortBy]
+    [accountQuery, lang, ownershipScope, selectedElements, selectedPackNames, selectedRarity, selectedSetCodes, selectedTypes, sortBy]
   )
 
-  const listQueryString = useMemo(() => buildQuery(baseParams), [baseParams])
+  const listQueryString = useMemo(
+    () =>
+      buildQuery({
+        ...baseParams,
+        page: listPage,
+        page_size: 40
+      }),
+    [baseParams, listPage]
+  )
 
   const statsQueryString = useMemo(
     () =>
@@ -293,12 +302,31 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
 
   const listQuery = useQuery({
     queryKey: ['owned-list', listQueryString],
-    queryFn: () => fetchJson<OwnedCardsResponse>(`/api/react/owned-cards?${listQueryString}`)
+    queryFn: () => fetchJson<OwnedCardsResponse>(`/api/react/owned-cards?${listQueryString}`),
+    enabled: viewMode === 'list',
+    refetchInterval: 60000
+  })
+
+  const gridQuery = useInfiniteQuery({
+    queryKey: ['owned-grid', baseParams],
+    queryFn: ({ pageParam }) =>
+      fetchJson<OwnedCardsResponse>(
+        `/api/react/owned-cards?${buildQuery({
+          ...baseParams,
+          page: pageParam,
+          page_size: 40
+        })}`
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
+    enabled: viewMode === 'grid',
+    refetchInterval: 60000
   })
 
   const statsQuery = useQuery({
     queryKey: ['owned-stats', statsQueryString],
-    queryFn: () => fetchJson<OwnedStatsResponse>(`/api/react/owned-cards/stats?${statsQueryString}`)
+    queryFn: () => fetchJson<OwnedStatsResponse>(`/api/react/owned-cards/stats?${statsQueryString}`),
+    refetchInterval: 60000
   })
 
   const detailQuery = useQuery({
@@ -370,9 +398,28 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
   }, [gridCols])
 
-  const cards = listQuery.data?.items ?? []
+  const gridCards = (gridQuery.data?.pages ?? []).flatMap((page) => page.items)
+  const cards = viewMode === 'grid' ? gridCards : (listQuery.data?.items ?? [])
+  const totalCards = viewMode === 'grid' ? (gridQuery.data?.pages[0]?.total ?? 0) : (listQuery.data?.total ?? 0)
+  const gridHasNextPage = Boolean(gridQuery.data?.pages[gridQuery.data.pages.length - 1]?.has_next)
+  const gridLoadMore = useCallback(() => {
+    if (viewMode !== 'grid') {
+      return
+    }
+    if (!gridQuery.isFetchingNextPage && gridQuery.hasNextPage) {
+      void gridQuery.fetchNextPage()
+    }
+  }, [gridQuery, viewMode])
+  const gridSentinelRef = useInfiniteTrigger({
+    enabled: viewMode === 'grid' && gridHasNextPage && !gridQuery.isFetchingNextPage,
+    onLoadMore: gridLoadMore
+  })
+  const isListLoading = viewMode === 'list' ? listQuery.isLoading : gridQuery.isLoading
+  const isListError = viewMode === 'list' ? listQuery.isError : gridQuery.isError
+  const listError = (viewMode === 'list' ? listQuery.error : gridQuery.error) as Error | null
+
   const clearFilters = () => {
-    setPage(0)
+    setListPage(0)
     setAccountQuery('')
     setSelectedRarity([])
     setSelectedTypes([])
@@ -400,7 +447,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
             className="field-input"
             value={accountQuery}
             onChange={(event) => {
-              setPage(0)
+              setListPage(0)
               setAccountQuery(event.target.value)
             }}
             placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID')}
@@ -408,25 +455,25 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         </div>
 
         <div className="filter-row">
-          <Button type="button" size="sm" variant={ownershipScope === 'owned' ? 'default' : 'outline'} onClick={() => { setPage(0); setOwnershipScope('owned') }}>
+          <Button type="button" size="sm" variant={ownershipScope === 'owned' ? 'default' : 'outline'} onClick={() => { setListPage(0); setOwnershipScope('owned') }}>
             {tr(t, 'owned_scope_owned', 'Owned')}
           </Button>
-          <Button type="button" size="sm" variant={ownershipScope === 'missing' ? 'default' : 'outline'} onClick={() => { setPage(0); setOwnershipScope('missing') }}>
+          <Button type="button" size="sm" variant={ownershipScope === 'missing' ? 'default' : 'outline'} onClick={() => { setListPage(0); setOwnershipScope('missing') }}>
             {tr(t, 'owned_scope_missing', 'Missing')}
           </Button>
-          <Button type="button" size="sm" variant={ownershipScope === 'all' ? 'default' : 'outline'} onClick={() => { setPage(0); setOwnershipScope('all') }}>
+          <Button type="button" size="sm" variant={ownershipScope === 'all' ? 'default' : 'outline'} onClick={() => { setListPage(0); setOwnershipScope('all') }}>
             {tr(t, 'owned_scope_all', 'All')}
           </Button>
         </div>
 
         <div className="filter-row">
-          <Button type="button" size="sm" variant={sortBy === 'acquired' ? 'default' : 'outline'} onClick={() => { setPage(0); setSortBy('acquired') }}>
+          <Button type="button" size="sm" variant={sortBy === 'acquired' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('acquired') }}>
             {tr(t, 'owned_sort_acquired', 'Acquired')}
           </Button>
-          <Button type="button" size="sm" variant={sortBy === 'rarity' ? 'default' : 'outline'} onClick={() => { setPage(0); setSortBy('rarity') }}>
+          <Button type="button" size="sm" variant={sortBy === 'rarity' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('rarity') }}>
             {tr(t, 'owned_sort_rarity', 'Rarity')}
           </Button>
-          <Button type="button" size="sm" variant={sortBy === 'count' ? 'default' : 'outline'} onClick={() => { setPage(0); setSortBy('count') }}>
+          <Button type="button" size="sm" variant={sortBy === 'count' ? 'default' : 'outline'} onClick={() => { setListPage(0); setSortBy('count') }}>
             {tr(t, 'owned_sort_count', 'Count')}
           </Button>
         </div>
@@ -474,7 +521,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
           <summary className="section-subtitle">{tr(t, 'filter_rarity', 'Rarity')}</summary>
           <div className="filter-row mt-2">
             {options.rarities.map((rarity) => (
-              <Button key={rarity} type="button" size="sm" variant={selectedRarity.includes(rarity) ? 'default' : 'outline'} onClick={() => { setPage(0); setSelectedRarity((prev) => toggleItems(prev, rarity)) }}>
+              <Button key={rarity} type="button" size="sm" variant={selectedRarity.includes(rarity) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedRarity((prev) => toggleItems(prev, rarity)) }}>
                 {t[`rarity_${rarity}`] ?? rarity}
               </Button>
             ))}
@@ -485,7 +532,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
           <summary className="section-subtitle">{tr(t, 'filter_type', 'Type')}</summary>
           <div className="filter-row mt-2">
             {options.card_types.map((cardType) => (
-              <Button key={cardType} type="button" size="sm" variant={selectedTypes.includes(cardType) ? 'default' : 'outline'} onClick={() => { setPage(0); setSelectedTypes((prev) => toggleItems(prev, cardType)) }}>
+              <Button key={cardType} type="button" size="sm" variant={selectedTypes.includes(cardType) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedTypes((prev) => toggleItems(prev, cardType)) }}>
                 {t[`type_${cardType}`] ?? cardType}
               </Button>
             ))}
@@ -496,7 +543,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
           <summary className="section-subtitle">{tr(t, 'filter_set', 'Set')}</summary>
           <div className="filter-row mt-2">
             {options.card_sets.map((item) => (
-              <Button key={item.code} type="button" size="sm" variant={selectedSetCodes.includes(item.code) ? 'default' : 'outline'} onClick={() => { setPage(0); setSelectedSetCodes((prev) => toggleItems(prev, item.code)) }}>
+              <Button key={item.code} type="button" size="sm" variant={selectedSetCodes.includes(item.code) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedSetCodes((prev) => toggleItems(prev, item.code)) }}>
                 {item.display_name}
               </Button>
             ))}
@@ -507,7 +554,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
           <summary className="section-subtitle">{tr(t, 'filter_pack', 'Pack')}</summary>
           <div className="filter-row mt-2">
             {options.packs.map((item) => (
-              <Button key={item.name} type="button" size="sm" variant={selectedPackNames.includes(item.name) ? 'default' : 'outline'} onClick={() => { setPage(0); setSelectedPackNames((prev) => toggleItems(prev, item.name)) }}>
+              <Button key={item.name} type="button" size="sm" variant={selectedPackNames.includes(item.name) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedPackNames((prev) => toggleItems(prev, item.name)) }}>
                 {item.display_name}
               </Button>
             ))}
@@ -518,7 +565,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
           <summary className="section-subtitle">{tr(t, 'filter_element', 'Element')}</summary>
           <div className="filter-row mt-2">
             {options.elements.map((item) => (
-              <Button key={item} type="button" size="sm" variant={selectedElements.includes(item) ? 'default' : 'outline'} onClick={() => { setPage(0); setSelectedElements((prev) => toggleItems(prev, item)) }}>
+              <Button key={item} type="button" size="sm" variant={selectedElements.includes(item) ? 'default' : 'outline'} onClick={() => { setListPage(0); setSelectedElements((prev) => toggleItems(prev, item)) }}>
                 {t[`element_${item}`] ?? item}
               </Button>
             ))}
@@ -537,10 +584,10 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         </div>
       )}
 
-      {listQuery.isLoading && <div className="surface-card text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
-      {listQuery.isError && <div className="surface-card text-sm text-danger">{(listQuery.error as Error).message}</div>}
+      {isListLoading && <div className="surface-card text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
+      {isListError && <div className="surface-card text-sm text-danger">{listError?.message}</div>}
 
-      {listQuery.data && (
+      {(viewMode === 'grid' ? gridQuery.data : listQuery.data) && (
         <>
           {viewMode === 'grid' ? (
             <div className="surface-card">
@@ -680,14 +727,27 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
             </div>
           )}
 
-          <div className="surface-card pagination-row">
-            <div className="text-xs text-muted">{tr(t, 'total_text', 'Total')}: {listQuery.data.total}</div>
-            <div className="filter-row">
-              <Button type="button" size="sm" variant="outline" disabled={!listQuery.data.has_prev} onClick={() => setPage((prev) => Math.max(prev - 1, 0))}>{tr(t, 'btn_prev_page', 'Previous')}</Button>
-              <span className="text-xs mono px-2 py-1">{page + 1}</span>
-              <Button type="button" size="sm" variant="outline" disabled={!listQuery.data.has_next} onClick={() => setPage((prev) => prev + 1)}>{tr(t, 'btn_next_page', 'Next')}</Button>
+          {viewMode === 'grid' ? (
+            <div className="surface-card section-stack">
+              <div className="text-xs text-muted">{tr(t, 'total_text', 'Total')}: {totalCards}</div>
+              {gridQuery.isFetchingNextPage && (
+                <div className="text-xs text-muted">{tr(t, 'label_loading_more', 'Loading more...')}</div>
+              )}
+              {!gridHasNextPage && cards.length > 0 && (
+                <div className="text-xs text-muted">{tr(t, 'label_reach_end', 'Reached the end')}</div>
+              )}
+              <div ref={gridSentinelRef} className="infinite-sentinel" />
             </div>
-          </div>
+          ) : (
+            <div className="surface-card pagination-row">
+              <div className="text-xs text-muted">{tr(t, 'total_text', 'Total')}: {totalCards}</div>
+              <div className="filter-row">
+                <Button type="button" size="sm" variant="outline" disabled={!listQuery.data?.has_prev} onClick={() => setListPage((prev) => Math.max(prev - 1, 0))}>{tr(t, 'btn_prev_page', 'Previous')}</Button>
+                <span className="text-xs mono px-2 py-1">{listPage + 1}</span>
+                <Button type="button" size="sm" variant="outline" disabled={!listQuery.data?.has_next} onClick={() => setListPage((prev) => prev + 1)}>{tr(t, 'btn_next_page', 'Next')}</Button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -778,7 +838,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                           setDetailSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
                         }}
                       >
-                        {detailSortOrder.toUpperCase()}
+                        {detailSortOrder === 'asc' ? tr(t, 'sort_order_asc', 'Ascending') : tr(t, 'sort_order_desc', 'Descending')}
                       </Button>
                     </div>
                   </div>
