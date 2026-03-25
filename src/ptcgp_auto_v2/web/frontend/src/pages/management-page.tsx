@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DatePicker } from '@/components/ui/date-picker'
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { Tooltip } from '@/components/ui/tooltip'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson, requestFormJson, requestJson } from '@/lib/api'
@@ -18,7 +23,7 @@ interface ManagementPageProps {
 interface ColumnDef {
   key: string
   label: string
-  render?: (row: Record<string, unknown>) => string
+  render?: (row: Record<string, unknown>) => ReactNode
   sortKey?: string
 }
 
@@ -43,6 +48,12 @@ interface PlanTaskConfigState {
 interface InlineNoticeState {
   level: 'success' | 'error'
   text: string
+}
+
+interface SearchableOption {
+  value: string
+  label: string
+  searchText?: string
 }
 
 const sections = [
@@ -151,6 +162,19 @@ function taskTypeLabel(t: Record<string, string>, value: unknown): string {
   return tr(t, `task_${key}`, key)
 }
 
+function taskTypesListLabel(t: Record<string, string>, value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) {
+    return '-'
+  }
+  const labels = value
+    .map((item) => taskTypeLabel(t, item))
+    .filter((item) => item && item !== '-')
+  if (labels.length === 0) {
+    return '-'
+  }
+  return labels.join(', ')
+}
+
 function requestTypeLabel(t: Record<string, string>, value: unknown): string {
   const key = typeof value === 'string' ? value : ''
   if (!key) {
@@ -220,6 +244,115 @@ function exchangeStatusLabel(t: Record<string, string>, value: unknown): string 
     return '-'
   }
   return tr(t, `exchange_request_status_${key}`, key)
+}
+
+function exchangeCancelDisabledReason(t: Record<string, string>, status: unknown): string {
+  const statusText = exchangeStatusLabel(t, status)
+  return `${tr(t, 'msg_exchange_request_cancel_failed', 'Only sending/sended requests can be cancelled')} (${statusText})`
+}
+
+function requestCancelDisabledReason(t: Record<string, string>, status: unknown): string {
+  const statusText = requestStatusLabel(t, status)
+  return `${tr(t, 'msg_request_cancel_failed', 'Only pending request records can be removed')} (${statusText})`
+}
+
+function statusBadgeVariant(value: unknown): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
+  const key = typeof value === 'string' ? value : ''
+  if (key === 'success' || key === 'completed' || key === 'sended') {
+    return 'success'
+  }
+  if (key === 'failed' || key === 'blocked' || key === 'timeout') {
+    return 'danger'
+  }
+  if (key === 'sending' || key === 'running' || key === 'pending') {
+    return 'warning'
+  }
+  if (key === 'canceling' || key === 'deleting') {
+    return 'info'
+  }
+  return 'muted'
+}
+
+function sceneBadgeVariant(value: string): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
+  if (value === 'rare_card_obtained') {
+    return 'success'
+  }
+  if (value === 'task_status') {
+    return 'warning'
+  }
+  if (value === 'system_warning') {
+    return 'danger'
+  }
+  return 'info'
+}
+
+function renderBadge(text: string, variant: 'success' | 'warning' | 'danger' | 'info' | 'muted') {
+  return <Badge variant={variant}>{text}</Badge>
+}
+
+function buildAccountSelectOptions(
+  accounts: Record<string, unknown>[],
+  t: Record<string, string>,
+  emptyLabel: string
+): SearchableOption[] {
+  const items: SearchableOption[] = [{ value: '', label: emptyLabel, searchText: emptyLabel }]
+  for (const account of accounts) {
+    const id = toText(account.id, t)
+    const displayName = toText(account.display_name || account.nickname, t)
+    const friendId = toText(account.friend_id, t)
+    const label = `${id} ${displayName} (${friendId})`
+    items.push({
+      value: id,
+      label,
+      searchText: `${id} ${displayName} ${friendId}`
+    })
+  }
+  return items
+}
+
+function searchableSelectLocale(t: Record<string, string>) {
+  return {
+    searchPlaceholder: tr(t, 'label_search', 'Search'),
+    emptyLabel: tr(t, 'label_no_data', 'No data'),
+    prevPageLabel: tr(t, 'btn_prev_page', 'Previous'),
+    nextPageLabel: tr(t, 'btn_next_page', 'Next')
+  }
+}
+
+function datePickerLocale(t: Record<string, string>) {
+  return {
+    selectDateLabel: tr(t, 'date_picker_select_date', 'Select date'),
+    todayLabel: tr(t, 'btn_today', 'Today'),
+    clearLabel: tr(t, 'date_picker_clear', 'Clear'),
+    prevMonthLabel: tr(t, 'date_picker_prev_month', 'Previous month'),
+    nextMonthLabel: tr(t, 'date_picker_next_month', 'Next month'),
+    weekdayLabels: [
+      tr(t, 'date_picker_weekday_mon', 'Mon'),
+      tr(t, 'date_picker_weekday_tue', 'Tue'),
+      tr(t, 'date_picker_weekday_wed', 'Wed'),
+      tr(t, 'date_picker_weekday_thu', 'Thu'),
+      tr(t, 'date_picker_weekday_fri', 'Fri'),
+      tr(t, 'date_picker_weekday_sat', 'Sat'),
+      tr(t, 'date_picker_weekday_sun', 'Sun')
+    ]
+  }
+}
+
+function TruncatedText({
+  text,
+  tooltip,
+  className
+}: {
+  text: string
+  tooltip?: string
+  className?: string
+}) {
+  const hint = tooltip ?? text
+  return (
+    <Tooltip content={hint} className="truncate-tooltip">
+      <span className={className ? `${className} text-truncate-1` : 'text-truncate-1'}>{text}</span>
+    </Tooltip>
+  )
 }
 
 function Pager({
@@ -339,43 +472,56 @@ function ListQueryControls({
       <div className="table-toolbar-zone table-toolbar-zone--left">
         <div className="table-filter-item">
           <label className="section-subtitle">{tr(t, 'label_sort_by', 'Sort By')}</label>
-          <select className="field-select table-control" value={sortBy} onChange={(event) => onSortByChange(event.target.value)}>
-            {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {tr(t, option.labelKey, option.fallback)}
-              </option>
-            ))}
-          </select>
+          <Select value={encodeSelectValue(sortBy)} onValueChange={(value) => onSortByChange(decodeSelectValue(value))}>
+            <SelectTrigger className="field-select table-control">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sortOptions.map((option) => (
+                <SelectItem key={option.value} value={encodeSelectValue(option.value)}>
+                  {tr(t, option.labelKey, option.fallback)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="table-filter-item">
           <label className="section-subtitle">{tr(t, 'label_sort_order', 'Order')}</label>
-          <select
-            className="field-select table-control"
-            value={sortOrder}
+          <Select
+            value={encodeSelectValue(sortOrder)}
             disabled={disableSortOrder}
-            onChange={(event) => onSortOrderChange(event.target.value as 'asc' | 'desc')}
+            onValueChange={(value) => onSortOrderChange(decodeSelectValue(value) as 'asc' | 'desc')}
           >
-            <option value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</option>
-            <option value="desc">{tr(t, 'sort_order_desc', 'Descending')}</option>
-          </select>
+            <SelectTrigger className="field-select table-control">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
+              <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       <div className="table-toolbar-zone table-toolbar-zone--right">
         <div className="table-filter-item">
           <label className="section-subtitle">{tr(t, 'label_page_size', 'Page Size')}</label>
-          <select
-            className="field-select table-control"
-            value={String(pageSize)}
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          <Select
+            value={encodeSelectValue(String(pageSize))}
+            onValueChange={(value) => onPageSizeChange(Number(decodeSelectValue(value)))}
           >
-            {options.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="field-select table-control">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((value) => (
+                <SelectItem key={value} value={String(value)}>
+                  {value}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
     </div>
@@ -396,6 +542,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   const [cardSets, setCardSets] = useState<Array<{ code: string; display_name: string }>>([])
   const [boosterOptions, setBoosterOptions] = useState<Array<{ name: string; display_name: string }>>([])
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
 
   const queryString = useMemo(
     () =>
@@ -512,6 +659,30 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     }
     setEditingPackConfig({ accountId, setCode, boosterName })
   }
+
+  const setSelectOptions = useMemo<SearchableOption[]>(
+    () => [
+      { value: '', label: tr(t, 'label_no_pack_auto', 'No target pack (auto select)') },
+      ...cardSets.map((item) => ({
+        value: item.code,
+        label: item.display_name,
+        searchText: `${item.code} ${item.display_name}`
+      }))
+    ],
+    [cardSets, t]
+  )
+
+  const boosterSelectOptions = useMemo<SearchableOption[]>(
+    () => [
+      { value: '', label: tr(t, 'label_none', '-- None --') },
+      ...boosterOptions.map((booster) => ({
+        value: booster.name,
+        label: booster.display_name,
+        searchText: `${booster.name} ${booster.display_name}`
+      }))
+    ],
+    [boosterOptions, t]
+  )
 
   return (
     <section className="section-stack">
@@ -653,7 +824,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
       {editingPlans && (
         <div className="dialog-overlay" onClick={() => setEditingPlans(null)}>
-          <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card section-stack plan-editor-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">{tr(t, 'btn_edit_plans', 'Plans')} #{editingPlans.accountId}</div>
             <div className="section-subtitle">{tr(t, 'label_active_plans', 'Active Plans')}</div>
             <div className="filter-row">
@@ -662,12 +833,14 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
               ))}
             </div>
             <div className="section-subtitle">{tr(t, 'option_select_plan', 'Select plan')}</div>
-            <div className="section-stack">
+            <div className="section-stack plan-assoc-list">
               {editingPlans.items.map((planItem, index) => {
                 const checked = planItem.is_active
+                const isFirst = index === 0
+                const isLast = index === editingPlans.items.length - 1
                 return (
-                  <div key={planItem.plan_id} className="filter-row">
-                    <label className="filter-row">
+                  <div key={planItem.plan_id} className="plan-assoc-item">
+                    <label className="filter-row plan-assoc-main">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -682,48 +855,54 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                           })
                         }}
                       />
-                      <span>{planItem.plan_name}</span>
+                      <span className="plan-assoc-name">{planItem.plan_name}</span>
                     </label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={index === 0}
-                      onClick={() => {
-                        setEditingPlans((prev) => {
-                          if (!prev || index === 0) {
-                            return prev
-                          }
-                          const nextItems = [...prev.items]
-                          const tmp = nextItems[index - 1]
-                          nextItems[index - 1] = nextItems[index]
-                          nextItems[index] = tmp
-                          return { ...prev, items: nextItems }
-                        })
-                      }}
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={index === editingPlans.items.length - 1}
-                      onClick={() => {
-                        setEditingPlans((prev) => {
-                          if (!prev || index === prev.items.length - 1) {
-                            return prev
-                          }
-                          const nextItems = [...prev.items]
-                          const tmp = nextItems[index + 1]
-                          nextItems[index + 1] = nextItems[index]
-                          nextItems[index] = tmp
-                          return { ...prev, items: nextItems }
-                        })
-                      }}
-                    >
-                      ↓
-                    </Button>
+                    <div className="plan-assoc-actions">
+                      <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isFirst}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isFirst}
+                          onClick={() => {
+                            setEditingPlans((prev) => {
+                              if (!prev || isFirst) {
+                                return prev
+                              }
+                              const nextItems = [...prev.items]
+                              const temp = nextItems[index - 1]
+                              nextItems[index - 1] = nextItems[index]
+                              nextItems[index] = temp
+                              return { ...prev, items: nextItems }
+                            })
+                          }}
+                        >
+                          ↑
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isLast}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isLast}
+                          onClick={() => {
+                            setEditingPlans((prev) => {
+                              if (!prev || isLast) {
+                                return prev
+                              }
+                              const nextItems = [...prev.items]
+                              const temp = nextItems[index + 1]
+                              nextItems[index + 1] = nextItems[index]
+                              nextItems[index] = temp
+                              return { ...prev, items: nextItems }
+                            })
+                          }}
+                        >
+                          ↓
+                        </Button>
+                      </Tooltip>
+                    </div>
                   </div>
                 )
               })}
@@ -741,11 +920,10 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
           <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">{tr(t, 'btn_pack_config_title', 'Pack Config')} #{editingPackConfig.accountId}</div>
             <label className="section-subtitle">{tr(t, 'label_target_series', 'Target Series')}</label>
-            <select
-              className="field-select"
+            <SearchableSelect
               value={editingPackConfig.setCode}
-              onChange={async (event) => {
-                const setCode = event.target.value
+              options={setSelectOptions}
+              onValueChange={async (setCode) => {
                 if (!setCode) {
                   setBoosterOptions([])
                   setEditingPackConfig((prev) => (prev ? { ...prev, setCode: '', boosterName: '' } : null))
@@ -755,20 +933,20 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                 setBoosterOptions(boosters)
                 setEditingPackConfig((prev) => (prev ? { ...prev, setCode, boosterName: boosters[0]?.name ?? '' } : null))
               }}
-            >
-              <option value="">{tr(t, 'label_no_pack_auto', 'No target pack (auto select)')}</option>
-              {cardSets.map((setItem) => (
-                <option key={setItem.code} value={setItem.code}>{setItem.display_name}</option>
-              ))}
-            </select>
+              {...selectLocale}
+              placeholder={tr(t, 'label_target_series', 'Target Series')}
+              pageSize={10}
+            />
 
             <label className="section-subtitle">{tr(t, 'label_target_booster', 'Target Booster')}</label>
-            <select className="field-select" value={editingPackConfig.boosterName} onChange={(event) => setEditingPackConfig((prev) => (prev ? { ...prev, boosterName: event.target.value } : null))}>
-              <option value="">{tr(t, 'label_none', '-- None --')}</option>
-              {boosterOptions.map((booster) => (
-                <option key={booster.name} value={booster.name}>{booster.display_name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={editingPackConfig.boosterName}
+              options={boosterSelectOptions}
+              onValueChange={(boosterName) => setEditingPackConfig((prev) => (prev ? { ...prev, boosterName } : null))}
+              {...selectLocale}
+              placeholder={tr(t, 'label_target_booster', 'Target Booster')}
+              pageSize={10}
+            />
 
             <div className="filter-row">
               <Button type="button" size="sm" onClick={() => savePackConfigMutation.mutate({ accountId: editingPackConfig.accountId, setCode: editingPackConfig.setCode, boosterName: editingPackConfig.boosterName })}>{tr(t, 'btn_save', 'Save')}</Button>
@@ -797,6 +975,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [taskOrder, setTaskOrder] = useState<string[]>([])
   const [taskConfigMap, setTaskConfigMap] = useState<Record<string, PlanTaskConfigState>>({})
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const [pendingDeletePlan, setPendingDeletePlan] = useState<{ id: number; name: string } | null>(null)
 
   const queryString = useMemo(
     () => buildQuery({ lang, q, page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder }),
@@ -861,11 +1040,13 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     mutationFn: (planId: number) => requestJson<{ ok: boolean; message: string }>(`/api/react/management/plans/${planId}`, { method: 'DELETE' }),
     onSuccess: (result) => {
       setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
+      setPendingDeletePlan(null)
       queryClient.invalidateQueries({ queryKey: ['management-plans'] })
     }
   })
 
   async function openEditor(planId: number | null) {
+    setPendingDeletePlan(null)
     const data = await fetchJson<Record<string, unknown>>(`/api/react/management/plans/edit?${buildQuery({ lang, plan_id: planId ?? undefined })}`)
     const plan = (data.plan as Record<string, unknown> | null) ?? null
     const availableTasks = ((data.available_tasks as unknown[]) ?? []) as string[]
@@ -931,49 +1112,91 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           t={t}
         />
         <InlineNotice notice={notice} />
-
-        <DataGrid
-          rows={items}
-          columns={[
-            { key: 'id', label: tr(t, 'col_id', 'ID'), sortKey: 'id' },
-            { key: 'name', label: tr(t, 'col_name', 'Name'), sortKey: 'name' },
-            { key: 'description', label: tr(t, 'col_description', 'Description') },
-            { key: 'task_types_list', label: tr(t, 'col_task', 'Task'), render: (row) => toText(row.task_types_list, t) },
-            {
-              key: 'actions',
-              label: tr(t, 'col_actions', 'Actions'),
-              render: (row) => {
-                const planId = Number(row.id)
-                return `${tr(t, 'btn_edit', 'Edit')}#${planId}`
-              }
-            }
-          ]}
-          t={t}
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          onSortChange={handleHeaderSort}
-        />
-
-        <div className="filter-row">
-          {items.map((item) => (
-            <div key={toText(item.id, t)} className="filter-row">
-              <Button type="button" size="sm" variant="outline" onClick={() => openEditor(Number(item.id))}>{tr(t, 'btn_edit', 'Edit')} {toText(item.name, t)}</Button>
+        {pendingDeletePlan && (
+          <div className="surface-card section-stack">
+            <div className="text-xs text-danger">
+              {tr(t, 'confirm_delete_plan', "Delete plan '{name}'?").replace('{name}', pendingDeletePlan.name)}
+            </div>
+            <div className="filter-row">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const template = tr(t, 'confirm_delete_plan', "Delete plan '{name}'?")
-                  const name = toText(item.name, t)
-                  if (confirm(template.replace('{name}', name))) {
-                    deleteMutation.mutate(Number(item.id))
-                  }
-                }}
+                onClick={() => deleteMutation.mutate(pendingDeletePlan.id)}
               >
-                {tr(t, 'btn_delete', 'Delete')}
+                {tr(t, 'label_confirm', 'Confirm')}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setPendingDeletePlan(null)}>
+                {tr(t, 'label_cancel', 'Cancel')}
               </Button>
             </div>
-          ))}
+          </div>
+        )}
+
+        <div className="table-wrap">
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <SortableHeaderCell
+                  label={tr(t, 'col_id', 'ID')}
+                  sortKey="id"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
+                <SortableHeaderCell
+                  label={tr(t, 'col_name', 'Name')}
+                  sortKey="name"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
+                <th>{tr(t, 'col_description', 'Description')}</th>
+                <th>{tr(t, 'col_task', 'Task')}</th>
+                <th>{tr(t, 'col_actions', 'Actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center text-muted">{tr(t, 'label_no_data', 'No data')}</td>
+                </tr>
+              )}
+              {items.map((item) => {
+                const planId = Number(item.id)
+                const planName = toText(item.name, t)
+                const description = toText(item.description, t)
+                const tasksLabel = taskTypesListLabel(t, item.task_types_list)
+                return (
+                  <tr key={planId}>
+                    <td className="mono">{planId}</td>
+                    <td>{planName}</td>
+                    <td>
+                      <TruncatedText text={description} />
+                    </td>
+                    <td>
+                      <TruncatedText text={tasksLabel} />
+                    </td>
+                    <td>
+                      <div className="filter-row">
+                        <Button type="button" size="sm" variant="outline" onClick={() => openEditor(planId)}>
+                          {tr(t, 'btn_edit', 'Edit')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setPendingDeletePlan({ id: planId, name: planName })}
+                        >
+                          {tr(t, 'btn_delete', 'Delete')}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
 
         <Pager
@@ -988,7 +1211,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 
       {isPlanEditorOpen && (
         <div className="dialog-overlay" onClick={() => { setEditingPlanId(null); setIsPlanEditorOpen(false) }}>
-          <div className="dialog-card section-stack" onClick={(event) => event.stopPropagation()}>
+          <div className="dialog-card section-stack plan-editor-dialog" onClick={(event) => event.stopPropagation()}>
             <div className="section-title">
               {editingPlanId ? `${tr(t, 'btn_edit', 'Edit')} #${editingPlanId}` : tr(t, 'modal_title_new_plan', 'New Plan')}
             </div>
@@ -997,17 +1220,19 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             <label className="section-subtitle">{tr(t, 'label_description', 'Description')}</label>
             <textarea className="field-textarea" value={planDesc} onChange={(event) => setPlanDesc(event.target.value)} />
             <label className="section-subtitle">{tr(t, 'label_task_config', 'Task Config')}</label>
-            <div className="section-stack">
+            <div className="section-stack plan-editor-task-list">
               {(taskOrder.length > 0 ? taskOrder : taskOptions).map((task, index) => {
                 const config = taskConfigMap[task] ?? {
                   enabled: false,
                   resetType: 'default',
                   intervalSeconds: 3600
                 }
+                const isFirst = index === 0
+                const isLast = index === taskOrder.length - 1
                 return (
-                  <div key={task} className="surface-card section-stack">
-                    <div className="filter-row">
-                      <label className="filter-row">
+                  <div key={task} className="surface-card section-stack plan-editor-task-item">
+                    <div className="filter-row plan-editor-task-row">
+                      <label className="filter-row plan-editor-task-main">
                         <input
                           type="checkbox"
                           checked={config.enabled}
@@ -1019,71 +1244,81 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                             }))
                           }}
                         />
-                        <span>{taskTypeLabel(t, task)}</span>
+                        <span className="plan-editor-task-name">{taskTypeLabel(t, task)}</span>
                       </label>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={index === 0}
-                        onClick={() => {
-                          setTaskOrder((prev) => {
-                            if (index === 0) {
-                              return prev
-                            }
-                            const next = [...prev]
-                            const tmp = next[index - 1]
-                            next[index - 1] = next[index]
-                            next[index] = tmp
-                            return next
-                          })
-                        }}
-                      >
-                        ↑
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={index === taskOrder.length - 1}
-                        onClick={() => {
-                          setTaskOrder((prev) => {
-                            if (index === prev.length - 1) {
-                              return prev
-                            }
-                            const next = [...prev]
-                            const tmp = next[index + 1]
-                            next[index + 1] = next[index]
-                            next[index] = tmp
-                            return next
-                          })
-                        }}
-                      >
-                        ↓
-                      </Button>
+                      <div className="plan-editor-task-actions">
+                        <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isFirst}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isFirst}
+                            onClick={() => {
+                              setTaskOrder((prev) => {
+                                if (isFirst) {
+                                  return prev
+                                }
+                                const next = [...prev]
+                                const temp = next[index - 1]
+                                next[index - 1] = next[index]
+                                next[index] = temp
+                                return next
+                              })
+                            }}
+                          >
+                            ↑
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isLast}>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isLast}
+                            onClick={() => {
+                              setTaskOrder((prev) => {
+                                if (isLast) {
+                                  return prev
+                                }
+                                const next = [...prev]
+                                const temp = next[index + 1]
+                                next[index + 1] = next[index]
+                                next[index] = temp
+                                return next
+                              })
+                            }}
+                          >
+                            ↓
+                          </Button>
+                        </Tooltip>
+                      </div>
                     </div>
-                    <div className="filter-row">
-                      <select
-                        className="field-select"
-                        value={config.resetType}
-                        onChange={(event) => {
-                          const resetType = event.target.value
+                    <div className="filter-row plan-editor-config-row">
+                      <Select
+                        value={encodeSelectValue(config.resetType)}
+                        onValueChange={(value) => {
+                          const resetType = decodeSelectValue(value)
                           setTaskConfigMap((prev) => ({
                             ...prev,
                             [task]: { ...config, resetType }
                           }))
                         }}
                       >
-                        {resetTypeOptions.map((resetType) => (
-                          <option key={resetType} value={resetType}>
-                            {tr(t, `reset_type_${resetType}`, resetType)}
-                          </option>
-                        ))}
-                        {!resetTypeOptions.includes('default') && <option value="default">{tr(t, 'label_default', 'default')}</option>}
-                      </select>
+                        <SelectTrigger className="field-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {resetTypeOptions.map((resetType) => (
+                            <SelectItem key={resetType} value={resetType}>
+                              {tr(t, `reset_type_${resetType}`, resetType)}
+                            </SelectItem>
+                          ))}
+                          {!resetTypeOptions.includes('default') && <SelectItem value="default">{tr(t, 'label_default', 'default')}</SelectItem>}
+                        </SelectContent>
+                      </Select>
                       {config.resetType === 'interval' && (
                         <input
-                          className="field-input"
+                          className="field-input plan-editor-interval-input"
                           type="number"
                           min={1}
                           value={config.intervalSeconds}
@@ -1396,6 +1631,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('tasks', 'sort_by'), 'dispatch_priority')
   const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('tasks', 'sort_order'), 'asc')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   const normalizedAccountKeyword = accountKeyword.trim()
   const selectedAccountMatch = normalizedAccountKeyword.match(/^(\d+)/)
@@ -1453,6 +1689,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
       }),
     onSuccess: (result) => {
       setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
+      setShowResetConfirm(false)
       queryClient.invalidateQueries({ queryKey: ['management-tasks'] })
     }
   })
@@ -1470,40 +1707,48 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         <div className="table-toolbar-zone table-toolbar-zone--left">
           <div className="table-filter-item">
             <label className="section-subtitle">{tr(t, 'filter_status', 'Status')}</label>
-            <select
-              className="field-select table-control"
-              value={status}
-              onChange={(event) => {
+            <Select
+              value={encodeSelectValue(status)}
+              onValueChange={(value) => {
                 setPage(0)
-                setStatus(event.target.value)
+                setStatus(decodeSelectValue(value))
               }}
             >
-              <option value="">{tr(t, 'label_all', 'All')}</option>
-              {statusOptions.map((item) => (
-                <option key={`task-status-${item}`} value={item}>
-                  {statusLabel(t, item)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="field-select table-control">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={encodeSelectValue('')}>{tr(t, 'label_all', 'All')}</SelectItem>
+                {statusOptions.map((item) => (
+                  <SelectItem key={`task-status-${item}`} value={item}>
+                    {statusLabel(t, item)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="table-filter-item">
             <label className="section-subtitle">{tr(t, 'filter_task', 'Task')}</label>
-            <select
-              className="field-select table-control"
-              value={taskType}
-              onChange={(event) => {
+            <Select
+              value={encodeSelectValue(taskType)}
+              onValueChange={(value) => {
                 setPage(0)
-                setTaskType(event.target.value)
+                setTaskType(decodeSelectValue(value))
               }}
             >
-              <option value="">{tr(t, 'label_all', 'All')}</option>
-              {taskTypeOptions.map((item) => (
-                <option key={`task-type-${item}`} value={item}>
-                  {taskTypeLabel(t, item)}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="field-select table-control">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={encodeSelectValue('')}>{tr(t, 'label_all', 'All')}</SelectItem>
+                {taskTypeOptions.map((item) => (
+                  <SelectItem key={`task-type-${item}`} value={item}>
+                    {taskTypeLabel(t, item)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="table-filter-item task-account-filter-item">
@@ -1537,26 +1782,38 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           <Button
             size="sm"
             type="button"
-            onClick={() => {
-              const warning = tr(
-                t,
-                'desc_reset_completed_warning',
-                'This action will reset completed tasks to pending based on current filters.'
-              )
-              const ignoreHint = tr(
-                t,
-                'desc_reset_completed_ignore_init',
-                'Init account tasks are always ignored.'
-              )
-              if (confirm(`${warning}\n${ignoreHint}`)) {
-                resetMutation.mutate()
-              }
-            }}
+            onClick={() => setShowResetConfirm((previous) => !previous)}
           >
             {tr(t, 'btn_reset_completed', 'Reset Completed')}
           </Button>
         </div>
       </div>
+      {showResetConfirm && (
+        <div className="surface-card section-stack">
+          <div className="text-xs text-danger">
+            {tr(
+              t,
+              'desc_reset_completed_warning',
+              'This action will reset completed tasks to pending based on current filters.'
+            )}
+          </div>
+          <div className="text-xs text-muted">
+            {tr(
+              t,
+              'desc_reset_completed_ignore_init',
+              'Init account tasks are always ignored.'
+            )}
+          </div>
+          <div className="filter-row">
+            <Button type="button" size="sm" variant="outline" onClick={() => resetMutation.mutate()}>
+              {tr(t, 'label_confirm', 'Confirm')}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setShowResetConfirm(false)}>
+              {tr(t, 'label_cancel', 'Cancel')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <ListQueryControls
         sortBy={sortBy}
@@ -1594,7 +1851,11 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           { key: 'id', label: tr(t, 'col_id', 'ID') },
           { key: 'account_id', label: tr(t, 'col_account', 'Account') },
           { key: 'task_type', label: tr(t, 'col_task', 'Task'), render: (row) => taskTypeLabel(t, row.task_type) },
-          { key: 'status', label: tr(t, 'col_status', 'Status'), render: (row) => statusLabel(t, row.status) },
+          {
+            key: 'status',
+            label: tr(t, 'col_status', 'Status'),
+            render: (row) => renderBadge(statusLabel(t, row.status), statusBadgeVariant(row.status))
+          },
           {
             key: 'dispatch_rank',
             label: tr(t, 'col_dispatch_priority', 'Dispatch Priority'),
@@ -1625,7 +1886,17 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
               return `${duration.toFixed(1)}s`
             }
           },
-          { key: 'reset_type', label: tr(t, 'col_reset_type', 'Reset Type') },
+          {
+            key: 'reset_type',
+            label: tr(t, 'col_reset_type', 'Reset Type'),
+            render: (row) => {
+              const resetType = toText(row.reset_type, t)
+              if (resetType === '-') {
+                return '-'
+              }
+              return tr(t, `reset_type_${resetType}`, resetType)
+            }
+          },
           {
             key: 'next_run_at_iso',
             label: tr(t, 'col_next_run', 'Next Run'),
@@ -1645,7 +1916,11 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
               return Boolean(row.target_pack_auto) ? `${value} (${tr(t, 'label_auto', 'Auto')})` : value
             }
           },
-          { key: 'error_message', label: tr(t, 'col_error', 'Error') }
+          {
+            key: 'error_message',
+            label: tr(t, 'col_error', 'Error'),
+            render: (row) => <TruncatedText text={toText(row.error_message, t)} />
+          }
         ]}
         t={t}
         sortBy={sortBy}
@@ -1696,7 +1971,8 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
 
   const query = useQuery({
     queryKey: ['management-metadata', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/metadata?${queryString}`)
+    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/metadata?${queryString}`),
+    placeholderData: (previous) => previous
   })
 
   const previewMutation = useMutation({
@@ -1741,38 +2017,6 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
     mutationFn: () => requestJson<Record<string, unknown>>('/api/react/management/metadata/check', { method: 'POST', body: {} }),
     onSuccess: (result) => setCheckResult(result)
   })
-
-  useEffect(() => {
-    const nextNodeType = query.data?.selected_node_type
-    if (typeof nextNodeType === 'string' && nextNodeType && nextNodeType !== selectedNodeType) {
-      setSelectedNodeType(nextNodeType)
-    }
-    const nextNodeId = query.data?.selected_node_id
-    if (typeof nextNodeId === 'string' && nextNodeId && nextNodeId !== selectedNodeId) {
-      setSelectedNodeId(nextNodeId)
-    }
-    const nextSetCode = query.data?.selected_set_code
-    if (typeof nextSetCode === 'string' && nextSetCode !== selectedSetCode) {
-      setSelectedSetCode(nextSetCode)
-    }
-    const nextPackName = query.data?.selected_pack_name
-    if (typeof nextPackName === 'string' && nextPackName !== selectedPackName) {
-      setSelectedPackName(nextPackName)
-    }
-    const nextAction = query.data?.current_action
-    if (typeof nextAction === 'string' && nextAction && nextAction !== currentAction) {
-      setCurrentAction(nextAction)
-    }
-    const nextSnapshotId = query.data?.snapshot_id
-    if (
-      typeof nextSnapshotId === 'string' &&
-      nextSnapshotId &&
-      nextSnapshotId !== snapshotId &&
-      previewResult === null
-    ) {
-      setSnapshotId(nextSnapshotId)
-    }
-  }, [currentAction, previewResult, query.data, selectedNodeId, selectedNodeType, selectedPackName, selectedSetCode, snapshotId])
 
   const sets = useMemo(
     () => (((query.data?.sets as unknown[]) ?? []) as Record<string, unknown>[]),
@@ -2168,6 +2412,8 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('daily-gift', 'sort_order'), 'desc')
   const [date, setDate] = usePersistedState<string>(managementStateKey('daily-gift', 'date'), '')
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('daily-gift', 'account_id'), '')
+  const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
+  const datePickerText = useMemo(() => datePickerLocale(t), [t])
 
   const queryString = useMemo(
     () =>
@@ -2196,6 +2442,10 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
   const selectedAccountId = toText(query.data?.selected_account_id, t) === '-' ? '' : toText(query.data?.selected_account_id, t)
+  const accountOptions = useMemo(
+    () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
+    [accounts, t]
+  )
 
   useEffect(() => {
     const currentDate = toText(query.data?.selected_biz_date_local, t)
@@ -2207,35 +2457,33 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
     }
   }, [accountId, date, query.data, selectedAccountId, t])
 
-  function accountDisplay(account: Record<string, unknown>): string {
-    const id = toText(account.id, t)
-    const name = toText(account.display_name, t)
-    const friendId = toText(account.friend_id, t)
-    return `${id} ${name} (${friendId})`
-  }
-
   return (
     <section className="surface-card section-stack">
       <div className="pagination-row">
         <div className="section-title">{tr(t, 'menu_daily_gift', 'Daily Gift')}</div>
         <div className="filter-row">
-          <input className="field-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          <select
-            className="field-select"
-            value={accountId}
-            onChange={(event) => {
-              setAccountId(event.target.value)
+          <DatePicker
+            value={date}
+            onChange={(value) => {
+              setDate(value)
               setPage(0)
               setPairPage(0)
             }}
-          >
-            <option value="">{tr(t, 'label_all_accounts', 'All Accounts')}</option>
-            {accounts.map((account) => (
-              <option key={`daily-account-${toText(account.id, t)}`} value={toText(account.id, t)}>
-                {accountDisplay(account)}
-              </option>
-            ))}
-          </select>
+            placeholder={tr(t, 'date_label', 'Date')}
+            i18n={datePickerText}
+          />
+          <SearchableSelect
+            value={accountId}
+            options={accountOptions}
+            onValueChange={(value) => {
+              setAccountId(value)
+              setPage(0)
+              setPairPage(0)
+            }}
+            {...selectLocale}
+            placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
+            pageSize={12}
+          />
           <Button type="button" size="sm" variant="outline" onClick={() => { setPage(0); setPairPage(0) }}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
@@ -2304,20 +2552,24 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
       />
       <div className="filter-row">
         <span className="text-xs text-muted">{tr(t, 'label_pair_page_size', 'Pair Page Size')}</span>
-        <select
-          className="field-select"
-          value={String(pairPageSize)}
-          onChange={(event) => {
+        <Select
+          value={encodeSelectValue(String(pairPageSize))}
+          onValueChange={(value) => {
             setPairPage(0)
-            setPairPageSize(Number(event.target.value))
+            setPairPageSize(Number(decodeSelectValue(value)))
           }}
         >
-          {[10, 20, 50, 100].map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="field-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[10, 20, 50, 100].map((value) => (
+              <SelectItem key={value} value={String(value)}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="section-subtitle">{tr(t, 'section_daily_gift_records', 'Gift Records')}</div>
@@ -2359,7 +2611,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
                     )}
                   </td>
                   <td className="mono">{toText(row.card_label, t)}</td>
-                  <td>{giftStatusLabel(t, row.status)}</td>
+                  <td>{renderBadge(giftStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
                   <td className="mono">
                     {Number.isFinite(beforeCount) ? String(beforeCount) : '-'}
                     {' -> '}
@@ -2406,9 +2658,9 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
                     #{toText(row.left_account_id, t)} ↔ #{toText(row.right_account_id, t)}
                   </div>
                 </td>
-                <td>{giftStatusLabel(t, row.left_to_right_status)}</td>
-                <td>{giftStatusLabel(t, row.right_to_left_status)}</td>
-                <td>{pairProgressLabel(t, row.pair_progress)}</td>
+                <td>{renderBadge(giftStatusLabel(t, row.left_to_right_status), statusBadgeVariant(row.left_to_right_status))}</td>
+                <td>{renderBadge(giftStatusLabel(t, row.right_to_left_status), statusBadgeVariant(row.right_to_left_status))}</td>
+                <td>{renderBadge(pairProgressLabel(t, row.pair_progress), statusBadgeVariant(row.pair_progress))}</td>
               </tr>
             ))}
           </tbody>
@@ -2437,6 +2689,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   const [targetAccountId, setTargetAccountId] = useState('')
   const [friendIdInput, setFriendIdInput] = useState('')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
 
   const queryString = useMemo(
     () =>
@@ -2501,37 +2754,48 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   const friendships = ((query.data?.friendships as unknown[]) ?? []) as Record<string, unknown>[]
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
-
-  function accountDisplay(account: Record<string, unknown>): string {
-    const id = toText(account.id, t)
-    const name = toText(account.display_name, t)
-    const friendId = toText(account.friend_id, t)
-    return `${id} ${name} (${friendId})`
-  }
+  const allAccountOptions = useMemo(
+    () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
+    [accounts, t]
+  )
+  const fromAccountOptions = useMemo(
+    () => buildAccountSelectOptions(accounts, t, tr(t, 'label_from_account', 'From Account')),
+    [accounts, t]
+  )
+  const targetAccountOptions = useMemo(
+    () => buildAccountSelectOptions(accounts, t, tr(t, 'label_target_account_optional', 'Target Account (optional)')),
+    [accounts, t]
+  )
 
   return (
     <section className="surface-card section-stack">
       <div className="section-title">{tr(t, 'menu_friendships', 'Friendships')}</div>
       <div className="form-grid">
         <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'label_search', 'Search')} />
-        <select className="field-select" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
-          <option value="">{tr(t, 'label_all_accounts', 'All Accounts')}</option>
-          {accounts.map((item) => (
-            <option key={`friendship-filter-account-${toText(item.id, t)}`} value={toText(item.id, t)}>{accountDisplay(item)}</option>
-          ))}
-        </select>
-        <select className="field-select" value={fromAccountId} onChange={(event) => setFromAccountId(event.target.value)}>
-          <option value="">{tr(t, 'label_from_account', 'From Account')}</option>
-          {accounts.map((item) => (
-            <option key={`friendship-filter-from-${toText(item.id, t)}`} value={toText(item.id, t)}>{accountDisplay(item)}</option>
-          ))}
-        </select>
-        <select className="field-select" value={targetAccountId} onChange={(event) => setTargetAccountId(event.target.value)}>
-          <option value="">{tr(t, 'label_target_account_optional', 'Target Account (optional)')}</option>
-          {accounts.map((item) => (
-            <option key={`friendship-filter-target-${toText(item.id, t)}`} value={toText(item.id, t)}>{accountDisplay(item)}</option>
-          ))}
-        </select>
+        <SearchableSelect
+          value={accountId}
+          options={allAccountOptions}
+          onValueChange={setAccountId}
+          {...selectLocale}
+          placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
+          pageSize={12}
+        />
+        <SearchableSelect
+          value={fromAccountId}
+          options={fromAccountOptions}
+          onValueChange={setFromAccountId}
+          {...selectLocale}
+          placeholder={tr(t, 'label_from_account', 'From Account')}
+          pageSize={12}
+        />
+        <SearchableSelect
+          value={targetAccountId}
+          options={targetAccountOptions}
+          onValueChange={setTargetAccountId}
+          {...selectLocale}
+          placeholder={tr(t, 'label_target_account_optional', 'Target Account (optional)')}
+          pageSize={12}
+        />
         <input className="field-input" value={friendIdInput} onChange={(event) => setFriendIdInput(event.target.value)} placeholder={tr(t, 'placeholder_friend_id', 'Friend ID (optional)')} />
       </div>
       <div className="filter-row">
@@ -2604,7 +2868,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                     {toId !== '-' && <div className="text-xs text-muted">#{toId}</div>}
                   </td>
                   <td>{requestTypeLabel(t, row.request_type)}</td>
-                  <td>{requestStatusLabel(t, row.status)}</td>
+                  <td>{renderBadge(requestStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
                   <td className="mono">{formatTime(row.updated_at)}</td>
                   <td>
                     {canCancel ? (
@@ -2612,7 +2876,13 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                         {tr(t, 'btn_remove_request', 'Delete Request')}
                       </Button>
                     ) : (
-                      <span className="text-muted">-</span>
+                      <Tooltip content={requestCancelDisabledReason(t, row.status)} focusable>
+                        <span>
+                          <Button type="button" size="sm" variant="outline" disabled>
+                            {tr(t, 'btn_remove_request', 'Delete Request')}
+                          </Button>
+                        </span>
+                      </Tooltip>
                     )}
                   </td>
                 </tr>
@@ -2702,6 +2972,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('exchange-cards', 'account_id'), '')
   const [status, setStatus] = usePersistedState<string>(managementStateKey('exchange-cards', 'status'), '')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
 
   const queryString = useMemo(
     () =>
@@ -2731,6 +3002,11 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   })
 
   const rows = ((query.data?.requests as unknown[]) ?? []) as Record<string, unknown>[]
+  const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
+  const accountOptions = useMemo(
+    () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
+    [accounts, t]
+  )
 
   return (
     <section className="surface-card section-stack">
@@ -2738,7 +3014,15 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
         <div className="section-title">{tr(t, 'menu_exchange_cards', 'Exchange Cards')}</div>
         <div className="filter-row">
           <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'label_search', 'Search')} />
-          <input className="field-input" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder={tr(t, 'account_id', 'Account ID')} />
+          <SearchableSelect
+            value={accountId}
+            options={accountOptions}
+            onValueChange={setAccountId}
+            {...selectLocale}
+            placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
+            pageSize={10}
+            className="management-inline-select"
+          />
           <input className="field-input" value={status} onChange={(event) => setStatus(event.target.value)} placeholder={tr(t, 'filter_status', 'Status')} />
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
@@ -2794,13 +3078,17 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
                 <td>{toText(row.from_account_id, t)}</td>
                 <td className="mono">{toText(row.to_friend_id, t)}</td>
                 <td>{toText(row.target_card_id, t)}</td>
-                <td>{exchangeStatusLabel(t, row.status)}</td>
+                <td>{renderBadge(exchangeStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
                 <td className="mono">{formatTime(row.created_at)}</td>
                 <td>
                   {Boolean(row.can_cancel) ? (
                     <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
                   ) : (
-                    <span className="text-muted">-</span>
+                    <Tooltip content={exchangeCancelDisabledReason(t, row.status)} focusable>
+                      <span>
+                        <Button type="button" size="sm" variant="outline" disabled>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
+                      </span>
+                    </Tooltip>
                   )}
                 </td>
               </tr>
@@ -2857,6 +3145,7 @@ function NotificationsSection({
   const cardPickerGridRef = useRef<HTMLDivElement | null>(null)
   const [selectedCardNameMap, setSelectedCardNameMap] = useState<Record<number, string>>({})
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
 
   const queryString = useMemo(
     () =>
@@ -3000,6 +3289,10 @@ function NotificationsSection({
     () => (((query.data?.notifications as unknown[]) ?? []) as Record<string, unknown>[]),
     [query.data?.notifications]
   )
+  const accounts = useMemo(
+    () => (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[]),
+    [query.data?.accounts]
+  )
   const configs = useMemo(
     () => (((query.data?.configs as unknown[]) ?? []) as Record<string, unknown>[]),
     [query.data?.configs]
@@ -3025,6 +3318,21 @@ function NotificationsSection({
     () => ((query.data?.account_name_map as Record<string, string> | undefined) ?? {}),
     [query.data?.account_name_map]
   )
+  const sceneSelectOptions = useMemo<SearchableOption[]>(
+    () => [
+      { value: '', label: tr(t, 'label_all_scenes', 'All Scenes') },
+      ...sceneOptions.map((item) => ({
+        value: item.value,
+        label: item.label,
+        searchText: `${item.value} ${item.label}`
+      }))
+    ],
+    [sceneOptions, t]
+  )
+  const accountSelectOptions = useMemo(
+    () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
+    [accounts, t]
+  )
   const cardPickerCards = cardPickerCardsAccum
   const cardPickerRarityCodes = useMemo(
     () => (((cardPickerQuery.data?.rarity_codes as unknown[]) ?? []) as string[]),
@@ -3045,6 +3353,39 @@ function NotificationsSection({
         display_name: string
       }>),
     [cardPickerQuery.data?.pack_names]
+  )
+  const cardPickerRaritySelectOptions = useMemo<SearchableOption[]>(
+    () => [
+      { value: '', label: tr(t, 'label_all_rarities', 'All Rarities') },
+      ...cardPickerRarityCodes.map((code) => ({
+        value: code,
+        label: t[`rarity_${code}`] ?? code,
+        searchText: code
+      }))
+    ],
+    [cardPickerRarityCodes, t]
+  )
+  const cardPickerSetSelectOptions = useMemo<SearchableOption[]>(
+    () => [
+      { value: '', label: tr(t, 'label_all_sets', 'All Sets') },
+      ...cardPickerSetOptions.map((option) => ({
+        value: option.value,
+        label: option.display_name || option.value,
+        searchText: `${option.value} ${option.display_name || ''}`
+      }))
+    ],
+    [cardPickerSetOptions, t]
+  )
+  const cardPickerPackSelectOptions = useMemo<SearchableOption[]>(
+    () => [
+      { value: '', label: tr(t, 'label_all_packs', 'All Packs') },
+      ...cardPickerPackOptions.map((option) => ({
+        value: option.value,
+        label: option.display_name || option.value,
+        searchText: `${option.value} ${option.display_name || ''}`
+      }))
+    ],
+    [cardPickerPackOptions, t]
   )
   const cardPickerSelectedRows = useMemo(
     () => (((cardPickerQuery.data?.selected_cards as unknown[]) ?? []) as Record<string, unknown>[]),
@@ -3255,33 +3596,46 @@ function NotificationsSection({
         <div className="table-toolbar-zone table-toolbar-zone--left notification-toolbar-react-left">
           <div className="table-filter-item">
             <label className="section-subtitle">{tr(t, 'col_scene', 'Scene')}</label>
-            <select className="field-select table-control" value={scene} onChange={(event) => setScene(event.target.value)}>
-              <option value="">{tr(t, 'label_all_scenes', 'All Scenes')}</option>
-              {sceneOptions.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={scene}
+              options={sceneSelectOptions}
+              onValueChange={(value) => {
+                setPage(0)
+                setScene(value)
+              }}
+              {...selectLocale}
+              placeholder={tr(t, 'label_all_scenes', 'All Scenes')}
+              pageSize={8}
+            />
           </div>
 
           <div className="table-filter-item">
             <label className="section-subtitle">{tr(t, 'col_account_id', 'Account ID')}</label>
-            <input
-              className="field-input table-control"
+            <SearchableSelect
               value={accountId}
-              onChange={(event) => setAccountId(event.target.value)}
-              placeholder={tr(t, 'account_id', 'Account ID')}
+              options={accountSelectOptions}
+              onValueChange={(value) => {
+                setPage(0)
+                setAccountId(value)
+              }}
+              {...selectLocale}
+              placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
+              pageSize={10}
             />
           </div>
 
           <div className="table-filter-item">
             <label className="section-subtitle">{tr(t, 'col_status', 'Status')}</label>
-            <select className="field-select table-control" value={isRead} onChange={(event) => setIsRead(event.target.value)}>
-              <option value="">{tr(t, 'label_all_status', 'All Status')}</option>
-              <option value="false">{tr(t, 'label_unread', 'Unread')}</option>
-              <option value="true">{tr(t, 'label_read', 'Read')}</option>
-            </select>
+            <Select value={encodeSelectValue(isRead)} onValueChange={(value) => setIsRead(decodeSelectValue(value))}>
+              <SelectTrigger className="field-select table-control">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={encodeSelectValue('')}>{tr(t, 'label_all_status', 'All Status')}</SelectItem>
+                <SelectItem value="false">{tr(t, 'label_unread', 'Unread')}</SelectItem>
+                <SelectItem value="true">{tr(t, 'label_read', 'Read')}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="table-filter-item notification-filter-item--search">
@@ -3296,13 +3650,13 @@ function NotificationsSection({
         </div>
 
         <div className="table-toolbar-zone table-toolbar-zone--right notification-toolbar-react-right">
-          <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>
+          <Button type="button" size="sm" variant="outline" className="notification-action-btn" onClick={() => setPage(0)}>
             {tr(t, 'label_search', 'Search')}
           </Button>
-          <Button type="button" size="sm" onClick={() => markAllMutation.mutate()}>
+          <Button type="button" size="sm" className="notification-action-btn" onClick={() => markAllMutation.mutate()}>
             {tr(t, 'mark_all_read', tr(t, 'btn_mark_all_read', 'Mark All Read'))}
           </Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => testWebhookMutation.mutate(null)}>
+          <Button type="button" size="sm" variant="outline" className="notification-action-btn notification-test-btn" onClick={() => testWebhookMutation.mutate(null)}>
             {tr(t, 'btn_test_webhook', 'Test Webhook')}
           </Button>
         </div>
@@ -3534,94 +3888,94 @@ function NotificationsSection({
                     setCardPickerPage(0)
                   }}
                 />
-                <select
-                  className="field-select"
+                <SearchableSelect
                   value={cardPickerRarity}
-                  onChange={(event) => {
-                    setCardPickerRarity(event.target.value)
+                  options={cardPickerRaritySelectOptions}
+                  onValueChange={(value) => {
+                    setCardPickerRarity(value)
                     setCardPickerPage(0)
                   }}
-                >
-                  <option value="">{tr(t, 'label_all_rarities', 'All Rarities')}</option>
-                  {cardPickerRarityCodes.map((code) => (
-                    <option key={`picker-rarity-${code}`} value={code}>
-                      {t[`rarity_${code}`] ?? code}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="field-select"
+                  {...selectLocale}
+                  placeholder={tr(t, 'label_all_rarities', 'All Rarities')}
+                  pageSize={10}
+                />
+                <SearchableSelect
                   value={cardPickerSetCode}
-                  onChange={(event) => {
-                    setCardPickerSetCode(event.target.value)
+                  options={cardPickerSetSelectOptions}
+                  onValueChange={(value) => {
+                    setCardPickerSetCode(value)
                     setCardPickerPage(0)
                   }}
-                >
-                  <option value="">{tr(t, 'label_all_sets', 'All Sets')}</option>
-                  {cardPickerSetOptions.map((option) => (
-                    <option key={`picker-set-${option.value}`} value={option.value}>
-                      {option.display_name || option.value}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="field-select"
+                  {...selectLocale}
+                  placeholder={tr(t, 'label_all_sets', 'All Sets')}
+                  pageSize={10}
+                />
+                <SearchableSelect
                   value={cardPickerPackName}
-                  onChange={(event) => {
-                    setCardPickerPackName(event.target.value)
+                  options={cardPickerPackSelectOptions}
+                  onValueChange={(value) => {
+                    setCardPickerPackName(value)
                     setCardPickerPage(0)
                   }}
-                >
-                  <option value="">{tr(t, 'label_all_packs', 'All Packs')}</option>
-                  {cardPickerPackOptions.map((option) => (
-                    <option key={`picker-pack-${option.value}`} value={option.value}>
-                      {option.display_name || option.value}
-                    </option>
-                  ))}
-                </select>
+                  {...selectLocale}
+                  placeholder={tr(t, 'label_all_packs', 'All Packs')}
+                  pageSize={10}
+                />
               </div>
 
               <div className="filter-row">
                 <span className="text-xs text-muted">{tr(t, 'label_sort_by', 'Sort By')}</span>
-                <select
-                  className="field-select"
-                  value={cardPickerSortBy}
-                  onChange={(event) => {
-                    setCardPickerSortBy(event.target.value)
+                <Select
+                  value={encodeSelectValue(cardPickerSortBy)}
+                  onValueChange={(value) => {
+                    setCardPickerSortBy(decodeSelectValue(value))
                     setCardPickerPage(0)
                   }}
                 >
-                  <option value="id">{tr(t, 'col_id', 'ID')}</option>
-                  <option value="number">{tr(t, 'col_number', 'Number')}</option>
-                  <option value="name">{tr(t, 'col_name', 'Name')}</option>
-                </select>
+                  <SelectTrigger className="field-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="id">{tr(t, 'col_id', 'ID')}</SelectItem>
+                    <SelectItem value="number">{tr(t, 'col_number', 'Number')}</SelectItem>
+                    <SelectItem value="name">{tr(t, 'col_name', 'Name')}</SelectItem>
+                  </SelectContent>
+                </Select>
                 <span className="text-xs text-muted">{tr(t, 'label_sort_order', 'Order')}</span>
-                <select
-                  className="field-select"
-                  value={cardPickerSortOrder}
-                  onChange={(event) => {
-                    setCardPickerSortOrder(event.target.value as 'asc' | 'desc')
+                <Select
+                  value={encodeSelectValue(cardPickerSortOrder)}
+                  onValueChange={(value) => {
+                    setCardPickerSortOrder(decodeSelectValue(value) as 'asc' | 'desc')
                     setCardPickerPage(0)
                   }}
                 >
-                  <option value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</option>
-                  <option value="desc">{tr(t, 'sort_order_desc', 'Descending')}</option>
-                </select>
+                  <SelectTrigger className="field-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
+                    <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
+                  </SelectContent>
+                </Select>
                 <span className="text-xs text-muted">{tr(t, 'label_page_size', 'Page Size')}</span>
-                <select
-                  className="field-select"
-                  value={String(cardPickerPageSize)}
-                  onChange={(event) => {
-                    setCardPickerPageSize(Number(event.target.value))
+                <Select
+                  value={encodeSelectValue(String(cardPickerPageSize))}
+                  onValueChange={(value) => {
+                    setCardPickerPageSize(Number(decodeSelectValue(value)))
                     setCardPickerPage(0)
                   }}
                 >
-                  {[24, 36, 48, 60].map((value) => (
-                    <option key={`picker-size-${value}`} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="field-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[24, 36, 48, 60].map((value) => (
+                      <SelectItem key={`picker-size-${value}`} value={String(value)}>
+                        {value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="text-xs text-muted">
@@ -3740,7 +4094,12 @@ function NotificationsSection({
             {notifications.map((row) => (
               <tr key={toText(row.id, t)}>
                 <td className="mono">{toText(row.id, t)}</td>
-                <td>{toText(row.scene_label, t) || tr(t, `notification_scene_${toText(row.scene, t)}`, toText(row.scene, t))}</td>
+                <td>
+                  {renderBadge(
+                    toText(row.scene_label, t) || tr(t, `notification_scene_${toText(row.scene, t)}`, toText(row.scene, t)),
+                    sceneBadgeVariant(toText(row.scene, t))
+                  )}
+                </td>
                 <td>{toText(row.title, t)}</td>
                 <td>
                   <div className="notification-row-content">
@@ -3763,9 +4122,7 @@ function NotificationsSection({
                         }}
                       />
                     ) : null}
-                    <div className="notification-content-text" title={toText(row.content, t)}>
-                      {toText(row.content, t)}
-                    </div>
+                    <TruncatedText text={toText(row.content, t)} className="notification-content-text" />
                   </div>
                 </td>
                 <td>
@@ -3773,14 +4130,14 @@ function NotificationsSection({
                     ? '-'
                     : accountNameMap[String(row.related_account_id)] ?? toText(row.related_account_id, t)}
                 </td>
-                <td>{Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread')}</td>
+                <td>{renderBadge(Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread'), Boolean(row.is_read) ? 'muted' : 'warning')}</td>
                 <td className="mono">{formatTime(row.created_at)}</td>
                 <td>
                   <div className="filter-row">
                     {!Boolean(row.is_read) && (
                       <Button type="button" size="sm" variant="outline" onClick={() => markReadMutation.mutate(Number(row.id))}>{tr(t, 'btn_mark_read', 'Mark Read')}</Button>
                     )}
-                    <Button type="button" size="sm" variant="outline" onClick={() => testWebhookMutation.mutate(Number(row.id))}>{tr(t, 'btn_test_send', 'Test')}</Button>
+                    <Button type="button" size="sm" variant="outline" className="notification-test-btn" onClick={() => testWebhookMutation.mutate(Number(row.id))}>{tr(t, 'btn_test_send', 'Test')}</Button>
                   </div>
                 </td>
               </tr>
