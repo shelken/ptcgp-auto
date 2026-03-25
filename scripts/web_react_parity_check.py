@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -117,9 +118,14 @@ def parse_console_error_count(output: str) -> int:
 
 def run_playwright_step(args: list[str], timeout: int = 120) -> tuple[bool, str]:
     """运行一次 playwright-cli。"""
-    if not PWCLI.exists():
+    if PWCLI.exists():
+        cmd = [str(PWCLI), *args]
+    elif shutil.which("playwright-cli"):
+        cmd = ["playwright-cli", *args]
+    else:
         return False, f"PWCLI_NOT_FOUND:{PWCLI}"
-    code, out = run_cmd([str(PWCLI), *args], cwd=ROOT, timeout=timeout)
+
+    code, out = run_cmd(cmd, cwd=ROOT, timeout=timeout)
     return code == 0, out
 
 

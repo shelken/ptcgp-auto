@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_DIR="$ROOT_DIR/src/ptcgp_auto_v2/web"
 WEB_PID=""
 STOPPING="0"
+RUN_WITH_DIRENV="0"
+
+if command -v direnv >/dev/null 2>&1 && [ -f "$ROOT_DIR/.envrc" ]; then
+  RUN_WITH_DIRENV="1"
+fi
 
 if ! command -v bun >/dev/null 2>&1; then
   echo "错误: 未找到 bun，请先安装 bun。" >&2
@@ -36,7 +41,34 @@ trap cleanup EXIT INT TERM
 
 echo "启动 Web 服务: http://127.0.0.1:8000"
 cd "$ROOT_DIR"
-PTCGP_WEB_DEV=1 PYTHONPATH=src uvicorn ptcgp_auto_v2.web.app:app --host 127.0.0.1 --port 8000 --reload "$@" &
+if [ "$RUN_WITH_DIRENV" = "1" ]; then
+  direnv exec "$ROOT_DIR" env PTCGP_WEB_DEV=1 PYTHONPATH="$ROOT_DIR/src" \
+    uv run python -m uvicorn \
+    ptcgp_auto_v2.web.app:app \
+    --app-dir "$ROOT_DIR/src" \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --reload \
+    --reload-dir src \
+    --reload-exclude "src/ptcgp_auto_v2/web/frontend/node_modules/*" \
+    --reload-exclude "src/ptcgp_auto_v2/web/frontend/dist/*" \
+    --reload-exclude "output/*" \
+    --reload-exclude ".git/*" \
+    "$@" &
+else
+  env PTCGP_WEB_DEV=1 PYTHONPATH="$ROOT_DIR/src" uv run python -m uvicorn \
+    ptcgp_auto_v2.web.app:app \
+    --app-dir "$ROOT_DIR/src" \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --reload \
+    --reload-dir src \
+    --reload-exclude "src/ptcgp_auto_v2/web/frontend/node_modules/*" \
+    --reload-exclude "src/ptcgp_auto_v2/web/frontend/dist/*" \
+    --reload-exclude "output/*" \
+    --reload-exclude ".git/*" \
+    "$@" &
+fi
 WEB_PID=$!
 
 sleep 1
