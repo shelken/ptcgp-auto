@@ -469,6 +469,7 @@
   "task_wonder_pick": "Wonder Pick",
   "text_select_sidebar": "Select an item from the sidebar",
   "theme_group_dark": "Dark Themes",
+  "theme_group_dual": "Dual Color Themes",
   "theme_group_light": "Light Themes",
   "theme_label": "THEME",
   "theme_mode_auto": "Auto",
@@ -479,6 +480,7 @@
   "themes": {
     "art_deco": "Art Deco",
     "brutalist": "Brutalist (Default)",
+    "clay_vibrant": "Claymorphism + Vibrant Blocks",
     "editorial": "Editorial",
     "luxury": "Luxury",
     "organic": "Organic",
