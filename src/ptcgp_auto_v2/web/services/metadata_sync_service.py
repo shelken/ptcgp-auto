@@ -176,253 +176,296 @@ def _build_preview_items(
     payload: dict[str, Any], repo: CardRepository | None = None
 ) -> list[dict[str, str]]:
     """将预览 payload 转换为可读清单。"""
-    items: list[dict[str, str]] = []
     if repo is None:
         with session_scope() as session:
             return _build_preview_items(payload, CardRepository(session))
 
     flib = payload.get("flibustier") if isinstance(payload, dict) else {}
     operations = flib.get("operations", {}) if isinstance(flib, dict) else {}
-
-    for set_item in operations.get("sets", []) if isinstance(operations, dict) else []:
-        if not isinstance(set_item, dict):
-            continue
-        set_code = str(set_item.get("code") or "-")
-        set_name = str(set_item.get("name") or "-")
-        op_type = str(set_item.get("op_type") or "upsert")
-        changes = []
-        if op_type == "create":
-            changes.append(f"新增系列: name='{set_name}'")
-        else:
-            # 显示具体字段变化
-            changed_values = set_item.get("changed_values")
-            if isinstance(changed_values, list):
-                for val_item in changed_values:
-                    if not isinstance(val_item, dict):
-                        continue
-                    field = str(val_item.get("field") or "")
-                    before_value = str(val_item.get("from") or "")
-                    after_value = str(val_item.get("to") or "")
-                    if not field:
-                        continue
-                    if len(before_value) > 40:
-                        before_value = before_value[:40] + "..."
-                    if len(after_value) > 40:
-                        after_value = after_value[:40] + "..."
-                    changes.append(f"{field}: '{before_value}' -> '{after_value}'")
-            elif set_item.get("name"):
-                changes.append(f"name: '' -> '{set_name}'")
-        items.append(
-            {
-                "type": "set",
-                "id": set_code,
-                "name": set_name,
-                "action": op_type,
-                "changes": " | ".join(changes) if changes else "",
-            }
-        )
-
-    for pack_item in (
-        operations.get("packs", []) if isinstance(operations, dict) else []
-    ):
-        if not isinstance(pack_item, dict):
-            continue
-        pack_name = str(pack_item.get("name") or "-")
-        set_code = str(pack_item.get("set_code") or "-")
-        op_type = str(pack_item.get("op_type") or "upsert")
-        changes = []
-        if op_type == "create":
-            changes.append(f"新增卡包: name='{pack_name}' (系列 '{set_code}')")
-        else:
-            # 显示具体字段变化
-            changed_values = pack_item.get("changed_values")
-            if isinstance(changed_values, list):
-                for val_item in changed_values:
-                    if not isinstance(val_item, dict):
-                        continue
-                    field = str(val_item.get("field") or "")
-                    before_value = str(val_item.get("from") or "")
-                    after_value = str(val_item.get("to") or "")
-                    if not field:
-                        continue
-                    if len(before_value) > 40:
-                        before_value = before_value[:40] + "..."
-                    if len(after_value) > 40:
-                        after_value = after_value[:40] + "..."
-                    changes.append(f"{field}: '{before_value}' -> '{after_value}'")
-        items.append(
-            {
-                "type": "pack",
-                "id": pack_name,
-                "name": pack_name,
-                "action": op_type,
-                "changes": " | ".join(changes) if changes else "",
-            }
-        )
-
-    for card_item in (
-        operations.get("cards", []) if isinstance(operations, dict) else []
-    ):
-        if not isinstance(card_item, dict):
-            continue
-        card = card_item.get("card")
-        if not isinstance(card, dict):
-            continue
-        set_code = str(card.get("set_code") or "")
-        number = card.get("number")
-        try:
-            card_number = int(number)
-            card_id = f"{set_code}-{card_number:03d}"
-        except (TypeError, ValueError):
-            card_id = f"{set_code}-{number}"
-
-        card_name = str(card.get("name") or "-")
-        op_type = str(
-            card_item.get("op_type")
-            or ("upsert" if bool(card_item.get("needs_upsert")) else "link")
-        )
-        change_parts: list[str] = []
-
-        if op_type == "create":
-            change_parts.append(f"新增卡牌: name='{card_name}'")
-        elif op_type == "force":
-            change_parts.append(f"强制覆盖: name='{card_name}'")
-
-        # 显示具体字段变化（仅 update/force，create 不显示）
-        changed_values = card_item.get("changed_values")
-        if op_type != "create" and isinstance(changed_values, list):
-            for val_item in changed_values:
-                if not isinstance(val_item, dict):
-                    continue
-                field = str(val_item.get("field") or "")
-                before_value = str(val_item.get("from") or "")
-                after_value = str(val_item.get("to") or "")
-                if not field or field == "__force__":
-                    continue
-                # 截断过长的值
-                if len(before_value) > 40:
-                    before_value = before_value[:40] + "..."
-                if len(after_value) > 40:
-                    after_value = after_value[:40] + "..."
-                change_parts.append(f"{field}: '{before_value}' -> '{after_value}'")
-
-        # 显示 pack_links 变化
-        if bool(card_item.get("add_pack_names")):
-            add_links = ",".join(
-                str(name) for name in card_item.get("add_pack_names", [])
-            )
-            if add_links:
-                change_parts.append(f"添加卡包关联: +{add_links}")
-
-        items.append(
-            {
-                "type": "card",
-                "id": card_id,
-                "name": card_name,
-                "action": op_type,
-                "changes": " | ".join(change_parts),
-            }
-        )
-
+    items: list[dict[str, str]] = []
+    items.extend(_build_flibustier_preview_items(operations))
     localization = payload.get("localization") if isinstance(payload, dict) else {}
     if isinstance(localization, dict):
-        for set_item in localization.get("sets", []):
-            if not isinstance(set_item, dict):
-                continue
-            set_code = str(set_item.get("set_code") or "-")
-            zh_value = str(set_item.get("zh") or "")
-            # 查询本地数据获取旧值
-            card_set = repo.get_set_by_code(set_code)
-            old_zh = ""
-            if card_set and card_set.label_data:
-                try:
-                    labels = json.loads(card_set.label_data)
-                    old_zh = str(labels.get("zh") or "")
-                except (TypeError, ValueError):
-                    old_zh = ""
-            if old_zh == zh_value:
-                continue  # 无变化，不显示
-            items.append(
-                {
-                    "type": "set",
-                    "id": set_code,
-                    "name": zh_value or "-",
-                    "action": "localize",
-                    "fields": "label_data.zh",
-                    "changes": f"zh: '{old_zh}' -> '{zh_value}'" if zh_value else "",
-                }
-            )
-
-        for pack_item in localization.get("packs", []):
-            if not isinstance(pack_item, dict):
-                continue
-            pack_name = str(pack_item.get("pack_name") or "-")
-            zh_value = str(pack_item.get("zh") or "")
-            # 查询本地数据获取旧值
-            pack = repo.get_pack_by_name(pack_name)
-            old_zh = ""
-            if pack and pack.label_data:
-                try:
-                    labels = json.loads(pack.label_data)
-                    old_zh = str(labels.get("zh") or "")
-                except (TypeError, ValueError):
-                    old_zh = ""
-            if old_zh == zh_value:
-                continue  # 无变化，不显示
-            items.append(
-                {
-                    "type": "pack",
-                    "id": pack_name,
-                    "name": zh_value or "-",
-                    "action": "localize",
-                    "fields": "label_data.zh",
-                    "changes": f"zh: '{old_zh}' -> '{zh_value}'" if zh_value else "",
-                }
-            )
-
-        for card_item in localization.get("cards", []):
-            if not isinstance(card_item, dict):
-                continue
-            set_code = str(card_item.get("set_code") or "")
-            number = card_item.get("number")
-            try:
-                card_number = int(number)
-                card_id = f"{set_code}-{card_number:03d}"
-            except (TypeError, ValueError):
-                card_id = f"{set_code}-{number}"
-            zh_name = str(card_item.get("localized_name") or "")
-            # 查询本地数据获取旧值
-            old_zh = ""
-            try:
-                card_num = int(number)
-                if set_code and card_num:
-                    card = repo.get_card_by_set_and_number(set_code, card_num)
-                    if card and card.data:
-                        try:
-                            data = json.loads(card.data)
-                            loc_name = data.get("localized_name")
-                            if isinstance(loc_name, dict):
-                                old_zh = str(loc_name.get("zh") or "")
-                        except (TypeError, ValueError):
-                            old_zh = ""
-            except (TypeError, ValueError):
-                pass
-            if old_zh == zh_name:
-                continue  # 无变化，不显示
-            items.append(
-                {
-                    "type": "card",
-                    "id": card_id,
-                    "name": zh_name or "-",
-                    "action": "localize",
-                    "fields": "data.localized_name.zh",
-                    "changes": f"localized_name.zh: '{old_zh}' -> '{zh_name}'"
-                    if zh_name
-                    else "",
-                }
-            )
-
+        items.extend(_build_localization_preview_items(localization, repo))
     return items
+
+
+def _build_flibustier_preview_items(operations: dict[str, Any]) -> list[dict[str, str]]:
+    """构建 flibustier 计划预览清单。"""
+    items: list[dict[str, str]] = []
+    for set_item in _iter_operation_items(operations, "sets"):
+        item = _build_set_operation_preview_item(set_item)
+        if item:
+            items.append(item)
+
+    for pack_item in _iter_operation_items(operations, "packs"):
+        item = _build_pack_operation_preview_item(pack_item)
+        if item:
+            items.append(item)
+
+    for card_item in _iter_operation_items(operations, "cards"):
+        item = _build_card_operation_preview_item(card_item)
+        if item:
+            items.append(item)
+    return items
+
+
+def _build_localization_preview_items(
+    localization: dict[str, Any],
+    repo: CardRepository,
+) -> list[dict[str, str]]:
+    """构建 52poke 本地化预览清单。"""
+    items: list[dict[str, str]] = []
+    for set_item in _iter_operation_items(localization, "sets"):
+        item = _build_set_localization_preview_item(set_item, repo)
+        if item:
+            items.append(item)
+
+    for pack_item in _iter_operation_items(localization, "packs"):
+        item = _build_pack_localization_preview_item(pack_item, repo)
+        if item:
+            items.append(item)
+
+    for card_item in _iter_operation_items(localization, "cards"):
+        item = _build_card_localization_preview_item(card_item, repo)
+        if item:
+            items.append(item)
+    return items
+
+
+def _iter_operation_items(
+    operations: dict[str, Any],
+    key: str,
+) -> list[dict[str, Any]]:
+    """读取操作列表并过滤非法项。"""
+    if not isinstance(operations, dict):
+        return []
+    raw_items = operations.get(key)
+    if not isinstance(raw_items, list):
+        return []
+    return [item for item in raw_items if isinstance(item, dict)]
+
+
+def _truncate_preview_value(value: Any) -> str:
+    """将预览值转成短文本，避免展示过长。"""
+    text = str(value or "")
+    if len(text) > 40:
+        return f"{text[:40]}..."
+    return text
+
+
+def _format_changed_values(
+    changed_values: Any,
+    *,
+    skip_force_flag: bool = False,
+) -> list[str]:
+    """将 changed_values 转成文本变化列表。"""
+    if not isinstance(changed_values, list):
+        return []
+    changes: list[str] = []
+    for val_item in changed_values:
+        if not isinstance(val_item, dict):
+            continue
+        field = str(val_item.get("field") or "")
+        if not field:
+            continue
+        if skip_force_flag and field == "__force__":
+            continue
+        before_value = _truncate_preview_value(val_item.get("from"))
+        after_value = _truncate_preview_value(val_item.get("to"))
+        changes.append(f"{field}: '{before_value}' -> '{after_value}'")
+    return changes
+
+
+def _format_card_preview_id(set_code: str, number: Any) -> str:
+    """格式化卡牌预览 ID。"""
+    try:
+        card_number = int(number)
+        return f"{set_code}-{card_number:03d}"
+    except (TypeError, ValueError):
+        return f"{set_code}-{number}"
+
+
+def _build_set_operation_preview_item(
+    set_item: dict[str, Any],
+) -> dict[str, str] | None:
+    """构建系列操作预览项。"""
+    set_code = str(set_item.get("code") or "-")
+    set_name = str(set_item.get("name") or "-")
+    op_type = str(set_item.get("op_type") or "upsert")
+    changes: list[str] = []
+    if op_type == "create":
+        changes.append(f"新增系列: name='{set_name}'")
+    else:
+        changed_values = set_item.get("changed_values")
+        if isinstance(changed_values, list):
+            changes = _format_changed_values(changed_values)
+        elif set_item.get("name"):
+            changes.append(f"name: '' -> '{set_name}'")
+    return {
+        "type": "set",
+        "id": set_code,
+        "name": set_name,
+        "action": op_type,
+        "changes": " | ".join(changes) if changes else "",
+    }
+
+
+def _build_pack_operation_preview_item(
+    pack_item: dict[str, Any],
+) -> dict[str, str] | None:
+    """构建卡包操作预览项。"""
+    pack_name = str(pack_item.get("name") or "-")
+    set_code = str(pack_item.get("set_code") or "-")
+    op_type = str(pack_item.get("op_type") or "upsert")
+    changes: list[str] = []
+    if op_type == "create":
+        changes.append(f"新增卡包: name='{pack_name}' (系列 '{set_code}')")
+    else:
+        changes = _format_changed_values(pack_item.get("changed_values"))
+    return {
+        "type": "pack",
+        "id": pack_name,
+        "name": pack_name,
+        "action": op_type,
+        "changes": " | ".join(changes) if changes else "",
+    }
+
+
+def _build_card_operation_preview_item(
+    card_item: dict[str, Any],
+) -> dict[str, str] | None:
+    """构建卡牌操作预览项。"""
+    card = card_item.get("card")
+    if not isinstance(card, dict):
+        return None
+    set_code = str(card.get("set_code") or "")
+    number = card.get("number")
+    card_id = _format_card_preview_id(set_code, number)
+    card_name = str(card.get("name") or "-")
+    op_type = str(
+        card_item.get("op_type")
+        or ("upsert" if bool(card_item.get("needs_upsert")) else "link")
+    )
+    change_parts: list[str] = []
+
+    if op_type == "create":
+        change_parts.append(f"新增卡牌: name='{card_name}'")
+    elif op_type == "force":
+        change_parts.append(f"强制覆盖: name='{card_name}'")
+
+    if op_type != "create":
+        change_parts.extend(
+            _format_changed_values(
+                card_item.get("changed_values"),
+                skip_force_flag=True,
+            )
+        )
+
+    if bool(card_item.get("add_pack_names")):
+        add_links = ",".join(str(name) for name in card_item.get("add_pack_names", []))
+        if add_links:
+            change_parts.append(f"添加卡包关联: +{add_links}")
+
+    return {
+        "type": "card",
+        "id": card_id,
+        "name": card_name,
+        "action": op_type,
+        "changes": " | ".join(change_parts),
+    }
+
+
+def _build_set_localization_preview_item(
+    set_item: dict[str, Any],
+    repo: CardRepository,
+) -> dict[str, str] | None:
+    """构建系列中文本地化预览项。"""
+    set_code = str(set_item.get("set_code") or "-")
+    zh_value = str(set_item.get("zh") or "")
+    card_set = repo.get_set_by_code(set_code)
+    old_zh = _extract_label_zh(getattr(card_set, "label_data", None))
+    if old_zh == zh_value:
+        return None
+    return {
+        "type": "set",
+        "id": set_code,
+        "name": zh_value or "-",
+        "action": "localize",
+        "fields": "label_data.zh",
+        "changes": f"zh: '{old_zh}' -> '{zh_value}'" if zh_value else "",
+    }
+
+
+def _build_pack_localization_preview_item(
+    pack_item: dict[str, Any],
+    repo: CardRepository,
+) -> dict[str, str] | None:
+    """构建卡包中文本地化预览项。"""
+    pack_name = str(pack_item.get("pack_name") or "-")
+    zh_value = str(pack_item.get("zh") or "")
+    pack = repo.get_pack_by_name(pack_name)
+    old_zh = _extract_label_zh(getattr(pack, "label_data", None))
+    if old_zh == zh_value:
+        return None
+    return {
+        "type": "pack",
+        "id": pack_name,
+        "name": zh_value or "-",
+        "action": "localize",
+        "fields": "label_data.zh",
+        "changes": f"zh: '{old_zh}' -> '{zh_value}'" if zh_value else "",
+    }
+
+
+def _build_card_localization_preview_item(
+    card_item: dict[str, Any],
+    repo: CardRepository,
+) -> dict[str, str] | None:
+    """构建卡牌中文本地化预览项。"""
+    set_code = str(card_item.get("set_code") or "")
+    number = card_item.get("number")
+    card_id = _format_card_preview_id(set_code, number)
+    zh_name = str(card_item.get("localized_name") or "")
+    old_zh = _extract_card_localized_zh(repo, set_code, number)
+    if old_zh == zh_name:
+        return None
+    return {
+        "type": "card",
+        "id": card_id,
+        "name": zh_name or "-",
+        "action": "localize",
+        "fields": "data.localized_name.zh",
+        "changes": f"localized_name.zh: '{old_zh}' -> '{zh_name}'" if zh_name else "",
+    }
+
+
+def _extract_label_zh(raw_label: str | None) -> str:
+    """从 label_data 中读取 zh。"""
+    labels = _parse_json_dict(raw_label)
+    return str(labels.get("zh") or "")
+
+
+def _extract_card_localized_zh(
+    repo: CardRepository,
+    set_code: str,
+    number: Any,
+) -> str:
+    """从卡牌 data 中读取 localized_name.zh。"""
+    try:
+        card_num = int(number)
+    except (TypeError, ValueError):
+        return ""
+    if not set_code or not card_num:
+        return ""
+    card = repo.get_card_by_set_and_number(set_code, card_num)
+    if card is None:
+        return ""
+    data = _parse_json_dict(card.data)
+    localized_name = data.get("localized_name")
+    if not isinstance(localized_name, dict):
+        return ""
+    return str(localized_name.get("zh") or "")
 
 
 def _apply_localization(
@@ -431,82 +474,112 @@ def _apply_localization(
     mode: str,
 ) -> dict[str, int]:
     """应用 52poke 本地化写入。"""
-    set_updates = 0
-    pack_updates = 0
-    card_updates = 0
-
-    for item in localization.get("sets", []):
-        set_code = str(item.get("set_code") or "")
-        zh_value = str(item.get("zh") or "").strip()
-        if not set_code or not zh_value:
-            continue
-        card_set = repo.get_set_by_code(set_code)
-        if card_set is None:
-            continue
-        labels = _parse_json_dict(card_set.label_data)
-        current_zh = str(labels.get("zh") or "").strip()
-        if mode == "supplement" and current_zh:
-            continue
-        if current_zh == zh_value:
-            continue
-        labels["zh"] = zh_value
-        if repo.update_set_label(set_code, json.dumps(labels, ensure_ascii=False)):
-            set_updates += 1
-
-    for item in localization.get("packs", []):
-        pack_name = str(item.get("pack_name") or "")
-        zh_value = str(item.get("zh") or "").strip()
-        if not pack_name or not zh_value:
-            continue
-        pack = repo.get_pack_by_name(pack_name)
-        if pack is None:
-            continue
-        labels = _parse_json_dict(pack.label_data)
-        current_zh = str(labels.get("zh") or "").strip()
-        if mode == "supplement" and current_zh:
-            continue
-        if current_zh == zh_value:
-            continue
-        labels["zh"] = zh_value
-        if repo.update_pack_label(pack_name, json.dumps(labels, ensure_ascii=False)):
-            pack_updates += 1
-
-    for item in localization.get("cards", []):
-        set_code = str(item.get("set_code") or "")
-        number = item.get("number")
-        zh_name = str(item.get("localized_name") or "").strip()
-        if not set_code or zh_name == "":
-            continue
-        try:
-            card_number = int(number)
-        except (TypeError, ValueError):
-            continue
-        card = repo.get_card_by_set_and_number(set_code, card_number)
-        if card is None:
-            continue
-
-        data = _parse_json_dict(card.data)
-        localized_name = data.get("localized_name")
-        if not isinstance(localized_name, dict):
-            localized_name = {}
-        current_zh = str(localized_name.get("zh") or "").strip()
-        if mode == "supplement" and current_zh:
-            continue
-        if current_zh == zh_name:
-            continue
-
-        localized_name["zh"] = zh_name
-        data["localized_name"] = localized_name
-        card_payload = asdict(card)
-        card_payload["data"] = json.dumps(data, ensure_ascii=False)
-        repo.upsert_card(Card.model_validate(card_payload))
-        card_updates += 1
+    set_updates = sum(
+        1
+        for item in _iter_operation_items(localization, "sets")
+        if _apply_set_localization_item(repo, item, mode)
+    )
+    pack_updates = sum(
+        1
+        for item in _iter_operation_items(localization, "packs")
+        if _apply_pack_localization_item(repo, item, mode)
+    )
+    card_updates = sum(
+        1
+        for item in _iter_operation_items(localization, "cards")
+        if _apply_card_localization_item(repo, item, mode)
+    )
 
     return {
         "set_label_updates": set_updates,
         "pack_label_updates": pack_updates,
         "card_name_updates": card_updates,
     }
+
+
+def _apply_set_localization_item(
+    repo: CardRepository,
+    item: dict[str, Any],
+    mode: str,
+) -> bool:
+    """应用单条系列本地化。"""
+    set_code = str(item.get("set_code") or "")
+    zh_value = str(item.get("zh") or "").strip()
+    if not set_code or not zh_value:
+        return False
+    card_set = repo.get_set_by_code(set_code)
+    if card_set is None:
+        return False
+    labels = _parse_json_dict(card_set.label_data)
+    current_zh = str(labels.get("zh") or "").strip()
+    if mode == "supplement" and current_zh:
+        return False
+    if current_zh == zh_value:
+        return False
+    labels["zh"] = zh_value
+    return bool(repo.update_set_label(set_code, json.dumps(labels, ensure_ascii=False)))
+
+
+def _apply_pack_localization_item(
+    repo: CardRepository,
+    item: dict[str, Any],
+    mode: str,
+) -> bool:
+    """应用单条卡包本地化。"""
+    pack_name = str(item.get("pack_name") or "")
+    zh_value = str(item.get("zh") or "").strip()
+    if not pack_name or not zh_value:
+        return False
+    pack = repo.get_pack_by_name(pack_name)
+    if pack is None:
+        return False
+    labels = _parse_json_dict(pack.label_data)
+    current_zh = str(labels.get("zh") or "").strip()
+    if mode == "supplement" and current_zh:
+        return False
+    if current_zh == zh_value:
+        return False
+    labels["zh"] = zh_value
+    return bool(
+        repo.update_pack_label(pack_name, json.dumps(labels, ensure_ascii=False))
+    )
+
+
+def _apply_card_localization_item(
+    repo: CardRepository,
+    item: dict[str, Any],
+    mode: str,
+) -> bool:
+    """应用单条卡牌本地化。"""
+    set_code = str(item.get("set_code") or "")
+    number = item.get("number")
+    zh_name = str(item.get("localized_name") or "").strip()
+    if not set_code or zh_name == "":
+        return False
+    try:
+        card_number = int(number)
+    except (TypeError, ValueError):
+        return False
+
+    card = repo.get_card_by_set_and_number(set_code, card_number)
+    if card is None:
+        return False
+    data = _parse_json_dict(card.data)
+    localized_name = data.get("localized_name")
+    if not isinstance(localized_name, dict):
+        localized_name = {}
+    current_zh = str(localized_name.get("zh") or "").strip()
+    if mode == "supplement" and current_zh:
+        return False
+    if current_zh == zh_name:
+        return False
+
+    localized_name["zh"] = zh_name
+    data["localized_name"] = localized_name
+    card_payload = asdict(card)
+    card_payload["data"] = json.dumps(data, ensure_ascii=False)
+    repo.upsert_card(Card.model_validate(card_payload))
+    return True
 
 
 def _parse_json_dict(raw: str | None) -> dict[str, Any]:
@@ -582,79 +655,80 @@ def _keep_data_update_without_zh(
     if not isinstance(operations, dict):
         return flibustier_plan
 
-    set_ops_raw = operations.get("sets")
-    set_ops = set_ops_raw if isinstance(set_ops_raw, list) else []
-    for item in set_ops:
-        if not isinstance(item, dict):
-            continue
-        set_code = str(item.get("code") or "")
-        if not set_code:
-            continue
-        current_set = repo.get_set_by_code(set_code)
-        if current_set is None:
-            continue
-        current_label = _parse_json_dict(current_set.label_data)
-        current_zh = str(current_label.get("zh") or "").strip()
-        if not current_zh:
-            continue
-        target_label = _parse_json_dict(str(item.get("label_data") or "{}"))
-        target_label["zh"] = current_zh
-        item["label_data"] = json.dumps(target_label, ensure_ascii=False)
-
-    pack_ops_raw = operations.get("packs")
-    pack_ops = pack_ops_raw if isinstance(pack_ops_raw, list) else []
-    for item in pack_ops:
-        if not isinstance(item, dict):
-            continue
-        pack_name = str(item.get("name") or "")
-        if not pack_name:
-            continue
-        current_pack = repo.get_pack_by_name(pack_name)
-        if current_pack is None:
-            continue
-        current_label = _parse_json_dict(current_pack.label_data)
-        current_zh = str(current_label.get("zh") or "").strip()
-        if not current_zh:
-            continue
-        target_label = _parse_json_dict(str(item.get("label_data") or "{}"))
-        target_label["zh"] = current_zh
-        item["label_data"] = json.dumps(target_label, ensure_ascii=False)
-
-    card_ops_raw = operations.get("cards")
-    card_ops = card_ops_raw if isinstance(card_ops_raw, list) else []
-    for item in card_ops:
-        if not isinstance(item, dict):
-            continue
-        card = item.get("card")
-        if not isinstance(card, dict):
-            continue
-        set_code = str(card.get("set_code") or "")
-        number = card.get("number")
-        try:
-            card_number = int(number)
-        except (TypeError, ValueError):
-            continue
-        current_card = repo.get_card_by_set_and_number(set_code, card_number)
-        if current_card is None:
-            continue
-
-        current_data = _parse_json_dict(current_card.data)
-        current_loc = current_data.get("localized_name")
-        if not isinstance(current_loc, dict):
-            continue
-        current_zh = str(current_loc.get("zh") or "").strip()
-        if not current_zh:
-            continue
-
-        target_data = _parse_json_dict(str(card.get("data") or "{}"))
-        target_loc = target_data.get("localized_name")
-        if not isinstance(target_loc, dict):
-            target_loc = {}
-        target_loc["zh"] = current_zh
-        target_data["localized_name"] = target_loc
-        card["data"] = json.dumps(target_data, ensure_ascii=False)
+    for item in _iter_operation_items(operations, "sets"):
+        _preserve_set_label_zh(item, repo)
+    for item in _iter_operation_items(operations, "packs"):
+        _preserve_pack_label_zh(item, repo)
+    for item in _iter_operation_items(operations, "cards"):
+        _preserve_card_data_zh(item, repo)
 
     return flibustier_plan
+
+
+def _preserve_set_label_zh(item: dict[str, Any], repo: CardRepository) -> None:
+    """保留系列 label_data.zh。"""
+    set_code = str(item.get("code") or "")
+    if not set_code:
+        return
+    current_set = repo.get_set_by_code(set_code)
+    if current_set is None:
+        return
+    current_label = _parse_json_dict(current_set.label_data)
+    current_zh = str(current_label.get("zh") or "").strip()
+    if not current_zh:
+        return
+    target_label = _parse_json_dict(str(item.get("label_data") or "{}"))
+    target_label["zh"] = current_zh
+    item["label_data"] = json.dumps(target_label, ensure_ascii=False)
+
+
+def _preserve_pack_label_zh(item: dict[str, Any], repo: CardRepository) -> None:
+    """保留卡包 label_data.zh。"""
+    pack_name = str(item.get("name") or "")
+    if not pack_name:
+        return
+    current_pack = repo.get_pack_by_name(pack_name)
+    if current_pack is None:
+        return
+    current_label = _parse_json_dict(current_pack.label_data)
+    current_zh = str(current_label.get("zh") or "").strip()
+    if not current_zh:
+        return
+    target_label = _parse_json_dict(str(item.get("label_data") or "{}"))
+    target_label["zh"] = current_zh
+    item["label_data"] = json.dumps(target_label, ensure_ascii=False)
+
+
+def _preserve_card_data_zh(item: dict[str, Any], repo: CardRepository) -> None:
+    """保留卡牌 data.localized_name.zh。"""
+    card = item.get("card")
+    if not isinstance(card, dict):
+        return
+    set_code = str(card.get("set_code") or "")
+    number = card.get("number")
+    try:
+        card_number = int(number)
+    except (TypeError, ValueError):
+        return
+    current_card = repo.get_card_by_set_and_number(set_code, card_number)
+    if current_card is None:
+        return
+
+    current_data = _parse_json_dict(current_card.data)
+    current_loc = current_data.get("localized_name")
+    if not isinstance(current_loc, dict):
+        return
+    current_zh = str(current_loc.get("zh") or "").strip()
+    if not current_zh:
+        return
+
+    target_data = _parse_json_dict(str(card.get("data") or "{}"))
+    target_loc = target_data.get("localized_name")
+    if not isinstance(target_loc, dict):
+        target_loc = {}
+    target_loc["zh"] = current_zh
+    target_data["localized_name"] = target_loc
+    card["data"] = json.dumps(target_data, ensure_ascii=False)
 
 
 def _build_flibustier_summary(operations: dict[str, Any]) -> dict[str, int]:
