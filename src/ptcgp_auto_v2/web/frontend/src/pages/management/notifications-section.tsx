@@ -10,6 +10,7 @@ import { usePersistedState } from '@/hooks/use-persisted-state'
 import { buildQuery, requestJson } from '@/lib/api'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
+import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 
 import {
   InlineNotice,
@@ -20,7 +21,6 @@ import {
   type SearchableOption,
   TruncatedText,
   buildAccountSelectOptions,
-  formatTime,
   managementStateKey,
   renderBadge,
   sceneBadgeVariant,
@@ -1050,7 +1050,9 @@ export function NotificationsSection({
                     : accountNameMap[String(row.related_account_id)] ?? toText(row.related_account_id, t)}
                 </td>
                 <td>{renderBadge(Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread'), Boolean(row.is_read) ? 'muted' : 'warning')}</td>
-                <td className="mono">{formatTime(row.created_at)}</td>
+                <td className="mono" title={formatAbsoluteDateTime(row.created_at)}>
+                  {formatRelativeDateTime(row.created_at, lang, t)}
+                </td>
                 <td>
                   <div className="filter-row">
                     {!Boolean(row.is_read) && (

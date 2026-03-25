@@ -54,13 +54,6 @@ export function toText(value: unknown, t?: Record<string, string>): string {
   return JSON.stringify(value)
 }
 
-export function formatTime(value: unknown): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    return '-'
-  }
-  return value.replace('T', ' ').slice(0, 19)
-}
-
 export function statusLabel(t: Record<string, string>, value: unknown): string {
   const key = typeof value === 'string' ? value : ''
   if (!key) {
