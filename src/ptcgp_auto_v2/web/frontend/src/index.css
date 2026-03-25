@@ -413,6 +413,12 @@
     inset 0 -6px 0 var(--clay-shadow-inner-bottom);
 }
 
+:root[data-theme='clay_vibrant'] .select-content [data-radix-select-viewport] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
 :root[data-theme='clay_vibrant'] .select-scroll-button {
   color: var(--muted);
   background: color-mix(in srgb, var(--paper-soft) 82%, var(--paper));
@@ -423,6 +429,9 @@
   border-radius: 12px;
   background: color-mix(in srgb, var(--paper) 90%, var(--paper-soft));
   color: var(--ink);
+  position: relative;
+  isolation: isolate;
+  transform: none;
   transition:
     background-color var(--clay-motion-fast) var(--clay-ease-out),
     border-color var(--clay-motion-fast) var(--clay-ease-out),
@@ -432,16 +441,30 @@
 :root[data-theme='clay_vibrant'] .select-item[data-highlighted] {
   background: var(--clay-control-bg-hover);
   border-color: color-mix(in srgb, var(--accent) 56%, var(--line));
+  transform: none;
+  z-index: 2;
+  box-shadow: none;
 }
 
 :root[data-theme='clay_vibrant'] .select-item[data-state='checked'] {
   background: color-mix(in srgb, var(--brand) 20%, var(--paper));
   border-color: color-mix(in srgb, var(--brand) 72%, var(--line));
   font-weight: 700;
+  transform: none;
+  z-index: 1;
+  box-shadow: none;
 }
 
 :root[data-theme='clay_vibrant'] .select-item:active {
   background: color-mix(in srgb, var(--accent) 24%, var(--paper));
+  transform: none;
+  box-shadow: none;
+}
+
+:root[data-theme='clay_vibrant'] .select-item[data-state='checked'][data-highlighted] {
+  background: color-mix(in srgb, var(--brand) 28%, var(--paper));
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--brand));
+  z-index: 3;
 }
 
 :root[data-theme='clay_vibrant'] .select-item:focus-visible {
@@ -452,6 +475,26 @@
 :root[data-theme='clay_vibrant'] .select-item[data-disabled] {
   opacity: 0.5;
   color: var(--muted);
+}
+
+.select-item[data-highlighted],
+.select-item[data-state='checked'],
+.select-item:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.select-item[data-highlighted],
+.select-item[data-state='checked'] {
+  isolation: isolate;
+}
+
+.select-item[data-highlighted] {
+  z-index: 2;
+}
+
+.select-item[data-state='checked'] {
+  z-index: 1;
 }
 
 :root[data-theme='clay_vibrant'] .tag,
@@ -956,6 +999,17 @@ body {
   border-color: var(--line);
   background: var(--paper-soft);
   color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap !important;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
 }
 
 .badge-success {
@@ -1127,7 +1181,7 @@ body {
 .searchable-select-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.32rem;
   max-height: 14rem;
   overflow: auto;
 }
@@ -1135,28 +1189,41 @@ body {
 .searchable-select-item {
   position: relative;
   z-index: 0;
+  isolation: isolate;
   border: 2px solid var(--line);
   background: var(--paper-soft);
   color: var(--ink);
-  min-height: 2.05rem;
-  padding: 0.36rem 0.5rem;
+  min-height: 2.1rem;
+  padding: 0.4rem 0.54rem;
   text-align: left;
   font-size: 0.76rem;
-  line-height: 1.3;
+  line-height: 1.25;
   cursor: pointer;
 }
 
 .searchable-select-item:hover {
   background: color-mix(in srgb, var(--accent) 20%, var(--paper));
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+  z-index: 2;
+  transform: none;
+  box-shadow: none;
 }
 
 .searchable-select-item.is-selected {
   background: color-mix(in srgb, var(--brand) 20%, var(--paper));
+  border-color: color-mix(in srgb, var(--brand) 68%, var(--line));
   font-weight: 700;
+  z-index: 1;
+  transform: none;
+  box-shadow: none;
 }
 
 .searchable-select-item.is-selected:hover {
   background: color-mix(in srgb, var(--brand) 26%, var(--paper));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--brand));
+  z-index: 3;
+  transform: none;
+  box-shadow: none;
 }
 
 .searchable-select-empty {
@@ -1237,6 +1304,30 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+.plan-editor-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.95rem;
+  min-height: 1.95rem;
+  border: 2px dashed var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.plan-editor-drag-handle:active {
+  cursor: grabbing;
+}
+
+.plan-editor-task-item.is-drag-over {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .plan-editor-config-row {
