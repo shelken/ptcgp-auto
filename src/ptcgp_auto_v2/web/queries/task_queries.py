@@ -10,6 +10,10 @@ from ptcgp_auto_v2.core.scheduling_service import build_task_instance_order_by
 from ptcgp_auto_v2.db.models.task_instance import TaskInstance
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
+from ptcgp_auto_v2.web.queries._query_helpers import (
+    fetch_window_rows,
+    normalize_pagination,
+)
 
 
 def _build_task_instance_filters(
@@ -40,6 +44,11 @@ def fetch_task_instances(
     sort_order: str,
 ) -> tuple[list[TaskInstance], bool, int]:
     """查询任务实例列表，返回分页数据、是否有下一页和总数。"""
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=100,
+    )
     statement = select(TaskInstance).options(
         selectinload(cast(Any, TaskInstance.account))  # type: ignore[arg-type]
         .selectinload(cast(Any, Account.task_plan_associations))  # type: ignore[arg-type]
@@ -62,13 +71,12 @@ def fetch_task_instances(
     total = int(session.exec(total_statement).one())
 
     statement = statement.order_by(*build_task_instance_order_by(sort_by, sort_order))
-    offset = page * page_size
-    statement = statement.offset(offset).limit(page_size + 1)
-    instances = list(session.exec(statement).all())
-
-    has_next = len(instances) > page_size
-    if has_next:
-        instances = instances[:page_size]
+    instances, has_next = fetch_window_rows(
+        session=session,
+        statement=statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
+    )
     return instances, has_next, total
 
 

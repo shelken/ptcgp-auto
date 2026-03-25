@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from ptcgp_auto_v2.db.models import Account, AccountPackPoint, AccountStat
+from ptcgp_auto_v2.web.queries._query_helpers import count_rows, fetch_page_rows
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page,
     normalize_page_size,
@@ -116,17 +117,14 @@ def list_account_resources(
         tie_breaker=Account.id,
     )
 
-    count_statement = select(func.count()).select_from(
-        statement.order_by(None).subquery()
+    total = count_rows(session, statement)
+    page_rows = fetch_page_rows(
+        session=session,
+        statement=statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
-    total = int(session.exec(count_statement).one())
-
-    paged_statement = statement.offset(normalized_page * normalized_page_size).limit(
-        normalized_page_size
-    )
-    rows = [
-        _build_account_resource_row(row) for row in session.exec(paged_statement).all()
-    ]
+    rows = [_build_account_resource_row(row) for row in page_rows]
     return rows, total
 
 
@@ -220,17 +218,12 @@ def list_pack_point_resources(
             tie_breaker=Account.id,
         )
 
-    count_statement = select(func.count()).select_from(
-        base_statement.order_by(None).subquery()
-    )
-    total = int(session.exec(count_statement).one())
-
-    paged_account_rows = list(
-        session.exec(
-            base_statement.offset(normalized_page * normalized_page_size).limit(
-                normalized_page_size
-            )
-        ).all()
+    total = count_rows(session, base_statement)
+    paged_account_rows = fetch_page_rows(
+        session=session,
+        statement=base_statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     account_ids = [row[0] for row in paged_account_rows]
 
