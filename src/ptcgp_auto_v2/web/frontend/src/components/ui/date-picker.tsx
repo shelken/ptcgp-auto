@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import { formatDateYmd, parseDateYmd } from '@/lib/time-display'
 import { cn } from '@/lib/utils'
 
 interface DatePickerProps {
@@ -17,31 +19,6 @@ interface DatePickerProps {
     nextMonthLabel?: string
     weekdayLabels?: string[]
   }
-}
-
-function parseDate(value: string): Date | null {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!match) {
-    return null
-  }
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return null
-  }
-  const date = new Date(year, month - 1, day)
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-    return null
-  }
-  return date
-}
-
-function formatDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function monthStart(date: Date): Date {
@@ -69,7 +46,7 @@ function buildCalendarDays(currentMonth: Date): Date[] {
 
 export function DatePicker({ value, onChange, placeholder, className, disabled = false, i18n }: DatePickerProps) {
   const [open, setOpen] = useState(false)
-  const selectedDate = useMemo(() => parseDate(value), [value])
+  const selectedDate = useMemo(() => parseDateYmd(value), [value])
   const [viewMonth, setViewMonth] = useState<Date>(() => monthStart(selectedDate ?? new Date()))
   const rootRef = useRef<HTMLDivElement | null>(null)
   const weekdayLabels = useMemo(() => {
@@ -86,32 +63,15 @@ export function DatePicker({ value, onChange, placeholder, className, disabled =
     }
   }, [selectedDate])
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (target && rootRef.current && !rootRef.current.contains(target)) {
-        setOpen(false)
-      }
-    }
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-      }
-    }
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onEscape)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onEscape)
-    }
-  }, [open])
+  useDismissibleLayer({
+    open,
+    rootRef,
+    onDismiss: () => setOpen(false)
+  })
 
   const days = useMemo(() => buildCalendarDays(viewMonth), [viewMonth])
   const currentMonth = viewMonth.getMonth()
-  const today = useMemo(() => formatDate(new Date()), [])
+  const today = useMemo(() => formatDateYmd(new Date()), [])
 
   return (
     <div className={cn('date-picker', className)} ref={rootRef}>
@@ -165,7 +125,7 @@ export function DatePicker({ value, onChange, placeholder, className, disabled =
 
           <div className="date-picker-day-grid">
             {days.map((day) => {
-              const dayValue = formatDate(day)
+              const dayValue = formatDateYmd(day)
               const isSelected = dayValue === value
               const isToday = dayValue === today
               const isOutside = day.getMonth() !== currentMonth
