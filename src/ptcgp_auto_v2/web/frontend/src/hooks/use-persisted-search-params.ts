@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 
+import { readStorageValue, writeStorageValue } from '@/lib/storage'
+
 const SEARCH_PARAMS_STORAGE_PREFIX = 'ptcgp_search_params:'
 
 function buildStorageKey(pathname: string): string {
@@ -21,7 +23,7 @@ export function usePersistedSearchParams() {
     if (searchParams.toString().length > 0) {
       return null
     }
-    const raw = window.localStorage.getItem(storageKey)
+    const raw = readStorageValue(storageKey)
     if (!raw) {
       return null
     }
@@ -33,7 +35,7 @@ export function usePersistedSearchParams() {
     if (current.length === 0) {
       return
     }
-    window.localStorage.setItem(storageKey, current)
+    writeStorageValue(storageKey, current)
   }, [searchParams, storageKey])
 
   useEffect(() => {
