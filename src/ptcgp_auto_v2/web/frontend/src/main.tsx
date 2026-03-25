@@ -12,6 +12,7 @@ import '@/styles/management-layout.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      placeholderData: (previousData: unknown) => previousData,
       refetchOnWindowFocus: false,
       retry: 1
     }
