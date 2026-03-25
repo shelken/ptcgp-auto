@@ -3,7 +3,6 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
-import { Tooltip } from '@/components/ui/tooltip'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
@@ -163,6 +162,14 @@ async function copyText(value: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+function reasonTitle(reason: string | null | undefined): string | undefined {
+  const text = (reason ?? '').trim()
+  if (!text || text === '-') {
+    return undefined
+  }
+  return text
 }
 
 function CardThumb({
@@ -1383,16 +1390,11 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                                         {tr(t, 'exchange_entry_action', 'Exchange')}
                                       </Button>
                                     ) : (
-                                      <Tooltip
-                                        content={row.exchange_action.reason_text ?? tr(t, 'exchange_entry_blocked_rarity', 'Not exchangeable')}
-                                        focusable
-                                      >
-                                        <span>
-                                          <Button type="button" size="sm" variant="outline" disabled>
-                                            {tr(t, 'exchange_entry_action', 'Exchange')}
-                                          </Button>
-                                        </span>
-                                      </Tooltip>
+                                      <span title={reasonTitle(row.exchange_action.reason_text)}>
+                                        <Button type="button" size="sm" variant="outline" disabled>
+                                          {tr(t, 'exchange_entry_action', 'Exchange')}
+                                        </Button>
+                                      </span>
                                     )
                                   )}
                                   {isPendingRow && normalizedFriendId.length === 0 && (
