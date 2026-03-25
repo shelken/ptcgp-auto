@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.daily_gift_service import build_daily_gift_context
 from ptcgp_auto_v2.web.services.metadata_service import (
     build_metadata_context,
@@ -15,7 +18,6 @@ from ptcgp_auto_v2.web.services.metadata_service import (
     execute_metadata_sync,
     preview_metadata_sync,
 )
-from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 
 
@@ -94,6 +96,14 @@ async def get_management_daily_gift(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取每日送卡页面数据。"""
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+    )
+    normalized_pair_page, normalized_pair_page_size = normalize_pagination_params(
+        page=pair_page,
+        page_size=pair_page_size,
+    )
     return json_response(
         build_daily_gift_context(
             session=session,
@@ -101,9 +111,9 @@ async def get_management_daily_gift(
             account_id=parse_optional_int(account_id),
             sort_by=sort_by,
             sort_order=sort_order,
-            page=normalize_page(page),
-            page_size=normalize_page_size(page_size),
-            pair_page=normalize_page(pair_page),
-            pair_page_size=normalize_page_size(pair_page_size),
+            page=normalized_page,
+            page_size=normalized_page_size,
+            pair_page=normalized_pair_page,
+            pair_page_size=normalized_pair_page_size,
         )
     )

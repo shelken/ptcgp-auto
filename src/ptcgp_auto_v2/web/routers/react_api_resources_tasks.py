@@ -11,14 +11,16 @@ from ptcgp_auto_v2.core.scheduling_service import (
     normalize_task_sort,
 )
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.resource_service import build_resources_context
 from ptcgp_auto_v2.web.services.task_service import (
     build_task_list_render_context,
     list_task_filter_accounts,
     reset_completed_tasks_by_filters,
 )
-from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
@@ -72,12 +74,16 @@ async def get_management_tasks(
     normalized_status = [item for item in status if item]
     normalized_task_type = [item for item in task_type if item]
     sort_by, sort_order = normalize_task_sort(sort_by, sort_order)
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+    )
 
     return json_response(
         build_task_list_render_context(
             session=session,
-            page=normalize_page(page),
-            page_size=normalize_page_size(page_size),
+            page=normalized_page,
+            page_size=normalized_page_size,
             status=normalized_status,
             task_type=normalized_task_type,
             account_id=parsed_account_id,

@@ -9,8 +9,7 @@ from sqlmodel import Session, col, select
 from ptcgp_auto_v2.db.models import ExchangeCardRequest
 from ptcgp_auto_v2.web.queries._query_helpers import (
     apply_sort,
-    fetch_page_rows_with_total,
-    normalize_pagination,
+    fetch_rows_with_optional_pagination,
     normalize_sort_params,
     resolve_sort_column,
 )
@@ -73,38 +72,6 @@ def _build_exchange_requests_statement(
     )
 
 
-def list_exchange_requests_page(
-    session: Session,
-    account_id: Optional[int] = None,
-    status: Optional[str] = None,
-    q: str = "",
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
-    page: int = 0,
-    page_size: int = 10,
-) -> tuple[list[ExchangeCardRequest], int]:
-    """查询交换请求列表（固定返回分页 tuple 协议）。"""
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    statement = _build_exchange_requests_statement(
-        account_id=account_id,
-        status=status,
-        q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
-    rows, total = fetch_page_rows_with_total(
-        session=session,
-        statement=statement,
-        page=normalized_page,
-        page_size=normalized_page_size,
-    )
-    return rows, total
-
-
 def list_exchange_requests(
     session: Session,
     account_id: Optional[int] = None,
@@ -124,18 +91,10 @@ def list_exchange_requests(
         sort_order=sort_order,
     )
 
-    if page is None or page_size is None:
-        return list(session.exec(statement).all())
-
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    rows, total = fetch_page_rows_with_total(
+    return fetch_rows_with_optional_pagination(
         session=session,
         statement=statement,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        page=page,
+        page_size=page_size,
+        max_page_size=100,
     )
-    return rows, total
