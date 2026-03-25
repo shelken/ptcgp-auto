@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
-import { Tooltip } from '@/components/ui/tooltip'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson, requestFormJson, requestJson } from '@/lib/api'
@@ -256,6 +255,39 @@ function requestCancelDisabledReason(t: Record<string, string>, status: unknown)
   return `${tr(t, 'msg_request_cancel_failed', 'Only pending request records can be removed')} (${statusText})`
 }
 
+function reasonTitle(reason: string | null | undefined): string | undefined {
+  const text = (reason ?? '').trim()
+  if (!text || text === '-') {
+    return undefined
+  }
+  return text
+}
+
+function parseBool(value: unknown): boolean {
+  if (value === true) {
+    return true
+  }
+  if (value === false) {
+    return false
+  }
+  if (typeof value === 'number') {
+    return value === 1
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    return normalized === '1' || normalized === 'true'
+  }
+  return false
+}
+
+function toTotalCount(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return Math.floor(parsed)
+  }
+  return Math.max(0, fallback)
+}
+
 function statusBadgeVariant(value: unknown): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
   const key = typeof value === 'string' ? value : ''
   if (key === 'success' || key === 'completed' || key === 'sended') {
@@ -288,6 +320,23 @@ function sceneBadgeVariant(value: string): 'success' | 'warning' | 'danger' | 'i
 
 function renderBadge(text: string, variant: 'success' | 'warning' | 'danger' | 'info' | 'muted') {
   return <Badge variant={variant}>{text}</Badge>
+}
+
+function QueryTotalSummary({
+  t,
+  total,
+  label
+}: {
+  t: Record<string, string>
+  total: number
+  label?: string
+}) {
+  return (
+    <div className="text-xs text-muted">
+      {label ? `${label} · ` : ''}
+      {tr(t, 'label_query_total_records', '本次查询总记录数')}: <span className="mono">{total}</span>
+    </div>
+  )
 }
 
 function buildAccountSelectOptions(
@@ -347,11 +396,41 @@ function TruncatedText({
   tooltip?: string
   className?: string
 }) {
-  const hint = tooltip ?? text
+  const hint = (tooltip ?? text).trim()
+  const textRef = useRef<HTMLSpanElement | null>(null)
+  const [nativeTitle, setNativeTitle] = useState<string | undefined>(undefined)
+
+  useEffect(() => {
+    const element = textRef.current
+    if (!element || !hint) {
+      setNativeTitle(undefined)
+      return
+    }
+
+    const updateTitle = () => {
+      const isTruncated = element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight
+      setNativeTitle(isTruncated ? hint : undefined)
+    }
+
+    updateTitle()
+    if (typeof ResizeObserver !== 'function') {
+      window.addEventListener('resize', updateTitle)
+      return () => window.removeEventListener('resize', updateTitle)
+    }
+
+    const observer = new ResizeObserver(updateTitle)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [hint, text, className])
+
   return (
-    <Tooltip content={hint} className="truncate-tooltip">
-      <span className={className ? `${className} text-truncate-1` : 'text-truncate-1'}>{text}</span>
-    </Tooltip>
+    <span
+      ref={textRef}
+      title={nativeTitle}
+      className={className ? `${className} text-truncate-1` : 'text-truncate-1'}
+    >
+      {text}
+    </span>
   )
 }
 
@@ -537,7 +616,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('accounts', 'page_size'), 10)
   const [editingAccount, setEditingAccount] = useState<Record<string, unknown> | null>(null)
   const [editingPlans, setEditingPlans] = useState<{ accountId: number; items: AccountPlanItemState[] } | null>(null)
-  const [currentPlans, setCurrentPlans] = useState<Record<string, unknown>[]>([])
+  const [currentPlans, setCurrentPlans] = useState<AccountPlanItemState[]>([])
   const [editingPackConfig, setEditingPackConfig] = useState<{ accountId: number; setCode: string; boosterName: string } | null>(null)
   const [cardSets, setCardSets] = useState<Array<{ code: string; display_name: string }>>([])
   const [boosterOptions, setBoosterOptions] = useState<Array<{ name: string; display_name: string }>>([])
@@ -589,7 +668,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     mutationFn: (payload: { accountId: number; items: AccountPlanItemState[] }) =>
       requestJson<{ ok: boolean }>(`/api/react/management/accounts/${payload.accountId}/plans`, {
         method: 'PUT',
-        body: payload.items.map((item) => ({ plan_id: item.plan_id, is_active: item.is_active }))
+        body: payload.items.map((item) => ({ plan_id: item.plan_id, is_active: item.is_active === true }))
       }),
     onSuccess: () => {
       setEditingPlans(null)
@@ -611,6 +690,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   })
 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
+  const totalRecords = toTotalCount(query.data?.total, items.length)
   const packConfigs = (query.data?.pack_configs as Record<string, Record<string, unknown>>) ?? {}
   const autoPackMap = (query.data?.auto_pack_map as Record<string, Record<string, unknown>>) ?? {}
 
@@ -621,9 +701,9 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
     const currentItems = current
       .map((item) => ({
-        plan_id: Number(item.plan_id),
-        plan_name: toText((item.task_plan as Record<string, unknown>)?.name, t),
-        is_active: Boolean(item.is_active),
+        plan_id: Number(item.task_plan_id ?? item.plan_id ?? (item.task_plan as Record<string, unknown> | undefined)?.id),
+        plan_name: toText((item.task_plan as Record<string, unknown>)?.name ?? item.name, t),
+        is_active: parseBool(item.is_active),
         priority: Number(item.priority ?? 0)
       }))
       .filter((item) => Number.isFinite(item.plan_id))
@@ -633,13 +713,13 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     const existingIds = new Set(currentItems.map((item) => item.plan_id))
     const candidateItems = available
       .map((item) => ({
-        plan_id: Number(item.id),
+        plan_id: Number(item.id ?? item.plan_id ?? item.task_plan_id),
         plan_name: toText(item.name, t),
-        is_active: false
+        is_active: parseBool(item.is_active)
       }))
       .filter((item) => Number.isFinite(item.plan_id) && !existingIds.has(item.plan_id))
 
-    setCurrentPlans(current)
+    setCurrentPlans(currentItems.filter((item) => item.is_active))
     setEditingPlans({ accountId, items: [...currentItems, ...candidateItems] })
   }
 
@@ -721,6 +801,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
         {query.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
         {query.isError && <div className="text-sm text-danger">{(query.error as Error).message}</div>}
         <InlineNotice notice={notice} />
+        <QueryTotalSummary t={t} total={totalRecords} />
 
         {query.data && (
           <>
@@ -752,7 +833,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                     const accountId = Number(item.id)
                     const associations = ((item.task_plan_associations as unknown[]) ?? []) as Record<string, unknown>[]
                     const activePlanNames = associations
-                      .filter((assoc) => Boolean(assoc.is_active) && typeof assoc.task_plan === 'object' && assoc.task_plan !== null)
+                      .filter((assoc) => parseBool(assoc.is_active) && typeof assoc.task_plan === 'object' && assoc.task_plan !== null)
                       .map((assoc) => toText((assoc.task_plan as Record<string, unknown>).name))
                     const config = packConfigs[String(accountId)]
                     const autoPack = autoPackMap[String(accountId)]
@@ -829,7 +910,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
             <div className="section-subtitle">{tr(t, 'label_active_plans', 'Active Plans')}</div>
             <div className="filter-row">
               {currentPlans.map((item) => (
-                <span key={toText(item.plan_id, t)} className="tag">{toText((item.task_plan as Record<string, unknown>)?.name, t)}</span>
+                <span key={item.plan_id} className="tag">{item.plan_name}</span>
               ))}
             </div>
             <div className="section-subtitle">{tr(t, 'option_select_plan', 'Select plan')}</div>
@@ -858,50 +939,46 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                       <span className="plan-assoc-name">{planItem.plan_name}</span>
                     </label>
                     <div className="plan-assoc-actions">
-                      <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isFirst}>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={isFirst}
-                          onClick={() => {
-                            setEditingPlans((prev) => {
-                              if (!prev || isFirst) {
-                                return prev
-                              }
-                              const nextItems = [...prev.items]
-                              const temp = nextItems[index - 1]
-                              nextItems[index - 1] = nextItems[index]
-                              nextItems[index] = temp
-                              return { ...prev, items: nextItems }
-                            })
-                          }}
-                        >
-                          ↑
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isLast}>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={isLast}
-                          onClick={() => {
-                            setEditingPlans((prev) => {
-                              if (!prev || isLast) {
-                                return prev
-                              }
-                              const nextItems = [...prev.items]
-                              const temp = nextItems[index + 1]
-                              nextItems[index + 1] = nextItems[index]
-                              nextItems[index] = temp
-                              return { ...prev, items: nextItems }
-                            })
-                          }}
-                        >
-                          ↓
-                        </Button>
-                      </Tooltip>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isFirst}
+                        onClick={() => {
+                          setEditingPlans((prev) => {
+                            if (!prev || isFirst) {
+                              return prev
+                            }
+                            const nextItems = [...prev.items]
+                            const temp = nextItems[index - 1]
+                            nextItems[index - 1] = nextItems[index]
+                            nextItems[index] = temp
+                            return { ...prev, items: nextItems }
+                          })
+                        }}
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isLast}
+                        onClick={() => {
+                          setEditingPlans((prev) => {
+                            if (!prev || isLast) {
+                              return prev
+                            }
+                            const nextItems = [...prev.items]
+                            const temp = nextItems[index + 1]
+                            nextItems[index + 1] = nextItems[index]
+                            nextItems[index] = temp
+                            return { ...prev, items: nextItems }
+                          })
+                        }}
+                      >
+                        ↓
+                      </Button>
                     </div>
                   </div>
                 )
@@ -974,6 +1051,8 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [resetTypeOptions, setResetTypeOptions] = useState<string[]>([])
   const [taskOrder, setTaskOrder] = useState<string[]>([])
   const [taskConfigMap, setTaskConfigMap] = useState<Record<string, PlanTaskConfigState>>({})
+  const [draggingTask, setDraggingTask] = useState<string | null>(null)
+  const [dragOverTask, setDragOverTask] = useState<string | null>(null)
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const [pendingDeletePlan, setPendingDeletePlan] = useState<{ id: number; name: string } | null>(null)
 
@@ -996,6 +1075,20 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     setSortBy(nextSortBy)
     setSortOrder('asc')
   }, [sortBy])
+
+  const reorderTaskByDrag = useCallback((sourceTask: string, targetTask: string) => {
+    setTaskOrder((prev) => {
+      const sourceOrder = prev.length > 0 ? [...prev] : [...taskOptions]
+      const sourceIndex = sourceOrder.indexOf(sourceTask)
+      const targetIndex = sourceOrder.indexOf(targetTask)
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+        return prev.length > 0 ? prev : sourceOrder
+      }
+      const [moved] = sourceOrder.splice(sourceIndex, 1)
+      sourceOrder.splice(targetIndex, 0, moved)
+      return sourceOrder
+    })
+  }, [taskOptions])
 
   const saveMutation = useMutation({
     mutationFn: (payload: { planId: number | null; name: string; description: string; tasks: string[]; taskConfigMap: Record<string, PlanTaskConfigState> }) => {
@@ -1077,6 +1170,8 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   }
 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
+  const totalRecords = toTotalCount(query.data?.total, items.length)
+  const orderedTasks: string[] = taskOrder.length > 0 ? taskOrder : taskOptions
 
   return (
     <section className="section-stack">
@@ -1112,6 +1207,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           t={t}
         />
         <InlineNotice notice={notice} />
+        <QueryTotalSummary t={t} total={totalRecords} />
         {pendingDeletePlan && (
           <div className="surface-card section-stack">
             <div className="text-xs text-danger">
@@ -1221,16 +1317,39 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             <textarea className="field-textarea" value={planDesc} onChange={(event) => setPlanDesc(event.target.value)} />
             <label className="section-subtitle">{tr(t, 'label_task_config', 'Task Config')}</label>
             <div className="section-stack plan-editor-task-list">
-              {(taskOrder.length > 0 ? taskOrder : taskOptions).map((task, index) => {
+              {orderedTasks.map((task, index) => {
                 const config = taskConfigMap[task] ?? {
                   enabled: false,
                   resetType: 'default',
                   intervalSeconds: 3600
                 }
                 const isFirst = index === 0
-                const isLast = index === taskOrder.length - 1
+                const isLast = index === orderedTasks.length - 1
                 return (
-                  <div key={task} className="surface-card section-stack plan-editor-task-item">
+                  <div
+                    key={task}
+                    className={`surface-card section-stack plan-editor-task-item ${dragOverTask === task ? 'is-drag-over' : ''}`}
+                    onDragOver={(event) => {
+                      if (!draggingTask || draggingTask === task) {
+                        return
+                      }
+                      event.preventDefault()
+                      if (dragOverTask !== task) {
+                        setDragOverTask(task)
+                      }
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      const sourceTask = event.dataTransfer.getData('text/plain') || draggingTask
+                      if (!sourceTask || sourceTask === task) {
+                        setDragOverTask(null)
+                        return
+                      }
+                      reorderTaskByDrag(sourceTask, task)
+                      setDraggingTask(null)
+                      setDragOverTask(null)
+                    }}
+                  >
                     <div className="filter-row plan-editor-task-row">
                       <label className="filter-row plan-editor-task-main">
                         <input
@@ -1247,50 +1366,67 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                         <span className="plan-editor-task-name">{taskTypeLabel(t, task)}</span>
                       </label>
                       <div className="plan-editor-task-actions">
-                        <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isFirst}>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={isFirst}
-                            onClick={() => {
-                              setTaskOrder((prev) => {
-                                if (isFirst) {
-                                  return prev
-                                }
-                                const next = [...prev]
-                                const temp = next[index - 1]
-                                next[index - 1] = next[index]
-                                next[index] = temp
-                                return next
-                              })
-                            }}
-                          >
-                            ↑
-                          </Button>
-                        </Tooltip>
-                        <Tooltip content={tr(t, 'desc_task_order_hint', 'Top items execute first')} focusable={isLast}>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={isLast}
-                            onClick={() => {
-                              setTaskOrder((prev) => {
-                                if (isLast) {
-                                  return prev
-                                }
-                                const next = [...prev]
-                                const temp = next[index + 1]
-                                next[index + 1] = next[index]
-                                next[index] = temp
-                                return next
-                              })
-                            }}
-                          >
-                            ↓
-                          </Button>
-                        </Tooltip>
+                        <button
+                          type="button"
+                          className="plan-editor-drag-handle"
+                          draggable={orderedTasks.length > 1}
+                          title={tr(t, 'label_drag_reorder', '拖拽排序')}
+                          aria-label={tr(t, 'label_drag_reorder', '拖拽排序')}
+                          onDragStart={(event) => {
+                            setDraggingTask(task)
+                            setDragOverTask(null)
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', task)
+                          }}
+                          onDragEnd={() => {
+                            setDraggingTask(null)
+                            setDragOverTask(null)
+                          }}
+                        >
+                          ⋮⋮
+                        </button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isFirst}
+                          onClick={() => {
+                            setTaskOrder((prev) => {
+                              const sourceOrder = prev.length > 0 ? [...prev] : [...orderedTasks]
+                              if (isFirst) {
+                                return prev.length > 0 ? prev : sourceOrder
+                              }
+                              const next = sourceOrder
+                              const temp = next[index - 1]
+                              next[index - 1] = next[index]
+                              next[index] = temp
+                              return next
+                            })
+                          }}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isLast}
+                          onClick={() => {
+                            setTaskOrder((prev) => {
+                              const sourceOrder = prev.length > 0 ? [...prev] : [...orderedTasks]
+                              if (isLast) {
+                                return prev.length > 0 ? prev : sourceOrder
+                              }
+                              const next = sourceOrder
+                              const temp = next[index + 1]
+                              next[index + 1] = next[index]
+                              next[index] = temp
+                              return next
+                            })
+                          }}
+                        >
+                          ↓
+                        </Button>
                       </div>
                     </div>
                     <div className="filter-row plan-editor-config-row">
@@ -1310,7 +1446,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                         <SelectContent>
                           {resetTypeOptions.map((resetType) => (
                             <SelectItem key={resetType} value={resetType}>
-                              {tr(t, `reset_type_${resetType}`, resetType)}
+                              {tr(t, `reset_type_${resetType}`, tr(t, 'label_unknown', 'Unknown'))}
                             </SelectItem>
                           ))}
                           {!resetTypeOptions.includes('default') && <SelectItem value="default">{tr(t, 'label_default', 'default')}</SelectItem>}
@@ -1345,7 +1481,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                 type="button"
                 size="sm"
                 onClick={() => {
-                  const enabledOrderedTasks = taskOrder.filter((task) => taskConfigMap[task]?.enabled)
+                  const enabledOrderedTasks = orderedTasks.filter((task) => taskConfigMap[task]?.enabled)
                   saveMutation.mutate({
                     planId: editingPlanId,
                     name: planName.trim(),
@@ -1698,6 +1834,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const statusOptions = ((query.data?.status_options as unknown[]) ?? []) as string[]
   const taskTypeOptions = ((query.data?.task_types as unknown[]) ?? []) as string[]
   const accountOptions = ((accountOptionsQuery.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[]
+  const totalRecords = toTotalCount(query.data?.total, rows.length)
 
   return (
     <section className="surface-card section-stack">
@@ -1844,6 +1981,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         disableSortOrder={sortBy === 'dispatch_priority'}
       />
       <InlineNotice notice={notice} />
+      <QueryTotalSummary t={t} total={totalRecords} />
 
       <DataGrid
         rows={rows}
@@ -1894,7 +2032,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
               if (resetType === '-') {
                 return '-'
               }
-              return tr(t, `reset_type_${resetType}`, resetType)
+              return tr(t, `reset_type_${resetType}`, tr(t, 'label_unknown', 'Unknown'))
             }
           },
           {
@@ -2438,6 +2576,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const records = ((query.data?.records as unknown[]) ?? []) as Record<string, unknown>[]
   const pairs = ((query.data?.pair_send_status_rows as unknown[]) ?? []) as Record<string, unknown>[]
   const stats = (query.data?.stats as Record<string, unknown> | undefined) ?? {}
+  const totalRecords = toTotalCount(query.data?.records_total, records.length)
   const recentBizDates = (((query.data?.recent_biz_dates as unknown[]) ?? []) as string[])
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
@@ -2571,6 +2710,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
           </SelectContent>
         </Select>
       </div>
+      <QueryTotalSummary t={t} total={totalRecords} />
 
       <div className="section-subtitle">{tr(t, 'section_daily_gift_records', 'Gift Records')}</div>
       <div className="table-wrap">
@@ -2752,6 +2892,8 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
 
   const requests = ((query.data?.requests as unknown[]) ?? []) as Record<string, unknown>[]
   const friendships = ((query.data?.friendships as unknown[]) ?? []) as Record<string, unknown>[]
+  const requestsTotal = toTotalCount(query.data?.request_total, requests.length)
+  const friendshipsTotal = toTotalCount(query.data?.friendship_total, friendships.length)
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
   const allAccountOptions = useMemo(
@@ -2831,6 +2973,10 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         }}
         t={t}
       />
+      <div className="section-stack">
+        <QueryTotalSummary t={t} total={requestsTotal} label={tr(t, 'section_friend_requests', 'Requests')} />
+        <QueryTotalSummary t={t} total={friendshipsTotal} label={tr(t, 'section_friendships', 'Friendships')} />
+      </div>
 
       <div className="section-subtitle">{tr(t, 'section_friend_requests', 'Requests')}</div>
       <div className="table-wrap">
@@ -2876,13 +3022,11 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                         {tr(t, 'btn_remove_request', 'Delete Request')}
                       </Button>
                     ) : (
-                      <Tooltip content={requestCancelDisabledReason(t, row.status)} focusable>
-                        <span>
-                          <Button type="button" size="sm" variant="outline" disabled>
-                            {tr(t, 'btn_remove_request', 'Delete Request')}
-                          </Button>
-                        </span>
-                      </Tooltip>
+                      <span title={reasonTitle(requestCancelDisabledReason(t, row.status))}>
+                        <Button type="button" size="sm" variant="outline" disabled>
+                          {tr(t, 'btn_remove_request', 'Delete Request')}
+                        </Button>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -3002,6 +3146,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   })
 
   const rows = ((query.data?.requests as unknown[]) ?? []) as Record<string, unknown>[]
+  const totalRecords = toTotalCount(query.data?.total_items, rows.length)
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountOptions = useMemo(
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
@@ -3052,6 +3197,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
         }}
         t={t}
       />
+      <QueryTotalSummary t={t} total={totalRecords} />
 
       <div className="table-wrap">
         <table className="grid-table">
@@ -3084,11 +3230,9 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
                   {Boolean(row.can_cancel) ? (
                     <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
                   ) : (
-                    <Tooltip content={exchangeCancelDisabledReason(t, row.status)} focusable>
-                      <span>
-                        <Button type="button" size="sm" variant="outline" disabled>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
-                      </span>
-                    </Tooltip>
+                    <span title={reasonTitle(exchangeCancelDisabledReason(t, row.status))}>
+                      <Button type="button" size="sm" variant="outline" disabled>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
+                    </span>
                   )}
                 </td>
               </tr>
@@ -3289,6 +3433,7 @@ function NotificationsSection({
     () => (((query.data?.notifications as unknown[]) ?? []) as Record<string, unknown>[]),
     [query.data?.notifications]
   )
+  const totalRecords = toTotalCount(query.data?.total, notifications.length)
   const accounts = useMemo(
     () => (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[]),
     [query.data?.accounts]
@@ -3686,6 +3831,7 @@ function NotificationsSection({
         t={t}
       />
       <InlineNotice notice={notice} />
+      <QueryTotalSummary t={t} total={totalRecords} />
 
       <div className="section-subtitle">{tr(t, 'page_notification_config', 'Notification Config')}</div>
       <div className="form-grid">
