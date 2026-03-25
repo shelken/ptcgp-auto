@@ -137,10 +137,7 @@
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--brand) 22%, transparent), transparent 42%),
-    radial-gradient(circle at 78% 14%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, #fff) 0%, var(--bg) 100%);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
   line-height: 1.45;
@@ -517,6 +514,7 @@ body {
   border: 2px solid var(--line);
   background: var(--paper);
   padding: 0.2rem;
+  overflow: hidden;
 }
 
 .record-card-image {
@@ -589,12 +587,28 @@ body {
 }
 
 .record-card-name {
-  margin-top: 0.2rem;
-  font-size: 0.68rem;
+  position: absolute;
+  left: 0.2rem;
+  right: 0.2rem;
+  bottom: 0.2rem;
+  padding: 0.12rem 0.26rem;
+  border-top: 1px solid var(--line);
+  background: rgba(15, 13, 10, 0.88);
+  color: #fff;
+  font-size: 0.66rem;
   font-weight: 700;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transform: translateY(110%);
+  transition: transform 140ms ease;
+  pointer-events: none;
+}
+
+.record-card-tile:hover .record-card-name,
+.record-card-tile:focus-within .record-card-name {
+  transform: translateY(0);
 }
 
 .owned-thumb {
@@ -615,28 +629,30 @@ body {
 .owned-grid {
   display: grid;
   grid-template-columns: repeat(var(--owned-grid-cols, 5), minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 1rem;
 }
 
 .owned-card {
   position: relative;
   border: 2px solid var(--line);
   background: var(--paper);
-  padding: 0.2rem;
+  padding: 0;
   cursor: pointer;
   text-align: left;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
 }
 
 .owned-card--missing {
-  opacity: 0.68;
+  opacity: 1;
 }
 
 .owned-card-media {
   width: 100%;
-  aspect-ratio: 2 / 3;
+  height: 100%;
   overflow: hidden;
-  border: 1px solid var(--line);
   background: #efe8d9;
+  position: relative;
 }
 
 .owned-card-image {
@@ -647,24 +663,68 @@ body {
 
 .owned-card-count {
   position: absolute;
-  right: 0.34rem;
-  top: 0.34rem;
-  min-width: 1.5rem;
-  padding: 0.05rem 0.28rem;
-  border: 1px solid var(--line);
-  background: rgba(255, 251, 242, 0.94);
+  right: 0;
+  top: 0;
+  min-width: 1.25rem;
+  padding: 0.06rem 0.3rem;
+  border-left: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  background: #161310;
+  color: #fff8e4;
   text-align: center;
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 800;
+  z-index: 3;
 }
 
 .owned-card-name {
-  margin-top: 0.2rem;
-  font-size: 0.68rem;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.2rem 0.34rem;
+  border-top: 2px solid var(--line);
+  background: rgba(15, 13, 10, 0.9);
+  color: #fff;
+  font-size: 0.66rem;
   font-weight: 700;
+  line-height: 1.22;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transform: translateY(102%);
+  transition: transform 140ms ease;
+  z-index: 2;
+}
+
+.owned-card:hover .owned-card-name,
+.owned-card:focus-within .owned-card-name {
+  transform: translateY(0);
+}
+
+.owned-card--missing .owned-card-image {
+  filter: grayscale(1) saturate(0.35);
+}
+
+.owned-card--missing .owned-card-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(0, 0, 0, 0.16) 0,
+      rgba(0, 0, 0, 0.16) 9px,
+      rgba(255, 255, 255, 0.05) 9px,
+      rgba(255, 255, 255, 0.05) 18px
+    ),
+    linear-gradient(rgba(18, 18, 18, 0.24), rgba(18, 18, 18, 0.42));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.owned-card--missing .owned-card-count {
+  background: rgba(24, 24, 24, 0.95);
 }
 
 .pagination-row {
@@ -863,6 +923,29 @@ body {
   margin-top: 0.2rem;
   font-size: 0.65rem;
   color: var(--muted);
+}
+
+.notification-picker-card {
+  aspect-ratio: auto;
+  overflow: visible;
+  padding: 0.2rem;
+}
+
+.notification-picker-card .owned-card-media {
+  aspect-ratio: 2 / 3;
+  height: auto;
+  border: 1px solid var(--line);
+}
+
+.notification-picker-card .owned-card-name {
+  position: static;
+  transform: none;
+  border: 0;
+  padding: 0;
+  margin-top: 0.2rem;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.68rem;
 }
 
 .notification-drawer-backdrop {

@@ -14,6 +14,7 @@ const STORAGE_KEY_THEME = 'ptcgp_theme'
 const STORAGE_KEY_THEME_MODE = 'ptcgp_theme_mode'
 const STORAGE_KEY_LAST_LIGHT = 'ptcgp_last_light_theme'
 const STORAGE_KEY_LAST_DARK = 'ptcgp_last_dark_theme'
+const STORAGE_KEY_THEME_INITIALIZED = 'ptcgp_theme_initialized'
 
 const DEFAULT_LIGHT_THEME: ThemeName = 'brutalist'
 const DEFAULT_DARK_THEME: ThemeName = 'retro'
@@ -47,7 +48,7 @@ function normalizeMode(mode: string | null): ThemeMode {
   if (mode === 'light' || mode === 'dark' || mode === 'auto') {
     return mode
   }
-  return 'auto'
+  return 'light'
 }
 
 function getLastLightTheme(): ThemeName {
@@ -112,6 +113,12 @@ export function resolveThemeByMode(mode: ThemeMode, theme: ThemeName): ThemeName
 }
 
 export function loadThemePreference(): ThemePreference {
+  if (!window.localStorage.getItem(STORAGE_KEY_THEME_INITIALIZED)) {
+    const initial: ThemePreference = { mode: 'light', theme: DEFAULT_LIGHT_THEME }
+    saveThemePreference(initial)
+    window.localStorage.setItem(STORAGE_KEY_THEME_INITIALIZED, '1')
+    return initial
+  }
   const mode = normalizeMode(window.localStorage.getItem(STORAGE_KEY_THEME_MODE))
   const theme = normalizeTheme(window.localStorage.getItem(STORAGE_KEY_THEME))
   return { mode, theme: alignThemeToMode(mode, theme) }
