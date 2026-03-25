@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bell, MonitorCog, Moon, Palette, Sun } from 'lucide-react'
-import { Navigate, NavLink, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { NotificationDrawer } from '@/components/notification-drawer'
 import { useBootstrap } from '@/hooks/use-bootstrap'
+import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { fetchJson } from '@/lib/api'
 import {
   alignThemeToMode,
@@ -42,7 +43,7 @@ function ThemeModeIcon({ mode }: { mode: ThemeMode }) {
 }
 
 export default function App() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = usePersistedSearchParams()
   const location = useLocation()
   const lang = searchParams.get('lang') ?? 'zh_CN'
   const [notificationOpen, setNotificationOpen] = useState(false)

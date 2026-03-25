@@ -4,6 +4,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
+import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson, requestFormJson, requestJson } from '@/lib/api'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
@@ -18,6 +19,7 @@ interface ColumnDef {
   key: string
   label: string
   render?: (row: Record<string, unknown>) => string
+  sortKey?: string
 }
 
 interface SortOption {
@@ -38,6 +40,11 @@ interface PlanTaskConfigState {
   intervalSeconds: number
 }
 
+interface InlineNoticeState {
+  level: 'success' | 'error'
+  text: string
+}
+
 const sections = [
   { key: 'accounts', labelKey: 'menu_accounts', fallback: 'Accounts' },
   { key: 'plans', labelKey: 'menu_plans', fallback: 'Plans' },
@@ -49,6 +56,35 @@ const sections = [
   { key: 'exchange-cards', labelKey: 'menu_exchange_cards', fallback: 'Exchange Cards' },
   { key: 'notifications', labelKey: 'menu_notifications', fallback: 'Notifications' }
 ] as const
+
+const MANAGEMENT_STATE_STORAGE_PREFIX = 'ptcgp_management_state:'
+
+function managementStateKey(section: string, field: string): string {
+  return `${MANAGEMENT_STATE_STORAGE_PREFIX}${section}:${field}`
+}
+
+/**
+ * 管理页筛选/排序/分页状态持久化（localStorage）
+ */
+function usePersistedState<T>(storageKey: string, initialValue: T) {
+  const [value, setValue] = useState<T>(() => {
+    const raw = window.localStorage.getItem(storageKey)
+    if (raw === null) {
+      return initialValue
+    }
+    try {
+      return JSON.parse(raw) as T
+    } catch {
+      return initialValue
+    }
+  })
+
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, JSON.stringify(value))
+  }, [storageKey, value])
+
+  return [value, setValue] as const
+}
 
 function toText(value: unknown, t?: Record<string, string>): string {
   if (value === null || value === undefined) {
@@ -131,6 +167,53 @@ function requestStatusLabel(t: Record<string, string>, value: unknown): string {
   return tr(t, `friend_request_status_${key}`, key)
 }
 
+function InlineNotice({ notice }: { notice: InlineNoticeState | null }) {
+  if (!notice) {
+    return null
+  }
+  return (
+    <div className={`surface-card text-sm ${notice.level === 'error' ? 'text-danger' : 'text-muted'}`}>
+      {notice.text}
+    </div>
+  )
+}
+
+function SortableHeaderCell({
+  label,
+  sortKey,
+  sortBy,
+  sortOrder,
+  onToggle,
+  className
+}: {
+  label: string
+  sortKey: string
+  sortBy: string
+  sortOrder: 'asc' | 'desc'
+  onToggle: (sortKey: string) => void
+  className?: string
+}) {
+  const isActive = sortBy === sortKey
+  const direction = isActive ? (sortOrder === 'asc' ? '↑' : '↓') : ''
+  return (
+    <th
+      role="button"
+      tabIndex={0}
+      className={className}
+      style={{ cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => onToggle(sortKey)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onToggle(sortKey)
+        }
+      }}
+    >
+      {label}{direction ? ` ${direction}` : ''}
+    </th>
+  )
+}
+
 function exchangeStatusLabel(t: Record<string, string>, value: unknown): string {
   const key = typeof value === 'string' ? value : ''
   if (!key) {
@@ -172,20 +255,38 @@ function Pager({
 function DataGrid({
   rows,
   columns,
-  t
+  t,
+  sortBy,
+  sortOrder,
+  onSortChange
 }: {
   rows: Record<string, unknown>[]
   columns: ColumnDef[]
   t: Record<string, string>
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  onSortChange?: (sortKey: string) => void
 }) {
   return (
     <div className="table-wrap">
       <table className="grid-table">
         <thead>
           <tr>
-            {columns.map((col) => (
-              <th key={col.key}>{col.label}</th>
-            ))}
+            {columns.map((col) => {
+              if (onSortChange && sortBy && sortOrder && col.sortKey) {
+                return (
+                  <SortableHeaderCell
+                    key={col.key}
+                    label={col.label}
+                    sortKey={col.sortKey}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    onToggle={onSortChange}
+                  />
+                )
+              }
+              return <th key={col.key}>{col.label}</th>
+            })}
           </tr>
         </thead>
         <tbody>
@@ -234,54 +335,67 @@ function ListQueryControls({
 }) {
   const options = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 20, 50, 100]
   return (
-    <div className="filter-row">
-      <span className="text-xs text-muted">{tr(t, 'label_sort_by', 'Sort By')}</span>
-      <select className="field-select" value={sortBy} onChange={(event) => onSortByChange(event.target.value)}>
-        {sortOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {tr(t, option.labelKey, option.fallback)}
-          </option>
-        ))}
-      </select>
-      <span className="text-xs text-muted">{tr(t, 'label_sort_order', 'Order')}</span>
-      <select
-        className="field-select"
-        value={sortOrder}
-        disabled={disableSortOrder}
-        onChange={(event) => onSortOrderChange(event.target.value as 'asc' | 'desc')}
-      >
-        <option value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</option>
-        <option value="desc">{tr(t, 'sort_order_desc', 'Descending')}</option>
-      </select>
-      <span className="text-xs text-muted">{tr(t, 'label_page_size', 'Page Size')}</span>
-      <select
-        className="field-select"
-        value={String(pageSize)}
-        onChange={(event) => onPageSizeChange(Number(event.target.value))}
-      >
-        {options.map((value) => (
-          <option key={value} value={value}>
-            {value}
-          </option>
-        ))}
-      </select>
+    <div className="table-toolbar-layout table-toolbar--dense management-query-controls">
+      <div className="table-toolbar-zone table-toolbar-zone--left">
+        <div className="table-filter-item">
+          <label className="section-subtitle">{tr(t, 'label_sort_by', 'Sort By')}</label>
+          <select className="field-select table-control" value={sortBy} onChange={(event) => onSortByChange(event.target.value)}>
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {tr(t, option.labelKey, option.fallback)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="table-filter-item">
+          <label className="section-subtitle">{tr(t, 'label_sort_order', 'Order')}</label>
+          <select
+            className="field-select table-control"
+            value={sortOrder}
+            disabled={disableSortOrder}
+            onChange={(event) => onSortOrderChange(event.target.value as 'asc' | 'desc')}
+          >
+            <option value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</option>
+            <option value="desc">{tr(t, 'sort_order_desc', 'Descending')}</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="table-toolbar-zone table-toolbar-zone--right">
+        <div className="table-filter-item">
+          <label className="section-subtitle">{tr(t, 'label_page_size', 'Page Size')}</label>
+          <select
+            className="field-select table-control"
+            value={String(pageSize)}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {options.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
     </div>
   )
 }
 
 function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [q, setQ] = useState('')
-  const [page, setPage] = useState(0)
-  const [sortBy, setSortBy] = useState('id')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [pageSize, setPageSize] = useState(10)
+  const [q, setQ] = usePersistedState<string>(managementStateKey('accounts', 'q'), '')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('accounts', 'page'), 0)
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('accounts', 'sort_by'), 'id')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('accounts', 'sort_order'), 'asc')
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('accounts', 'page_size'), 10)
   const [editingAccount, setEditingAccount] = useState<Record<string, unknown> | null>(null)
   const [editingPlans, setEditingPlans] = useState<{ accountId: number; items: AccountPlanItemState[] } | null>(null)
   const [currentPlans, setCurrentPlans] = useState<Record<string, unknown>[]>([])
   const [editingPackConfig, setEditingPackConfig] = useState<{ accountId: number; setCode: string; boosterName: string } | null>(null)
   const [cardSets, setCardSets] = useState<Array<{ code: string; display_name: string }>>([])
   const [boosterOptions, setBoosterOptions] = useState<Array<{ name: string; display_name: string }>>([])
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const queryString = useMemo(
     () =>
@@ -301,6 +415,16 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/accounts?${queryString}`)
   })
 
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    setPage(0)
+    if (sortBy === nextSortBy) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortBy(nextSortBy)
+    setSortOrder('asc')
+  }, [sortBy])
+
   const saveAccountMutation = useMutation({
     mutationFn: (payload: { accountId: number; nickname: string; remark: string }) =>
       requestJson<{ ok: boolean; message: string }>(`/api/react/management/accounts/${payload.accountId}`, {
@@ -308,7 +432,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
         body: { nickname: payload.nickname, remark: payload.remark }
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       setEditingAccount(null)
       queryClient.invalidateQueries({ queryKey: ['management-accounts'] })
     }
@@ -333,7 +457,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
         body: { set_code: payload.setCode, booster_name: payload.boosterName }
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       setEditingPackConfig(null)
       queryClient.invalidateQueries({ queryKey: ['management-accounts'] })
     }
@@ -425,6 +549,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
         {query.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
         {query.isError && <div className="text-sm text-danger">{(query.error as Error).message}</div>}
+        <InlineNotice notice={notice} />
 
         {query.data && (
           <>
@@ -432,7 +557,13 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
               <table className="grid-table">
                 <thead>
                   <tr>
-                    <th>{tr(t, 'col_id', 'ID')}</th>
+                    <SortableHeaderCell
+                      label={tr(t, 'col_id', 'ID')}
+                      sortKey="id"
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onToggle={handleHeaderSort}
+                    />
                     <th>{tr(t, 'col_nickname', 'Nickname')}</th>
                     <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
                     <th>{tr(t, 'col_plans', 'Plans')}</th>
@@ -652,11 +783,11 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
 function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [q, setQ] = useState('')
-  const [page, setPage] = useState(0)
-  const [sortBy, setSortBy] = useState('id')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [pageSize, setPageSize] = useState(10)
+  const [q, setQ] = usePersistedState<string>(managementStateKey('plans', 'q'), '')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('plans', 'page'), 0)
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('plans', 'sort_by'), 'id')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('plans', 'sort_order'), 'asc')
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('plans', 'page_size'), 10)
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null)
   const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false)
   const [planName, setPlanName] = useState('')
@@ -665,6 +796,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [resetTypeOptions, setResetTypeOptions] = useState<string[]>([])
   const [taskOrder, setTaskOrder] = useState<string[]>([])
   const [taskConfigMap, setTaskConfigMap] = useState<Record<string, PlanTaskConfigState>>({})
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const queryString = useMemo(
     () => buildQuery({ lang, q, page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder }),
@@ -675,6 +807,16 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     queryKey: ['management-plans', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/plans?${queryString}`)
   })
+
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    setPage(0)
+    if (sortBy === nextSortBy) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortBy(nextSortBy)
+    setSortOrder('asc')
+  }, [sortBy])
 
   const saveMutation = useMutation({
     mutationFn: (payload: { planId: number | null; name: string; description: string; tasks: string[]; taskConfigMap: Record<string, PlanTaskConfigState> }) => {
@@ -703,8 +845,11 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     },
     onSuccess: (result) => {
       if (!result.ok) {
-        alert(result.message)
+        setNotice({ level: 'error', text: result.message })
         return
+      }
+      if (result.message) {
+        setNotice({ level: 'success', text: result.message })
       }
       setEditingPlanId(null)
       setIsPlanEditorOpen(false)
@@ -715,7 +860,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const deleteMutation = useMutation({
     mutationFn: (planId: number) => requestJson<{ ok: boolean; message: string }>(`/api/react/management/plans/${planId}`, { method: 'DELETE' }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-plans'] })
     }
   })
@@ -785,12 +930,13 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           }}
           t={t}
         />
+        <InlineNotice notice={notice} />
 
         <DataGrid
           rows={items}
           columns={[
-            { key: 'id', label: tr(t, 'col_id', 'ID') },
-            { key: 'name', label: tr(t, 'col_name', 'Name') },
+            { key: 'id', label: tr(t, 'col_id', 'ID'), sortKey: 'id' },
+            { key: 'name', label: tr(t, 'col_name', 'Name'), sortKey: 'name' },
             { key: 'description', label: tr(t, 'col_description', 'Description') },
             { key: 'task_types_list', label: tr(t, 'col_task', 'Task'), render: (row) => toText(row.task_types_list, t) },
             {
@@ -803,6 +949,9 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             }
           ]}
           t={t}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={handleHeaderSort}
         />
 
         <div className="filter-row">
@@ -983,12 +1132,12 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 }
 
 function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string> }) {
-  const [q, setQ] = useState('')
-  const [page, setPage] = useState(0)
-  const [view, setView] = useState('stats')
-  const [sortBy, setSortBy] = useState('id')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [pageSize, setPageSize] = useState(20)
+  const [q, setQ] = usePersistedState<string>(managementStateKey('resources', 'q'), '')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('resources', 'page'), 0)
+  const [view, setView] = usePersistedState<string>(managementStateKey('resources', 'view'), 'stats')
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('resources', 'sort_by'), 'id')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('resources', 'sort_order'), 'asc')
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('resources', 'page_size'), 20)
 
   const queryString = useMemo(
     () => buildQuery({ lang, q, page, page_size: pageSize, view, sort_by: sortBy, sort_order: sortOrder }),
@@ -998,6 +1147,16 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
     queryKey: ['management-resources', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/resources?${queryString}`)
   })
+
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    setPage(0)
+    if (sortBy === nextSortBy) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortBy(nextSortBy)
+    setSortOrder('asc')
+  }, [sortBy])
 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
   const seriesList = (((query.data?.series_list as unknown[]) ?? []) as string[])
@@ -1090,10 +1249,34 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
           <table className="grid-table">
             <thead>
               <tr>
-                <th>{tr(t, 'col_account', 'Account')}</th>
-                <th>{tr(t, 'col_exchange_points', 'Exchange Points')}</th>
-                <th>{tr(t, 'col_pack_hourglass', 'Pack Hourglass')}</th>
-                <th>{tr(t, 'col_updated_at', 'Updated At')}</th>
+                <SortableHeaderCell
+                  label={tr(t, 'col_account', 'Account')}
+                  sortKey="id"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
+                <SortableHeaderCell
+                  label={tr(t, 'col_exchange_points', 'Exchange Points')}
+                  sortKey="exchange_points"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
+                <SortableHeaderCell
+                  label={tr(t, 'col_pack_hourglass', 'Pack Hourglass')}
+                  sortKey="pack_hourglass_count"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
+                <SortableHeaderCell
+                  label={tr(t, 'col_updated_at', 'Updated At')}
+                  sortKey="updated_at"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
               </tr>
             </thead>
             <tbody>
@@ -1134,9 +1317,23 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
           <table className="grid-table resource-pack-table">
             <thead>
               <tr>
-                <th>{tr(t, 'col_account', 'Account')}</th>
+                <SortableHeaderCell
+                  label={tr(t, 'col_account', 'Account')}
+                  sortKey="id"
+                  sortBy={sortBy}
+                  sortOrder={sortOrder}
+                  onToggle={handleHeaderSort}
+                />
                 {seriesList.map((series) => (
-                  <th key={`series-header-${series}`} className="mono">{series}</th>
+                  <SortableHeaderCell
+                    key={`series-header-${series}`}
+                    label={series}
+                    sortKey={`series:${series}`}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    onToggle={handleHeaderSort}
+                    className="mono"
+                  />
                 ))}
               </tr>
             </thead>
@@ -1191,13 +1388,14 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
 
 function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(20)
-  const [status, setStatus] = useState<string[]>([])
-  const [taskTypes, setTaskTypes] = useState<string[]>([])
-  const [accountKeyword, setAccountKeyword] = useState('')
-  const [sortBy, setSortBy] = useState('dispatch_priority')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('tasks', 'page'), 0)
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('tasks', 'page_size'), 20)
+  const [status, setStatus] = usePersistedState<string>(managementStateKey('tasks', 'status'), '')
+  const [taskType, setTaskType] = usePersistedState<string>(managementStateKey('tasks', 'task_type'), '')
+  const [accountKeyword, setAccountKeyword] = usePersistedState<string>(managementStateKey('tasks', 'account_keyword'), '')
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('tasks', 'sort_by'), 'dispatch_priority')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('tasks', 'sort_order'), 'asc')
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const normalizedAccountKeyword = accountKeyword.trim()
   const selectedAccountMatch = normalizedAccountKeyword.match(/^(\d+)/)
@@ -1219,32 +1417,42 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         lang,
         page,
         page_size: pageSize,
-        status,
-        task_type: taskTypes,
+        status: status || undefined,
+        task_type: taskType || undefined,
         account_id: selectedAccountId || undefined,
         account_q: selectedAccountQuery || undefined,
         sort_by: sortBy,
         sort_order: sortOrder
       }),
-    [lang, page, pageSize, selectedAccountId, selectedAccountQuery, sortBy, sortOrder, status, taskTypes]
+    [lang, page, pageSize, selectedAccountId, selectedAccountQuery, sortBy, sortOrder, status, taskType]
   )
   const query = useQuery({
     queryKey: ['management-tasks', queryString],
     queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/tasks?${queryString}`)
   })
 
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    setPage(0)
+    if (sortBy === nextSortBy) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      return
+    }
+    setSortBy(nextSortBy)
+    setSortOrder('asc')
+  }, [sortBy])
+
   const resetMutation = useMutation({
     mutationFn: () =>
       requestJson<{ ok: boolean; message: string }>('/api/react/management/tasks/reset-completed', {
         method: 'POST',
         body: {
-          status,
-          task_type: taskTypes,
+          status: status ? [status] : [],
+          task_type: taskType ? [taskType] : [],
           account_id: selectedAccountId || null
         }
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-tasks'] })
     }
   })
@@ -1256,29 +1464,76 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 
   return (
     <section className="surface-card section-stack">
-      <div className="pagination-row">
-        <div className="section-title">{tr(t, 'menu_tasks', 'Tasks')}</div>
-        <div className="filter-row">
-          <input
-            className="field-input"
-            list="task-account-options"
-            value={accountKeyword}
-            onChange={(event) => {
-              setPage(0)
-              setAccountKeyword(event.target.value)
-            }}
-            placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID / nickname / friend id')}
-          />
-          <datalist id="task-account-options">
-            {accountOptions.map((item) => {
-              const id = toText(item.id, t)
-              const displayName = toText(item.display_name || item.nickname, t)
-              const friendId = toText(item.friend_id, t)
-              const optionLabel = `${id} ${displayName} (${friendId})`
-              return <option key={id} value={optionLabel} />
-            })}
-          </datalist>
-          <Button size="sm" type="button" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
+      <div className="section-title">{tr(t, 'menu_tasks', 'Tasks')}</div>
+
+      <div className="table-toolbar-layout table-toolbar--dense management-query-controls">
+        <div className="table-toolbar-zone table-toolbar-zone--left">
+          <div className="table-filter-item">
+            <label className="section-subtitle">{tr(t, 'filter_status', 'Status')}</label>
+            <select
+              className="field-select table-control"
+              value={status}
+              onChange={(event) => {
+                setPage(0)
+                setStatus(event.target.value)
+              }}
+            >
+              <option value="">{tr(t, 'label_all', 'All')}</option>
+              {statusOptions.map((item) => (
+                <option key={`task-status-${item}`} value={item}>
+                  {statusLabel(t, item)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="table-filter-item">
+            <label className="section-subtitle">{tr(t, 'filter_task', 'Task')}</label>
+            <select
+              className="field-select table-control"
+              value={taskType}
+              onChange={(event) => {
+                setPage(0)
+                setTaskType(event.target.value)
+              }}
+            >
+              <option value="">{tr(t, 'label_all', 'All')}</option>
+              {taskTypeOptions.map((item) => (
+                <option key={`task-type-${item}`} value={item}>
+                  {taskTypeLabel(t, item)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="table-filter-item task-account-filter-item">
+            <label className="section-subtitle">{tr(t, 'filter_account', 'Account')}</label>
+            <input
+              className="field-input table-control"
+              list="task-account-options"
+              value={accountKeyword}
+              onChange={(event) => {
+                setPage(0)
+                setAccountKeyword(event.target.value)
+              }}
+              placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID / nickname / friend id')}
+            />
+            <datalist id="task-account-options">
+              {accountOptions.map((item) => {
+                const id = toText(item.id, t)
+                const displayName = toText(item.display_name || item.nickname, t)
+                const friendId = toText(item.friend_id, t)
+                const optionLabel = `${id} ${displayName} (${friendId})`
+                return <option key={id} value={optionLabel} />
+              })}
+            </datalist>
+          </div>
+        </div>
+
+        <div className="table-toolbar-zone table-toolbar-zone--right">
+          <Button size="sm" type="button" variant="outline" onClick={() => setPage(0)}>
+            {tr(t, 'label_search', 'Search')}
+          </Button>
           <Button
             size="sm"
             type="button"
@@ -1303,81 +1558,35 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         </div>
       </div>
 
-      <div className="form-grid">
-        <div className="section-stack">
-          <div className="section-subtitle">{tr(t, 'filter_status', 'Status')}</div>
-          {statusOptions.map((item) => (
-            <label key={item} className="filter-row">
-              <input
-                type="checkbox"
-                checked={status.includes(item)}
-                onChange={(event) => {
-                  setPage(0)
-                  setStatus((prev) => {
-                    if (event.target.checked) {
-                      return [...prev, item]
-                    }
-                    return prev.filter((value) => value !== item)
-                  })
-                }}
-              />
-              <span>{statusLabel(t, item)}</span>
-            </label>
-          ))}
-        </div>
-        <div className="section-stack">
-          <div className="section-subtitle">{tr(t, 'filter_task', 'Task')}</div>
-          {taskTypeOptions.map((item) => (
-            <label key={item} className="filter-row">
-              <input
-                type="checkbox"
-                checked={taskTypes.includes(item)}
-                onChange={(event) => {
-                  setPage(0)
-                  setTaskTypes((prev) => {
-                    if (event.target.checked) {
-                      return [...prev, item]
-                    }
-                    return prev.filter((value) => value !== item)
-                  })
-                }}
-              />
-              <span>{taskTypeLabel(t, item)}</span>
-            </label>
-          ))}
-        </div>
-        <div className="section-stack">
-          <div className="section-subtitle">{tr(t, 'filter_sort', 'Sort')}</div>
-          <ListQueryControls
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            pageSize={pageSize}
-            sortOptions={[
-              { value: 'dispatch_priority', labelKey: 'col_dispatch_priority', fallback: 'Dispatch Priority' },
-              { value: 'last_completed_at', labelKey: 'col_last_completed', fallback: 'Last Completed' },
-              { value: 'last_duration_seconds', labelKey: 'col_last_duration', fallback: 'Last Duration' },
-              { value: 'next_run_at', labelKey: 'col_next_run', fallback: 'Next Run' }
-            ]}
-            onSortByChange={(value) => {
-              setPage(0)
-              setSortBy(value)
-              if (value === 'dispatch_priority') {
-                setSortOrder('asc')
-              }
-            }}
-            onSortOrderChange={(value) => {
-              setPage(0)
-              setSortOrder(value)
-            }}
-            onPageSizeChange={(value) => {
-              setPage(0)
-              setPageSize(value)
-            }}
-            t={t}
-            disableSortOrder={sortBy === 'dispatch_priority'}
-          />
-        </div>
-      </div>
+      <ListQueryControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        pageSize={pageSize}
+        sortOptions={[
+          { value: 'dispatch_priority', labelKey: 'col_dispatch_priority', fallback: 'Dispatch Priority' },
+          { value: 'last_completed_at', labelKey: 'col_last_completed', fallback: 'Last Completed' },
+          { value: 'last_duration_seconds', labelKey: 'col_last_duration', fallback: 'Last Duration' },
+          { value: 'next_run_at', labelKey: 'col_next_run', fallback: 'Next Run' }
+        ]}
+        onSortByChange={(value) => {
+          setPage(0)
+          setSortBy(value)
+          if (value === 'dispatch_priority') {
+            setSortOrder('asc')
+          }
+        }}
+        onSortOrderChange={(value) => {
+          setPage(0)
+          setSortOrder(value)
+        }}
+        onPageSizeChange={(value) => {
+          setPage(0)
+          setPageSize(value)
+        }}
+        t={t}
+        disableSortOrder={sortBy === 'dispatch_priority'}
+      />
+      <InlineNotice notice={notice} />
 
       <DataGrid
         rows={rows}
@@ -1398,10 +1607,16 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
               return `${rank}/${total}`
             }
           },
-          { key: 'last_completed_at_iso', label: tr(t, 'col_last_completed', 'Last Completed'), render: (row) => formatTime(row.last_completed_at_iso) },
+          {
+            key: 'last_completed_at_iso',
+            label: tr(t, 'col_last_completed', 'Last Completed'),
+            sortKey: 'last_completed_at',
+            render: (row) => formatTime(row.last_completed_at_iso)
+          },
           {
             key: 'last_duration_seconds',
             label: tr(t, 'col_last_duration', 'Last Duration'),
+            sortKey: 'last_duration_seconds',
             render: (row) => {
               const duration = Number(row.last_duration_seconds ?? 0)
               if (!Number.isFinite(duration) || duration <= 0) {
@@ -1411,7 +1626,12 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             }
           },
           { key: 'reset_type', label: tr(t, 'col_reset_type', 'Reset Type') },
-          { key: 'next_run_at_iso', label: tr(t, 'col_next_run', 'Next Run'), render: (row) => formatTime(row.next_run_at_iso) },
+          {
+            key: 'next_run_at_iso',
+            label: tr(t, 'col_next_run', 'Next Run'),
+            sortKey: 'next_run_at',
+            render: (row) => formatTime(row.next_run_at_iso)
+          },
           { key: 'plan_name', label: tr(t, 'col_plan', 'Plan') },
           { key: 'plan_priority', label: tr(t, 'label_priority', 'Priority') },
           {
@@ -1428,6 +1648,9 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           { key: 'error_message', label: tr(t, 'col_error', 'Error') }
         ]}
         t={t}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={handleHeaderSort}
       />
 
       <Pager
@@ -1444,16 +1667,17 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 
 function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const [uiStep, setUiStep] = useState<1 | 2 | 3>(1)
-  const [selectedNodeType, setSelectedNodeType] = useState('root')
-  const [selectedNodeId, setSelectedNodeId] = useState('all')
-  const [selectedSetCode, setSelectedSetCode] = useState('')
-  const [selectedPackName, setSelectedPackName] = useState('')
-  const [currentAction, setCurrentAction] = useState('update_new_series')
+  const [selectedNodeType, setSelectedNodeType] = usePersistedState<string>(managementStateKey('metadata', 'selected_node_type'), 'root')
+  const [selectedNodeId, setSelectedNodeId] = usePersistedState<string>(managementStateKey('metadata', 'selected_node_id'), 'all')
+  const [selectedSetCode, setSelectedSetCode] = usePersistedState<string>(managementStateKey('metadata', 'selected_set_code'), '')
+  const [selectedPackName, setSelectedPackName] = usePersistedState<string>(managementStateKey('metadata', 'selected_pack_name'), '')
+  const [currentAction, setCurrentAction] = usePersistedState<string>(managementStateKey('metadata', 'current_action'), 'update_new_series')
   const [snapshotId, setSnapshotId] = useState('')
-  const [forceRefresh, setForceRefresh] = useState(false)
+  const [forceRefresh, setForceRefresh] = usePersistedState<boolean>(managementStateKey('metadata', 'force_refresh'), false)
   const [previewResult, setPreviewResult] = useState<Record<string, unknown> | null>(null)
   const [executeResult, setExecuteResult] = useState<Record<string, unknown> | null>(null)
   const [checkResult, setCheckResult] = useState<Record<string, unknown> | null>(null)
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const queryString = useMemo(
     () =>
@@ -1506,7 +1730,10 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
       }),
     onSuccess: (result) => {
       setExecuteResult(result)
-      alert(`${tr(t, 'label_success_records', 'Done')}: ${toText(result.status ?? 'ok', t)}`)
+      setNotice({
+        level: 'success',
+        text: `${tr(t, 'label_success_records', 'Done')}: ${toText(result.status ?? 'ok', t)}`
+      })
     }
   })
 
@@ -1665,6 +1892,7 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
 
       {query.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
       {query.isError && <div className="text-sm text-danger">{(query.error as Error).message}</div>}
+      <InlineNotice notice={notice} />
 
       {uiStep === 1 && (
         <div className="metadata-workspace">
@@ -1932,14 +2160,14 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
 }
 
 function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string> }) {
-  const [page, setPage] = useState(0)
-  const [pairPage, setPairPage] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
-  const [pairPageSize, setPairPageSize] = useState(10)
-  const [sortBy, setSortBy] = useState('updated_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [date, setDate] = useState('')
-  const [accountId, setAccountId] = useState('')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('daily-gift', 'page'), 0)
+  const [pairPage, setPairPage] = usePersistedState<number>(managementStateKey('daily-gift', 'pair_page'), 0)
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'page_size'), 10)
+  const [pairPageSize, setPairPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'pair_page_size'), 10)
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('daily-gift', 'sort_by'), 'updated_at')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('daily-gift', 'sort_order'), 'desc')
+  const [date, setDate] = usePersistedState<string>(managementStateKey('daily-gift', 'date'), '')
+  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('daily-gift', 'account_id'), '')
 
   const queryString = useMemo(
     () =>
@@ -2199,15 +2427,16 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
 }
 function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
-  const [sortBy, setSortBy] = useState('created_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [q, setQ] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [fromAccountId, setFromAccountId] = useState('')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('friendships', 'page'), 0)
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('friendships', 'page_size'), 10)
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('friendships', 'sort_by'), 'created_at')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('friendships', 'sort_order'), 'desc')
+  const [q, setQ] = usePersistedState<string>(managementStateKey('friendships', 'q'), '')
+  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('friendships', 'account_id'), '')
+  const [fromAccountId, setFromAccountId] = usePersistedState<string>(managementStateKey('friendships', 'from_account_id'), '')
   const [targetAccountId, setTargetAccountId] = useState('')
   const [friendIdInput, setFriendIdInput] = useState('')
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const queryString = useMemo(
     () =>
@@ -2239,7 +2468,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         }
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-friendships'] })
     }
   })
@@ -2255,7 +2484,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         }
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-friendships'] })
     }
   })
@@ -2263,7 +2492,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   const cancelMutation = useMutation({
     mutationFn: (requestId: number) => requestJson<{ ok: boolean; message: string }>(`/api/react/management/friendships/${requestId}/cancel`, { method: 'POST', body: {} }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-friendships'] })
     }
   })
@@ -2310,6 +2539,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         <Button type="button" size="sm" onClick={() => addMutation.mutate()}>{tr(t, 'btn_create_add_request', 'Create Add Request')}</Button>
         <Button type="button" size="sm" variant="outline" onClick={() => deleteMutation.mutate(undefined)}>{tr(t, 'btn_create_delete_request', 'Create Delete Request')}</Button>
       </div>
+      <InlineNotice notice={notice} />
       <ListQueryControls
         sortBy={sortBy}
         sortOrder={sortOrder}
@@ -2464,13 +2694,14 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
 }
 function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
-  const [sortBy, setSortBy] = useState('created_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [q, setQ] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [status, setStatus] = useState('')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('exchange-cards', 'page'), 0)
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('exchange-cards', 'page_size'), 10)
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('exchange-cards', 'sort_by'), 'created_at')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('exchange-cards', 'sort_order'), 'desc')
+  const [q, setQ] = usePersistedState<string>(managementStateKey('exchange-cards', 'q'), '')
+  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('exchange-cards', 'account_id'), '')
+  const [status, setStatus] = usePersistedState<string>(managementStateKey('exchange-cards', 'status'), '')
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const queryString = useMemo(
     () =>
@@ -2494,7 +2725,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   const cancelMutation = useMutation({
     mutationFn: (requestId: number) => requestJson<{ ok: boolean; message: string }>(`/api/react/management/exchange-cards/${requestId}/cancel`, { method: 'POST', body: {} }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-exchange-cards'] })
     }
   })
@@ -2512,6 +2743,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
+      <InlineNotice notice={notice} />
       <ListQueryControls
         sortBy={sortBy}
         sortOrder={sortOrder}
@@ -2599,31 +2831,32 @@ function NotificationsSection({
   assets: CardImageAssets
 }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(10)
-  const [sortBy, setSortBy] = useState('created_at')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [scene, setScene] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [isRead, setIsRead] = useState('')
-  const [q, setQ] = useState('')
+  const [page, setPage] = usePersistedState<number>(managementStateKey('notifications', 'page'), 0)
+  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('notifications', 'page_size'), 10)
+  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('notifications', 'sort_by'), 'created_at')
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('notifications', 'sort_order'), 'desc')
+  const [scene, setScene] = usePersistedState<string>(managementStateKey('notifications', 'scene'), '')
+  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('notifications', 'account_id'), '')
+  const [isRead, setIsRead] = usePersistedState<string>(managementStateKey('notifications', 'is_read'), '')
+  const [q, setQ] = usePersistedState<string>(managementStateKey('notifications', 'q'), '')
   const [configState, setConfigState] = useState<
     Record<string, { enabled: boolean; enabledWebhook: boolean; extraConfig: Record<string, unknown> }>
   >({})
   const [cardPickerOpen, setCardPickerOpen] = useState(false)
-  const [cardPickerScene, setCardPickerScene] = useState('rare_card_obtained')
-  const [cardPickerQ, setCardPickerQ] = useState('')
-  const [cardPickerRarity, setCardPickerRarity] = useState('')
-  const [cardPickerSetCode, setCardPickerSetCode] = useState('')
-  const [cardPickerPackName, setCardPickerPackName] = useState('')
-  const [cardPickerSortBy, setCardPickerSortBy] = useState('id')
-  const [cardPickerSortOrder, setCardPickerSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [cardPickerPage, setCardPickerPage] = useState(0)
-  const [cardPickerPageSize, setCardPickerPageSize] = useState(24)
+  const [cardPickerScene, setCardPickerScene] = usePersistedState<string>(managementStateKey('notifications', 'picker_scene'), 'rare_card_obtained')
+  const [cardPickerQ, setCardPickerQ] = usePersistedState<string>(managementStateKey('notifications', 'picker_q'), '')
+  const [cardPickerRarity, setCardPickerRarity] = usePersistedState<string>(managementStateKey('notifications', 'picker_rarity'), '')
+  const [cardPickerSetCode, setCardPickerSetCode] = usePersistedState<string>(managementStateKey('notifications', 'picker_set_code'), '')
+  const [cardPickerPackName, setCardPickerPackName] = usePersistedState<string>(managementStateKey('notifications', 'picker_pack_name'), '')
+  const [cardPickerSortBy, setCardPickerSortBy] = usePersistedState<string>(managementStateKey('notifications', 'picker_sort_by'), 'id')
+  const [cardPickerSortOrder, setCardPickerSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('notifications', 'picker_sort_order'), 'asc')
+  const [cardPickerPage, setCardPickerPage] = usePersistedState<number>(managementStateKey('notifications', 'picker_page'), 0)
+  const [cardPickerPageSize, setCardPickerPageSize] = usePersistedState<number>(managementStateKey('notifications', 'picker_page_size'), 24)
   const [cardPickerSelectedIds, setCardPickerSelectedIds] = useState<number[]>([])
   const [cardPickerCardsAccum, setCardPickerCardsAccum] = useState<Record<string, unknown>[]>([])
   const cardPickerGridRef = useRef<HTMLDivElement | null>(null)
   const [selectedCardNameMap, setSelectedCardNameMap] = useState<Record<number, string>>({})
+  const [notice, setNotice] = useState<InlineNoticeState | null>(null)
 
   const queryString = useMemo(
     () =>
@@ -2722,7 +2955,7 @@ function NotificationsSection({
       }
     }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-notifications'] })
     }
   })
@@ -2739,7 +2972,7 @@ function NotificationsSection({
         }
       }),
     onSuccess: (result) => {
-      alert(result.message)
+      setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       queryClient.invalidateQueries({ queryKey: ['management-notifications'] })
     }
   })
@@ -2760,7 +2993,7 @@ function NotificationsSection({
           page_size: pageSize
         }
       }),
-    onSuccess: (result) => alert(result.message)
+    onSuccess: (result) => setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
   })
 
   const notifications = useMemo(
@@ -3016,52 +3249,89 @@ function NotificationsSection({
 
   return (
     <section className="surface-card section-stack">
-      <div className="pagination-row">
-        <div className="section-title">{tr(t, 'notification_center', 'Notifications')}</div>
-        <div className="filter-row">
-          <select className="field-select" value={scene} onChange={(event) => setScene(event.target.value)}>
-            <option value="">{tr(t, 'label_all_scenes', 'All Scenes')}</option>
-            {sceneOptions.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
-          <input className="field-input" value={accountId} onChange={(event) => setAccountId(event.target.value)} placeholder={tr(t, 'account_id', 'Account ID')} />
-          <select className="field-select" value={isRead} onChange={(event) => setIsRead(event.target.value)}>
-            <option value="">{tr(t, 'label_all_status', 'All Status')}</option>
-            <option value="false">{tr(t, 'label_unread', 'Unread')}</option>
-            <option value="true">{tr(t, 'label_read', 'Read')}</option>
-          </select>
-          <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'notification_search_placeholder', 'Search title/content/account')} />
-          <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
+      <div className="section-title">{tr(t, 'notification_center', 'Notifications')}</div>
+
+      <div className="table-toolbar-layout table-toolbar--dense notification-toolbar-react">
+        <div className="table-toolbar-zone table-toolbar-zone--left notification-toolbar-react-left">
+          <div className="table-filter-item">
+            <label className="section-subtitle">{tr(t, 'col_scene', 'Scene')}</label>
+            <select className="field-select table-control" value={scene} onChange={(event) => setScene(event.target.value)}>
+              <option value="">{tr(t, 'label_all_scenes', 'All Scenes')}</option>
+              {sceneOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="table-filter-item">
+            <label className="section-subtitle">{tr(t, 'col_account_id', 'Account ID')}</label>
+            <input
+              className="field-input table-control"
+              value={accountId}
+              onChange={(event) => setAccountId(event.target.value)}
+              placeholder={tr(t, 'account_id', 'Account ID')}
+            />
+          </div>
+
+          <div className="table-filter-item">
+            <label className="section-subtitle">{tr(t, 'col_status', 'Status')}</label>
+            <select className="field-select table-control" value={isRead} onChange={(event) => setIsRead(event.target.value)}>
+              <option value="">{tr(t, 'label_all_status', 'All Status')}</option>
+              <option value="false">{tr(t, 'label_unread', 'Unread')}</option>
+              <option value="true">{tr(t, 'label_read', 'Read')}</option>
+            </select>
+          </div>
+
+          <div className="table-filter-item notification-filter-item--search">
+            <label className="section-subtitle">{tr(t, 'label_search', 'Search')}</label>
+            <input
+              className="field-input table-control"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder={tr(t, 'notification_search_placeholder', 'Search title/content/account')}
+            />
+          </div>
         </div>
-        <div className="filter-row">
-          <ListQueryControls
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            pageSize={pageSize}
-            sortOptions={[
-              { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
-              { value: 'title', labelKey: 'col_title', fallback: 'Title' },
-              { value: 'scene', labelKey: 'col_scene', fallback: 'Scene' }
-            ]}
-            onSortByChange={(value) => {
-              setPage(0)
-              setSortBy(value)
-            }}
-            onSortOrderChange={(value) => {
-              setPage(0)
-              setSortOrder(value)
-            }}
-            onPageSizeChange={(value) => {
-              setPage(0)
-              setPageSize(value)
-            }}
-            t={t}
-          />
-          <Button type="button" size="sm" onClick={() => markAllMutation.mutate()}>{tr(t, 'mark_all_read', tr(t, 'btn_mark_all_read', 'Mark All Read'))}</Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => testWebhookMutation.mutate(null)}>{tr(t, 'btn_test_webhook', 'Test Webhook')}</Button>
+
+        <div className="table-toolbar-zone table-toolbar-zone--right notification-toolbar-react-right">
+          <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>
+            {tr(t, 'label_search', 'Search')}
+          </Button>
+          <Button type="button" size="sm" onClick={() => markAllMutation.mutate()}>
+            {tr(t, 'mark_all_read', tr(t, 'btn_mark_all_read', 'Mark All Read'))}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => testWebhookMutation.mutate(null)}>
+            {tr(t, 'btn_test_webhook', 'Test Webhook')}
+          </Button>
         </div>
       </div>
+
+      <ListQueryControls
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        pageSize={pageSize}
+        sortOptions={[
+          { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+          { value: 'title', labelKey: 'col_title', fallback: 'Title' },
+          { value: 'scene', labelKey: 'col_scene', fallback: 'Scene' }
+        ]}
+        onSortByChange={(value) => {
+          setPage(0)
+          setSortBy(value)
+        }}
+        onSortOrderChange={(value) => {
+          setPage(0)
+          setSortOrder(value)
+        }}
+        onPageSizeChange={(value) => {
+          setPage(0)
+          setPageSize(value)
+        }}
+        t={t}
+      />
+      <InlineNotice notice={notice} />
 
       <div className="section-subtitle">{tr(t, 'page_notification_config', 'Notification Config')}</div>
       <div className="form-grid">
@@ -3611,30 +3881,41 @@ function ManagementSectionRouter({
 }
 
 export function ManagementPage({ lang, t, assets }: ManagementPageProps) {
-  return (
-    <section className="section-stack">
-      <div className="surface-card tab-nav">
-        {sections.map((section) => (
-          <NavLink key={section.key} to={`/management/${section.key}`}>
-            {({ isActive }) => (
-              <Button variant={isActive ? 'default' : 'outline'} size="sm" type="button">
-                {t[section.labelKey] ?? section.fallback}
-              </Button>
-            )}
-          </NavLink>
-        ))}
-      </div>
+  usePersistedSearchParams()
 
-      <Routes>
-        <Route path="/" element={<Navigate to="/management/accounts" replace />} />
-        {sections.map((section) => (
-          <Route
-            key={section.key}
-            path={section.key}
-            element={<ManagementSectionRouter lang={lang} sectionKey={section.key} t={t} assets={assets} />}
-          />
-        ))}
-      </Routes>
+  return (
+    <section className="management-shell">
+      <aside className="surface-card management-sidebar">
+        <nav className="management-sidebar-nav">
+          {sections.map((section) => (
+            <NavLink key={section.key} to={`/management/${section.key}`}>
+              {({ isActive }) => (
+                <Button
+                  variant={isActive ? 'default' : 'outline'}
+                  size="sm"
+                  type="button"
+                  className="management-side-btn"
+                >
+                  {t[section.labelKey] ?? section.fallback}
+                </Button>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="management-main section-stack">
+        <Routes>
+          <Route path="/" element={<Navigate to="/management/accounts" replace />} />
+          {sections.map((section) => (
+            <Route
+              key={section.key}
+              path={section.key}
+              element={<ManagementSectionRouter lang={lang} sectionKey={section.key} t={t} assets={assets} />}
+            />
+          ))}
+        </Routes>
+      </div>
     </section>
   )
 }
