@@ -11,8 +11,7 @@ from sqlmodel import Session, col, select
 from ptcgp_auto_v2.db.models import AccountFriendRequest, AccountFriendship
 from ptcgp_auto_v2.web.queries._query_helpers import (
     apply_sort,
-    fetch_page_rows_with_total,
-    normalize_pagination,
+    fetch_rows_with_optional_pagination,
     normalize_sort_params,
     resolve_sort_column,
 )
@@ -124,66 +123,6 @@ def _build_friendships_statement(
     )
 
 
-def list_friend_requests_page(
-    session: Session,
-    account_id: int | None = None,
-    q: str = "",
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
-    page: int = 0,
-    page_size: int = 10,
-) -> tuple[list[AccountFriendRequest], int]:
-    """按条件查询好友请求（固定返回分页 tuple 协议）。"""
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    statement = _build_friend_requests_statement(
-        account_id=account_id,
-        q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
-    rows, total = fetch_page_rows_with_total(
-        session=session,
-        statement=statement,
-        page=normalized_page,
-        page_size=normalized_page_size,
-    )
-    return rows, total
-
-
-def list_friendships_page(
-    session: Session,
-    account_id: int | None = None,
-    q: str = "",
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
-    page: int = 0,
-    page_size: int = 10,
-) -> tuple[list[AccountFriendship], int]:
-    """按条件查询好友关系（固定返回分页 tuple 协议）。"""
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    statement = _build_friendships_statement(
-        account_id=account_id,
-        q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
-    rows, total = fetch_page_rows_with_total(
-        session=session,
-        statement=statement,
-        page=normalized_page,
-        page_size=normalized_page_size,
-    )
-    return rows, total
-
-
 def list_friend_requests(
     session: Session,
     account_id: int | None = None,
@@ -202,21 +141,14 @@ def list_friend_requests(
         sort_order=sort_order,
     )
 
-    if page is None or page_size is None:
-        return list(session.exec(statement.limit(limit)).all())
-
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    rows, total = fetch_page_rows_with_total(
+    return fetch_rows_with_optional_pagination(
         session=session,
         statement=statement,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        page=page,
+        page_size=page_size,
+        full_limit=limit,
+        max_page_size=100,
     )
-    return rows, total
 
 
 def list_friendships(
@@ -237,18 +169,11 @@ def list_friendships(
         sort_order=sort_order,
     )
 
-    if page is None or page_size is None:
-        return list(session.exec(statement.limit(limit)).all())
-
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    rows, total = fetch_page_rows_with_total(
+    return fetch_rows_with_optional_pagination(
         session=session,
         statement=statement,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        page=page,
+        page_size=page_size,
+        full_limit=limit,
+        max_page_size=100,
     )
-    return rows, total

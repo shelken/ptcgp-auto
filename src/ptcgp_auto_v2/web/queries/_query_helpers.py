@@ -99,6 +99,34 @@ def fetch_page_rows_with_total(
     return rows, total
 
 
+def fetch_rows_with_optional_pagination(
+    *,
+    session: Session,
+    statement: Any,
+    page: int | None,
+    page_size: int | None,
+    full_limit: int | None = None,
+    max_page_size: int = 100,
+) -> tuple[list[Any], int] | list[Any]:
+    """按是否传入分页参数返回全量或分页结果。"""
+    if page is None or page_size is None:
+        if full_limit is None:
+            return list(session.exec(statement).all())
+        return list(session.exec(statement.limit(full_limit)).all())
+
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=max_page_size,
+    )
+    return fetch_page_rows_with_total(
+        session=session,
+        statement=statement,
+        page=normalized_page,
+        page_size=normalized_page_size,
+    )
+
+
 def fetch_window_rows(
     *,
     session: Session,
