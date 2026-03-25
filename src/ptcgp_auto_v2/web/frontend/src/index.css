@@ -89,6 +89,72 @@
   --font-heading: 'Quicksand', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
 }
 
+:root[data-theme='clay_vibrant'] {
+  --clay-border-width: 3px;
+  --clay-radius-lg: 20px;
+  --clay-radius-md: 16px;
+  --clay-motion-fast: 180ms;
+  --clay-motion-base: 220ms;
+  --clay-motion-slow: 280ms;
+  --font-ui: 'Nunito', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
+  --font-heading: 'Fredoka', 'Nunito', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
+  --font-mono: 'Fira Code', 'Space Mono', 'JetBrains Mono', 'SFMono-Regular', monospace;
+}
+
+:root[data-theme='clay_vibrant'][data-theme-scheme='light'] {
+  --bg: #F4EFFF;
+  --paper: #FFFFFF;
+  --paper-soft: #EFE5FF;
+  --ink: #22184A;
+  --muted: #5F5284;
+  --line: #3F2F78;
+  --brand: #7C3AED;
+  --brand-ink: #FFFFFF;
+  --accent: #FF8A1E;
+  --danger: #D72652;
+  --shadow: 0 8px 0 rgba(63, 47, 120, 0.94), 0 18px 28px rgba(66, 27, 146, 0.2);
+  --clay-shadow-inner-top: rgba(255, 255, 255, 0.8);
+  --clay-shadow-inner-bottom: rgba(124, 58, 237, 0.14);
+  --clay-control-bg: var(--paper);
+  --clay-control-bg-hover: color-mix(in srgb, var(--brand) 14%, var(--paper-soft));
+  --clay-control-shadow: 0 6px 0 rgba(63, 47, 120, 0.82), 0 14px 20px rgba(66, 27, 146, 0.16),
+    inset 0 2px 0 rgba(255, 255, 255, 0.82), inset 0 -4px 0 rgba(124, 58, 237, 0.12);
+  --clay-header-bg: var(--line);
+  --clay-header-ink: #FFFFFF;
+  --clay-bg-orb-1: rgba(124, 58, 237, 0.18);
+  --clay-bg-orb-2: rgba(255, 138, 30, 0.22);
+  --clay-bg-grad-start: #F4EFFF;
+  --clay-bg-grad-mid: #EAF2FF;
+  --clay-bg-grad-end: #FDF3FF;
+}
+
+:root[data-theme='clay_vibrant'][data-theme-scheme='dark'] {
+  --bg: #0F0F23;
+  --paper: #191933;
+  --paper-soft: #23234A;
+  --ink: #E7E9FF;
+  --muted: #A9ADD6;
+  --line: #B3A5FF;
+  --brand: #A78BFA;
+  --brand-ink: #0F0F23;
+  --accent: #FF4D8D;
+  --danger: #FF6B7A;
+  --shadow: 0 8px 0 rgba(12, 12, 34, 0.95), 0 18px 28px rgba(8, 8, 23, 0.46);
+  --clay-shadow-inner-top: rgba(255, 255, 255, 0.2);
+  --clay-shadow-inner-bottom: rgba(15, 15, 35, 0.64);
+  --clay-control-bg: var(--paper-soft);
+  --clay-control-bg-hover: color-mix(in srgb, var(--accent) 18%, var(--paper-soft));
+  --clay-control-shadow: 0 6px 0 rgba(12, 12, 34, 0.88), 0 14px 20px rgba(8, 8, 23, 0.48),
+    inset 0 2px 0 rgba(255, 255, 255, 0.2), inset 0 -4px 0 rgba(10, 10, 26, 0.72);
+  --clay-header-bg: var(--brand);
+  --clay-header-ink: var(--brand-ink);
+  --clay-bg-orb-1: rgba(167, 139, 250, 0.16);
+  --clay-bg-orb-2: rgba(255, 77, 141, 0.18);
+  --clay-bg-grad-start: #0F0F23;
+  --clay-bg-grad-mid: #161636;
+  --clay-bg-grad-end: #23234A;
+}
+
 :root[data-theme='retro'] {
   --bg: #10121a;
   --paper: #171b27;
@@ -133,6 +199,108 @@
 
 * {
   box-sizing: border-box;
+}
+
+:root[data-theme='clay_vibrant'] body {
+  background:
+    radial-gradient(circle at 10% 10%, var(--clay-bg-orb-1) 0, rgba(0, 0, 0, 0) 45%),
+    radial-gradient(circle at 92% 16%, var(--clay-bg-orb-2) 0, rgba(0, 0, 0, 0) 44%),
+    linear-gradient(155deg, var(--clay-bg-grad-start) 0%, var(--clay-bg-grad-mid) 58%, var(--clay-bg-grad-end) 100%);
+  background-attachment: fixed;
+}
+
+:root[data-theme='clay_vibrant'] .surface-card {
+  border-width: var(--clay-border-width);
+  border-radius: var(--clay-radius-lg);
+  box-shadow:
+    var(--shadow),
+    inset 0 2px 0 var(--clay-shadow-inner-top),
+    inset 0 -7px 0 var(--clay-shadow-inner-bottom);
+  transition:
+    transform var(--clay-motion-base) ease,
+    box-shadow var(--clay-motion-base) ease,
+    background-color var(--clay-motion-base) ease,
+    border-color var(--clay-motion-base) ease;
+}
+
+:root[data-theme='clay_vibrant'] .icon-button,
+:root[data-theme='clay_vibrant'] .theme-mode-pill,
+:root[data-theme='clay_vibrant'] .field-input,
+:root[data-theme='clay_vibrant'] .field-select,
+:root[data-theme='clay_vibrant'] .field-textarea,
+:root[data-theme='clay_vibrant'] .metadata-node-btn {
+  border-width: var(--clay-border-width);
+  border-radius: var(--clay-radius-md);
+  background: var(--clay-control-bg);
+  box-shadow: var(--clay-control-shadow);
+  transition:
+    transform var(--clay-motion-fast) ease,
+    box-shadow var(--clay-motion-fast) ease,
+    background-color var(--clay-motion-base) ease,
+    color var(--clay-motion-fast) ease;
+}
+
+:root[data-theme='clay_vibrant'] .icon-button:hover,
+:root[data-theme='clay_vibrant'] .theme-mode-pill:hover,
+:root[data-theme='clay_vibrant'] .metadata-node-btn:hover {
+  background: var(--clay-control-bg-hover);
+  transform: translateY(-1px);
+}
+
+:root[data-theme='clay_vibrant'] .grid-table th {
+  border-width: var(--clay-border-width);
+  background: var(--clay-header-bg);
+  color: var(--clay-header-ink);
+  box-shadow:
+    inset 0 2px 0 var(--clay-shadow-inner-top),
+    inset 0 -4px 0 color-mix(in srgb, var(--clay-header-bg) 72%, #000);
+  transition:
+    background-color var(--clay-motion-base) ease,
+    color var(--clay-motion-base) ease;
+}
+
+:root[data-theme='clay_vibrant'] .table-wrap {
+  border-width: var(--clay-border-width);
+}
+
+:root[data-theme='clay_vibrant'] .theme-mode-pill.is-active,
+:root[data-theme='clay_vibrant'] .icon-button.is-active {
+  background: var(--brand);
+  color: var(--brand-ink);
+  box-shadow:
+    0 8px 0 color-mix(in srgb, var(--line) 88%, #000),
+    0 16px 24px color-mix(in srgb, var(--brand) 34%, transparent),
+    inset 0 2px 0 color-mix(in srgb, var(--brand-ink) 30%, transparent);
+}
+
+:root[data-theme='clay_vibrant'] .icon-button:focus-visible,
+:root[data-theme='clay_vibrant'] .theme-mode-pill:focus-visible,
+:root[data-theme='clay_vibrant'] .field-input:focus-visible,
+:root[data-theme='clay_vibrant'] .field-select:focus-visible,
+:root[data-theme='clay_vibrant'] .field-textarea:focus-visible,
+:root[data-theme='clay_vibrant'] .metadata-node-btn:focus-visible {
+  outline: var(--clay-border-width) solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme='clay_vibrant'] .surface-card,
+  :root[data-theme='clay_vibrant'] .icon-button,
+  :root[data-theme='clay_vibrant'] .theme-mode-pill,
+  :root[data-theme='clay_vibrant'] .field-input,
+  :root[data-theme='clay_vibrant'] .field-select,
+  :root[data-theme='clay_vibrant'] .field-textarea,
+  :root[data-theme='clay_vibrant'] .metadata-node-btn,
+  :root[data-theme='clay_vibrant'] .grid-table th {
+    transition: none;
+    animation: none;
+  }
+
+  :root[data-theme='clay_vibrant'] .icon-button:hover,
+  :root[data-theme='clay_vibrant'] .theme-mode-pill:hover,
+  :root[data-theme='clay_vibrant'] .metadata-node-btn:hover {
+    transform: none;
+  }
 }
 
 body {
