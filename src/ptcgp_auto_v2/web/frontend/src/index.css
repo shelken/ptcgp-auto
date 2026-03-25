@@ -1262,7 +1262,17 @@ body {
 }
 
 .plan-editor-dialog {
-  width: min(960px, 100%);
+  --dialog-card-width: var(--dialog-width-lg);
+  --dialog-card-max-height: var(--dialog-max-height-lg);
+}
+
+.dialog-card.account-plan-assoc-dialog {
+  --dialog-card-width: var(--dialog-width-md);
+  --dialog-card-max-height: min(82vh, 720px);
+}
+
+.account-plan-assoc-dialog .plan-assoc-list {
+  max-height: min(48vh, 430px);
 }
 
 .plan-editor-task-list,
@@ -1279,15 +1289,64 @@ body {
   padding: 0.5rem;
 }
 
-.plan-editor-task-row,
-.plan-assoc-main {
+.plan-editor-task-item {
+  cursor: grab;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background-color 0.14s ease;
+}
+
+.plan-editor-task-item:active {
+  cursor: grabbing;
+}
+
+.plan-editor-task-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+}
+
+.plan-editor-task-item input,
+.plan-editor-task-item textarea,
+.plan-editor-task-item select,
+.plan-editor-task-item button,
+.plan-editor-task-item .field-input,
+.plan-editor-task-item .field-textarea,
+.plan-editor-task-item .field-select,
+.plan-editor-task-item .select-trigger,
+.plan-editor-task-item .searchable-select {
+  cursor: auto;
+}
+
+.plan-editor-task-item input[type='checkbox'],
+.plan-editor-task-item button,
+.plan-editor-task-item .select-trigger {
+  cursor: pointer;
+}
+
+.plan-assoc-item {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.45rem;
 }
 
-.plan-editor-task-main,
+.plan-editor-task-row {
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
 .plan-assoc-main {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.plan-editor-task-main {
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -1304,25 +1363,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-}
-
-.plan-editor-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.95rem;
-  min-height: 1.95rem;
-  border: 2px dashed var(--line);
-  background: var(--paper);
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1;
-  cursor: grab;
-  user-select: none;
-}
-
-.plan-editor-drag-handle:active {
-  cursor: grabbing;
+  flex: 0 0 auto;
 }
 
 .plan-editor-task-item.is-drag-over {
@@ -1518,9 +1559,22 @@ body {
   z-index: 50;
 }
 
+:root {
+  --dialog-width-sm: 540px;
+  --dialog-width-md: 760px;
+  --dialog-width-lg: 920px;
+  --dialog-width-xl: 1120px;
+  --dialog-max-height-sm: 82vh;
+  --dialog-max-height-md: 86vh;
+  --dialog-max-height-lg: 90vh;
+  --dialog-max-height-xl: 92vh;
+}
+
 .dialog-card {
-  width: min(840px, 100%);
-  max-height: 88vh;
+  --dialog-card-width: var(--dialog-width-md);
+  --dialog-card-max-height: var(--dialog-max-height-md);
+  width: min(var(--dialog-card-width), 100%);
+  max-height: var(--dialog-card-max-height);
   overflow: auto;
   border: 2px solid var(--line);
   background: var(--paper);
@@ -1528,13 +1582,34 @@ body {
   padding: 0.85rem;
 }
 
+.dialog-card--sm {
+  --dialog-card-width: var(--dialog-width-sm);
+  --dialog-card-max-height: var(--dialog-max-height-sm);
+}
+
+.dialog-card--md {
+  --dialog-card-width: var(--dialog-width-md);
+  --dialog-card-max-height: var(--dialog-max-height-md);
+}
+
+.dialog-card--lg {
+  --dialog-card-width: var(--dialog-width-lg);
+  --dialog-card-max-height: var(--dialog-max-height-lg);
+}
+
+.dialog-card--xl {
+  --dialog-card-width: var(--dialog-width-xl);
+  --dialog-card-max-height: var(--dialog-max-height-xl);
+}
+
 .notification-picker-dialog {
-  width: min(1080px, 100%);
+  --dialog-card-width: var(--dialog-width-xl);
+  --dialog-card-max-height: var(--dialog-max-height-xl);
 }
 
 .notification-picker-grid {
   --owned-grid-cols: 6;
-  max-height: 56vh;
+  max-height: min(64vh, calc(var(--dialog-card-max-height) - 13rem));
   overflow: auto;
   padding-right: 0.2rem;
 }
@@ -1815,10 +1890,14 @@ body {
   }
 
   .plan-editor-task-row,
-  .plan-assoc-main,
   .plan-editor-config-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .plan-assoc-item {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .plan-editor-task-actions,
