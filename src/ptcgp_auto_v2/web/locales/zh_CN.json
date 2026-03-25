@@ -464,6 +464,7 @@
   "task_wonder_pick": "得卡挑战",
   "text_select_sidebar": "请从左侧选择一项",
   "theme_group_dark": "暗色主题",
+  "theme_group_dual": "双色主题",
   "theme_group_light": "亮色主题",
   "theme_label": "主题",
   "theme_mode_auto": "自动",
@@ -474,6 +475,7 @@
   "themes": {
     "art_deco": "艺术装饰",
     "brutalist": "野兽派 (默认)",
+    "clay_vibrant": "黏土活力块状",
     "editorial": "杂志排版",
     "luxury": "奢华精致",
     "organic": "有机自然",
