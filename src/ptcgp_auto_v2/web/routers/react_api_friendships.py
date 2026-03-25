@@ -8,14 +8,16 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.models import Account
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.friendship_service import (
     build_friendship_context,
     cancel_pending_request,
     create_add_request,
     create_delete_request,
 )
-from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
@@ -35,6 +37,10 @@ async def get_management_friendships(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取好友管理页面数据。"""
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+    )
     context = build_friendship_context(
         session=session,
         account_id=parse_optional_int(account_id),
@@ -42,8 +48,8 @@ async def get_management_friendships(
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
-        page=normalize_page(page),
-        page_size=normalize_page_size(page_size),
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     return json_response(context)
 

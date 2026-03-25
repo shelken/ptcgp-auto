@@ -11,13 +11,32 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
 from ptcgp_auto_v2.db.models import Account, AccountPackPoint, AccountStat
-from ptcgp_auto_v2.web.queries._query_helpers import count_rows, fetch_page_rows
+from ptcgp_auto_v2.web.queries._query_helpers import (
+    count_rows,
+    fetch_page_rows,
+    normalize_sort_params,
+    resolve_sort_column,
+)
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page,
     normalize_page_size,
     normalize_query_text,
-    normalize_sort_order,
 )
+
+ACCOUNT_RESOURCE_SORT_FIELDS = {
+    "id": Account.id,
+    "nickname": func.lower(Account.nickname),
+    "friend_id": func.lower(Account.friend_id),
+    "exchange_points": AccountStat.exchange_points,
+    "pack_hourglass_count": AccountStat.pack_hourglass_count,
+}
+ACCOUNT_RESOURCE_SORT_KEYS = {**ACCOUNT_RESOURCE_SORT_FIELDS, "updated_at": "updated_at"}
+
+PACK_POINT_SORT_FIELDS = {
+    "id": Account.id,
+    "nickname": func.lower(Account.nickname),
+    "friend_id": func.lower(Account.friend_id),
+}
 
 
 def _apply_account_search(statement, normalized_q: str):
@@ -81,7 +100,12 @@ def list_account_resources(
 ) -> tuple[list[dict[str, Any]], int]:
     """分页查询账号资源列表。"""
     normalized_q = normalize_query_text(q)
-    normalized_sort_order = normalize_sort_order(sort_order)
+    normalized_sort_by, normalized_sort_order = normalize_sort_params(
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields=ACCOUNT_RESOURCE_SORT_KEYS,
+        default_field="id",
+    )
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
 
@@ -101,15 +125,13 @@ def list_account_resources(
     )
     statement = _apply_account_search(statement, normalized_q)
 
-    allowed_sort_columns = {
-        "id": Account.id,
-        "nickname": func.lower(Account.nickname),
-        "friend_id": func.lower(Account.friend_id),
-        "exchange_points": AccountStat.exchange_points,
-        "pack_hourglass_count": AccountStat.pack_hourglass_count,
-        "updated_at": resource_updated_at,
-    }
-    sort_column = allowed_sort_columns.get(sort_by, Account.id)
+    sort_column = resolve_sort_column(
+        sort_by=normalized_sort_by,
+        fields=ACCOUNT_RESOURCE_SORT_FIELDS,
+        default_field="id",
+    )
+    if normalized_sort_by == "updated_at":
+        sort_column = resource_updated_at
     statement = _apply_nulls_last_order(
         statement=statement,
         sort_column=sort_column,
@@ -171,7 +193,12 @@ def list_pack_point_resources(
 ) -> dict[str, Any]:
     """分页查询账号包点数资源列表。"""
     normalized_q = normalize_query_text(q)
-    normalized_sort_order = normalize_sort_order(sort_order)
+    normalized_sort_by, normalized_sort_order = normalize_sort_params(
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields=PACK_POINT_SORT_FIELDS,
+        default_field="id",
+    )
     normalized_page = normalize_page(page)
     normalized_page_size = normalize_page_size(page_size)
 
@@ -205,12 +232,11 @@ def list_pack_point_resources(
             tie_breaker=Account.id,
         )
     else:
-        allowed_sort_columns = {
-            "id": Account.id,
-            "nickname": func.lower(Account.nickname),
-            "friend_id": func.lower(Account.friend_id),
-        }
-        sort_column = allowed_sort_columns.get(sort_by, Account.id)
+        sort_column = resolve_sort_column(
+            sort_by=normalized_sort_by,
+            fields=PACK_POINT_SORT_FIELDS,
+            default_field="id",
+        )
         base_statement = _apply_nulls_last_order(
             statement=base_statement,
             sort_column=sort_column,

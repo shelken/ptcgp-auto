@@ -7,9 +7,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.record_service import build_records_list_context
-from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 
 
 router = APIRouter()
@@ -24,10 +26,14 @@ async def get_records(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取开包记录数据。"""
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+    )
     context = build_records_list_context(
         session=session,
-        page=normalize_page(page),
-        page_size=normalize_page_size(page_size),
+        page=normalized_page,
+        page_size=normalized_page_size,
         rarity=[item for item in rarity if item],
         card_type=[item for item in card_type if item],
     )

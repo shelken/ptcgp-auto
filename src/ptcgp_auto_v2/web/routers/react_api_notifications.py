@@ -10,6 +10,7 @@ from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.infra.notifier import get_notifier
 from ptcgp_auto_v2.web.routers.react_api_common import (
     json_response,
+    normalize_pagination_params,
     parse_bool_flag,
     parse_unique_int_ids,
 )
@@ -27,7 +28,6 @@ from ptcgp_auto_v2.web.services.notification_service import (
     normalize_scene,
     update_notification_config,
 )
-from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
@@ -48,11 +48,16 @@ async def get_notifications_panel(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取顶部通知抽屉数据。"""
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+        max_size=50,
+    )
     return json_response(
         build_notification_panel_context(
             session=session,
-            page=normalize_page(page),
-            page_size=normalize_page_size(page_size, max_size=50),
+            page=normalized_page,
+            page_size=normalized_page_size,
         )
     )
 
@@ -88,6 +93,10 @@ async def get_management_notifications(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取通知管理页面数据。"""
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+    )
     context = build_notifications_context(
         session=session,
         scene=normalize_scene(scene) or None,
@@ -96,8 +105,8 @@ async def get_management_notifications(
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
-        page=normalize_page(page),
-        page_size=normalize_page_size(page_size),
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     return json_response(context)
 
@@ -187,6 +196,11 @@ async def get_management_notification_card_picker(
 ):
     """获取通知配置卡牌选择器数据。"""
     selected_ids = parse_unique_int_ids(request.query_params.getlist("notify_card_ids"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=card_selector_page,
+        page_size=card_selector_page_size,
+        max_size=60,
+    )
     context = build_notification_card_selector_context(
         session=session,
         scene=normalize_scene(scene) or "rare_card_obtained",
@@ -197,8 +211,8 @@ async def get_management_notification_card_picker(
         pack_name=card_selector_pack_name,
         sort_by=card_selector_sort_by,
         sort_order=card_selector_sort_order,
-        page=normalize_page(card_selector_page),
-        page_size=normalize_page_size(card_selector_page_size, max_size=60),
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     return json_response(context)
 
@@ -218,7 +232,11 @@ async def post_notification_test_webhook(
     sort_order = str(body.get("sort_order") or "desc")
     page = parse_optional_int(body.get("page")) or 0
     page_size = parse_optional_int(body.get("page_size")) or 10
-    parsed_is_read = parse_bool_flag(str(body.get("is_read") or ""))
+    parsed_is_read = parse_bool_flag(body.get("is_read"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page,
+        page_size=page_size,
+    )
 
     _, t = get_current_i18n()
     notification = None
@@ -234,8 +252,8 @@ async def post_notification_test_webhook(
             q=q,
             sort_by=sort_by,
             sort_order=sort_order,
-            page=normalize_page(page),
-            page_size=normalize_page_size(page_size),
+            page=normalized_page,
+            page_size=normalized_page_size,
         )
         notifications = context.get("notifications") or []
         notification = notifications[0] if notifications else None
