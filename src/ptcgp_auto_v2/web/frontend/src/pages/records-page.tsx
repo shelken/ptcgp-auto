@@ -1,12 +1,15 @@
-import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
+import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson } from '@/lib/api'
+import { applyImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
+import { formatTime, parseSearchList, toggleListItem } from '@/lib/list-utils'
 import type { BootstrapOptions } from '@/types/api'
 
 interface RecordsPageProps {
@@ -75,32 +78,6 @@ interface PreviewState {
   cardNumber: number
 }
 
-// 预览卡牌回弹过渡：与 owned 页面保持一致
-const PREVIEW_REBOUND_TRANSITION = 'transform 360ms cubic-bezier(0.22, 1, 0.36, 1)'
-// 拖拽旋转角度上限，避免卡牌过度倾斜
-const PREVIEW_ROTATE_LIMIT = 45
-// 鼠标位移到旋转角度的转换系数
-const PREVIEW_ROTATE_STEP = 0.5
-
-function toggleItem(current: string[], value: string): string[] {
-  if (current.includes(value)) {
-    return current.filter((item) => item !== value)
-  }
-  return [...current, value]
-}
-
-function parseSearchList(params: URLSearchParams, key: string): string[] {
-  const values = params.getAll(key)
-  return values.map((item) => item.trim()).filter((item) => item.length > 0)
-}
-
-function formatTime(value: string) {
-  if (!value) {
-    return '-'
-  }
-  return value.replace('T', ' ').slice(0, 19)
-}
-
 function resolveLayoutByCount(cardCount: number): string {
   if (cardCount === 6) {
     return 'layout-6'
@@ -167,21 +144,7 @@ function RecordCardTile({
             className="record-card-image"
             loading="lazy"
             decoding="async"
-            onError={(event) => {
-              const image = event.currentTarget
-              if (image.dataset.webpTried === '1') {
-                image.src = urls.cdnPng
-                image.dataset.webpTried = '2'
-                return
-              }
-              if (image.dataset.webpTried === '2') {
-                image.src = urls.cdnWebp
-                image.dataset.webpTried = '3'
-                return
-              }
-              image.dataset.webpTried = '1'
-              image.src = urls.webp
-            }}
+            onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
           />
         ) : (
           <div className="record-card-fallback">{tr(t, 'no_image', 'No Image')}</div>
@@ -224,21 +187,7 @@ function BatchOverviewTile({
           className="record-card-image"
           loading="lazy"
           decoding="async"
-          onError={(event) => {
-            const image = event.currentTarget
-            if (image.dataset.webpTried === '1') {
-              image.src = urls.cdnPng
-              image.dataset.webpTried = '2'
-              return
-            }
-            if (image.dataset.webpTried === '2') {
-              image.src = urls.cdnWebp
-              image.dataset.webpTried = '3'
-              return
-            }
-            image.dataset.webpTried = '1'
-            image.src = urls.webp
-          }}
+          onError={(event) => applyImageFallback(event.currentTarget, [urls.webp, urls.cdnPng, urls.cdnWebp])}
         />
       ) : (
         <div className="record-batch-pack-fallback">{pack.max_rarity || '☆'}</div>
@@ -261,21 +210,16 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     return stored === 'list' ? 'list' : 'grid'
   })
   const [previewCard, setPreviewCard] = useState<PreviewState | null>(null)
-  const [previewDragging, setPreviewDragging] = useState(false)
   const [activeBatchPack, setActiveBatchPack] = useState<Record<string, number | null>>({})
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
-  const previewCardRef = useRef<HTMLDivElement | null>(null)
-  const previewShineRef = useRef<HTMLDivElement | null>(null)
-  const previewWindowListenersAttachedRef = useRef(false)
-  const stopPreviewDragRef = useRef<(withRebound?: boolean) => void>(() => {})
-  const previewDragStateRef = useRef({
-    dragging: false,
-    pointerId: -1,
-    lastX: 0,
-    lastY: 0,
-    rotateX: 0,
-    rotateY: 0
-  })
+  const {
+    cardRef: previewCardRef,
+    shineRef: previewShineRef,
+    dragging: previewDragging,
+    startDrag: startPreviewDrag,
+    stopDrag: stopPreviewDrag,
+    resetTransform: resetPreviewTransform
+  } = useCardPreviewDrag()
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -293,121 +237,6 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   useEffect(() => {
     window.localStorage.setItem(RECORDS_VIEW_MODE_KEY, viewMode)
   }, [viewMode])
-
-  const applyPreviewTransform = useCallback((x: number, y: number) => {
-    const cardEl = previewCardRef.current
-    if (cardEl) {
-      cardEl.style.transform = `rotateY(${y}deg) rotateX(${x}deg)`
-    }
-    const shineEl = previewShineRef.current
-    if (shineEl) {
-      shineEl.style.transform = `translateX(${-y * 1.4}px) translateY(${x * 1.4}px)`
-    }
-  }, [])
-
-  const setPreviewTransition = useCallback((animated: boolean) => {
-    const transitionValue = animated ? PREVIEW_REBOUND_TRANSITION : 'none'
-    const cardEl = previewCardRef.current
-    if (cardEl) {
-      cardEl.style.transition = transitionValue
-    }
-    const shineEl = previewShineRef.current
-    if (shineEl) {
-      shineEl.style.transition = transitionValue
-    }
-  }, [])
-
-  const resetPreviewTransform = useCallback((animated = false) => {
-    const state = previewDragStateRef.current
-    state.rotateX = 0
-    state.rotateY = 0
-    setPreviewTransition(animated)
-    applyPreviewTransform(0, 0)
-  }, [applyPreviewTransform, setPreviewTransition])
-
-  const onPreviewPointerMove = useCallback(
-    (event: PointerEvent) => {
-      const state = previewDragStateRef.current
-      if (!state.dragging) {
-        return
-      }
-      if (state.pointerId !== -1 && event.pointerId !== state.pointerId) {
-        return
-      }
-      if (event.cancelable) {
-        event.preventDefault()
-      }
-      const deltaX = event.clientX - state.lastX
-      const deltaY = event.clientY - state.lastY
-      state.lastX = event.clientX
-      state.lastY = event.clientY
-      state.rotateX = Math.max(-PREVIEW_ROTATE_LIMIT, Math.min(PREVIEW_ROTATE_LIMIT, state.rotateX - deltaY * PREVIEW_ROTATE_STEP))
-      state.rotateY = Math.max(-PREVIEW_ROTATE_LIMIT, Math.min(PREVIEW_ROTATE_LIMIT, state.rotateY + deltaX * PREVIEW_ROTATE_STEP))
-      applyPreviewTransform(state.rotateX, state.rotateY)
-    },
-    [applyPreviewTransform]
-  )
-
-  const onPreviewPointerEnd = useCallback(() => {
-    stopPreviewDragRef.current()
-  }, [])
-
-  const attachPreviewWindowListeners = useCallback(() => {
-    if (previewWindowListenersAttachedRef.current) {
-      return
-    }
-    previewWindowListenersAttachedRef.current = true
-    window.addEventListener('pointermove', onPreviewPointerMove, { passive: false })
-    window.addEventListener('pointerup', onPreviewPointerEnd)
-    window.addEventListener('pointercancel', onPreviewPointerEnd)
-    window.addEventListener('blur', onPreviewPointerEnd)
-  }, [onPreviewPointerMove, onPreviewPointerEnd])
-
-  const detachPreviewWindowListeners = useCallback(() => {
-    if (!previewWindowListenersAttachedRef.current) {
-      return
-    }
-    previewWindowListenersAttachedRef.current = false
-    window.removeEventListener('pointermove', onPreviewPointerMove)
-    window.removeEventListener('pointerup', onPreviewPointerEnd)
-    window.removeEventListener('pointercancel', onPreviewPointerEnd)
-    window.removeEventListener('blur', onPreviewPointerEnd)
-  }, [onPreviewPointerMove, onPreviewPointerEnd])
-
-  const stopPreviewDrag = useCallback((withRebound = true) => {
-    const state = previewDragStateRef.current
-    const wasDragging = state.dragging
-    state.dragging = false
-    state.pointerId = -1
-    setPreviewDragging(false)
-    detachPreviewWindowListeners()
-    if (withRebound && wasDragging) {
-      resetPreviewTransform(true)
-    }
-  }, [detachPreviewWindowListeners, resetPreviewTransform])
-
-  useEffect(() => {
-    stopPreviewDragRef.current = stopPreviewDrag
-  }, [stopPreviewDrag])
-
-  const startPreviewDrag = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return
-      }
-      event.preventDefault()
-      stopPreviewDrag(false)
-      setPreviewTransition(false)
-      const state = previewDragStateRef.current
-      state.dragging = true
-      state.pointerId = event.pointerId
-      state.lastX = event.clientX
-      state.lastY = event.clientY
-      setPreviewDragging(true)
-      attachPreviewWindowListeners()
-    },
-    [attachPreviewWindowListeners, setPreviewTransition, stopPreviewDrag]
-  )
 
   const closePreview = useCallback(() => {
     stopPreviewDrag(false)
@@ -446,13 +275,6 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     window.addEventListener('keydown', onEscape)
     return () => window.removeEventListener('keydown', onEscape)
   }, [closePreview, previewCard])
-
-  useEffect(
-    () => () => {
-      stopPreviewDrag(false)
-    },
-    [stopPreviewDrag]
-  )
 
   const queryBaseString = useMemo(
     () =>
@@ -557,7 +379,7 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
                   type="button"
                   size="sm"
                   variant={selectedRarity.includes(rarity) ? 'default' : 'outline'}
-                  onClick={() => setSelectedRarity((prev) => toggleItem(prev, rarity))}
+                  onClick={() => setSelectedRarity((prev) => toggleListItem(prev, rarity))}
                 >
                   {t[`rarity_${rarity}`] ?? rarity}
                 </Button>
@@ -574,7 +396,7 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
                   type="button"
                   size="sm"
                   variant={selectedTypes.includes(cardType) ? 'default' : 'outline'}
-                  onClick={() => setSelectedTypes((prev) => toggleItem(prev, cardType))}
+                  onClick={() => setSelectedTypes((prev) => toggleListItem(prev, cardType))}
                 >
                   {t[`type_${cardType}`] ?? cardType}
                 </Button>
@@ -735,23 +557,11 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
                   alt={previewCard.title}
                   className="card-preview-image"
                   onError={(event) => {
-                    const image = event.currentTarget
                     const urls = getCardImageUrls(assets, {
                       setCode: previewCard.setCode,
                       cardNumber: previewCard.cardNumber
                     })
-                    if (image.dataset.webpTried === '1') {
-                      image.src = urls.cdnWebp
-                      image.dataset.webpTried = '2'
-                      return
-                    }
-                    if (image.dataset.webpTried === '2') {
-                      image.src = urls.png
-                      image.dataset.webpTried = '3'
-                      return
-                    }
-                    image.dataset.webpTried = '1'
-                    image.src = urls.webp
+                    applyImageFallback(event.currentTarget, [urls.webp, urls.cdnWebp, urls.png])
                   }}
                 />
                 <div ref={previewShineRef} className="card-preview-shine" />
