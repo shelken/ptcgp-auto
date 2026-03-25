@@ -2,7 +2,6 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { SearchableSelect } from '@/components/ui/searchable-select'
@@ -21,6 +20,24 @@ import {
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
+import {
+  InlineNotice,
+  ListQueryControls,
+  Pager,
+  QueryTotalSummary,
+  TruncatedText,
+  buildAccountSelectOptions,
+  managementStateKey,
+  renderBadge,
+  searchableSelectLocale,
+  statusLabel,
+  taskTypeLabel,
+  toText,
+  toTotalCount,
+  type InlineNoticeState,
+  type SearchableOption,
+  type SortOption
+} from './management/shared'
 
 interface ManagementPageProps {
   lang: string
@@ -35,12 +52,6 @@ interface ColumnDef {
   sortKey?: string
 }
 
-interface SortOption {
-  value: string
-  labelKey: string
-  fallback: string
-}
-
 interface AccountPlanItemState {
   plan_id: number
   plan_name: string
@@ -51,17 +62,6 @@ interface PlanTaskConfigState {
   enabled: boolean
   resetType: string
   intervalSeconds: number
-}
-
-interface InlineNoticeState {
-  level: 'success' | 'error'
-  text: string
-}
-
-interface SearchableOption {
-  value: string
-  label: string
-  searchText?: string
 }
 
 const sections = [
@@ -76,38 +76,6 @@ const sections = [
   { key: 'notifications', labelKey: 'menu_notifications', fallback: 'Notifications' }
 ] as const
 
-const MANAGEMENT_STATE_STORAGE_PREFIX = 'ptcgp_management_state:'
-
-function managementStateKey(section: string, field: string): string {
-  return `${MANAGEMENT_STATE_STORAGE_PREFIX}${section}:${field}`
-}
-
-function toText(value: unknown, t?: Record<string, string>): string {
-  if (value === null || value === undefined) {
-    return '-'
-  }
-  if (typeof value === 'boolean') {
-    const locale = t ?? {}
-    return value ? tr(locale, 'label_read', 'Yes') : tr(locale, 'label_unread', 'No')
-  }
-  if (typeof value === 'number') {
-    return String(value)
-  }
-  if (typeof value === 'string') {
-    return value
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return '-'
-    }
-    if (typeof value[0] === 'string' || typeof value[0] === 'number') {
-      return value.join(', ')
-    }
-    return `${value.length} ${tr(t ?? {}, 'label_total_records', 'items')}`
-  }
-  return JSON.stringify(value)
-}
-
 function renderRelativeTime(value: unknown, lang: string, t: Record<string, string>) {
   const absolute = formatAbsoluteDateTime(value)
   return (
@@ -115,14 +83,6 @@ function renderRelativeTime(value: unknown, lang: string, t: Record<string, stri
       {formatRelativeDateTime(value, lang, t)}
     </span>
   )
-}
-
-function statusLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `status_${key}`, key)
 }
 
 function giftStatusLabel(t: Record<string, string>, value: unknown): string {
@@ -139,14 +99,6 @@ function pairProgressLabel(t: Record<string, string>, value: unknown): string {
     return '-'
   }
   return tr(t, `gift_pair_progress_${key}`, key)
-}
-
-function taskTypeLabel(t: Record<string, string>, value: unknown): string {
-  const key = typeof value === 'string' ? value : ''
-  if (!key) {
-    return '-'
-  }
-  return tr(t, `task_${key}`, key)
 }
 
 function taskTypesListLabel(t: Record<string, string>, value: unknown): string {
@@ -176,17 +128,6 @@ function requestStatusLabel(t: Record<string, string>, value: unknown): string {
     return '-'
   }
   return tr(t, `friend_request_status_${key}`, key)
-}
-
-function InlineNotice({ notice }: { notice: InlineNoticeState | null }) {
-  if (!notice) {
-    return null
-  }
-  return (
-    <div className={`surface-card text-sm ${notice.level === 'error' ? 'text-danger' : 'text-muted'}`}>
-      {notice.text}
-    </div>
-  )
 }
 
 function SortableHeaderCell({
@@ -268,14 +209,6 @@ function parseBool(value: unknown): boolean {
   return false
 }
 
-function toTotalCount(value: unknown, fallback: number): number {
-  const parsed = Number(value)
-  if (Number.isFinite(parsed) && parsed >= 0) {
-    return Math.floor(parsed)
-  }
-  return Math.max(0, fallback)
-}
-
 function statusBadgeVariant(value: unknown): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
   const key = typeof value === 'string' ? value : ''
   if (key === 'success' || key === 'completed' || key === 'sended') {
@@ -291,56 +224,6 @@ function statusBadgeVariant(value: unknown): 'success' | 'warning' | 'danger' | 
     return 'info'
   }
   return 'muted'
-}
-
-function renderBadge(text: string, variant: 'success' | 'warning' | 'danger' | 'info' | 'muted') {
-  return <Badge variant={variant}>{text}</Badge>
-}
-
-function QueryTotalSummary({
-  t,
-  total,
-  label
-}: {
-  t: Record<string, string>
-  total: number
-  label?: string
-}) {
-  return (
-    <div className="text-xs text-muted">
-      {label ? `${label} · ` : ''}
-      {tr(t, 'label_query_total_records', '本次查询总记录数')}: <span className="mono">{total}</span>
-    </div>
-  )
-}
-
-function buildAccountSelectOptions(
-  accounts: Record<string, unknown>[],
-  t: Record<string, string>,
-  emptyLabel: string
-): SearchableOption[] {
-  const items: SearchableOption[] = [{ value: '', label: emptyLabel, searchText: emptyLabel }]
-  for (const account of accounts) {
-    const id = toText(account.id, t)
-    const displayName = toText(account.display_name || account.nickname, t)
-    const friendId = toText(account.friend_id, t)
-    const label = `${id} ${displayName} (${friendId})`
-    items.push({
-      value: id,
-      label,
-      searchText: `${id} ${displayName} ${friendId}`
-    })
-  }
-  return items
-}
-
-function searchableSelectLocale(t: Record<string, string>) {
-  return {
-    searchPlaceholder: tr(t, 'label_search', 'Search'),
-    emptyLabel: tr(t, 'label_no_data', 'No data'),
-    prevPageLabel: tr(t, 'btn_prev_page', 'Previous'),
-    nextPageLabel: tr(t, 'btn_next_page', 'Next')
-  }
 }
 
 function datePickerLocale(t: Record<string, string>) {
@@ -360,83 +243,6 @@ function datePickerLocale(t: Record<string, string>) {
       tr(t, 'date_picker_weekday_sun', 'Sun')
     ]
   }
-}
-
-function TruncatedText({
-  text,
-  tooltip,
-  className
-}: {
-  text: string
-  tooltip?: string
-  className?: string
-}) {
-  const hint = (tooltip ?? text).trim()
-  const textRef = useRef<HTMLSpanElement | null>(null)
-  const [nativeTitle, setNativeTitle] = useState<string | undefined>(undefined)
-
-  useEffect(() => {
-    const element = textRef.current
-    if (!element || !hint) {
-      setNativeTitle(undefined)
-      return
-    }
-
-    const updateTitle = () => {
-      const isTruncated = element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight
-      setNativeTitle(isTruncated ? hint : undefined)
-    }
-
-    updateTitle()
-    if (typeof ResizeObserver !== 'function') {
-      window.addEventListener('resize', updateTitle)
-      return () => window.removeEventListener('resize', updateTitle)
-    }
-
-    const observer = new ResizeObserver(updateTitle)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [hint, text, className])
-
-  return (
-    <span
-      ref={textRef}
-      title={nativeTitle}
-      className={className ? `${className} text-truncate-1` : 'text-truncate-1'}
-    >
-      {text}
-    </span>
-  )
-}
-
-function Pager({
-  page,
-  hasPrev,
-  hasNext,
-  onPrev,
-  onNext,
-  t
-}: {
-  page: number
-  hasPrev: boolean
-  hasNext: boolean
-  onPrev: () => void
-  onNext: () => void
-  t: Record<string, string>
-}) {
-  return (
-    <div className="pagination-row">
-      <span className="text-xs mono">{tr(t, 'page_label', 'Page')} {page + 1}</span>
-      <div className="filter-row">
-        <Button size="sm" variant="outline" type="button" disabled={!hasPrev} onClick={onPrev}>
-          {tr(t, 'btn_prev_page', 'Previous')}
-        </Button>
-        <Button size="sm" variant="outline" type="button" disabled={!hasNext} onClick={onNext}>
-          {tr(t, 'btn_next_page', 'Next')}
-        </Button>
-      </div>
-    </div>
-  )
 }
 
 function DataGrid({
@@ -493,91 +299,6 @@ function DataGrid({
           ))}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-function ListQueryControls({
-  sortBy,
-  sortOrder,
-  pageSize,
-  sortOptions,
-  pageSizeOptions,
-  onSortByChange,
-  onSortOrderChange,
-  onPageSizeChange,
-  t,
-  disableSortOrder = false
-}: {
-  sortBy: string
-  sortOrder: 'asc' | 'desc'
-  pageSize: number
-  sortOptions: SortOption[]
-  pageSizeOptions?: number[]
-  onSortByChange: (value: string) => void
-  onSortOrderChange: (value: 'asc' | 'desc') => void
-  onPageSizeChange: (value: number) => void
-  t: Record<string, string>
-  disableSortOrder?: boolean
-}) {
-  const options = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 20, 50, 100]
-  return (
-    <div className="table-toolbar-layout table-toolbar--dense management-query-controls">
-      <div className="table-toolbar-zone table-toolbar-zone--left">
-        <div className="table-filter-item">
-          <label className="section-subtitle">{tr(t, 'label_sort_by', 'Sort By')}</label>
-          <Select value={encodeSelectValue(sortBy)} onValueChange={(value) => onSortByChange(decodeSelectValue(value))}>
-            <SelectTrigger className="field-select table-control">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {sortOptions.map((option) => (
-                <SelectItem key={option.value} value={encodeSelectValue(option.value)}>
-                  {tr(t, option.labelKey, option.fallback)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="table-filter-item">
-          <label className="section-subtitle">{tr(t, 'label_sort_order', 'Order')}</label>
-          <Select
-            value={encodeSelectValue(sortOrder)}
-            disabled={disableSortOrder}
-            onValueChange={(value) => onSortOrderChange(decodeSelectValue(value) as 'asc' | 'desc')}
-          >
-            <SelectTrigger className="field-select table-control">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
-              <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="table-toolbar-zone table-toolbar-zone--right">
-        <div className="table-filter-item">
-          <label className="section-subtitle">{tr(t, 'label_page_size', 'Page Size')}</label>
-          <Select
-            value={encodeSelectValue(String(pageSize))}
-            onValueChange={(value) => onPageSizeChange(Number(decodeSelectValue(value)))}
-          >
-            <SelectTrigger className="field-select table-control">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((value) => (
-                <SelectItem key={value} value={String(value)}>
-                  {value}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
     </div>
   )
 }
