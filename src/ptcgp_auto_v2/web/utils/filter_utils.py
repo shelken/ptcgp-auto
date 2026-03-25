@@ -19,6 +19,19 @@ def normalize_query_text(q: str | object | None) -> str:
     return ""
 
 
+def normalize_choice(
+    value: str | None,
+    *,
+    allowed: set[str],
+    default: str,
+) -> str:
+    """归一化枚举值，非法值回退默认值。"""
+    normalized = str(value or "").strip()
+    if normalized in allowed:
+        return normalized
+    return default
+
+
 def normalize_sort_order(sort_order: str) -> str:
     """归一化排序方向为 asc 或 desc。
 

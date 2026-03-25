@@ -123,7 +123,6 @@ def build_metadata_context(
 
         selected_context = _build_selected_context(
             repo=repo,
-            sets_data=sets_data,
             packs_by_set=packs_by_set,
             selected_node_type=selected_node_type,
             selected_node_id=selected_node_id,
@@ -287,7 +286,6 @@ def resolve_sync_request(
 
 def _build_selected_context(
     repo: CardRepository,
-    sets_data: list[dict[str, Any]],
     packs_by_set: dict[str, list[dict[str, Any]]],
     selected_node_type: str,
     selected_node_id: str,
@@ -295,7 +293,6 @@ def _build_selected_context(
     selected_pack_name: str,
 ) -> dict[str, Any]:
     """构建当前选中节点上下文"""
-    del sets_data
     node_type, node_id = _normalize_selected_node(selected_node_type, selected_node_id)
     set_code = (selected_set_code or "").strip()
     pack_name = (selected_pack_name or "").strip()
@@ -518,13 +515,12 @@ def _normalize_action_for_node(node_type: str, action: str) -> str:
 def _build_action_cards(available_actions: list[str]) -> list[dict[str, Any]]:
     """将动作列表转换为卡片展示结构。"""
     cards: list[dict[str, Any]] = []
-
     if "update_new_series" in available_actions:
         cards.append(
-            {
-                "title_key": "metadata_action_update_new_series",
-                "title_fallback": "更新新系列",
-                "buttons": [
+            _build_action_card(
+                title_key="metadata_action_update_new_series",
+                title_fallback="更新新系列",
+                buttons=[
                     {
                         "action": "update_new_series",
                         "label_key": "metadata_action_update_new_series",
@@ -532,63 +528,77 @@ def _build_action_cards(available_actions: list[str]) -> list[dict[str, Any]]:
                         "mode": "supplement",
                     }
                 ],
-            }
+            )
         )
 
-    data_buttons: list[dict[str, str]] = []
-    if "update_data_supplement" in available_actions:
-        data_buttons.append(
-            {
-                "action": "update_data_supplement",
-                "label_key": "metadata_mode_supplement",
-                "label_fallback": "补充",
-                "mode": "supplement",
-            }
-        )
-    if "update_data_force" in available_actions:
-        data_buttons.append(
-            {
-                "action": "update_data_force",
-                "label_key": "metadata_mode_force",
-                "label_fallback": "覆盖",
-                "mode": "force",
-            }
-        )
+    data_buttons = _build_mode_buttons(
+        available_actions=available_actions,
+        supplement_action="update_data_supplement",
+        force_action="update_data_force",
+    )
     if data_buttons:
         cards.append(
-            {
-                "title_key": "metadata_action_update_data",
-                "title_fallback": "更新数据",
-                "buttons": data_buttons,
-            }
+            _build_action_card(
+                title_key="metadata_action_update_data",
+                title_fallback="更新数据",
+                buttons=data_buttons,
+            )
         )
 
-    chinese_buttons: list[dict[str, str]] = []
-    if "update_chinese_supplement" in available_actions:
-        chinese_buttons.append(
+    chinese_buttons = _build_mode_buttons(
+        available_actions=available_actions,
+        supplement_action="update_chinese_supplement",
+        force_action="update_chinese_force",
+    )
+    if chinese_buttons:
+        cards.append(
+            _build_action_card(
+                title_key="metadata_action_update_chinese",
+                title_fallback="更新中文",
+                buttons=chinese_buttons,
+            )
+        )
+    return cards
+
+
+def _build_action_card(
+    *,
+    title_key: str,
+    title_fallback: str,
+    buttons: list[dict[str, str]],
+) -> dict[str, Any]:
+    """构建动作卡片视图。"""
+    return {
+        "title_key": title_key,
+        "title_fallback": title_fallback,
+        "buttons": buttons,
+    }
+
+
+def _build_mode_buttons(
+    *,
+    available_actions: list[str],
+    supplement_action: str,
+    force_action: str,
+) -> list[dict[str, str]]:
+    """构建补充/覆盖动作按钮。"""
+    buttons: list[dict[str, str]] = []
+    if supplement_action in available_actions:
+        buttons.append(
             {
-                "action": "update_chinese_supplement",
+                "action": supplement_action,
                 "label_key": "metadata_mode_supplement",
                 "label_fallback": "补充",
                 "mode": "supplement",
             }
         )
-    if "update_chinese_force" in available_actions:
-        chinese_buttons.append(
+    if force_action in available_actions:
+        buttons.append(
             {
-                "action": "update_chinese_force",
+                "action": force_action,
                 "label_key": "metadata_mode_force",
                 "label_fallback": "覆盖",
                 "mode": "force",
             }
         )
-    if chinese_buttons:
-        cards.append(
-            {
-                "title_key": "metadata_action_update_chinese",
-                "title_fallback": "更新中文",
-                "buttons": chinese_buttons,
-            }
-        )
-
-    return cards
+    return buttons
