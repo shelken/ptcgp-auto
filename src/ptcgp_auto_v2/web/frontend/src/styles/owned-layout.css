@@ -248,10 +248,10 @@
   background: var(--paper);
   color: var(--ink);
   min-width: 4rem;
-  min-height: 2.15rem;
-  padding: 0.34rem 0.62rem;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.66rem;
   font-size: 0.7rem;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
@@ -265,11 +265,12 @@
 .owned-scope-btn.is-active {
   background: var(--brand);
   color: var(--brand-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 26%, transparent);
 }
 
 .owned-cols-segmented {
   display: inline-flex;
-  align-items: stretch;
+  align-items: center;
   border: 2px solid var(--line);
   border-radius: 0.62rem;
   background: var(--paper);
@@ -284,12 +285,13 @@
   border-right: 2px solid var(--line);
   background: var(--paper);
   color: var(--ink);
-  min-width: 2.4rem;
-  min-height: 2.15rem;
-  padding: 0.34rem 0.62rem;
-  font-size: 0.72rem;
+  min-width: 2.75rem;
+  min-height: 2.36rem;
+  padding: 0.36rem 0.72rem;
+  font-size: 0.82rem;
   line-height: 1;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -300,6 +302,7 @@
 .owned-cols-btn.is-active {
   background: var(--brand);
   color: var(--brand-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 26%, transparent);
 }
 
 :root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn,
