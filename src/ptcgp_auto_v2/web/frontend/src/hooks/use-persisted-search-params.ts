@@ -46,7 +46,7 @@ export function usePersistedSearchParams() {
     if (cachedSearchParams.toString().length === 0) {
       return
     }
-    setSearchParams(cachedSearchParams, { replace: true })
+    setSearchParams(cachedSearchParams, { replace: true, preventScrollReset: true })
   }, [cachedSearchParams, searchParams, setSearchParams])
 
   const effectiveSearchParams = cachedSearchParams ?? searchParams
