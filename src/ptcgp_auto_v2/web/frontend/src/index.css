@@ -245,8 +245,7 @@
 :root[data-theme='clay_vibrant'] .owned-filter-clear,
 :root[data-theme='clay_vibrant'] .owned-scope-btn,
 :root[data-theme='clay_vibrant'] .owned-cols-btn,
-:root[data-theme='clay_vibrant'] .owned-card-modal-close,
-:root[data-theme='clay_vibrant'] button.text-xs {
+:root[data-theme='clay_vibrant'] .owned-card-modal-close {
   border-style: solid;
   border-color: var(--line);
   border-width: var(--clay-border-width);
@@ -280,8 +279,7 @@
 :root[data-theme='clay_vibrant'] .owned-filter-clear:hover,
 :root[data-theme='clay_vibrant'] .owned-scope-btn:hover,
 :root[data-theme='clay_vibrant'] .owned-cols-btn:hover,
-:root[data-theme='clay_vibrant'] .owned-card-modal-close:hover,
-:root[data-theme='clay_vibrant'] button.text-xs:hover {
+:root[data-theme='clay_vibrant'] .owned-card-modal-close:hover {
   background: var(--clay-control-bg-hover);
   transform: translateY(var(--clay-lift-y));
 }
@@ -294,8 +292,7 @@
 :root[data-theme='clay_vibrant'] .owned-filter-clear:active,
 :root[data-theme='clay_vibrant'] .owned-scope-btn:active,
 :root[data-theme='clay_vibrant'] .owned-cols-btn:active,
-:root[data-theme='clay_vibrant'] .owned-card-modal-close:active,
-:root[data-theme='clay_vibrant'] button.text-xs:active {
+:root[data-theme='clay_vibrant'] .owned-card-modal-close:active {
   transform: translateY(var(--clay-press-y));
   box-shadow:
     0 3px 0 color-mix(in srgb, var(--line) 88%, #000),
@@ -598,8 +595,7 @@
 :root[data-theme='clay_vibrant'] .record-batch-pack:focus-visible,
 :root[data-theme='clay_vibrant'] .owned-card:focus-visible,
 :root[data-theme='clay_vibrant'] .notification-picker-card:focus-visible,
-:root[data-theme='clay_vibrant'] .grid-table th[role='button']:focus-visible,
-:root[data-theme='clay_vibrant'] button.text-xs:focus-visible {
+:root[data-theme='clay_vibrant'] .grid-table th[role='button']:focus-visible {
   outline: var(--clay-border-width) solid var(--accent);
   outline-offset: 2px;
 }
@@ -633,8 +629,7 @@
   :root[data-theme='clay_vibrant'] .owned-cols-segmented,
   :root[data-theme='clay_vibrant'] .metadata-step-card,
   :root[data-theme='clay_vibrant'] .metadata-action-card,
-  :root[data-theme='clay_vibrant'] .metadata-summary-card,
-  :root[data-theme='clay_vibrant'] button.text-xs {
+  :root[data-theme='clay_vibrant'] .metadata-summary-card {
     transition: none;
     animation: none;
   }
@@ -654,8 +649,7 @@
   :root[data-theme='clay_vibrant'] .record-batch-pack:hover,
   :root[data-theme='clay_vibrant'] .owned-card:hover,
   :root[data-theme='clay_vibrant'] .notification-picker-card:hover,
-  :root[data-theme='clay_vibrant'] .management-side-btn:hover,
-  :root[data-theme='clay_vibrant'] button.text-xs:hover {
+  :root[data-theme='clay_vibrant'] .management-side-btn:hover {
     transform: none;
   }
 }
@@ -1164,7 +1158,8 @@ body {
   top: calc(100% + 0.35rem);
   left: 0;
   z-index: 120;
-  width: min(22rem, 88vw);
+  width: max(100%, 14rem);
+  max-width: min(28rem, calc(100vw - 1rem));
   border: 2px solid var(--line);
   background: var(--paper);
   box-shadow: 7px 7px 0 rgba(20, 15, 10, 0.82);
@@ -1269,6 +1264,10 @@ body {
 .dialog-card.account-plan-assoc-dialog {
   --dialog-card-width: var(--dialog-width-md);
   --dialog-card-max-height: min(82vh, 720px);
+}
+
+.dialog-card.pack-config-dialog {
+  overflow: visible;
 }
 
 .account-plan-assoc-dialog .plan-assoc-list {
@@ -1557,6 +1556,7 @@ body {
   justify-content: center;
   padding: 1rem;
   z-index: 50;
+  overscroll-behavior: contain;
 }
 
 :root {
@@ -1576,6 +1576,7 @@ body {
   width: min(var(--dialog-card-width), 100%);
   max-height: var(--dialog-card-max-height);
   overflow: auto;
+  overscroll-behavior: contain;
   border: 2px solid var(--line);
   background: var(--paper);
   box-shadow: 8px 8px 0 rgba(15, 13, 10, 0.95);

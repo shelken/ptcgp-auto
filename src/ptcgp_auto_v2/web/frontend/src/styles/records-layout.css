@@ -237,7 +237,7 @@
   position: relative;
   border: 2px solid var(--line);
   background: var(--paper);
-  padding: 0.2rem;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -245,7 +245,8 @@
   width: 100%;
   aspect-ratio: 2 / 3;
   object-fit: cover;
-  border: 1px solid var(--line);
+  display: block;
+  border: 0;
   background: #efe8d9;
 }
 

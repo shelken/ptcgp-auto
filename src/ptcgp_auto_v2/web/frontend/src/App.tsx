@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bell, MonitorCog, Moon, Palette, Sun } from 'lucide-react'
-import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes, useLocation, type SetURLSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { NotificationDrawer } from '@/components/notification-drawer'
@@ -25,10 +25,10 @@ import { ManagementPage } from '@/pages/management-page'
 import { OwnedCardsPage } from '@/pages/owned-cards-page'
 import { RecordsPage } from '@/pages/records-page'
 
-function setLangParam(nextLang: string, searchParams: URLSearchParams, setSearchParams: (nextInit: URLSearchParams) => void) {
+function setLangParam(nextLang: string, searchParams: URLSearchParams, setSearchParams: SetURLSearchParams) {
   const next = new URLSearchParams(searchParams)
   next.set('lang', nextLang)
-  setSearchParams(next)
+  setSearchParams(next, { replace: true, preventScrollReset: true })
 }
 
 function ThemeModeIcon({ mode }: { mode: ThemeMode }) {
