@@ -1,14 +1,18 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
 import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
+import { useCardPreviewVisual } from '@/hooks/use-card-preview-visual'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
+import { usePreviewOriginVisibility } from '@/hooks/use-preview-origin-visibility'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
+import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
+import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
@@ -283,11 +287,18 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [detailPageSize, setDetailPageSize] = useState(() => restoreDetailPageSize())
   const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
   const [pendingExchangeAccountId, setPendingExchangeAccountId] = useState<number | null>(null)
+  const [detailPreviewOriginRect, setDetailPreviewOriginRect] = useState<PreviewRectLike | null>(null)
+  const detailPreviewAnimatedKeyRef = useRef('')
+  const detailPreviewMotionRef = useRef<HTMLDivElement | null>(null)
+  const detailPreviewOriginRef = useRef<HTMLElement | null>(null)
+  const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
+  const { hiddenOriginRef: hiddenDetailOriginRef, hideOrigin: hideDetailOrigin, restoreOrigin: restoreDetailOrigin } = usePreviewOriginVisibility()
   const {
     cardRef: detailPreviewCardRef,
     shineRef: detailPreviewShineRef,
     dragging: detailPreviewDragging,
     startDrag: startDetailPreviewDrag,
+    onDragMove: onDetailPreviewDragMove,
     stopDrag: stopDetailPreviewDrag,
     resetTransform: resetDetailPreviewTransform
   } = useCardPreviewDrag()
@@ -504,13 +515,43 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     setDetailQ('')
     setDetailSortBy('account_id')
     setDetailSortOrder('asc')
+    if (cardId === null) {
+      setDetailPreviewOriginRect(null)
+      detailPreviewAnimatedKeyRef.current = ''
+    }
   }, [resetDetailPreviewTransform, stopDetailPreviewDrag])
-  const openDetailModal = useCallback((cardId: number) => {
+  const openDetailModal = useCallback((cardId: number, originEl?: HTMLElement | null) => {
+    clearCardFlipExitGhosts()
     resetDetailModalState(cardId)
-  }, [resetDetailModalState])
+    hideDetailOrigin(originEl)
+    detailPreviewOriginRef.current = originEl ?? null
+    setDetailPreviewOriginRect(snapshotElementRect(originEl))
+    detailPreviewAnimatedKeyRef.current = ''
+  }, [hideDetailOrigin, resetDetailModalState])
   const closeDetailModal = useCallback(() => {
+    const cardEl = detailPreviewCardRef.current
+    const motionRect = snapshotElementRect(detailPreviewMotionRef.current)
+    const originRect = detailPreviewOriginRect
+    const hiddenOrigin = hiddenDetailOriginRef.current
+    if (cardEl && originRect && hiddenOrigin) {
+      exitRestoringOriginRef.current = hiddenOrigin
+      void playCardFlipExitGhost({
+        from: cardEl,
+        fromRect: motionRect,
+        to: detailPreviewOriginRef.current,
+        toRect: originRect
+      }).finally(() => {
+        restoreDetailOrigin(hiddenOrigin)
+        if (exitRestoringOriginRef.current === hiddenOrigin) {
+          exitRestoringOriginRef.current = null
+        }
+      })
+    } else if (hiddenOrigin) {
+      restoreDetailOrigin(hiddenOrigin)
+    }
     resetDetailModalState(null)
-  }, [resetDetailModalState])
+    detailPreviewOriginRef.current = null
+  }, [detailPreviewCardRef, detailPreviewOriginRect, resetDetailModalState, restoreDetailOrigin])
 
   const applyDetailSort = useCallback(
     (nextSortBy: DetailSortField) => {
@@ -539,10 +580,14 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     if (detailCardId === null) {
       stopDetailPreviewDrag(false)
       resetDetailPreviewTransform(false)
+      if (exitRestoringOriginRef.current) {
+        return
+      }
+      restoreDetailOrigin()
       return
     }
     resetDetailPreviewTransform(false)
-  }, [detailCardId, resetDetailPreviewTransform, stopDetailPreviewDrag])
+  }, [detailCardId, resetDetailPreviewTransform, restoreDetailOrigin, stopDetailPreviewDrag])
 
   useEffect(() => {
     if (detailCardId === null) {
@@ -606,12 +651,62 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   useEffect(() => {
     window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
   }, [gridCols])
-  const detailPreviewImageUrls = detailQuery.data
-    ? getCardImageUrls(assets, {
-        setCode: detailQuery.data.card.set_code,
-        cardNumber: detailQuery.data.card.number
+  const detailData = detailQuery.data?.card.id === detailCardId ? detailQuery.data : null
+  const detailPreviewCacheKey = detailData
+    ? `${detailData.card.id}-${detailData.card.set_code}-${detailData.card.number}`
+    : ''
+  const {
+    imageUrls: detailPreviewImageUrls,
+    cardBackImageUrl: detailCardBackImageUrl,
+    effectId: detailPreviewEffectId,
+    visualStyle: detailPreviewStyle
+  } = useCardPreviewVisual({
+    assets,
+    enabled: detailCardId !== null && detailData !== null,
+    setCode: detailData?.card.set_code ?? '',
+    cardNumber: detailData?.card.number ?? 0,
+    rarity: detailData?.card.rarity ?? '',
+    cacheKey: detailPreviewCacheKey
+  })
+
+  useLayoutEffect(() => {
+    if (detailCardId === null || !detailData) {
+      return
+    }
+    let cancelled = false
+    let rafId = 0
+    const animationKey = `${detailCardId}-${detailData.card.id}`
+
+    const run = () => {
+      if (cancelled) {
+        return
+      }
+      const motionEl = detailPreviewMotionRef.current
+      const rotateEl = detailPreviewCardRef.current
+      if (!motionEl || !rotateEl) {
+        rafId = window.requestAnimationFrame(run)
+        return
+      }
+      if (detailPreviewAnimatedKeyRef.current === animationKey) {
+        return
+      }
+      detailPreviewAnimatedKeyRef.current = animationKey
+      void playCardFlipEntrance({
+        fromRect: detailPreviewOriginRect,
+        to: motionEl,
+        rotateTarget: rotateEl
       })
-    : null
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId)
+      }
+    }
+  }, [detailCardId, detailData, detailPreviewMotionRef, detailPreviewCardRef, detailPreviewOriginRect])
 
   const gridCards = (gridQuery.data?.pages ?? []).flatMap((page) => page.items)
   const cards = viewMode === 'grid' ? gridCards : (listQuery.data?.items ?? [])
@@ -871,7 +966,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                         key={item.card.id}
                         type="button"
                         className={`owned-card ${item.ownership_state === 'missing' ? 'owned-card--missing' : ''}`}
-                        onClick={() => openDetailModal(item.card.id)}
+                        onClick={(event) => openDetailModal(item.card.id, event.currentTarget)}
                       >
                         <div className="owned-card-media">
                           <img
@@ -944,7 +1039,11 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => openDetailModal(item.card.id)}
+                          onClick={(event) => {
+                            const row = event.currentTarget.closest('tr')
+                            const thumb = row?.querySelector('.owned-thumb')
+                            openDetailModal(item.card.id, (thumb as HTMLElement | null) ?? event.currentTarget)
+                          }}
                         >
                           {tr(t, 'label_detail', 'Detail')}
                         </Button>
@@ -985,44 +1084,72 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
 
       {detailCardId !== null && (
         <div
-          className="dialog-overlay"
+          className="dialog-overlay card-preview-overlay active"
+          style={detailPreviewStyle}
           onClick={closeDetailModal}
         >
           <div className="dialog-card owned-detail-modal" onClick={(event) => event.stopPropagation()}>
-            {detailQuery.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
+            {detailCardId !== null && !detailData && detailQuery.isFetching && (
+              <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>
+            )}
             {detailQuery.isError && <div className="text-sm text-danger">{(detailQuery.error as Error).message}</div>}
 
-            {detailQuery.data && (
+            {detailData && (
               <div className="owned-card-modal-layout">
                 <aside className="owned-card-modal-left">
                   <div className="surface-card section-stack">
-                    <div className="section-title">{detailQuery.data.card_display_name}</div>
+                    <div className="section-title">{detailData.card_display_name}</div>
                     <div className="filter-row">
-                      <span className="tag">{detailQuery.data.card.set_code}</span>
-                      <span className="tag">#{String(detailQuery.data.card.number).padStart(3, '0')}</span>
-                      <span className="tag">{detailQuery.data.card.rarity}</span>
+                      <span className="tag">{detailData.card.set_code}</span>
+                      <span className="tag">#{String(detailData.card.number).padStart(3, '0')}</span>
+                      <span className="tag">{detailData.card.rarity}</span>
                     </div>
                     <div className="owned-card-preview-wrap">
                       <div
-                        ref={detailPreviewCardRef}
-                        className={`owned-card-preview owned-card-draggable ${ownershipScope === 'missing' ? 'owned-card-preview--missing' : ''} ${detailPreviewDragging ? 'dragging' : ''}`}
-                        onPointerDown={startDetailPreviewDrag}
+                        ref={detailPreviewMotionRef}
+                        className="owned-card-preview-motion"
                       >
-                        <img
-                          src={detailPreviewImageUrls?.cdnPng ?? ''}
-                          alt={detailQuery.data.card_display_name}
-                          className="owned-card-preview-image"
-                          loading="lazy"
-                          decoding="async"
-                          draggable={false}
-                          onError={(event) => {
-                            if (!detailPreviewImageUrls) {
-                              return
-                            }
-                            applyCardPreviewImageFallback(event.currentTarget, detailPreviewImageUrls)
-                          }}
-                        />
-                        <div ref={detailPreviewShineRef} className="owned-card-shine" />
+                        <div
+                          ref={detailPreviewCardRef}
+                          className={`owned-card-preview card-preview-surface owned-card-draggable ${detailPreviewDragging ? 'dragging' : ''}`}
+                          style={detailPreviewStyle}
+                          data-preview-effect={detailPreviewEffectId}
+                          onPointerDown={startDetailPreviewDrag}
+                          onPointerMove={onDetailPreviewDragMove}
+                        >
+                          <div className="card-preview-face card-preview-front">
+                            <img
+                              src={detailPreviewImageUrls?.cdnPng ?? ''}
+                              alt={detailData.card_display_name}
+                              className="owned-card-preview-image card-preview-image"
+                              loading="lazy"
+                              decoding="async"
+                              draggable={false}
+                              onError={(event) => {
+                                if (!detailPreviewImageUrls) {
+                                  return
+                                }
+                                applyCardPreviewImageFallback(event.currentTarget, detailPreviewImageUrls)
+                              }}
+                            />
+                            <div className="card-preview-layer card-preview-layer--foil" />
+                            <div ref={detailPreviewShineRef} className="card-preview-layer card-preview-layer--glare owned-card-shine" />
+                            <div className="card-preview-layer card-preview-layer--spark" />
+                          </div>
+                          <div className="card-preview-face card-preview-back" aria-hidden="true">
+                            {detailCardBackImageUrl.length > 0 ? (
+                              <img
+                                src={detailCardBackImageUrl}
+                                alt=""
+                                className="card-preview-back-image"
+                                loading="lazy"
+                                decoding="async"
+                                draggable={false}
+                                onError={(event) => hideBrokenCardBackImage(event.currentTarget)}
+                              />
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div className="text-xs text-muted text-center">{tr(t, 'card_preview_hint', '拖动旋转查看')}</div>
@@ -1035,9 +1162,9 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                     <button type="button" className="owned-card-modal-close" onClick={closeDetailModal}>✕</button>
                   </div>
                   <div className="text-xs text-muted">
-                    {tr(t, 'owned_accounts_total', 'Accounts')}: {detailQuery.data.total_accounts}
+                    {tr(t, 'owned_accounts_total', 'Accounts')}: {detailData.total_accounts}
                     {' ｜ '}
-                    {tr(t, 'owned_count_total', 'Total Count')}: {detailQuery.data.total_count}
+                    {tr(t, 'owned_count_total', 'Total Count')}: {detailData.total_count}
                   </div>
                   {detailNotice && (
                     <div className={`surface-card text-sm ${detailNotice.level === 'error' ? 'text-danger' : 'text-muted'}`}>
@@ -1178,8 +1305,8 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                                             from_account_id: row.account_id,
                                             to_account_id: null,
                                             to_friend_id: normalizedFriendId,
-                                            target_card_id: detailQuery.data.card.id,
-                                            target_card_rarity: detailQuery.data.card.rarity
+                                            target_card_id: detailData.card.id,
+                                            target_card_rarity: detailData.card.rarity
                                           })
                                         }}
                                       >

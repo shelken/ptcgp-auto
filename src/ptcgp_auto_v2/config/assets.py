@@ -26,6 +26,7 @@ def build_card_image_bases(lang: str) -> dict[str, str]:
     return {
         "proxy_base_url": f"{CARD_IMAGE_WSRV_BASE_URL}{repo_cards_base}",
         "cdn_base_url": f"{CARD_IMAGE_CDN_ROOT_URL}/{image_locale}/cards-by-set",
+        "misc_cdn_base_url": f"{CARD_IMAGE_CDN_ROOT_URL}/others",
     }
 
 

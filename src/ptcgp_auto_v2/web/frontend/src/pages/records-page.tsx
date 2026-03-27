@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
+import { useCardPreviewVisual } from '@/hooks/use-card-preview-visual'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
+import { usePreviewOriginVisibility } from '@/hooks/use-preview-origin-visibility'
 import { buildQuery, fetchJson } from '@/lib/api'
 import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
+import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
+import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
@@ -80,6 +84,7 @@ interface PreviewState {
 }
 
 const RECORDS_PAGE_SIZE = 10
+const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
 
 function resolveLayoutByCount(cardCount: number): string {
   if (cardCount === 6) {
@@ -128,7 +133,7 @@ function RecordCardTile({
   card: RecordCardView
   assets: CardImageAssets
   t: Record<string, string>
-  onPreview: (card: PreviewState) => void
+  onPreview: (card: PreviewState, originEl: HTMLElement) => void
 }) {
   const { setCode, cardNumber, hasImage } = resolveCardImageMeta(card)
 
@@ -142,13 +147,13 @@ function RecordCardTile({
       <button
         type="button"
         className="unstyled-btn"
-        onClick={() =>
+        onClick={(event) =>
           onPreview({
             title: card.display_name,
             rarity: card.rarity,
             setCode,
             cardNumber
-          })
+          }, event.currentTarget)
         }
       >
         {hasImage ? (
@@ -164,10 +169,8 @@ function RecordCardTile({
           <div className="record-card-fallback">{tr(t, 'no_image', 'No Image')}</div>
         )}
       </button>
-      <div className="record-card-meta">
-        <span className="record-card-rarity" title={card.rarity}>{card.rarity}</span>
-        {card.is_new ? <span className="record-card-new">{tr(t, 'new_badge', 'NEW')}</span> : null}
-      </div>
+      {card.rarity ? <span className="record-card-rarity" title={card.rarity}>{card.rarity}</span> : null}
+      {card.is_new ? <span className="record-card-new">{tr(t, 'new_badge', 'NEW')}</span> : null}
       <div className="record-card-name" title={card.display_name || card.card_name || '-'}>
         {card.display_name || card.card_name || '-'}
       </div>
@@ -212,8 +215,6 @@ function BatchOverviewTile({
 }
 
 export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
-  const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
-
   const [searchParams, setSearchParams] = usePersistedSearchParams()
   const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'records_rarity'))
   const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseSearchList(searchParams, 'records_type'))
@@ -222,13 +223,20 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     return stored === 'list' ? 'list' : 'grid'
   })
   const [previewCard, setPreviewCard] = useState<PreviewState | null>(null)
+  const [previewOriginRect, setPreviewOriginRect] = useState<PreviewRectLike | null>(null)
   const [activeBatchPack, setActiveBatchPack] = useState<Record<string, number | null>>({})
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const previewMotionRef = useRef<HTMLDivElement | null>(null)
+  const previewOriginRef = useRef<HTMLElement | null>(null)
+  const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
+  const previewAnimatedKeyRef = useRef('')
+  const { hiddenOriginRef: hiddenPreviewOriginRef, hideOrigin: hidePreviewOrigin, restoreOrigin: restorePreviewOrigin } = usePreviewOriginVisibility()
   const {
     cardRef: previewCardRef,
     shineRef: previewShineRef,
     dragging: previewDragging,
     startDrag: startPreviewDrag,
+    onDragMove: onPreviewDragMove,
     stopDrag: stopPreviewDrag,
     resetTransform: resetPreviewTransform
   } = useCardPreviewDrag()
@@ -255,25 +263,95 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   }, [viewMode])
 
   const closePreview = useCallback(() => {
+    const cardEl = previewCardRef.current
+    const motionRect = snapshotElementRect(previewMotionRef.current)
+    const originRect = previewOriginRect
+    const hiddenOrigin = hiddenPreviewOriginRef.current
+    if (cardEl && originRect && hiddenOrigin) {
+      exitRestoringOriginRef.current = hiddenOrigin
+      void playCardFlipExitGhost({
+        from: cardEl,
+        fromRect: motionRect,
+        to: previewOriginRef.current,
+        toRect: originRect
+      }).finally(() => {
+        restorePreviewOrigin(hiddenOrigin)
+        if (exitRestoringOriginRef.current === hiddenOrigin) {
+          exitRestoringOriginRef.current = null
+        }
+      })
+    } else if (hiddenOrigin) {
+      restorePreviewOrigin(hiddenOrigin)
+    }
     resetPreviewState()
     setPreviewCard(null)
-  }, [resetPreviewState])
+    setPreviewOriginRect(null)
+    previewOriginRef.current = null
+    previewAnimatedKeyRef.current = ''
+  }, [previewCardRef, previewOriginRect, resetPreviewState, restorePreviewOrigin])
 
   const openPreview = useCallback(
-    (card: PreviewState) => {
+    (card: PreviewState, originEl: HTMLElement) => {
+      clearCardFlipExitGhosts()
       resetPreviewState()
+      previewOriginRef.current = originEl
+      hidePreviewOrigin(originEl)
+      setPreviewOriginRect(snapshotElementRect(originEl))
       setPreviewCard(card)
     },
-    [resetPreviewState]
+    [hidePreviewOrigin, resetPreviewState]
   )
 
   useEffect(() => {
     if (!previewCard) {
       resetPreviewState()
+      if (exitRestoringOriginRef.current) {
+        return
+      }
+      restorePreviewOrigin()
       return
     }
     resetPreviewTransform(false)
-  }, [previewCard, resetPreviewState, resetPreviewTransform])
+  }, [previewCard, resetPreviewState, resetPreviewTransform, restorePreviewOrigin])
+
+  useLayoutEffect(() => {
+    if (!previewCard) {
+      return
+    }
+    let cancelled = false
+    let rafId = 0
+    const animationKey = `${previewCard.setCode}-${previewCard.cardNumber}-${previewCard.title}`
+
+    const run = () => {
+      if (cancelled) {
+        return
+      }
+      const motionEl = previewMotionRef.current
+      const rotateEl = previewCardRef.current
+      if (!motionEl || !rotateEl) {
+        rafId = window.requestAnimationFrame(run)
+        return
+      }
+      if (previewAnimatedKeyRef.current === animationKey) {
+        return
+      }
+      previewAnimatedKeyRef.current = animationKey
+      void playCardFlipEntrance({
+        fromRect: previewOriginRect,
+        to: motionEl,
+        rotateTarget: rotateEl
+      })
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId)
+      }
+    }
+  }, [previewCard, previewOriginRect, previewCardRef])
 
   useEffect(() => {
     if (!previewCard) {
@@ -313,12 +391,22 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
     refetchInterval: 60000
   })
-  const previewImageUrls = previewCard
-    ? getCardImageUrls(assets, {
-        setCode: previewCard.setCode,
-        cardNumber: previewCard.cardNumber
-      })
-    : null
+  const previewCacheKey = previewCard
+    ? `${previewCard.setCode}-${previewCard.cardNumber}-${previewCard.title}`
+    : ''
+  const {
+    imageUrls: previewImageUrls,
+    cardBackImageUrl: previewCardBackImageUrl,
+    effectId: previewEffectId,
+    visualStyle: previewVisualStyle
+  } = useCardPreviewVisual({
+    assets,
+    enabled: previewCard !== null,
+    setCode: previewCard?.setCode ?? '',
+    cardNumber: previewCard?.cardNumber ?? 0,
+    rarity: previewCard?.rarity ?? '',
+    cacheKey: previewCacheKey
+  })
 
   const pages = query.data?.pages ?? []
   const records = pages.flatMap((page) => page.items)
@@ -558,27 +646,51 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
       {previewCard && (
         <div
           className="dialog-overlay card-preview-overlay active"
+          style={previewVisualStyle}
           onClick={closePreview}
         >
           <div className="card-preview-container" onClick={(event) => event.stopPropagation()}>
             <div
-              ref={previewCardRef}
-              className={`card-preview-card ${previewDragging ? 'dragging' : ''}`}
-              onPointerDown={startPreviewDrag}
+              ref={previewMotionRef}
+              className="card-preview-motion"
             >
-              <div className="card-preview-front">
-                <img
-                  src={previewImageUrls?.cdnPng ?? ''}
-                  alt={previewCard.title}
-                  className="card-preview-image"
-                  onError={(event) => {
-                    if (!previewImageUrls) {
-                      return
-                    }
-                    applyCardPreviewImageFallback(event.currentTarget, previewImageUrls)
-                  }}
-                />
-                <div ref={previewShineRef} className="card-preview-shine" />
+              <div
+                ref={previewCardRef}
+                className={`card-preview-card card-preview-surface ${previewDragging ? 'dragging' : ''}`}
+                style={previewVisualStyle}
+                data-preview-effect={previewEffectId}
+                onPointerDown={startPreviewDrag}
+                onPointerMove={onPreviewDragMove}
+              >
+                <div className="card-preview-face card-preview-front">
+                  <img
+                    src={previewImageUrls?.cdnPng ?? ''}
+                    alt={previewCard.title}
+                    className="card-preview-image"
+                    onError={(event) => {
+                      if (!previewImageUrls) {
+                        return
+                      }
+                      applyCardPreviewImageFallback(event.currentTarget, previewImageUrls)
+                    }}
+                  />
+                  <div className="card-preview-layer card-preview-layer--foil" />
+                  <div ref={previewShineRef} className="card-preview-layer card-preview-layer--glare card-preview-shine" />
+                  <div className="card-preview-layer card-preview-layer--spark" />
+                </div>
+                <div className="card-preview-face card-preview-back" aria-hidden="true">
+                  {previewCardBackImageUrl.length > 0 ? (
+                    <img
+                      src={previewCardBackImageUrl}
+                      alt=""
+                      className="card-preview-back-image"
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
+                      onError={(event) => hideBrokenCardBackImage(event.currentTarget)}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
             <div className="card-preview-info">

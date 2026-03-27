@@ -3,6 +3,7 @@ const EMPTY_IMAGE_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywA
 export interface CardImageAssets {
   card_proxy_base_url: string
   card_cdn_base_url: string
+  misc_cdn_base_url: string
 }
 
 export interface CardImagePayload {
