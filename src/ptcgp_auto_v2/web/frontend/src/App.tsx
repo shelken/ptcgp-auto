@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Bell, MonitorCog, Moon, Palette, Sun } from 'lucide-react'
 import { Navigate, NavLink, Route, Routes, useLocation, type SetURLSearchParams } from 'react-router-dom'
@@ -21,9 +21,18 @@ import {
   saveThemePreference,
   type ThemePreference
 } from '@/lib/theme'
-import { ManagementPage } from '@/pages/management-page'
-import { OwnedCardsPage } from '@/pages/owned-cards-page'
-import { RecordsPage } from '@/pages/records-page'
+const RecordsPage = lazy(async () => {
+  const mod = await import('@/pages/records-page')
+  return { default: mod.RecordsPage }
+})
+const OwnedCardsPage = lazy(async () => {
+  const mod = await import('@/pages/owned-cards-page')
+  return { default: mod.OwnedCardsPage }
+})
+const ManagementPage = lazy(async () => {
+  const mod = await import('@/pages/management-page')
+  return { default: mod.ManagementPage }
+})
 
 function setLangParam(nextLang: string, searchParams: URLSearchParams, setSearchParams: SetURLSearchParams) {
   const next = new URLSearchParams(searchParams)
@@ -291,12 +300,20 @@ export default function App() {
         </NavLink>
       </nav>
 
-      <Routes>
-        <Route path="/" element={<Navigate to="/records" replace />} />
-        <Route path="/records" element={<RecordsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
-        <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
-        <Route path="/management/*" element={<ManagementPage lang={lang} t={t} assets={assets} />} />
-      </Routes>
+      <Suspense
+        fallback={(
+          <div className="surface-card text-sm text-muted">
+            {t.label_loading ?? 'Loading...'}
+          </div>
+        )}
+      >
+        <Routes>
+          <Route path="/" element={<Navigate to="/records" replace />} />
+          <Route path="/records" element={<RecordsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
+          <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
+          <Route path="/management/*" element={<ManagementPage lang={lang} t={t} assets={assets} />} />
+        </Routes>
+      </Suspense>
 
       <NotificationDrawer
         lang={lang}

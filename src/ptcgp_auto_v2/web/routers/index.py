@@ -48,6 +48,7 @@ async def react_bootstrap(
             "assets": {
                 "card_proxy_base_url": image_bases["proxy_base_url"],
                 "card_cdn_base_url": image_bases["cdn_base_url"],
+                "misc_cdn_base_url": image_bases["misc_cdn_base_url"],
             },
         }
     )

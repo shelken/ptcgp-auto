@@ -13,5 +13,6 @@ export interface BootstrapResponse {
   assets: {
     card_proxy_base_url: string
     card_cdn_base_url: string
+    misc_cdn_base_url: string
   }
 }
