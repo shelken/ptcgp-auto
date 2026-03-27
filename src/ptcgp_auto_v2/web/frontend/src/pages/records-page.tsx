@@ -1,16 +1,16 @@
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
+import { useCardPreviewVisual } from '@/hooks/use-card-preview-visual'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
+import { usePreviewOriginVisibility } from '@/hooks/use-preview-origin-visibility'
 import { buildQuery, fetchJson } from '@/lib/api'
 import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
-import { getCardBackImageUrl, hideBrokenCardBackImage } from '@/lib/card-preview-assets'
-import { buildCardPreviewVisualVars, resolveCardPreviewEffectId } from '@/lib/card-preview-effects'
-import { getDefaultThemeRgb, resolveCardThemeColor } from '@/lib/card-theme-color'
+import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
 import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, toggleListItem } from '@/lib/list-utils'
@@ -84,6 +84,7 @@ interface PreviewState {
 }
 
 const RECORDS_PAGE_SIZE = 10
+const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
 
 function resolveLayoutByCount(cardCount: number): string {
   if (cardCount === 6) {
@@ -214,8 +215,6 @@ function BatchOverviewTile({
 }
 
 export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
-  const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
-
   const [searchParams, setSearchParams] = usePersistedSearchParams()
   const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'records_rarity'))
   const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseSearchList(searchParams, 'records_type'))
@@ -225,14 +224,13 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   })
   const [previewCard, setPreviewCard] = useState<PreviewState | null>(null)
   const [previewOriginRect, setPreviewOriginRect] = useState<PreviewRectLike | null>(null)
-  const [previewThemeRgb, setPreviewThemeRgb] = useState<[number, number, number]>(getDefaultThemeRgb)
   const [activeBatchPack, setActiveBatchPack] = useState<Record<string, number | null>>({})
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const previewMotionRef = useRef<HTMLDivElement | null>(null)
   const previewOriginRef = useRef<HTMLElement | null>(null)
-  const hiddenPreviewOriginRef = useRef<HTMLElement | null>(null)
   const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
   const previewAnimatedKeyRef = useRef('')
+  const { hiddenOriginRef: hiddenPreviewOriginRef, hideOrigin: hidePreviewOrigin, restoreOrigin: restorePreviewOrigin } = usePreviewOriginVisibility()
   const {
     cardRef: previewCardRef,
     shineRef: previewShineRef,
@@ -246,28 +244,6 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     stopPreviewDrag(false)
     resetPreviewTransform(false)
   }, [resetPreviewTransform, stopPreviewDrag])
-  const restorePreviewOriginVisibility = useCallback(() => {
-    const hiddenOrigin = hiddenPreviewOriginRef.current
-    if (!hiddenOrigin) {
-      return
-    }
-    hiddenOrigin.classList.remove('card-preview-origin-hidden')
-    hiddenPreviewOriginRef.current = null
-  }, [])
-  const restorePreviewOriginElement = useCallback((originEl: HTMLElement | null) => {
-    if (!originEl) {
-      return
-    }
-    originEl.classList.remove('card-preview-origin-hidden')
-    if (hiddenPreviewOriginRef.current === originEl) {
-      hiddenPreviewOriginRef.current = null
-    }
-  }, [])
-  const hidePreviewOrigin = useCallback((originEl: HTMLElement) => {
-    restorePreviewOriginVisibility()
-    originEl.classList.add('card-preview-origin-hidden')
-    hiddenPreviewOriginRef.current = originEl
-  }, [restorePreviewOriginVisibility])
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -299,26 +275,25 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
         to: previewOriginRef.current,
         toRect: originRect
       }).finally(() => {
-        restorePreviewOriginElement(hiddenOrigin)
+        restorePreviewOrigin(hiddenOrigin)
         if (exitRestoringOriginRef.current === hiddenOrigin) {
           exitRestoringOriginRef.current = null
         }
       })
     } else if (hiddenOrigin) {
-      restorePreviewOriginElement(hiddenOrigin)
+      restorePreviewOrigin(hiddenOrigin)
     }
     resetPreviewState()
     setPreviewCard(null)
     setPreviewOriginRect(null)
     previewOriginRef.current = null
     previewAnimatedKeyRef.current = ''
-  }, [previewCardRef, previewOriginRect, resetPreviewState, restorePreviewOriginElement])
+  }, [previewCardRef, previewOriginRect, resetPreviewState, restorePreviewOrigin])
 
   const openPreview = useCallback(
     (card: PreviewState, originEl: HTMLElement) => {
       clearCardFlipExitGhosts()
       resetPreviewState()
-      setPreviewThemeRgb(getDefaultThemeRgb())
       previewOriginRef.current = originEl
       hidePreviewOrigin(originEl)
       setPreviewOriginRect(snapshotElementRect(originEl))
@@ -330,15 +305,14 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   useEffect(() => {
     if (!previewCard) {
       resetPreviewState()
-      setPreviewThemeRgb(getDefaultThemeRgb())
       if (exitRestoringOriginRef.current) {
         return
       }
-      restorePreviewOriginVisibility()
+      restorePreviewOrigin()
       return
     }
     resetPreviewTransform(false)
-  }, [previewCard, resetPreviewState, resetPreviewTransform, restorePreviewOriginVisibility])
+  }, [previewCard, resetPreviewState, resetPreviewTransform, restorePreviewOrigin])
 
   useLayoutEffect(() => {
     if (!previewCard) {
@@ -417,58 +391,22 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     getNextPageParam: (lastPage) => (lastPage.has_next ? lastPage.page + 1 : undefined),
     refetchInterval: 60000
   })
-  const previewImageUrls = previewCard
-    ? getCardImageUrls(assets, {
-        setCode: previewCard.setCode,
-        cardNumber: previewCard.cardNumber
-      })
-    : null
-  // 取色使用代理图，避免 CDN 跨域导致提色失败
-  const previewImageUrl = previewImageUrls?.png ?? ''
-  const previewCardBackImageUrl = getCardBackImageUrl(assets)
   const previewCacheKey = previewCard
     ? `${previewCard.setCode}-${previewCard.cardNumber}-${previewCard.title}`
     : ''
-
-  useEffect(() => {
-    if (!previewCard || previewCacheKey.length === 0 || previewImageUrl.length === 0) {
-      setPreviewThemeRgb(getDefaultThemeRgb())
-      return
-    }
-    let cancelled = false
-    void resolveCardThemeColor({
-      cacheKey: previewCacheKey,
-      imageUrl: previewImageUrl
-    }).then((result) => {
-      if (!cancelled) {
-        setPreviewThemeRgb(result.rgb)
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setPreviewThemeRgb(getDefaultThemeRgb())
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [previewCard, previewCacheKey, previewImageUrl])
-
-  const previewVisualVars = useMemo(
-    () =>
-      buildCardPreviewVisualVars({
-        rarity: previewCard?.rarity ?? '',
-        rgb: previewThemeRgb
-      }),
-    [previewCard?.rarity, previewThemeRgb]
-  )
-  const previewEffectId = useMemo(
-    () => resolveCardPreviewEffectId(previewCard?.rarity ?? ''),
-    [previewCard?.rarity]
-  )
-  const previewVisualStyle = useMemo(
-    () => previewVisualVars as CSSProperties,
-    [previewVisualVars]
-  )
+  const {
+    imageUrls: previewImageUrls,
+    cardBackImageUrl: previewCardBackImageUrl,
+    effectId: previewEffectId,
+    visualStyle: previewVisualStyle
+  } = useCardPreviewVisual({
+    assets,
+    enabled: previewCard !== null,
+    setCode: previewCard?.setCode ?? '',
+    cardNumber: previewCard?.cardNumber ?? 0,
+    rarity: previewCard?.rarity ?? '',
+    cacheKey: previewCacheKey
+  })
 
   const pages = query.data?.pages ?? []
   const records = pages.flatMap((page) => page.items)

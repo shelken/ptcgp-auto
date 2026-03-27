@@ -414,6 +414,30 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     )
   }, [])
 
+  const resolveDragPointer = useCallback((dragState: PreviewDragState, clientX: number, clientY: number): PreviewPointerMetrics => {
+    if (dragState.anchorRect) {
+      return resolvePointerMetricsFromRect(dragState.anchorRect, clientX, clientY)
+    }
+    return resolvePointerMetrics(cardRef.current, clientX, clientY)
+  }, [])
+
+  const advanceDragInteraction = useCallback((clientX: number, clientY: number): void => {
+    const dragState = dragStateRef.current
+    const pointer = resolveDragPointer(dragState, clientX, clientY)
+
+    if (!dragState.moved) {
+      const movedDistance = Math.hypot(clientX - dragState.pressX, clientY - dragState.pressY)
+      if (movedDistance < PREVIEW_DRAG_START_DISTANCE_PX) {
+        return
+      }
+      dragState.moved = true
+    }
+
+    updateDragTargetFromPointer(pointer)
+    markInteraction()
+    ensureAnimationFrame()
+  }, [ensureAnimationFrame, markInteraction, resolveDragPointer, updateDragTargetFromPointer])
+
   const onWindowPointerMove = useCallback((event: PointerEvent): void => {
     const dragState = dragStateRef.current
     if (!dragState.dragging) {
@@ -427,23 +451,8 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
       event.preventDefault()
     }
 
-    const pointer = dragState.anchorRect
-      ? resolvePointerMetricsFromRect(dragState.anchorRect, event.clientX, event.clientY)
-      : resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
-
-    if (!dragState.moved) {
-      const movedDistance = Math.hypot(event.clientX - dragState.pressX, event.clientY - dragState.pressY)
-      if (movedDistance < PREVIEW_DRAG_START_DISTANCE_PX) {
-        return
-      }
-      dragState.moved = true
-    }
-
-    updateDragTargetFromPointer(pointer)
-
-    markInteraction()
-    ensureAnimationFrame()
-  }, [ensureAnimationFrame, markInteraction, updateDragTargetFromPointer])
+    advanceDragInteraction(event.clientX, event.clientY)
+  }, [advanceDragInteraction])
 
   const onWindowPointerEnd = useCallback((event: PointerEvent): void => {
     const dragState = dragStateRef.current
@@ -547,9 +556,7 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
           height: liveRect.height
         }
       : null
-    const pointer = dragState.anchorRect
-      ? resolvePointerMetricsFromRect(dragState.anchorRect, event.clientX, event.clientY)
-      : resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
+    const pointer = resolveDragPointer(dragState, event.clientX, event.clientY)
     dragState.dragging = true
     dragState.pointerId = event.pointerId
     dragState.pressX = event.clientX
@@ -563,7 +570,7 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     setDragging(true)
     attachWindowListeners()
     ensureAnimationFrame()
-  }, [attachWindowListeners, ensureAnimationFrame, markInteraction, stopDrag])
+  }, [attachWindowListeners, ensureAnimationFrame, markInteraction, resolveDragPointer, stopDrag])
 
   const onDragMove = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
     const dragState = dragStateRef.current
@@ -575,22 +582,8 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     }
 
     event.preventDefault()
-    const pointer = dragState.anchorRect
-      ? resolvePointerMetricsFromRect(dragState.anchorRect, event.clientX, event.clientY)
-      : resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
-
-    if (!dragState.moved) {
-      const movedDistance = Math.hypot(event.clientX - dragState.pressX, event.clientY - dragState.pressY)
-      if (movedDistance < PREVIEW_DRAG_START_DISTANCE_PX) {
-        return
-      }
-      dragState.moved = true
-    }
-
-    updateDragTargetFromPointer(pointer)
-    markInteraction()
-    ensureAnimationFrame()
-  }, [ensureAnimationFrame, markInteraction, updateDragTargetFromPointer])
+    advanceDragInteraction(event.clientX, event.clientY)
+  }, [advanceDragInteraction])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
