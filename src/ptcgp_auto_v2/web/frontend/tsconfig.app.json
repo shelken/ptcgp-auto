@@ -14,7 +14,8 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "node-vibrant/browser": ["src/types/node-vibrant-browser.d.ts"]
     }
   },
   "include": ["src"]
