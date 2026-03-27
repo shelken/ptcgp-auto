@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,10 @@ import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { buildQuery, fetchJson } from '@/lib/api'
 import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
+import { getCardBackImageUrl, hideBrokenCardBackImage } from '@/lib/card-preview-assets'
+import { buildCardPreviewVisualVars, resolveCardPreviewEffectId } from '@/lib/card-preview-effects'
+import { getDefaultThemeRgb, resolveCardThemeColor } from '@/lib/card-theme-color'
+import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
@@ -128,7 +132,7 @@ function RecordCardTile({
   card: RecordCardView
   assets: CardImageAssets
   t: Record<string, string>
-  onPreview: (card: PreviewState) => void
+  onPreview: (card: PreviewState, originEl: HTMLElement) => void
 }) {
   const { setCode, cardNumber, hasImage } = resolveCardImageMeta(card)
 
@@ -142,13 +146,13 @@ function RecordCardTile({
       <button
         type="button"
         className="unstyled-btn"
-        onClick={() =>
+        onClick={(event) =>
           onPreview({
             title: card.display_name,
             rarity: card.rarity,
             setCode,
             cardNumber
-          })
+          }, event.currentTarget)
         }
       >
         {hasImage ? (
@@ -164,10 +168,8 @@ function RecordCardTile({
           <div className="record-card-fallback">{tr(t, 'no_image', 'No Image')}</div>
         )}
       </button>
-      <div className="record-card-meta">
-        <span className="record-card-rarity" title={card.rarity}>{card.rarity}</span>
-        {card.is_new ? <span className="record-card-new">{tr(t, 'new_badge', 'NEW')}</span> : null}
-      </div>
+      {card.rarity ? <span className="record-card-rarity" title={card.rarity}>{card.rarity}</span> : null}
+      {card.is_new ? <span className="record-card-new">{tr(t, 'new_badge', 'NEW')}</span> : null}
       <div className="record-card-name" title={card.display_name || card.card_name || '-'}>
         {card.display_name || card.card_name || '-'}
       </div>
@@ -222,13 +224,21 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     return stored === 'list' ? 'list' : 'grid'
   })
   const [previewCard, setPreviewCard] = useState<PreviewState | null>(null)
+  const [previewOriginRect, setPreviewOriginRect] = useState<PreviewRectLike | null>(null)
+  const [previewThemeRgb, setPreviewThemeRgb] = useState<[number, number, number]>(getDefaultThemeRgb)
   const [activeBatchPack, setActiveBatchPack] = useState<Record<string, number | null>>({})
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const previewMotionRef = useRef<HTMLDivElement | null>(null)
+  const previewOriginRef = useRef<HTMLElement | null>(null)
+  const hiddenPreviewOriginRef = useRef<HTMLElement | null>(null)
+  const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
+  const previewAnimatedKeyRef = useRef('')
   const {
     cardRef: previewCardRef,
     shineRef: previewShineRef,
     dragging: previewDragging,
     startDrag: startPreviewDrag,
+    onDragMove: onPreviewDragMove,
     stopDrag: stopPreviewDrag,
     resetTransform: resetPreviewTransform
   } = useCardPreviewDrag()
@@ -236,6 +246,28 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     stopPreviewDrag(false)
     resetPreviewTransform(false)
   }, [resetPreviewTransform, stopPreviewDrag])
+  const restorePreviewOriginVisibility = useCallback(() => {
+    const hiddenOrigin = hiddenPreviewOriginRef.current
+    if (!hiddenOrigin) {
+      return
+    }
+    hiddenOrigin.classList.remove('card-preview-origin-hidden')
+    hiddenPreviewOriginRef.current = null
+  }, [])
+  const restorePreviewOriginElement = useCallback((originEl: HTMLElement | null) => {
+    if (!originEl) {
+      return
+    }
+    originEl.classList.remove('card-preview-origin-hidden')
+    if (hiddenPreviewOriginRef.current === originEl) {
+      hiddenPreviewOriginRef.current = null
+    }
+  }, [])
+  const hidePreviewOrigin = useCallback((originEl: HTMLElement) => {
+    restorePreviewOriginVisibility()
+    originEl.classList.add('card-preview-origin-hidden')
+    hiddenPreviewOriginRef.current = originEl
+  }, [restorePreviewOriginVisibility])
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -255,25 +287,97 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   }, [viewMode])
 
   const closePreview = useCallback(() => {
+    const cardEl = previewCardRef.current
+    const motionRect = snapshotElementRect(previewMotionRef.current)
+    const originRect = previewOriginRect
+    const hiddenOrigin = hiddenPreviewOriginRef.current
+    if (cardEl && originRect && hiddenOrigin) {
+      exitRestoringOriginRef.current = hiddenOrigin
+      void playCardFlipExitGhost({
+        from: cardEl,
+        fromRect: motionRect,
+        to: previewOriginRef.current,
+        toRect: originRect
+      }).finally(() => {
+        restorePreviewOriginElement(hiddenOrigin)
+        if (exitRestoringOriginRef.current === hiddenOrigin) {
+          exitRestoringOriginRef.current = null
+        }
+      })
+    } else if (hiddenOrigin) {
+      restorePreviewOriginElement(hiddenOrigin)
+    }
     resetPreviewState()
     setPreviewCard(null)
-  }, [resetPreviewState])
+    setPreviewOriginRect(null)
+    previewOriginRef.current = null
+    previewAnimatedKeyRef.current = ''
+  }, [previewCardRef, previewOriginRect, resetPreviewState, restorePreviewOriginElement])
 
   const openPreview = useCallback(
-    (card: PreviewState) => {
+    (card: PreviewState, originEl: HTMLElement) => {
+      clearCardFlipExitGhosts()
       resetPreviewState()
+      setPreviewThemeRgb(getDefaultThemeRgb())
+      previewOriginRef.current = originEl
+      hidePreviewOrigin(originEl)
+      setPreviewOriginRect(snapshotElementRect(originEl))
       setPreviewCard(card)
     },
-    [resetPreviewState]
+    [hidePreviewOrigin, resetPreviewState]
   )
 
   useEffect(() => {
     if (!previewCard) {
       resetPreviewState()
+      setPreviewThemeRgb(getDefaultThemeRgb())
+      if (exitRestoringOriginRef.current) {
+        return
+      }
+      restorePreviewOriginVisibility()
       return
     }
     resetPreviewTransform(false)
-  }, [previewCard, resetPreviewState, resetPreviewTransform])
+  }, [previewCard, resetPreviewState, resetPreviewTransform, restorePreviewOriginVisibility])
+
+  useLayoutEffect(() => {
+    if (!previewCard) {
+      return
+    }
+    let cancelled = false
+    let rafId = 0
+    const animationKey = `${previewCard.setCode}-${previewCard.cardNumber}-${previewCard.title}`
+
+    const run = () => {
+      if (cancelled) {
+        return
+      }
+      const motionEl = previewMotionRef.current
+      const rotateEl = previewCardRef.current
+      if (!motionEl || !rotateEl) {
+        rafId = window.requestAnimationFrame(run)
+        return
+      }
+      if (previewAnimatedKeyRef.current === animationKey) {
+        return
+      }
+      previewAnimatedKeyRef.current = animationKey
+      void playCardFlipEntrance({
+        fromRect: previewOriginRect,
+        to: motionEl,
+        rotateTarget: rotateEl
+      })
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+      if (rafId !== 0) {
+        window.cancelAnimationFrame(rafId)
+      }
+    }
+  }, [previewCard, previewOriginRect, previewCardRef])
 
   useEffect(() => {
     if (!previewCard) {
@@ -319,6 +423,52 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
         cardNumber: previewCard.cardNumber
       })
     : null
+  // 取色使用代理图，避免 CDN 跨域导致提色失败
+  const previewImageUrl = previewImageUrls?.png ?? ''
+  const previewCardBackImageUrl = getCardBackImageUrl(assets)
+  const previewCacheKey = previewCard
+    ? `${previewCard.setCode}-${previewCard.cardNumber}-${previewCard.title}`
+    : ''
+
+  useEffect(() => {
+    if (!previewCard || previewCacheKey.length === 0 || previewImageUrl.length === 0) {
+      setPreviewThemeRgb(getDefaultThemeRgb())
+      return
+    }
+    let cancelled = false
+    void resolveCardThemeColor({
+      cacheKey: previewCacheKey,
+      imageUrl: previewImageUrl
+    }).then((result) => {
+      if (!cancelled) {
+        setPreviewThemeRgb(result.rgb)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setPreviewThemeRgb(getDefaultThemeRgb())
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [previewCard, previewCacheKey, previewImageUrl])
+
+  const previewVisualVars = useMemo(
+    () =>
+      buildCardPreviewVisualVars({
+        rarity: previewCard?.rarity ?? '',
+        rgb: previewThemeRgb
+      }),
+    [previewCard?.rarity, previewThemeRgb]
+  )
+  const previewEffectId = useMemo(
+    () => resolveCardPreviewEffectId(previewCard?.rarity ?? ''),
+    [previewCard?.rarity]
+  )
+  const previewVisualStyle = useMemo(
+    () => previewVisualVars as CSSProperties,
+    [previewVisualVars]
+  )
 
   const pages = query.data?.pages ?? []
   const records = pages.flatMap((page) => page.items)
@@ -558,27 +708,51 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
       {previewCard && (
         <div
           className="dialog-overlay card-preview-overlay active"
+          style={previewVisualStyle}
           onClick={closePreview}
         >
           <div className="card-preview-container" onClick={(event) => event.stopPropagation()}>
             <div
-              ref={previewCardRef}
-              className={`card-preview-card ${previewDragging ? 'dragging' : ''}`}
-              onPointerDown={startPreviewDrag}
+              ref={previewMotionRef}
+              className="card-preview-motion"
             >
-              <div className="card-preview-front">
-                <img
-                  src={previewImageUrls?.cdnPng ?? ''}
-                  alt={previewCard.title}
-                  className="card-preview-image"
-                  onError={(event) => {
-                    if (!previewImageUrls) {
-                      return
-                    }
-                    applyCardPreviewImageFallback(event.currentTarget, previewImageUrls)
-                  }}
-                />
-                <div ref={previewShineRef} className="card-preview-shine" />
+              <div
+                ref={previewCardRef}
+                className={`card-preview-card card-preview-surface ${previewDragging ? 'dragging' : ''}`}
+                style={previewVisualStyle}
+                data-preview-effect={previewEffectId}
+                onPointerDown={startPreviewDrag}
+                onPointerMove={onPreviewDragMove}
+              >
+                <div className="card-preview-face card-preview-front">
+                  <img
+                    src={previewImageUrls?.cdnPng ?? ''}
+                    alt={previewCard.title}
+                    className="card-preview-image"
+                    onError={(event) => {
+                      if (!previewImageUrls) {
+                        return
+                      }
+                      applyCardPreviewImageFallback(event.currentTarget, previewImageUrls)
+                    }}
+                  />
+                  <div className="card-preview-layer card-preview-layer--foil" />
+                  <div ref={previewShineRef} className="card-preview-layer card-preview-layer--glare card-preview-shine" />
+                  <div className="card-preview-layer card-preview-layer--spark" />
+                </div>
+                <div className="card-preview-face card-preview-back" aria-hidden="true">
+                  {previewCardBackImageUrl.length > 0 ? (
+                    <img
+                      src={previewCardBackImageUrl}
+                      alt=""
+                      className="card-preview-back-image"
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
+                      onError={(event) => hideBrokenCardBackImage(event.currentTarget)}
+                    />
+                  ) : null}
+                </div>
               </div>
             </div>
             <div className="card-preview-info">

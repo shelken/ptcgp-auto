@@ -1,18 +1,24 @@
 import { type MutableRefObject, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef, useState } from 'react'
 
-// 拖拽旋转角度上限，避免卡牌过度倾斜
-const PREVIEW_ROTATE_LIMIT = 24
-// 悬停状态下的轻微倾斜幅度
-const PREVIEW_HOVER_ROTATE_LIMIT = 14
-// 鼠标位移到旋转角度的转换系数
-const PREVIEW_ROTATE_STEP = 0.45
+// 拖拽 X 轴旋转上限（上下倾斜）
+const PREVIEW_ROTATE_X_LIMIT = 30
+// 拖拽 Y 轴旋转上限（左右翻转，超过 90 才能看到卡背）
+const PREVIEW_ROTATE_Y_LIMIT = 170
 // requestAnimationFrame 插值比例：每帧逼近目标 15%
 const PREVIEW_LERP_FACTOR = 0.15
-// Idle 漂浮延迟
-const PREVIEW_IDLE_DELAY_MS = 1200
+// 拖拽中使用更高插值，保证跟手
+const PREVIEW_DRAG_LERP_FACTOR = 0.82
+// 开启 idle 漂浮：静置时模拟自然漂浮
+const PREVIEW_ENABLE_IDLE_FLOAT = true
+// 进场动画约 1650ms，静置漂浮必须晚于进场结束，避免抢同一条 transform
+const PREVIEW_IDLE_DELAY_MS = 2200
 // 插值收敛阈值：低于该阈值时停帧
 const PREVIEW_SETTLE_ROTATE_EPSILON = 0.02
 const PREVIEW_SETTLE_POINTER_EPSILON = 0.0008
+// 样式写入阈值：避免高频写入导致主线程压力
+const PREVIEW_APPLY_EPSILON = 0.0006
+// 拖拽启动阈值：防止按下瞬间就发生倾斜跳变
+const PREVIEW_DRAG_START_DISTANCE_PX = 3
 
 interface PreviewPointerMetrics {
   ratioX: number
@@ -21,17 +27,41 @@ interface PreviewPointerMetrics {
   fromCenterY: number
 }
 
+interface PreviewRect {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 interface PreviewVisualState {
   rotateX: number
   rotateY: number
   pointer: PreviewPointerMetrics
 }
 
+interface AppliedVisualSnapshot {
+  pointerX: number
+  pointerY: number
+  fromCenterX: number
+  fromCenterY: number
+  pointerDistance: number
+  rotateX: number
+  rotateY: number
+  tiltStrength: number
+  holoAngle: number
+}
+
 interface PreviewDragState {
   dragging: boolean
   pointerId: number
-  lastX: number
-  lastY: number
+  anchorRect: PreviewRect | null
+  pressX: number
+  pressY: number
+  pressPointer: PreviewPointerMetrics
+  startRotateX: number
+  startRotateY: number
+  moved: boolean
   targetRotateX: number
   targetRotateY: number
   targetPointer: PreviewPointerMetrics
@@ -42,8 +72,7 @@ interface UseCardPreviewDragResult {
   shineRef: MutableRefObject<HTMLDivElement | null>
   dragging: boolean
   startDrag: (event: ReactPointerEvent<HTMLDivElement>) => void
-  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void
-  onPointerLeave: () => void
+  onDragMove: (event: ReactPointerEvent<HTMLDivElement>) => void
   stopDrag: (withRebound?: boolean) => void
   resetTransform: (animated?: boolean) => void
 }
@@ -70,11 +99,18 @@ function resolvePointerMetrics(
   clientX: number,
   clientY: number
 ): PreviewPointerMetrics {
-  if (!cardEl) {
+  const rect = cardEl?.getBoundingClientRect()
+  if (!rect) {
     return DEFAULT_POINTER_METRICS
   }
+  return resolvePointerMetricsFromRect(rect, clientX, clientY)
+}
 
-  const rect = cardEl.getBoundingClientRect()
+function resolvePointerMetricsFromRect(
+  rect: PreviewRect,
+  clientX: number,
+  clientY: number
+): PreviewPointerMetrics {
   if (rect.width <= 0 || rect.height <= 0) {
     return DEFAULT_POINTER_METRICS
   }
@@ -99,6 +135,20 @@ function clonePointer(pointer: PreviewPointerMetrics): PreviewPointerMetrics {
   }
 }
 
+function resolveIdleFloatHost(cardEl: HTMLDivElement | null): HTMLElement | null {
+  if (!cardEl) {
+    return null
+  }
+  const parent = cardEl.parentElement
+  if (!parent) {
+    return cardEl
+  }
+  if (parent.classList.contains('card-preview-motion') || parent.classList.contains('owned-card-preview-motion')) {
+    return parent
+  }
+  return cardEl
+}
+
 export function useCardPreviewDrag(): UseCardPreviewDragResult {
   const [dragging, setDragging] = useState(false)
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -109,12 +159,19 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
   const idleActiveRef = useRef(false)
   const animationFrameRef = useRef<number | null>(null)
   const stopDragRef = useRef<(withRebound?: boolean) => void>(() => {})
+  const appliedSnapshotRef = useRef<AppliedVisualSnapshot | null>(null)
+  const captureHostRef = useRef<HTMLDivElement | null>(null)
 
   const dragStateRef = useRef<PreviewDragState>({
     dragging: false,
     pointerId: -1,
-    lastX: 0,
-    lastY: 0,
+    anchorRect: null,
+    pressX: 0,
+    pressY: 0,
+    pressPointer: clonePointer(DEFAULT_POINTER_METRICS),
+    startRotateX: 0,
+    startRotateY: 0,
+    moved: false,
     targetRotateX: 0,
     targetRotateY: 0,
     targetPointer: clonePointer(DEFAULT_POINTER_METRICS)
@@ -131,31 +188,59 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     const shineEl = shineRef.current
 
     const pointerDistance = Math.min(1, Math.hypot(state.pointer.fromCenterX, state.pointer.fromCenterY))
-    const rotateDistance = Math.min(1, (Math.abs(state.rotateX) + Math.abs(state.rotateY)) / (PREVIEW_ROTATE_LIMIT * 2))
+    const rotateDistance = Math.min(1, (Math.abs(state.rotateX) + Math.abs(state.rotateY)) / (PREVIEW_ROTATE_X_LIMIT + PREVIEW_ROTATE_Y_LIMIT))
     const tiltStrength = clamp(pointerDistance * 0.45 + rotateDistance * 0.85, 0, 1)
     const holoAngle = ((Math.atan2(state.pointer.fromCenterY, state.pointer.fromCenterX) * 180) / Math.PI + 450) % 360
 
-    const pointerX = `${(state.pointer.ratioX * 100).toFixed(3)}%`
-    const pointerY = `${(state.pointer.ratioY * 100).toFixed(3)}%`
+    const snapshot: AppliedVisualSnapshot = {
+      pointerX: state.pointer.ratioX,
+      pointerY: state.pointer.ratioY,
+      fromCenterX: state.pointer.fromCenterX,
+      fromCenterY: state.pointer.fromCenterY,
+      pointerDistance,
+      rotateX: state.rotateX,
+      rotateY: state.rotateY,
+      tiltStrength,
+      holoAngle
+    }
+    const previous = appliedSnapshotRef.current
+    const changed = !previous
+      || Math.abs(previous.pointerX - snapshot.pointerX) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.pointerY - snapshot.pointerY) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.fromCenterX - snapshot.fromCenterX) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.fromCenterY - snapshot.fromCenterY) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.pointerDistance - snapshot.pointerDistance) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.rotateX - snapshot.rotateX) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.rotateY - snapshot.rotateY) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.tiltStrength - snapshot.tiltStrength) > PREVIEW_APPLY_EPSILON
+      || Math.abs(previous.holoAngle - snapshot.holoAngle) > 0.08
+
+    if (!changed) {
+      return
+    }
+    appliedSnapshotRef.current = snapshot
+
+    const pointerX = `${(snapshot.pointerX * 100).toFixed(3)}%`
+    const pointerY = `${(snapshot.pointerY * 100).toFixed(3)}%`
 
     if (cardEl) {
       cardEl.style.setProperty('--preview-pointer-x', pointerX)
       cardEl.style.setProperty('--preview-pointer-y', pointerY)
       cardEl.style.setProperty('--preview-glare-x', pointerX)
       cardEl.style.setProperty('--preview-glare-y', pointerY)
-      cardEl.style.setProperty('--preview-pointer-from-center-x', state.pointer.fromCenterX.toFixed(4))
-      cardEl.style.setProperty('--preview-pointer-from-center-y', state.pointer.fromCenterY.toFixed(4))
-      cardEl.style.setProperty('--preview-pointer-from-center', pointerDistance.toFixed(4))
-      cardEl.style.setProperty('--preview-rotate-x', `${state.rotateX.toFixed(3)}deg`)
-      cardEl.style.setProperty('--preview-rotate-y', `${state.rotateY.toFixed(3)}deg`)
-      cardEl.style.setProperty('--preview-tilt-strength', tiltStrength.toFixed(4))
-      cardEl.style.setProperty('--preview-holo-angle', `${holoAngle.toFixed(2)}deg`)
+      cardEl.style.setProperty('--preview-pointer-from-center-x', snapshot.fromCenterX.toFixed(4))
+      cardEl.style.setProperty('--preview-pointer-from-center-y', snapshot.fromCenterY.toFixed(4))
+      cardEl.style.setProperty('--preview-pointer-from-center', snapshot.pointerDistance.toFixed(4))
+      cardEl.style.setProperty('--preview-rotate-x', `${snapshot.rotateX.toFixed(3)}deg`)
+      cardEl.style.setProperty('--preview-rotate-y', `${snapshot.rotateY.toFixed(3)}deg`)
+      cardEl.style.setProperty('--preview-tilt-strength', snapshot.tiltStrength.toFixed(4))
+      cardEl.style.setProperty('--preview-holo-angle', `${snapshot.holoAngle.toFixed(2)}deg`)
     }
 
     if (shineEl) {
       shineEl.style.setProperty('--preview-glare-x', pointerX)
       shineEl.style.setProperty('--preview-glare-y', pointerY)
-      shineEl.style.setProperty('--preview-pointer-from-center', pointerDistance.toFixed(4))
+      shineEl.style.setProperty('--preview-pointer-from-center', snapshot.pointerDistance.toFixed(4))
     }
   }, [])
 
@@ -184,16 +269,25 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
   }, [])
 
   const stopIdleFloat = useCallback((): void => {
-    idleActiveRef.current = false
-    const cardEl = cardRef.current
-    if (!cardEl) {
+    if (!idleActiveRef.current) {
       return
     }
-    cardEl.classList.remove('preview-idle-float')
-    cardEl.removeAttribute('data-preview-idle-variant')
+    idleActiveRef.current = false
+    const cardEl = cardRef.current
+    const hostEl = resolveIdleFloatHost(cardEl)
+    if (!hostEl) {
+      return
+    }
+    hostEl.classList.remove('preview-idle-float')
+    hostEl.removeAttribute('data-preview-idle-variant')
+    cardEl?.classList.remove('preview-idle-float')
+    cardEl?.removeAttribute('data-preview-idle-variant')
   }, [])
 
   const startIdleFloat = useCallback((): void => {
+    if (!PREVIEW_ENABLE_IDLE_FLOAT) {
+      return
+    }
     if (prefersReducedMotionRef.current) {
       return
     }
@@ -202,17 +296,21 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
       return
     }
     const cardEl = cardRef.current
-    if (!cardEl) {
+    const hostEl = resolveIdleFloatHost(cardEl)
+    if (!hostEl) {
       return
     }
     idleActiveRef.current = true
     const idleVariant = String(Math.floor(Math.random() * 3) + 1)
-    cardEl.setAttribute('data-preview-idle-variant', idleVariant)
-    cardEl.classList.add('preview-idle-float')
+    hostEl.setAttribute('data-preview-idle-variant', idleVariant)
+    hostEl.classList.add('preview-idle-float')
   }, [])
 
   const scheduleIdleFloat = useCallback((): void => {
     clearIdleTimer()
+    if (!PREVIEW_ENABLE_IDLE_FLOAT) {
+      return
+    }
     if (prefersReducedMotionRef.current) {
       return
     }
@@ -227,16 +325,29 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     scheduleIdleFloat()
   }, [scheduleIdleFloat, stopIdleFloat])
 
+  const setAnimatingClass = useCallback((active: boolean): void => {
+    const cardEl = cardRef.current
+    if (!cardEl) {
+      return
+    }
+    if (active) {
+      cardEl.classList.add('preview-animating')
+      return
+    }
+    cardEl.classList.remove('preview-animating')
+  }, [])
+
   const stepAnimation = useCallback((): void => {
     const dragState = dragStateRef.current
     const renderState = renderStateRef.current
+    const lerpFactor = dragState.dragging ? PREVIEW_DRAG_LERP_FACTOR : PREVIEW_LERP_FACTOR
 
-    renderState.rotateX += (dragState.targetRotateX - renderState.rotateX) * PREVIEW_LERP_FACTOR
-    renderState.rotateY += (dragState.targetRotateY - renderState.rotateY) * PREVIEW_LERP_FACTOR
-    renderState.pointer.ratioX += (dragState.targetPointer.ratioX - renderState.pointer.ratioX) * PREVIEW_LERP_FACTOR
-    renderState.pointer.ratioY += (dragState.targetPointer.ratioY - renderState.pointer.ratioY) * PREVIEW_LERP_FACTOR
-    renderState.pointer.fromCenterX += (dragState.targetPointer.fromCenterX - renderState.pointer.fromCenterX) * PREVIEW_LERP_FACTOR
-    renderState.pointer.fromCenterY += (dragState.targetPointer.fromCenterY - renderState.pointer.fromCenterY) * PREVIEW_LERP_FACTOR
+    renderState.rotateX += (dragState.targetRotateX - renderState.rotateX) * lerpFactor
+    renderState.rotateY += (dragState.targetRotateY - renderState.rotateY) * lerpFactor
+    renderState.pointer.ratioX += (dragState.targetPointer.ratioX - renderState.pointer.ratioX) * lerpFactor
+    renderState.pointer.ratioY += (dragState.targetPointer.ratioY - renderState.pointer.ratioY) * lerpFactor
+    renderState.pointer.fromCenterX += (dragState.targetPointer.fromCenterX - renderState.pointer.fromCenterX) * lerpFactor
+    renderState.pointer.fromCenterY += (dragState.targetPointer.fromCenterY - renderState.pointer.fromCenterY) * lerpFactor
 
     if (cardRef.current || shineRef.current) {
       applyVisualState(renderState)
@@ -255,7 +366,8 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     }
 
     animationFrameRef.current = null
-  }, [applyVisualState])
+    setAnimatingClass(false)
+  }, [applyVisualState, setAnimatingClass])
 
   const ensureAnimationFrame = useCallback((): void => {
     if (typeof window === 'undefined') {
@@ -264,8 +376,9 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     if (animationFrameRef.current !== null) {
       return
     }
+    setAnimatingClass(true)
     animationFrameRef.current = window.requestAnimationFrame(stepAnimation)
-  }, [stepAnimation])
+  }, [setAnimatingClass, stepAnimation])
 
   const resetTransform = useCallback((animated = false): void => {
     setTargetNeutral()
@@ -277,25 +390,29 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
+        setAnimatingClass(false)
       }
       return
     }
     ensureAnimationFrame()
-  }, [applyVisualState, ensureAnimationFrame, markInteraction, setTargetNeutral, syncRenderToTarget])
+  }, [applyVisualState, ensureAnimationFrame, markInteraction, setAnimatingClass, setTargetNeutral, syncRenderToTarget])
 
-  const applyHoverState = useCallback((clientX: number, clientY: number): void => {
+  const updateDragTargetFromPointer = useCallback((pointer: PreviewPointerMetrics): void => {
     const dragState = dragStateRef.current
-    if (dragState.dragging) {
-      return
-    }
-
-    const pointer = resolvePointerMetrics(cardRef.current, clientX, clientY)
+    const deltaCenterX = pointer.fromCenterX - dragState.pressPointer.fromCenterX
+    const deltaCenterY = pointer.fromCenterY - dragState.pressPointer.fromCenterY
     dragState.targetPointer = pointer
-    dragState.targetRotateX = clamp(-pointer.fromCenterY * PREVIEW_HOVER_ROTATE_LIMIT, -PREVIEW_HOVER_ROTATE_LIMIT, PREVIEW_HOVER_ROTATE_LIMIT)
-    dragState.targetRotateY = clamp(pointer.fromCenterX * PREVIEW_HOVER_ROTATE_LIMIT, -PREVIEW_HOVER_ROTATE_LIMIT, PREVIEW_HOVER_ROTATE_LIMIT)
-    markInteraction()
-    ensureAnimationFrame()
-  }, [ensureAnimationFrame, markInteraction])
+    dragState.targetRotateX = clamp(
+      dragState.startRotateX - deltaCenterY * PREVIEW_ROTATE_X_LIMIT,
+      -PREVIEW_ROTATE_X_LIMIT,
+      PREVIEW_ROTATE_X_LIMIT
+    )
+    dragState.targetRotateY = clamp(
+      dragState.startRotateY + deltaCenterX * PREVIEW_ROTATE_Y_LIMIT,
+      -PREVIEW_ROTATE_Y_LIMIT,
+      PREVIEW_ROTATE_Y_LIMIT
+    )
+  }, [])
 
   const onWindowPointerMove = useCallback((event: PointerEvent): void => {
     const dragState = dragStateRef.current
@@ -310,18 +427,23 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
       event.preventDefault()
     }
 
-    const deltaX = event.clientX - dragState.lastX
-    const deltaY = event.clientY - dragState.lastY
+    const pointer = dragState.anchorRect
+      ? resolvePointerMetricsFromRect(dragState.anchorRect, event.clientX, event.clientY)
+      : resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
 
-    dragState.lastX = event.clientX
-    dragState.lastY = event.clientY
-    dragState.targetRotateX = clamp(dragState.targetRotateX - deltaY * PREVIEW_ROTATE_STEP, -PREVIEW_ROTATE_LIMIT, PREVIEW_ROTATE_LIMIT)
-    dragState.targetRotateY = clamp(dragState.targetRotateY + deltaX * PREVIEW_ROTATE_STEP, -PREVIEW_ROTATE_LIMIT, PREVIEW_ROTATE_LIMIT)
-    dragState.targetPointer = resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
+    if (!dragState.moved) {
+      const movedDistance = Math.hypot(event.clientX - dragState.pressX, event.clientY - dragState.pressY)
+      if (movedDistance < PREVIEW_DRAG_START_DISTANCE_PX) {
+        return
+      }
+      dragState.moved = true
+    }
+
+    updateDragTargetFromPointer(pointer)
 
     markInteraction()
     ensureAnimationFrame()
-  }, [ensureAnimationFrame, markInteraction])
+  }, [ensureAnimationFrame, markInteraction, updateDragTargetFromPointer])
 
   const onWindowPointerEnd = useCallback((event: PointerEvent): void => {
     const dragState = dragStateRef.current
@@ -360,9 +482,29 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
   const stopDrag = useCallback((withRebound = true): void => {
     const dragState = dragStateRef.current
     const wasDragging = dragState.dragging
+    const pointerId = dragState.pointerId
+    const captureHost = captureHostRef.current
+
+    if (captureHost && pointerId !== -1) {
+      try {
+        if (captureHost.hasPointerCapture(pointerId)) {
+          captureHost.releasePointerCapture(pointerId)
+        }
+      } catch {
+        // 忽略释放失败，避免阻断关闭流程
+      }
+    }
+    captureHostRef.current = null
 
     dragState.dragging = false
     dragState.pointerId = -1
+    dragState.anchorRect = null
+    dragState.pressX = 0
+    dragState.pressY = 0
+    dragState.pressPointer = clonePointer(DEFAULT_POINTER_METRICS)
+    dragState.startRotateX = 0
+    dragState.startRotateY = 0
+    dragState.moved = false
     setDragging(false)
     detachWindowListeners()
 
@@ -389,35 +531,66 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
 
     try {
       event.currentTarget.setPointerCapture(event.pointerId)
+      captureHostRef.current = event.currentTarget
     } catch {
       // 捕获失败时继续，窗口级监听兜底
+      captureHostRef.current = null
     }
 
     const dragState = dragStateRef.current
+    const liveRect = cardRef.current?.getBoundingClientRect() ?? null
+    dragState.anchorRect = liveRect
+      ? {
+          left: liveRect.left,
+          top: liveRect.top,
+          width: liveRect.width,
+          height: liveRect.height
+        }
+      : null
+    const pointer = dragState.anchorRect
+      ? resolvePointerMetricsFromRect(dragState.anchorRect, event.clientX, event.clientY)
+      : resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
     dragState.dragging = true
     dragState.pointerId = event.pointerId
-    dragState.lastX = event.clientX
-    dragState.lastY = event.clientY
-    dragState.targetPointer = resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
+    dragState.pressX = event.clientX
+    dragState.pressY = event.clientY
+    dragState.pressPointer = clonePointer(pointer)
+    dragState.startRotateX = renderStateRef.current.rotateX
+    dragState.startRotateY = renderStateRef.current.rotateY
+    dragState.moved = false
+    dragState.targetPointer = clonePointer(renderStateRef.current.pointer)
 
     setDragging(true)
     attachWindowListeners()
     ensureAnimationFrame()
   }, [attachWindowListeners, ensureAnimationFrame, markInteraction, stopDrag])
 
-  const onPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
-    applyHoverState(event.clientX, event.clientY)
-  }, [applyHoverState])
-
-  const onPointerLeave = useCallback((): void => {
+  const onDragMove = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
     const dragState = dragStateRef.current
-    if (dragState.dragging) {
+    if (!dragState.dragging) {
       return
     }
-    setTargetNeutral()
+    if (dragState.pointerId !== -1 && event.pointerId !== dragState.pointerId) {
+      return
+    }
+
+    event.preventDefault()
+    const pointer = dragState.anchorRect
+      ? resolvePointerMetricsFromRect(dragState.anchorRect, event.clientX, event.clientY)
+      : resolvePointerMetrics(cardRef.current, event.clientX, event.clientY)
+
+    if (!dragState.moved) {
+      const movedDistance = Math.hypot(event.clientX - dragState.pressX, event.clientY - dragState.pressY)
+      if (movedDistance < PREVIEW_DRAG_START_DISTANCE_PX) {
+        return
+      }
+      dragState.moved = true
+    }
+
+    updateDragTargetFromPointer(pointer)
     markInteraction()
     ensureAnimationFrame()
-  }, [ensureAnimationFrame, markInteraction, setTargetNeutral])
+  }, [ensureAnimationFrame, markInteraction, updateDragTargetFromPointer])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -452,6 +625,7 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
         window.cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
       }
+      cardRef.current?.classList.remove('preview-animating')
     }
   }, [clearIdleTimer, markInteraction, stopDrag, stopIdleFloat])
 
@@ -460,8 +634,7 @@ export function useCardPreviewDrag(): UseCardPreviewDragResult {
     shineRef,
     dragging,
     startDrag,
-    onPointerMove,
-    onPointerLeave,
+    onDragMove,
     stopDrag,
     resetTransform
   }

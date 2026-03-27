@@ -71,8 +71,8 @@
   padding: 0.06rem 0.3rem;
   border-left: 2px solid var(--line);
   border-bottom: 2px solid var(--line);
-  background: #161310;
-  color: #fff8e4;
+  background: var(--line);
+  color: var(--paper);
   text-align: center;
   font-size: 0.64rem;
   font-weight: 800;
@@ -86,8 +86,8 @@
   bottom: 0;
   padding: 0.2rem 0.34rem;
   border-top: 2px solid var(--line);
-  background: rgba(15, 13, 10, 0.9);
-  color: #fff;
+  background: var(--line);
+  color: var(--paper);
   font-size: 0.66rem;
   font-weight: 700;
   line-height: 1.22;
@@ -526,17 +526,23 @@
 }
 
 .owned-card-preview-wrap {
-  perspective: 800px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  perspective: 1450px;
 }
 
 .owned-card-preview-motion {
+  width: min(100%, 18rem);
   display: grid;
   place-items: center;
+  perspective: 1450px;
   transform-origin: center center;
   transform-style: preserve-3d;
 }
 
 .owned-card-preview {
+  width: 100%;
   aspect-ratio: 2 / 3;
 }
 
@@ -566,27 +572,6 @@
 .owned-card-shine {
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-}
-
-.owned-card-preview--missing .owned-card-preview-image {
-  filter: grayscale(1) saturate(0.35);
-}
-
-.owned-card-preview--missing::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    repeating-linear-gradient(
-      -45deg,
-      rgba(0, 0, 0, 0.14) 0,
-      rgba(0, 0, 0, 0.14) 10px,
-      rgba(255, 255, 255, 0.02) 10px,
-      rgba(255, 255, 255, 0.02) 20px
-    ),
-    linear-gradient(rgba(18, 18, 18, 0.26), rgba(18, 18, 18, 0.42));
-  pointer-events: none;
-  z-index: 2;
 }
 
 @media (max-width: 1024px) {
