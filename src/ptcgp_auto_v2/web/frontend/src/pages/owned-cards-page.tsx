@@ -4,14 +4,14 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
 import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
+import { useCardPreviewVisual } from '@/hooks/use-card-preview-visual'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
+import { usePreviewOriginVisibility } from '@/hooks/use-preview-origin-visibility'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { applyCardListImageFallback, applyCardPreviewImageFallback } from '@/lib/card-image-fallback'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
-import { getCardBackImageUrl, hideBrokenCardBackImage } from '@/lib/card-preview-assets'
-import { buildCardPreviewVisualVars, resolveCardPreviewEffectId } from '@/lib/card-preview-effects'
-import { getDefaultThemeRgb, resolveCardThemeColor } from '@/lib/card-theme-color'
+import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
 import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
 import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
@@ -288,12 +288,11 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
   const [pendingExchangeAccountId, setPendingExchangeAccountId] = useState<number | null>(null)
   const [detailPreviewOriginRect, setDetailPreviewOriginRect] = useState<PreviewRectLike | null>(null)
-  const [detailPreviewThemeRgb, setDetailPreviewThemeRgb] = useState<[number, number, number]>(getDefaultThemeRgb)
   const detailPreviewAnimatedKeyRef = useRef('')
   const detailPreviewMotionRef = useRef<HTMLDivElement | null>(null)
   const detailPreviewOriginRef = useRef<HTMLElement | null>(null)
-  const hiddenDetailOriginRef = useRef<HTMLElement | null>(null)
   const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
+  const { hiddenOriginRef: hiddenDetailOriginRef, hideOrigin: hideDetailOrigin, restoreOrigin: restoreDetailOrigin } = usePreviewOriginVisibility()
   const {
     cardRef: detailPreviewCardRef,
     shineRef: detailPreviewShineRef,
@@ -508,7 +507,6 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const resetDetailModalState = useCallback((cardId: number | null) => {
     stopDetailPreviewDrag(false)
     resetDetailPreviewTransform(false)
-    setDetailPreviewThemeRgb(getDefaultThemeRgb())
     setDetailNotice(null)
     setPendingExchangeAccountId(null)
     setFriendInputByAccount({})
@@ -522,22 +520,6 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
       detailPreviewAnimatedKeyRef.current = ''
     }
   }, [resetDetailPreviewTransform, stopDetailPreviewDrag])
-  const restoreDetailOriginVisibility = useCallback(() => {
-    const hiddenOrigin = hiddenDetailOriginRef.current
-    if (!hiddenOrigin) {
-      return
-    }
-    hiddenOrigin.classList.remove('card-preview-origin-hidden')
-    hiddenDetailOriginRef.current = null
-  }, [])
-  const hideDetailOrigin = useCallback((originEl: HTMLElement | null | undefined) => {
-    restoreDetailOriginVisibility()
-    if (!originEl) {
-      return
-    }
-    originEl.classList.add('card-preview-origin-hidden')
-    hiddenDetailOriginRef.current = originEl
-  }, [restoreDetailOriginVisibility])
   const openDetailModal = useCallback((cardId: number, originEl?: HTMLElement | null) => {
     clearCardFlipExitGhosts()
     resetDetailModalState(cardId)
@@ -559,23 +541,17 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         to: detailPreviewOriginRef.current,
         toRect: originRect
       }).finally(() => {
-        hiddenOrigin.classList.remove('card-preview-origin-hidden')
-        if (hiddenDetailOriginRef.current === hiddenOrigin) {
-          hiddenDetailOriginRef.current = null
-        }
+        restoreDetailOrigin(hiddenOrigin)
         if (exitRestoringOriginRef.current === hiddenOrigin) {
           exitRestoringOriginRef.current = null
         }
       })
     } else if (hiddenOrigin) {
-      hiddenOrigin.classList.remove('card-preview-origin-hidden')
-      if (hiddenDetailOriginRef.current === hiddenOrigin) {
-        hiddenDetailOriginRef.current = null
-      }
+      restoreDetailOrigin(hiddenOrigin)
     }
     resetDetailModalState(null)
     detailPreviewOriginRef.current = null
-  }, [detailPreviewCardRef, detailPreviewOriginRect, resetDetailModalState])
+  }, [detailPreviewCardRef, detailPreviewOriginRect, resetDetailModalState, restoreDetailOrigin])
 
   const applyDetailSort = useCallback(
     (nextSortBy: DetailSortField) => {
@@ -604,15 +580,14 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     if (detailCardId === null) {
       stopDetailPreviewDrag(false)
       resetDetailPreviewTransform(false)
-      setDetailPreviewThemeRgb(getDefaultThemeRgb())
       if (exitRestoringOriginRef.current) {
         return
       }
-      restoreDetailOriginVisibility()
+      restoreDetailOrigin()
       return
     }
     resetDetailPreviewTransform(false)
-  }, [detailCardId, resetDetailPreviewTransform, restoreDetailOriginVisibility, stopDetailPreviewDrag])
+  }, [detailCardId, resetDetailPreviewTransform, restoreDetailOrigin, stopDetailPreviewDrag])
 
   useEffect(() => {
     if (detailCardId === null) {
@@ -677,58 +652,22 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
   }, [gridCols])
   const detailData = detailQuery.data?.card.id === detailCardId ? detailQuery.data : null
-  const detailPreviewImageUrls = detailData
-    ? getCardImageUrls(assets, {
-        setCode: detailData.card.set_code,
-        cardNumber: detailData.card.number
-      })
-    : null
-  // 取色使用代理图，避免 CDN 跨域导致提色失败
-  const detailPreviewImageUrl = detailPreviewImageUrls?.png ?? ''
-  const detailCardBackImageUrl = getCardBackImageUrl(assets)
   const detailPreviewCacheKey = detailData
     ? `${detailData.card.id}-${detailData.card.set_code}-${detailData.card.number}`
     : ''
-
-  useEffect(() => {
-    if (detailCardId === null || detailPreviewCacheKey.length === 0 || detailPreviewImageUrl.length === 0) {
-      setDetailPreviewThemeRgb(getDefaultThemeRgb())
-      return
-    }
-    let cancelled = false
-    void resolveCardThemeColor({
-      cacheKey: detailPreviewCacheKey,
-      imageUrl: detailPreviewImageUrl
-    }).then((result) => {
-      if (!cancelled) {
-        setDetailPreviewThemeRgb(result.rgb)
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setDetailPreviewThemeRgb(getDefaultThemeRgb())
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [detailCardId, detailPreviewCacheKey, detailPreviewImageUrl])
-
-  const detailPreviewVisualVars = useMemo(
-    () =>
-      buildCardPreviewVisualVars({
-        rarity: detailData?.card.rarity ?? '',
-        rgb: detailPreviewThemeRgb
-      }),
-    [detailData?.card.rarity, detailPreviewThemeRgb]
-  )
-  const detailPreviewEffectId = useMemo(
-    () => resolveCardPreviewEffectId(detailData?.card.rarity ?? ''),
-    [detailData?.card.rarity]
-  )
-  const detailPreviewStyle = useMemo(
-    () => detailPreviewVisualVars as CSSProperties,
-    [detailPreviewVisualVars]
-  )
+  const {
+    imageUrls: detailPreviewImageUrls,
+    cardBackImageUrl: detailCardBackImageUrl,
+    effectId: detailPreviewEffectId,
+    visualStyle: detailPreviewStyle
+  } = useCardPreviewVisual({
+    assets,
+    enabled: detailCardId !== null && detailData !== null,
+    setCode: detailData?.card.set_code ?? '',
+    cardNumber: detailData?.card.number ?? 0,
+    rarity: detailData?.card.rarity ?? '',
+    cacheKey: detailPreviewCacheKey
+  })
 
   useLayoutEffect(() => {
     if (detailCardId === null || !detailData) {
