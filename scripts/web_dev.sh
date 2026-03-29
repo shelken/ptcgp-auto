@@ -52,10 +52,8 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ ! -d "$WEB_DIR/frontend/node_modules" ]; then
-  echo "安装 React 前端依赖..."
-  bun install --cwd "$WEB_DIR/frontend"
-fi
+echo "校验 React 前端依赖..."
+bun install --cwd "$WEB_DIR/frontend" --frozen-lockfile
 
 echo "构建 React 前端..."
 bun run --cwd "$WEB_DIR/frontend" build
