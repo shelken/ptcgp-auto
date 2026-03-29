@@ -19,9 +19,8 @@ templates/packs_auto/
 .alma-snapshots
 runs/**
 output
-src/ptcgp_auto_v2/web/node_modules/
-src/ptcgp_auto_v2/web/frontend/node_modules/
-src/ptcgp_auto_v2/web/frontend/dist/
+node_modules
+dist
 src/ptcgp_auto_v2/web/frontend/src/**/*.js
 src/ptcgp_auto_v2/web/frontend/*.tsbuildinfo
 src/ptcgp_auto_v2/web/frontend/vite.config.js
