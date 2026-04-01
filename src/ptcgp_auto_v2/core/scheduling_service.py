@@ -15,6 +15,7 @@ from sqlmodel import Session, case, col, func
 
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import TaskInstance
+from ptcgp_auto_v2.utils.game_time import get_game_day_window
 
 # 任务列表排序字段常量（Web 与仓储层共享）
 TASK_SORT_BY_DISPATCH_PRIORITY = "dispatch_priority"
@@ -138,7 +139,9 @@ def should_reset_task(
         return False
 
     if reset_type == RESET_TYPE_DAILY:
-        return schedule_anchor_at.date() < now.date()
+        last_window_start, _ = get_game_day_window(schedule_anchor_at)
+        current_window_start, _ = get_game_day_window(now)
+        return last_window_start < current_window_start
     if reset_type == RESET_TYPE_WEEKLY:
         last_week = schedule_anchor_at.isocalendar()[1]
         current_week = now.isocalendar()[1]
@@ -152,9 +155,9 @@ def should_reset_task(
 
 
 def _next_daily_reset(last_completed: datetime) -> datetime:
-    """计算每日任务下一次运行时间。"""
-    next_day = (last_completed + timedelta(days=1)).date()
-    return datetime.combine(next_day, datetime.min.time())
+    """计算每日任务下一次运行时间（按游戏刷新时刻）。"""
+    _, next_reset_at = get_game_day_window(last_completed)
+    return next_reset_at
 
 
 def _next_weekly_reset(last_completed: datetime) -> datetime:
@@ -307,7 +310,9 @@ def build_account_scheduling_context(account: Any) -> AccountSchedulingContext:
     )
 
 
-def order_account_tasks(context: AccountSchedulingContext, tasks: list[Any]) -> list[Any]:
+def order_account_tasks(
+    context: AccountSchedulingContext, tasks: list[Any]
+) -> list[Any]:
     """按账号调度上下文对任务排序。"""
     if not context.task_order:
         return sorted(
@@ -472,9 +477,11 @@ def build_task_scheduling_summary(
     dispatch_plan: AccountDispatchPlan | None = None,
 ) -> TaskSchedulingSummary:
     """构建任务统一调度摘要。"""
-    next_run_at, effective_reset_type, interval_seconds, plan_source = compute_next_run_for_instance(
-        instance,
-        account_cache,
+    next_run_at, effective_reset_type, interval_seconds, plan_source = (
+        compute_next_run_for_instance(
+            instance,
+            account_cache,
+        )
     )
     dispatch_rank = None
     dispatch_rank_total = None
