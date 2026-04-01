@@ -7,17 +7,11 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from pathlib import Path
 from typing import Any, Callable
 
-# 确保项目 src 目录在 sys.path 中
-SRC_DIR = Path(__file__).resolve().parent.parent.parent
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-from ptcgp_auto_v2.db.engine import session_scope  # noqa: E402  # 入口脚本需要先调整 sys.path
-from ptcgp_auto_v2.db.repositories import CardRepository  # noqa: E402  # 入口脚本需要先调整 sys.path
-from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (  # noqa: E402  # 入口脚本需要先调整 sys.path
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories import CardRepository
+from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (
     FlibustierSyncService,
 )
 

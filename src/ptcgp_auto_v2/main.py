@@ -302,14 +302,18 @@ def list_accounts():
         for account in accounts:
             plan_name = "-"
             if account.task_plan_associations:
-                active_assocs = [a for a in account.task_plan_associations if a.is_active]
+                active_assocs = [
+                    a for a in account.task_plan_associations if a.is_active
+                ]
                 if active_assocs:
                     active_assocs.sort(key=lambda x: (-x.priority, x.task_plan_id))
                     primary_assoc = active_assocs[0]
                     if primary_assoc.task_plan:
                         plan_name = primary_assoc.task_plan.name
 
-            game_id = account.game_id[:16] if len(account.game_id) > 16 else account.game_id
+            game_id = (
+                account.game_id[:16] if len(account.game_id) > 16 else account.game_id
+            )
             rows.append(
                 [
                     account.id,
@@ -367,8 +371,12 @@ def reset_running_tasks():
     from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 
     with session_scope() as session:
-        count = RepositoryFactory(session).task_instances().reset_stale_tasks(
-            force_all=True,
+        count = (
+            RepositoryFactory(session)
+            .task_instances()
+            .reset_stale_tasks(
+                force_all=True,
+            )
         )
     print(f"已重置 {count} 个异常状态任务为待执行状态")
 
@@ -729,16 +737,22 @@ def main():
     print("PTCGP Auto v2 - 任务队列架构自动化框架")
     print()
     print("使用方式:")
-    print("  python main_v2.py --daemon                    # 守护模式")
-    print("  python main_v2.py --daemon --web              # 守护模式 + Web 服务")
-    print("  python main_v2.py --web                       # 仅启动 Web 服务")
-    print("  python main_v2.py --list-tasks                # 列出任务")
-    print("  python main_v2.py --list-accounts             # 列出账号")
-    print("  python main_v2.py --switch-account 4 -d 5715  # 切换账号")
-    print("  python main_v2.py --sync-account              # 同步当前设备账号")
-    print("  python main_v2.py --sync-account -d 127.0.0.1:5556  # 指定设备同步")
-    print("  python main_v2.py --task open_pack --account 1              # 单任务")
-    print("  python main_v2.py --task claim_rewards open_pack --account 1  # 多任务")
+    print("  uv run python main_v2.py --daemon                    # 守护模式")
+    print(
+        "  uv run python main_v2.py --daemon --web              # 守护模式 + Web 服务"
+    )
+    print("  uv run python main_v2.py --web                       # 仅启动 Web 服务")
+    print("  uv run python main_v2.py --list-tasks                # 列出任务")
+    print("  uv run python main_v2.py --list-accounts             # 列出账号")
+    print("  uv run python main_v2.py --switch-account 4 -d 5715  # 切换账号")
+    print("  uv run python main_v2.py --sync-account              # 同步当前设备账号")
+    print("  uv run python main_v2.py --sync-account -d 127.0.0.1:5556  # 指定设备同步")
+    print(
+        "  uv run python main_v2.py --task open_pack --account 1              # 单任务"
+    )
+    print(
+        "  uv run python main_v2.py --task claim_rewards open_pack --account 1  # 多任务"
+    )
     print()
     print("更多选项请使用 --help 查看")
 

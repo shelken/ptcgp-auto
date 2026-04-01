@@ -37,7 +37,6 @@ from test_yolo_hash_match import (
 )
 
 # 引入终端预览工具
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 try:
     from ptcgp_auto_v2.utils.terminal_preview import (
         preview_image_inline,  # type: ignore

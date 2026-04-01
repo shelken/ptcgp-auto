@@ -214,8 +214,6 @@ def calculate_similarity(hash1: np.ndarray, hash2: np.ndarray) -> float:
 def discover_devices_simple():
     """自动发现 BlueStacks 设备"""
     try:
-        # 尝试导入主项目的发现工具
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
         from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
         devices = discover_devices()

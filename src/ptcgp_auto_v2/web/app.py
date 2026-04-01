@@ -1,28 +1,22 @@
-# ruff: noqa: E402
 import os
-import sys
 
 
-def _setup_src_import_path() -> str:
-    """注入 src 路径，确保可直接导入项目模块。"""
+def _get_current_dir() -> str:
+    """返回当前模块目录。"""
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    src_dir = os.path.abspath(os.path.join(current_dir, "../.."))
-    if src_dir not in sys.path:
-        sys.path.append(src_dir)
     return current_dir
 
 
-CURRENT_DIR = _setup_src_import_path()
+CURRENT_DIR = _get_current_dir()
 
 from fastapi import FastAPI
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from ptcgp_auto_v2.web.routers import index, react_api
-from ptcgp_auto_v2.web.utils.i18n import detect_lang, init_i18n, set_lang_context
-
 # 导入任务模块以触发注册
 import ptcgp_auto_v2.tasks  # noqa: F401
+from ptcgp_auto_v2.web.routers import index, react_api
+from ptcgp_auto_v2.web.utils.i18n import detect_lang, init_i18n, set_lang_context
 
 
 def _mount_frontend_assets(app: FastAPI) -> None:

@@ -6,19 +6,18 @@
 __test__ = False
 
 import argparse
-import cv2
 import io
-import numpy as np
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from PIL import Image
 from typing import List, Optional, Tuple
 
-# 添加主项目路径以导入 ADB 模块
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+import cv2
+import numpy as np
+from PIL import Image
+
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
 

@@ -1134,7 +1134,7 @@ wheels = [
 [[package]]
 name = "ptcgp-auto"
 version = "2.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "coremltools" },
     { name = "fastapi" },

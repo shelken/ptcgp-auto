@@ -12,14 +12,10 @@ YOLO+Hash 识别性能基准测试脚本
 """
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
 from PIL import Image
-
-# 添加项目路径
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from ptcgp_auto_v2.config import constants
 from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager

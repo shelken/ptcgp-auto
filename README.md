@@ -87,6 +87,8 @@ direnv allow
 uv sync
 ```
 
+`uv sync` 现在会把当前项目一并装进 `.venv`。不要再使用 `PYTHONPATH=src`，也不要为了导入 `src/` 下项目包去手动补 `sys.path`。
+
 ### 1.1 使用 `.env` 配置（v2）
 
 v2 现已支持读取项目根目录 `.env`（与 v1 一致，且不覆盖已存在的环境变量）。
@@ -231,7 +233,7 @@ v1 版本主要用于单人对战刷经验，目前作为遗留模块存在。
 
 ```bash
 # 启动 v1 自动对战
-python main.py
+uv run python main.py
 ```
 
 ## 开发指南

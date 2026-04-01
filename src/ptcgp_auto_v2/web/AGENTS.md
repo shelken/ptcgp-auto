@@ -44,7 +44,7 @@ bun run --cwd src/ptcgp_auto_v2/web/frontend build
 ./scripts/web_dev.sh
 
 # Python 代码检查
-PYTHONPATH=src uv run ruff check src/ptcgp_auto_v2/web
+uv run ruff check src/ptcgp_auto_v2/web
 ```
 
 ## 验收要求

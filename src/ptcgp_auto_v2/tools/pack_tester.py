@@ -5,18 +5,13 @@
 提供卡包封面图片的下载、对比、匹配测试功能。
 """
 
-import sys
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from PIL import Image
 
-# 确保能导入 v2 模块
-ROOT_DIR = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(ROOT_DIR / "src"))
-
-from ptcgp_auto_v2.utils.pack_image_manager import (  # noqa: E402  # 入口脚本需要先调整 sys.path
+from ptcgp_auto_v2.utils.pack_image_manager import (
     PACK_CROP_RATIO,
     PackImageManager,
 )
@@ -176,7 +171,7 @@ def test_match(
                 print(f"✓ 匹配成功! 位置: {match.box}")
                 print("\n推荐命令:")
                 print(
-                    f"  python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
+                    f"  uv run python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
                 )
                 return (best_conf, match.box)
         print("✗ 未达到阈值. 建议调整裁剪参数后重试")
@@ -767,13 +762,13 @@ def test_quick_match(adb_controller, threshold: float = 0.8):
         print("  ✓ 匹配成功！")
         print("\n推荐命令:")
         print(
-            f"  python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
+            f"  uv run python debug_tool.py -a PORT --test-pack match --booster {booster_name} --scale {best_scale:.3f}"
         )
     else:
         print(f"  ✗ 未达阈值 ({threshold})")
         print("\n建议: 尝试调整裁剪参数")
         print(
-            f"  python debug_tool.py -a PORT --test-pack roi --booster {booster_name}"
+            f"  uv run python debug_tool.py -a PORT --test-pack roi --booster {booster_name}"
         )
 
     print(f"{'=' * 60}")

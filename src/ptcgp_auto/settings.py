@@ -3,10 +3,10 @@ Unified settings loader
 Priority: CLI args > Environment variables > .env file > defaults
 """
 
-import os
 import argparse
+import os
 from pathlib import Path
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Optional, Tuple
 
 from ptcgp_auto.logger import get_logger
 
@@ -110,10 +110,10 @@ def create_parser() -> argparse.ArgumentParser:
 配置优先级: CLI 参数 > 环境变量 > .env 文件 > 默认值
 
 示例:
-  python main.py -a 5556                    # 指定端口
-  python main.py --log-level DEBUG          # 启用调试日志
-  python main.py --notify-key YOUR_KEY      # 启用通知
-  LOG_LEVEL=DEBUG python main.py            # 环境变量设置日志级别
+  uv run python main.py -a 5556                    # 指定端口
+  uv run python main.py --log-level DEBUG          # 启用调试日志
+  uv run python main.py --notify-key YOUR_KEY      # 启用通知
+  LOG_LEVEL=DEBUG uv run python main.py            # 环境变量设置日志级别
         """,
     )
 

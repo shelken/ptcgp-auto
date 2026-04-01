@@ -7,22 +7,16 @@ PTCGP 调试工具 - v2 版本
 完全基于 v2 infra 层实现。
 
 基本用法:
-    python debug_tool.py -a 5555 --ocr
-    python debug_tool.py -a 5555 --template icon_yes --scale 0.67
-    python debug_tool.py -a 5555 --test-pack match --booster Charizard
+    uv run python debug_tool.py -a 5555 --ocr
+    uv run python debug_tool.py -a 5555 --template icon_yes --scale 0.67
+    uv run python debug_tool.py -a 5555 --test-pack match --booster Charizard
 """
 
-# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
-
-# 添加项目路径
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.insert(0, str(ROOT_DIR / "src"))
 
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.infra.adb import AdbController
@@ -32,6 +26,7 @@ from ptcgp_auto_v2.tools.context import get_adb, set_current_address
 
 if TYPE_CHECKING:
     from typing import Optional, Tuple
+
     from PIL import Image
 
 
@@ -45,6 +40,7 @@ PACK_TEST_ACTIONS = ["download", "compare", "match", "batch", "roi", "list", "cl
 # =============================================================================
 # 工具函数
 # =============================================================================
+
 
 def parse_address(address: str | None) -> Tuple[Optional[str], Optional[int]]:
     """
@@ -142,6 +138,7 @@ def crop_image(
 # 命令处理函数
 # =============================================================================
 
+
 def handle_screenshot(adb: AdbController) -> None:
     """处理 --screenshot 命令"""
     img = take_screenshot(adb)
@@ -203,6 +200,7 @@ def handle_template(
         # 使用 stem 作为模板名，加载文件
         template_key = path.stem
         import cv2
+
         template_img = cv2.imread(str(path))
         if template_img is None:
             print(f"ERROR: 无法读取模板: {path}")
@@ -212,9 +210,13 @@ def handle_template(
         if abs(scale_ratio - 1.0) > 0.01:
             new_w = int(template_img.shape[1] * scale_ratio)
             new_h = int(template_img.shape[0] * scale_ratio)
-            template_img = cv2.resize(template_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            template_img = cv2.resize(
+                template_img, (new_w, new_h), interpolation=cv2.INTER_AREA
+            )
         matcher.templates[template_key] = template_img
-        print(f"LOADED: {template_key} <- {path} ({template_img.shape[1]}x{template_img.shape[0]})")
+        print(
+            f"LOADED: {template_key} <- {path} ({template_img.shape[1]}x{template_img.shape[0]})"
+        )
         template_name = template_key
     else:
         # 系统模板 - 尝试加载
@@ -222,6 +224,7 @@ def handle_template(
         if template_name.startswith("packs_auto/"):
             booster_name = template_name[11:]  # 去掉 "packs_auto/" 前缀
             from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
+
             manager = PackImageManager()
             if not manager.ensure_pack_ready(booster_name):
                 print(f"ERROR: 下载卡包资源失败: {booster_name}")
@@ -231,7 +234,9 @@ def handle_template(
         elif "/" in template_name:
             matcher.load_template(f"{template_name}.png", is_pack_template=True)
         else:
-            if not matcher._load_template_file(Path(matcher.templates_dir) / f"{template_name}.png"):
+            if not matcher._load_template_file(
+                Path(matcher.templates_dir) / f"{template_name}.png"
+            ):
                 # 尝试递归搜索
                 candidates = list(matcher.templates_dir.rglob(f"{template_name}.png"))
                 if candidates:
@@ -293,6 +298,7 @@ def _print_single_match(
     """打印单个匹配位置"""
     # 先检查模板是否已加载
     from ptcgp_auto_v2.infra.template import TemplateMatcher as TM
+
     normalized_name = TM._normalize_name(matcher, template_name)
     if normalized_name not in matcher.templates:
         print(f"TEMPLATE_NOT_LOADED: {template_name}")
@@ -311,7 +317,9 @@ def _print_single_match(
 
     match = matcher.find_with_scale(img, template_name, scale, threshold=threshold)
     if match:
-        print(f"MATCH_OK: {template_name} confidence={raw_confidence:.4f} threshold={threshold}")
+        print(
+            f"MATCH_OK: {template_name} confidence={raw_confidence:.4f} threshold={threshold}"
+        )
         offset_x, offset_y = roi_offset
         x1, y1, x2, y2 = match.box
         cx = (x1 + x2) // 2 + offset_x
@@ -322,7 +330,9 @@ def _print_single_match(
             f"center=({cx},{cy})"
         )
     else:
-        print(f"MATCH_FAILED: {template_name} confidence={raw_confidence:.4f} threshold={threshold}")
+        print(
+            f"MATCH_FAILED: {template_name} confidence={raw_confidence:.4f} threshold={threshold}"
+        )
 
 
 def _suggest_best_scale(
@@ -338,7 +348,9 @@ def _suggest_best_scale(
 
     if best_conf >= threshold:
         # 使用最佳比例实际匹配并输出位置
-        match = matcher.find_with_scale(img, template_name, best_scale, threshold=threshold)
+        match = matcher.find_with_scale(
+            img, template_name, best_scale, threshold=threshold
+        )
         if match:
             print(f"\nCONFIDENCE: {match.confidence:.4f} threshold={threshold}")
             x1, y1, x2, y2 = match.box
@@ -349,7 +361,7 @@ def _suggest_best_scale(
                 f"({x1},{y1})-({x2},{y2}) center=({cx},{cy})"
             )
         print(
-            f"\n✓ 推荐使用: python debug_tool.py --template {template_name} --scale {best_scale}"
+            f"\n✓ 推荐使用: uv run python debug_tool.py --template {template_name} --scale {best_scale}"
         )
 
 
@@ -396,7 +408,9 @@ def handle_pack_test(args: argparse.Namespace) -> None:
     if action == "download":
         if not booster:
             print("错误: download 需要指定 --booster 参数")
-            print("示例: python debug_tool.py --test-pack download --booster Charizard,Mewtwo")
+            print(
+                "示例: uv run python debug_tool.py --test-pack download --booster Charizard,Mewtwo"
+            )
             return
         test_download([b.strip() for b in booster.split(",")])
         return
@@ -404,7 +418,9 @@ def handle_pack_test(args: argparse.Namespace) -> None:
     if action == "compare":
         if not booster:
             print("错误: compare 需要指定 --booster 参数")
-            print("示例: python debug_tool.py --test-pack compare --booster Charizard")
+            print(
+                "示例: uv run python debug_tool.py --test-pack compare --booster Charizard"
+            )
             return
         test_compare(booster)
         return
@@ -418,7 +434,9 @@ def handle_pack_test(args: argparse.Namespace) -> None:
     if action == "match":
         if not booster:
             print("错误: match 需要指定 --booster 参数")
-            print("示例: python debug_tool.py -a PORT --test-pack match --booster Charizard")
+            print(
+                "示例: uv run python debug_tool.py -a PORT --test-pack match --booster Charizard"
+            )
             return
         test_match(adb, booster, scale=scale, threshold=threshold)
 
@@ -439,6 +457,7 @@ def handle_pack_test(args: argparse.Namespace) -> None:
 # 参数解析
 # =============================================================================
 
+
 def create_parser() -> argparse.ArgumentParser:
     """创建命令行参数解析器"""
     parser = argparse.ArgumentParser(
@@ -447,40 +466,31 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  %(prog)s -a 5555 --ocr                    # OCR识别
-  %(prog)s -a 5555 --template icon_yes      # 模板匹配
-  %(prog)s -a 5555 --template icon_yes --all    # 查找所有匹配位置
-  %(prog)s -a 5555 --crop                   # 交互式截取模板
-  %(prog)s --test-pack list                 # 列出已下载卡包
+  uv run python debug_tool.py -a 5555 --ocr                    # OCR识别
+  uv run python debug_tool.py -a 5555 --template icon_yes      # 模板匹配
+  uv run python debug_tool.py -a 5555 --template icon_yes --all    # 查找所有匹配位置
+  uv run python debug_tool.py -a 5555 --crop                   # 交互式截取模板
+  uv run python debug_tool.py --test-pack list                 # 列出已下载卡包
         """,
     )
 
     # 通用参数
     general = parser.add_argument_group("通用参数")
     general.add_argument(
-        "-a", "--address",
+        "-a",
+        "--address",
         type=str,
         default=None,
         metavar="ADDR",
-        help="ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)"
+        help="ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)",
     )
 
     # 基础功能（互斥）
     basic = parser.add_argument_group("基础功能（互斥）")
+    basic.add_argument("--screenshot", action="store_true", help="截图并保存到调试目录")
+    basic.add_argument("--ocr", action="store_true", help="截图并输出 OCR 识别结果")
     basic.add_argument(
-        "--screenshot",
-        action="store_true",
-        help="截图并保存到调试目录"
-    )
-    basic.add_argument(
-        "--ocr",
-        action="store_true",
-        help="截图并输出 OCR 识别结果"
-    )
-    basic.add_argument(
-        "--crop",
-        action="store_true",
-        help="截图并打开区域选择器，框选区域保存为模板"
+        "--crop", action="store_true", help="截图并打开区域选择器，框选区域保存为模板"
     )
 
     # 模板匹配参数
@@ -489,34 +499,34 @@ def create_parser() -> argparse.ArgumentParser:
         "--template",
         type=str,
         metavar="NAME",
-        help="查找指定模板名称或路径（如 icon_yes 或 /path/to/template.png）"
+        help="查找指定模板名称或路径（如 icon_yes 或 /path/to/template.png）",
     )
     template.add_argument(
         "--all",
         action="store_true",
         dest="all_matches",
-        help="【--template专用】查找并输出所有匹配位置"
+        help="【--template专用】查找并输出所有匹配位置",
     )
     template.add_argument(
         "--scale",
         type=float,
         default=None,
         metavar="RATIO",
-        help="【--template专用】模板匹配缩放比例（如 0.22, 0.81, 1.0）"
+        help="【--template专用】模板匹配缩放比例（如 0.22, 0.81, 1.0）",
     )
     template.add_argument(
         "--threshold",
         type=float,
         default=None,
         metavar="VAL",
-        help="【--template专用】匹配置信度阈值（0-1，默认 0.8）"
+        help="【--template专用】匹配置信度阈值（0-1，默认 0.8）",
     )
     template.add_argument(
         "--roi",
         type=str,
         default=None,
         metavar="X,Y,W,H",
-        help="【--template专用】限制匹配区域，格式: '100,200,500,500'"
+        help="【--template专用】限制匹配区域，格式: '100,200,500,500'",
     )
 
     # 卡包测试参数
@@ -526,18 +536,18 @@ def create_parser() -> argparse.ArgumentParser:
         type=str,
         metavar="ACTION",
         choices=PACK_TEST_ACTIONS,
-        help=f"卡包测试动作: {', '.join(PACK_TEST_ACTIONS)}"
+        help=f"卡包测试动作: {', '.join(PACK_TEST_ACTIONS)}",
     )
     pack.add_argument(
         "--booster",
         type=str,
         metavar="NAME",
-        help="【--test-pack专用】指定子包名称（多个用逗号分隔，如 Charizard,Mewtwo）"
+        help="【--test-pack专用】指定子包名称（多个用逗号分隔，如 Charizard,Mewtwo）",
     )
     pack.add_argument(
         "--quick",
         action="store_true",
-        help="【--test-pack roi专用】快速测试模式，交互式选择卡包"
+        help="【--test-pack roi专用】快速测试模式，交互式选择卡包",
     )
 
     return parser
@@ -546,6 +556,7 @@ def create_parser() -> argparse.ArgumentParser:
 # =============================================================================
 # 主函数
 # =============================================================================
+
 
 def main() -> None:
     """主入口函数"""
