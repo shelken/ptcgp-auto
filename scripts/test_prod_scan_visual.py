@@ -3,7 +3,7 @@
 正式识别流程可视化输出（对齐 test_massive_matching.py 格式）
 
 示例：
-PYTHONPATH=src python scripts/test_prod_scan_visual.py --adb 127.0.0.1:5775
+uv run python scripts/test_prod_scan_visual.py --adb 127.0.0.1:5775
 """
 
 import argparse

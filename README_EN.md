@@ -45,8 +45,10 @@ direnv allow
 
 Manual dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
+
+`uv sync` now installs the current project into `.venv` too. Do not use `PYTHONPATH=src`, and do not patch `sys.path` just to import packages from `src/`.
 
 ### 1.1 Use `.env` for v2
 
@@ -76,10 +78,10 @@ Webhook resolution priority: **Explicit URL arg > `PTCGP_WEBHOOK_URL` > `PTCGP_N
 
 ```bash
 # Auto-discover BlueStacks and run daemon mode
-python main_v2.py --daemon
+uv run python main_v2.py --daemon
 
 # Run with a specific device
-python main_v2.py --daemon -d 127.0.0.1:5555
+uv run python main_v2.py --daemon -d 127.0.0.1:5555
 ```
 
 ## 📦 Model Auto-Download
@@ -94,23 +96,23 @@ Models are stored under `data/models/` and loaded into memory automatically.
 
 ```bash
 # Help
-python main_v2.py --help
+uv run python main_v2.py --help
 
 # List accounts
-python main_v2.py --list-accounts
+uv run python main_v2.py --list-accounts
 
 # List supported tasks
-python main_v2.py --list-tasks
+uv run python main_v2.py --list-tasks
 
 # Run a single task (debug)
-python main_v2.py --task open_pack --account 1
+uv run python main_v2.py --task open_pack --account 1
 
 # Sync currently logged-in account into DB
-python main_v2.py --sync-account
+uv run python main_v2.py --sync-account
 
 # Override WeCom config by CLI (highest priority)
-python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
-python main_v2.py --web --notify-key "xxxx"
+uv run python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
+uv run python main_v2.py --web --notify-key "xxxx"
 ```
 
 ## 🏗️ Architecture
@@ -162,7 +164,7 @@ v1 focuses on solo battle grinding and remains as a legacy module. It will be mi
 
 ```bash
 # Start v1 automated battles
-python main.py
+uv run python main.py
 ```
 
 ## Development

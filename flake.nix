@@ -99,7 +99,7 @@
             echo "使用方法:"
             echo "  1. 确保 BlueStacks Air 已运行"
             echo "  2. 连接 ADB: adb connect 127.0.0.1:5555"
-            echo "  3. 运行脚本(V2): python main_v2.py --daemon"
+            echo "  3. 运行脚本(V2): uv run python main_v2.py --daemon"
             echo ""
           '';
         };
