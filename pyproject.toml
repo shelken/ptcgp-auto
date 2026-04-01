@@ -10,7 +10,7 @@ dependencies = [
   "loguru>=0.7.0",
   "numpy>=1.14.5,<=2.3.5",
   "opencv-python>=4.8.0",
-  "pillow>=10.0.0",
+  "pillow>=12.1.1",
   "pyobjc-framework-vision>=10.0",
   "scipy>=1.17.0",
   "sqlmodel>=0.0.16",
