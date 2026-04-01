@@ -29,6 +29,6 @@
 ## 来源
 
 - 主项目已通过的升级核对：
-  - `/Users/shelken/Code/active/ptcgp-auto/docs/refs/19-pillow-upgrade-check-2026-04-01.md`
-  - `/Users/shelken/Code/active/ptcgp-auto/docs/refs/20-scipy-upgrade-check-2026-04-01.md`
-  - `/Users/shelken/Code/active/ptcgp-auto/docs/refs/21-opencv-python-upgrade-check-2026-04-01.md`
+  - `2026-04-01-upgrade-pillow.md`
+  - `2026-04-01-upgrade-scipy.md`
+  - `2026-04-01-upgrade-opencv-python.md`

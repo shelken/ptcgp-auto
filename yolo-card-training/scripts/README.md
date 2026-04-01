@@ -7,7 +7,7 @@
 ### 1. 进入工作目录
 
 ```bash
-cd /Users/shelken/Code/active/ptcgp-auto/yolo-card-training/
+cd yolo-card-training/
 direnv allow  # 自动加载 nix 环境
 ```
 
