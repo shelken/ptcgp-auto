@@ -12,7 +12,6 @@ from datetime import datetime, time, timedelta, timezone
 
 from ptcgp_auto_v2.config.constants import GAME_UTC_OFFSET_HOURS
 
-
 GAME_RESET_UTC_HOUR = 6
 GAME_RESET_UTC_MINUTE = 0
 
@@ -39,6 +38,22 @@ def get_game_day_window(now: datetime | None = None) -> tuple[datetime, datetime
     start = datetime.combine(day, reset_time)
     end = start + timedelta(days=1)
     return start, end
+
+
+def get_next_game_day_reset_at(now: datetime | None = None) -> datetime:
+    """返回给定时间所在游戏日的下一次刷新时刻。"""
+    _, end = get_game_day_window(now)
+    return end
+
+
+def has_game_day_rolled_over(
+    anchor: datetime,
+    now: datetime | None = None,
+) -> bool:
+    """判断给定锚点所在游戏日是否已经切换。"""
+    anchor_start, _ = get_game_day_window(anchor)
+    current_start, _ = get_game_day_window(now)
+    return anchor_start < current_start
 
 
 def get_game_biz_date_str(now: datetime | None = None) -> str:

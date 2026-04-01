@@ -15,7 +15,10 @@ from sqlmodel import Session, case, col, func
 
 from ptcgp_auto_v2.core.task_status import TaskStatus
 from ptcgp_auto_v2.db.models import TaskInstance
-from ptcgp_auto_v2.utils.game_time import get_game_day_window
+from ptcgp_auto_v2.utils.game_time import (
+    get_next_game_day_reset_at,
+    has_game_day_rolled_over,
+)
 
 # 任务列表排序字段常量（Web 与仓储层共享）
 TASK_SORT_BY_DISPATCH_PRIORITY = "dispatch_priority"
@@ -139,9 +142,7 @@ def should_reset_task(
         return False
 
     if reset_type == RESET_TYPE_DAILY:
-        last_window_start, _ = get_game_day_window(schedule_anchor_at)
-        current_window_start, _ = get_game_day_window(now)
-        return last_window_start < current_window_start
+        return has_game_day_rolled_over(schedule_anchor_at, now)
     if reset_type == RESET_TYPE_WEEKLY:
         last_week = schedule_anchor_at.isocalendar()[1]
         current_week = now.isocalendar()[1]
@@ -156,8 +157,7 @@ def should_reset_task(
 
 def _next_daily_reset(last_completed: datetime) -> datetime:
     """计算每日任务下一次运行时间（按游戏刷新时刻）。"""
-    _, next_reset_at = get_game_day_window(last_completed)
-    return next_reset_at
+    return get_next_game_day_reset_at(last_completed)
 
 
 def _next_weekly_reset(last_completed: datetime) -> datetime:
