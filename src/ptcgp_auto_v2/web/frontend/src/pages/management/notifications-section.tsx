@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { Tooltip } from '@/components/ui/tooltip'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { useManagementListQuery } from '@/hooks/use-management-list-query'
 import { usePersistedState } from '@/hooks/use-persisted-state'
@@ -13,6 +14,7 @@ import { tr } from '@/lib/i18n'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 
 import {
+  AccountIdentityCell,
   InlineNotice,
   type InlineNoticeState,
   ListQueryControls,
@@ -30,6 +32,44 @@ import {
   toText,
   toTotalCount
 } from './shared'
+
+function stripMarkdownImages(content: string): string {
+  if (!content) {
+    return ''
+  }
+  return content
+    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+    .replace(/<img[^>]*>/gi, '')
+}
+
+function extractNotificationContentText(content: string): string {
+  const cleaned = stripMarkdownImages(content)
+    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
+    .replace(/[*_`>#-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned || '-'
+}
+
+const managementThumbFrameStyle: CSSProperties = {
+  width: '2.5rem',
+  height: '3.3rem',
+  border: '1px solid var(--line)',
+  borderRadius: '0.35rem',
+  background: '#efe8d9',
+  overflow: 'hidden',
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+}
+
+const managementThumbImageStyle: CSSProperties = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'contain',
+  display: 'block'
+}
 
 export function NotificationsSection({
   lang,
@@ -251,6 +291,16 @@ export function NotificationsSection({
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]
   )
+  const accountMetaMap = useMemo(() => {
+    const map: Record<string, Record<string, unknown>> = {}
+    for (const account of accounts) {
+      const key = toText(account.id, t)
+      if (key !== '-') {
+        map[key] = account
+      }
+    }
+    return map
+  }, [accounts, t])
   const cardPickerCards = cardPickerCardsAccum
   const cardPickerRarityCodes = useMemo(
     () => (((cardPickerQuery.data?.rarity_codes as unknown[]) ?? []) as string[]),
@@ -559,6 +609,8 @@ export function NotificationsSection({
           <div className="table-filter-item notification-filter-item--search">
             <label className="section-subtitle">{tr(t, 'label_search', 'Search')}</label>
             <input
+              id="notifications-search"
+              name="notifications-search"
               className="field-input table-control"
               value={q}
               onChange={(event) => setQ(event.target.value)}
@@ -620,6 +672,8 @@ export function NotificationsSection({
               <div className="section-title">{tr(t, `notification_scene_${sceneKey}`, sceneKey)}</div>
               <label className="filter-row">
                 <input
+                  id={`${sceneKey}-enabled`}
+                  name={`${sceneKey}-enabled`}
                   type="checkbox"
                   checked={current.enabled}
                   onChange={(event) => {
@@ -638,6 +692,8 @@ export function NotificationsSection({
               </label>
               <label className="filter-row">
                 <input
+                  id={`${sceneKey}-webhook`}
+                  name={`${sceneKey}-webhook`}
                   type="checkbox"
                   checked={current.enabledWebhook}
                   onChange={(event) => {
@@ -664,6 +720,8 @@ export function NotificationsSection({
                       return (
                         <label key={`${sceneKey}-rarity-${rarity}`} className="filter-row">
                           <input
+                            id={`${sceneKey}-rarity-${rarity}`}
+                            name={`${sceneKey}-rarity-${rarity}`}
                             type="checkbox"
                             checked={checked}
                             onChange={(event) => updateExtraList(sceneKey, 'notify_by_rarity', rarity, event.target.checked)}
@@ -695,6 +753,8 @@ export function NotificationsSection({
                       {tr(t, 'btn_select_cards', 'Select Cards')}
                     </Button>
                     <input
+                      id={`${sceneKey}-notify-card-ids`}
+                      name={`${sceneKey}-notify-card-ids`}
                       className="field-input"
                       value={parseIdList(current.extraConfig.notify_card_ids).join(',')}
                       placeholder={tr(t, 'label_notify_card_ids', 'Target Cards') + ' (1,2,3)'}
@@ -729,6 +789,8 @@ export function NotificationsSection({
                       return (
                         <label key={`${sceneKey}-task-${taskType}`} className="filter-row">
                           <input
+                            id={`${sceneKey}-task-${taskType}`}
+                            name={`${sceneKey}-task-${taskType}`}
                             type="checkbox"
                             checked={checked}
                             onChange={(event) => updateExtraList(sceneKey, 'notify_task_types', taskType, event.target.checked)}
@@ -746,6 +808,8 @@ export function NotificationsSection({
                       return (
                         <label key={`${sceneKey}-status-${status}`} className="filter-row">
                           <input
+                            id={`${sceneKey}-status-${status}`}
+                            name={`${sceneKey}-status-${status}`}
                             type="checkbox"
                             checked={checked}
                             onChange={(event) => updateExtraList(sceneKey, 'notify_on', status, event.target.checked)}
@@ -799,6 +863,8 @@ export function NotificationsSection({
             <div className="section-stack">
               <div className="filter-row">
                 <input
+                  id="notification-card-picker-search"
+                  name="notification-card-picker-search"
                   className="field-input"
                   value={cardPickerQ}
                   placeholder={tr(t, 'notification_card_search_placeholder', 'Search card name/number/set')}
@@ -929,6 +995,8 @@ export function NotificationsSection({
                       className={`owned-card notification-picker-card ${checked ? 'is-selected' : ''}`}
                     >
                       <input
+                        id={`notification-picker-card-${cardId}`}
+                        name={`notification-picker-card-${cardId}`}
                         className="notification-picker-checkbox"
                         type="checkbox"
                         checked={checked}
@@ -1010,59 +1078,78 @@ export function NotificationsSection({
                 <td colSpan={8} className="text-center text-muted">{tr(t, 'notification_empty', 'No notifications')}</td>
               </tr>
             )}
-            {notifications.map((row) => (
-              <tr key={toText(row.id, t)}>
-                <td className="mono">{toText(row.id, t)}</td>
-                <td>
-                  {renderBadge(
-                    toText(row.scene_label, t) || tr(t, `notification_scene_${toText(row.scene, t)}`, toText(row.scene, t)),
-                    sceneBadgeVariant(toText(row.scene, t))
-                  )}
-                </td>
-                <td>{toText(row.title, t)}</td>
-                <td>
-                  <div className="notification-row-content">
-                    {String(row.image_url ?? '').length > 0 ? (
-                      <img
-                        src={String(row.image_url)}
-                        alt={toText(row.title, t)}
-                        className="notification-thumb"
-                        loading="lazy"
-                        decoding="async"
-                        onError={(event) => {
-                          const image = event.currentTarget
-                          const webpUrl = String(row.image_webp_url ?? '')
-                          if (webpUrl && image.dataset.webpTried !== '1') {
-                            image.dataset.webpTried = '1'
-                            image.src = webpUrl
-                            return
-                          }
-                          image.style.display = 'none'
-                        }}
-                      />
-                    ) : null}
-                    <TruncatedText text={toText(row.content, t)} className="notification-content-text" />
-                  </div>
-                </td>
-                <td>
-                  {toText(row.related_account_id, t) === '-'
-                    ? '-'
-                    : accountNameMap[String(row.related_account_id)] ?? toText(row.related_account_id, t)}
-                </td>
-                <td>{renderBadge(Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread'), Boolean(row.is_read) ? 'muted' : 'warning')}</td>
-                <td className="mono" title={formatAbsoluteDateTime(row.created_at)}>
-                  {formatRelativeDateTime(row.created_at, lang, t)}
-                </td>
-                <td>
-                  <div className="filter-row">
-                    {!Boolean(row.is_read) && (
-                      <Button type="button" size="sm" variant="outline" onClick={() => markReadMutation.mutate(Number(row.id))}>{tr(t, 'btn_mark_read', 'Mark Read')}</Button>
+            {notifications.map((row) => {
+              const contentText = extractNotificationContentText(toText(row.content, t))
+              return (
+                <tr key={toText(row.id, t)}>
+                  <td className="mono">{toText(row.id, t)}</td>
+                  <td>
+                    {renderBadge(
+                      toText(row.scene_label, t) || tr(t, `notification_scene_${toText(row.scene, t)}`, toText(row.scene, t)),
+                      sceneBadgeVariant(toText(row.scene, t))
                     )}
-                    <Button type="button" size="sm" variant="outline" className="notification-test-btn" onClick={() => testWebhookMutation.mutate(Number(row.id))}>{tr(t, 'btn_test_send', 'Test')}</Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td>{toText(row.title, t)}</td>
+                  <td>
+                    <div className="notification-row-content">
+                      {String(row.image_url ?? '').length > 0 ? (
+                        <div style={managementThumbFrameStyle}>
+                          <img
+                            src={String(row.image_url)}
+                            alt={toText(row.title, t)}
+                            className="notification-thumb"
+                            style={managementThumbImageStyle}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(event) => {
+                              const image = event.currentTarget
+                              const webpUrl = String(row.image_webp_url ?? '')
+                              if (webpUrl && image.dataset.webpTried !== '1') {
+                                image.dataset.webpTried = '1'
+                                image.src = webpUrl
+                                return
+                              }
+                              const wrapper = image.parentElement as HTMLElement | null
+                              if (wrapper) {
+                                wrapper.style.display = 'none'
+                              }
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                      <TruncatedText text={contentText} tooltip={contentText} className="notification-content-text" />
+                    </div>
+                  </td>
+                  <td>
+                    {toText(row.related_account_id, t) === '-'
+                      ? '-'
+                      : (
+                          <AccountIdentityCell
+                            t={t}
+                            accountId={row.related_account_id}
+                            name={accountMetaMap[String(row.related_account_id)]?.display_name ?? accountNameMap[String(row.related_account_id)] ?? toText(row.related_account_id, t)}
+                            friendId={accountMetaMap[String(row.related_account_id)]?.friend_id}
+                            gameId={accountMetaMap[String(row.related_account_id)]?.game_id}
+                          />
+                        )}
+                  </td>
+                  <td>{renderBadge(Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread'), Boolean(row.is_read) ? 'muted' : 'warning')}</td>
+                  <td className="mono">
+                    <Tooltip content={formatAbsoluteDateTime(row.created_at)}>
+                      <span>{formatRelativeDateTime(row.created_at, lang, t)}</span>
+                    </Tooltip>
+                  </td>
+                  <td>
+                    <div className="filter-row">
+                      {!Boolean(row.is_read) && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => markReadMutation.mutate(Number(row.id))}>{tr(t, 'btn_mark_read', 'Mark Read')}</Button>
+                      )}
+                      <Button type="button" size="sm" variant="outline" className="notification-test-btn" onClick={() => testWebhookMutation.mutate(Number(row.id))}>{tr(t, 'btn_test_send', 'Test')}</Button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

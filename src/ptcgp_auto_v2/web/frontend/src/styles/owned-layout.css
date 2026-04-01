@@ -450,6 +450,31 @@
   align-items: center;
 }
 
+.owned-modal-exchange-row {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.4fr) minmax(0, 1.4fr) auto;
+  gap: 0.55rem;
+  align-items: end;
+}
+
+.owned-modal-exchange-account {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.owned-modal-exchange-target {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.owned-modal-exchange-target .field-input {
+  width: 100%;
+}
+
 .owned-card-modal-table-shell {
   min-height: 0;
   flex: 1;
@@ -503,6 +528,24 @@
 .owned-card-exchange-table-frame .grid-table th:nth-child(5),
 .owned-card-exchange-table-frame .grid-table td:nth-child(5) {
   width: 25%;
+}
+
+.owned-modal-friend-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.owned-modal-friend-cell .mono {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owned-exchange-row--selected td {
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .owned-modal-sort-btn {
@@ -610,6 +653,15 @@
 
   .owned-modal-query-row {
     grid-template-columns: 1fr;
+  }
+
+  .owned-modal-exchange-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .owned-modal-exchange-row > button {
+    width: 100%;
   }
 
   .owned-card-exchange-table-frame {

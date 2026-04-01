@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
@@ -26,6 +26,7 @@ interface NotificationPanelResponse {
   has_more: boolean
   next_page: number
   unread_count: number
+  total_count: number
   page: number
   page_size: number
 }
@@ -35,12 +36,20 @@ marked.setOptions({
   breaks: true
 })
 
+function stripMarkdownImages(content: string) {
+  if (!content) {
+    return ''
+  }
+  return content
+    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+    .replace(/<img[^>]*>/gi, '')
+}
+
 function extractPlainText(content: string, maxLength = 100) {
   if (!content) {
     return ''
   }
-  const result = content
-    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+  const result = stripMarkdownImages(content)
     .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
     .replace(/[*_`>#-]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -52,10 +61,10 @@ function extractPlainText(content: string, maxLength = 100) {
 }
 
 function renderMarkdownSafely(content: string) {
-  const rendered = marked.parse(content || '') as string
+  const rendered = marked.parse(stripMarkdownImages(content || '')) as string
   const sanitized = DOMPurify.sanitize(rendered, {
-    ALLOWED_TAGS: ['a', 'b', 'strong', 'i', 'em', 'p', 'br', 'ul', 'ol', 'li', 'code', 'pre', 'img'],
-    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt']
+    ALLOWED_TAGS: ['a', 'b', 'strong', 'i', 'em', 'p', 'br', 'ul', 'ol', 'li', 'code', 'pre'],
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel']
   })
   const wrapper = document.createElement('div')
   wrapper.innerHTML = sanitized
@@ -64,6 +73,26 @@ function renderMarkdownSafely(content: string) {
     node.setAttribute('rel', 'noopener noreferrer')
   })
   return wrapper.innerHTML
+}
+
+const drawerThumbFrameStyle: CSSProperties = {
+  width: '3rem',
+  height: '4rem',
+  border: '1px solid var(--line)',
+  borderRadius: '0.4rem',
+  background: '#efe8d9',
+  overflow: 'hidden',
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+}
+
+const drawerThumbImageStyle: CSSProperties = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'contain',
+  display: 'block'
 }
 
 export function NotificationDrawer({
@@ -227,6 +256,8 @@ export function NotificationDrawer({
   const pages = query.data?.pages ?? []
   const notifications = pages.flatMap((page) => page.notifications)
   const firstPage = pages[0]
+  const totalCountValue = Number(firstPage?.total_count)
+  const totalCount = Number.isFinite(totalCountValue) && totalCountValue >= 0 ? Math.floor(totalCountValue) : notifications.length
   const markdownById = useMemo(() => {
     const map: Record<number, string> = {}
     for (const item of notifications) {
@@ -289,18 +320,28 @@ export function NotificationDrawer({
                   }}
                 >
                   {(item.image_url || item.image_webp_url) && (
-                    <img
-                      className="notification-thumb"
-                      src={item.image_url || item.image_webp_url || ''}
-                      alt={item.title}
-                      loading="lazy"
-                      onError={(event) => {
-                        const image = event.currentTarget
-                        if (item.image_webp_url && image.src !== item.image_webp_url) {
-                          image.src = item.image_webp_url
-                        }
-                      }}
-                    />
+                    <div style={drawerThumbFrameStyle}>
+                      <img
+                        className="notification-thumb"
+                        src={item.image_url || item.image_webp_url || ''}
+                        alt={item.title}
+                        style={drawerThumbImageStyle}
+                        loading="lazy"
+                        decoding="async"
+                        onError={(event) => {
+                          const image = event.currentTarget
+                          if (item.image_webp_url && image.dataset.webpTried !== '1') {
+                            image.dataset.webpTried = '1'
+                            image.src = item.image_webp_url
+                            return
+                          }
+                          const wrapper = image.parentElement as HTMLElement | null
+                          if (wrapper) {
+                            wrapper.style.display = 'none'
+                          }
+                        }}
+                      />
+                    </div>
                   )}
                   <div className="notification-main">
                     <div className="notification-item-header">
@@ -336,7 +377,7 @@ export function NotificationDrawer({
             {tr(t, 'label_unread', 'Unread')}: {firstPage?.unread_count ?? 0}
           </span>
           <span className="text-xs text-muted">
-            {tr(t, 'label_total_records', 'Total')}: {notifications.length}
+            {tr(t, 'label_total_records', 'Total')}: {totalCount}
           </span>
         </div>
       </aside>

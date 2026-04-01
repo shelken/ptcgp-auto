@@ -6,7 +6,7 @@ export interface CardImageAssets {
   misc_cdn_base_url: string
 }
 
-export interface CardImagePayload {
+interface CardImagePayload {
   setCode?: string | null
   cardNumber?: number | null
 }

@@ -400,7 +400,7 @@ def build_notification_panel_context(
     - 同状态内按创建时间倒序
 
     Returns:
-        dict: 包含 notifications, has_more, next_page, unread_count 等字段
+        dict: 包含 notifications, has_more, next_page, unread_count, total_count 等字段
     """
     from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 
@@ -430,6 +430,7 @@ def build_notification_panel_context(
         "has_more": has_more,
         "next_page": next_page,
         "unread_count": unread_count,
+        "total_count": total_count,
         "page": normalized_page,
         "page_size": normalized_page_size,
     }
