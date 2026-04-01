@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { Tooltip } from '@/components/ui/tooltip'
 import { useCardPreviewDrag } from '@/hooks/use-card-preview-drag'
 import { useCardPreviewVisual } from '@/hooks/use-card-preview-visual'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
@@ -279,14 +280,14 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   })
 
   const [detailCardId, setDetailCardId] = useState<number | null>(null)
-  const [friendInputByAccount, setFriendInputByAccount] = useState<Record<number, string>>({})
+  const [selectedExchangeAccountId, setSelectedExchangeAccountId] = useState<number | null>(null)
+  const [targetFriendIdInput, setTargetFriendIdInput] = useState('')
   const [detailPage, setDetailPage] = useState(0)
   const [detailQ, setDetailQ] = useState('')
   const [detailSortBy, setDetailSortBy] = useState<DetailSortField>('account_id')
   const [detailSortOrder, setDetailSortOrder] = useState<'asc' | 'desc'>('asc')
   const [detailPageSize, setDetailPageSize] = useState(() => restoreDetailPageSize())
   const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
-  const [pendingExchangeAccountId, setPendingExchangeAccountId] = useState<number | null>(null)
   const [detailPreviewOriginRect, setDetailPreviewOriginRect] = useState<PreviewRectLike | null>(null)
   const detailPreviewAnimatedKeyRef = useRef('')
   const detailPreviewMotionRef = useRef<HTMLDivElement | null>(null)
@@ -492,7 +493,8 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
         level: 'success',
         text: result.message
       })
-      setPendingExchangeAccountId(null)
+      setSelectedExchangeAccountId(null)
+      setTargetFriendIdInput('')
       queryClient.invalidateQueries({ queryKey: ['owned-detail', detailCardId, lang] })
       queryClient.invalidateQueries({ queryKey: ['owned-detail-table', detailCardId] })
     },
@@ -508,8 +510,8 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     stopDetailPreviewDrag(false)
     resetDetailPreviewTransform(false)
     setDetailNotice(null)
-    setPendingExchangeAccountId(null)
-    setFriendInputByAccount({})
+    setSelectedExchangeAccountId(null)
+    setTargetFriendIdInput('')
     setDetailCardId(cardId)
     setDetailPage(0)
     setDetailQ('')
@@ -638,15 +640,15 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   }, [detailCardId])
 
   useEffect(() => {
-    if (pendingExchangeAccountId === null) {
+    if (selectedExchangeAccountId === null) {
       return
     }
     const rows = detailTableQuery.data?.accounts ?? []
-    const stillExists = rows.some((row) => row.account_id === pendingExchangeAccountId)
+    const stillExists = rows.some((row) => row.account_id === selectedExchangeAccountId)
     if (!stillExists) {
-      setPendingExchangeAccountId(null)
+      setSelectedExchangeAccountId(null)
     }
-  }, [detailTableQuery.data?.accounts, pendingExchangeAccountId])
+  }, [detailTableQuery.data?.accounts, selectedExchangeAccountId])
 
   useEffect(() => {
     window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
@@ -728,6 +730,19 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const isListError = viewMode === 'list' ? listQuery.isError : gridQuery.isError
   const listError = (viewMode === 'list' ? listQuery.error : gridQuery.error) as Error | null
   const emptyCardsText = ownedEmptyText(ownershipScope, t)
+  const detailAccounts = detailTableQuery.data?.accounts ?? []
+  const selectedExchangeAccount = detailAccounts.find((row) => row.account_id === selectedExchangeAccountId) ?? null
+  const normalizedTargetFriendId = targetFriendIdInput.trim()
+  const selectedExchangeDisabledReason = selectedExchangeAccount?.exchange_action.enabled
+    ? ''
+    : (selectedExchangeAccount?.exchange_action.reason_text ?? '')
+  const canSubmitExchange = Boolean(
+    detailData
+      && selectedExchangeAccount
+      && selectedExchangeAccount.exchange_action.enabled
+      && normalizedTargetFriendId.length > 0
+      && !exchangeMutation.isPending
+  )
 
   const clearFilters = () => {
     setListPage(0)
@@ -757,6 +772,8 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
 
             <div className="filter-row">
               <input
+                id="owned-account-query"
+                name="owned-account-query"
                 className="field-input"
                 value={accountQuery}
                 onChange={(event) => {
@@ -1171,9 +1188,65 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                       {detailNotice.text}
                     </div>
                   )}
+                  <div className="owned-modal-exchange-row surface-card">
+                    <div className="owned-modal-exchange-account">
+                      <div className="text-xs text-muted">{tr(t, 'exchange_from_account', 'Source Account')}</div>
+                      <div className="mono">
+                        {selectedExchangeAccount
+                          ? `${selectedExchangeAccount.nickname || `#${selectedExchangeAccount.account_id}`} (#${selectedExchangeAccount.account_id})`
+                          : tr(t, 'exchange_select_account_first', 'Select one account first')}
+                      </div>
+                    </div>
+                    <div className="owned-modal-exchange-target">
+                      <label
+                        className="text-xs text-muted"
+                        htmlFor="owned-exchange-target-friend-id"
+                      >
+                        {tr(t, 'exchange_input_friend_id', 'Target Friend ID')}
+                      </label>
+                      <input
+                        id="owned-exchange-target-friend-id"
+                        name="owned-exchange-target-friend-id"
+                        className="field-input"
+                        value={targetFriendIdInput}
+                        onChange={(event) => setTargetFriendIdInput(event.target.value)}
+                        placeholder={tr(t, 'exchange_input_friend_id', 'Target Friend ID')}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      disabled={!canSubmitExchange}
+                      onClick={() => {
+                        if (!detailData || !selectedExchangeAccount) {
+                          return
+                        }
+                        exchangeMutation.mutate({
+                          from_account_id: selectedExchangeAccount.account_id,
+                          to_account_id: null,
+                          to_friend_id: normalizedTargetFriendId,
+                          target_card_id: detailData.card.id,
+                          target_card_rarity: detailData.card.rarity
+                        })
+                      }}
+                    >
+                      {tr(t, 'exchange_entry_action', 'Exchange')}
+                    </Button>
+                  </div>
+                  {selectedExchangeDisabledReason.length > 0 && (
+                    <div className="text-xs text-danger">{selectedExchangeDisabledReason}</div>
+                  )}
+                  {selectedExchangeAccount && normalizedTargetFriendId.length === 0 && (
+                    <div className="text-xs text-danger">
+                      {tr(t, 'exchange_friend_id_required', 'Please input target friend ID')}
+                    </div>
+                  )}
 
                   <div className="owned-modal-query-row">
                     <input
+                      id="owned-modal-account-query"
+                      name="owned-modal-account-query"
                       className="field-input"
                       value={detailQ}
                       onChange={(event) => {
@@ -1245,37 +1318,26 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                           </tr>
                         </thead>
                         <tbody>
-                          {(detailTableQuery.data?.accounts ?? []).length === 0 && (
+                          {detailAccounts.length === 0 && (
                             <tr>
                               <td colSpan={5} className="text-center text-muted">{tr(t, 'exchange_entry_no_available_accounts', 'No eligible accounts')}</td>
                             </tr>
                           )}
-                          {(detailTableQuery.data?.accounts ?? []).map((row) => {
-                            const defaultFriendId = friendInputByAccount[row.account_id] ?? row.friend_id ?? ''
-                            const normalizedFriendId = defaultFriendId.trim()
-                            const isPendingRow = pendingExchangeAccountId === row.account_id
+                          {detailAccounts.map((row) => {
+                            const rowFriendId = String(row.friend_id ?? '').trim()
+                            const isSelectedRow = selectedExchangeAccountId === row.account_id
                             return (
-                              <tr key={row.account_id}>
+                              <tr key={row.account_id} className={isSelectedRow ? 'owned-exchange-row--selected' : ''}>
                                 <td>{row.nickname || `#${row.account_id}`}</td>
                                 <td>
-                                  <div className="filter-row">
-                                    <input
-                                      className="field-input w-full"
-                                      value={defaultFriendId}
-                                      onChange={(event) =>
-                                        setFriendInputByAccount((prev) => ({
-                                          ...prev,
-                                          [row.account_id]: event.target.value
-                                        }))
-                                      }
-                                      placeholder={tr(t, 'exchange_input_friend_id', 'Target Friend ID')}
-                                    />
+                                  <div className="owned-modal-friend-cell">
+                                    <span className="mono">{rowFriendId || '-'}</span>
                                     <Button
                                       type="button"
                                       size="sm"
                                       variant="outline"
                                       onClick={() => {
-                                        void copyText(defaultFriendId).then((copied) => {
+                                        void copyText(rowFriendId).then((copied) => {
                                           setDetailNotice({
                                             level: copied ? 'success' : 'error',
                                             text: copied
@@ -1284,7 +1346,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                                           })
                                         })
                                       }}
-                                      disabled={defaultFriendId.trim().length === 0}
+                                      disabled={rowFriendId.length === 0}
                                     >
                                       {tr(t, 'label_copy', 'Copy')}
                                     </Button>
@@ -1293,61 +1355,32 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                                 <td className="mono">{row.count}</td>
                                 <td className="mono">{row.exchange_points ?? '-'}</td>
                                 <td>
-                                  {isPendingRow ? (
-                                    <div className="filter-row">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="default"
-                                        disabled={normalizedFriendId.length === 0 || exchangeMutation.isPending}
-                                        onClick={() => {
-                                          exchangeMutation.mutate({
-                                            from_account_id: row.account_id,
-                                            to_account_id: null,
-                                            to_friend_id: normalizedFriendId,
-                                            target_card_id: detailData.card.id,
-                                            target_card_rarity: detailData.card.rarity
-                                          })
-                                        }}
-                                      >
-                                        {tr(t, 'label_confirm', '确认')}
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        disabled={exchangeMutation.isPending}
-                                        onClick={() => setPendingExchangeAccountId(null)}
-                                      >
-                                        {tr(t, 'label_cancel', '取消')}
-                                      </Button>
-                                    </div>
+                                  {row.exchange_action.enabled ? (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant={isSelectedRow ? 'default' : 'outline'}
+                                      disabled={exchangeMutation.isPending}
+                                      onClick={() => {
+                                        setSelectedExchangeAccountId(row.account_id)
+                                        setDetailNotice(null)
+                                      }}
+                                    >
+                                      {isSelectedRow
+                                        ? tr(t, 'label_selected', 'Selected')
+                                        : tr(t, 'label_select', 'Select')}
+                                    </Button>
                                   ) : (
-                                    row.exchange_action.enabled ? (
+                                    <Tooltip content={reasonTitle(row.exchange_action.reason_text) ?? ''}>
                                       <Button
                                         type="button"
                                         size="sm"
                                         variant="outline"
-                                        disabled={exchangeMutation.isPending}
-                                        onClick={() => {
-                                          setPendingExchangeAccountId(row.account_id)
-                                          setDetailNotice(null)
-                                        }}
+                                        disabled
                                       >
                                         {tr(t, 'exchange_entry_action', 'Exchange')}
                                       </Button>
-                                    ) : (
-                                      <span title={reasonTitle(row.exchange_action.reason_text)}>
-                                        <Button type="button" size="sm" variant="outline" disabled>
-                                          {tr(t, 'exchange_entry_action', 'Exchange')}
-                                        </Button>
-                                      </span>
-                                    )
-                                  )}
-                                  {isPendingRow && normalizedFriendId.length === 0 && (
-                                    <div className="text-xs text-danger mt-1">
-                                      {tr(t, 'exchange_friend_id_required', '请先填写目标好友ID')}
-                                    </div>
+                                    </Tooltip>
                                   )}
                                 </td>
                               </tr>

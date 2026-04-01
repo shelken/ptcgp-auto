@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { Tooltip } from '@/components/ui/tooltip'
 import { tr } from '@/lib/i18n'
 
 export interface InlineNoticeState {
@@ -133,14 +134,112 @@ export function buildAccountSelectOptions(
     const id = toText(account.id, t)
     const displayName = toText(account.display_name || account.nickname, t)
     const friendId = toText(account.friend_id, t)
-    const label = `${id} ${displayName} (${friendId})`
+    const gameId = toText(account.game_id, t)
+    const label = gameId !== '-' ? `${id} ${displayName} (${friendId}) [${gameId}]` : `${id} ${displayName} (${friendId})`
     items.push({
       value: id,
       label,
-      searchText: `${id} ${displayName} ${friendId}`
+      searchText: `${id} ${displayName} ${friendId} ${gameId}`
     })
   }
   return items
+}
+
+function safeClipboardWrite(text: string) {
+  if (!text || typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+    return
+  }
+  void navigator.clipboard.writeText(text).catch(() => {})
+}
+
+function formatFriendIdForDisplay(raw: string): string {
+  const normalized = raw.trim()
+  if (!normalized) {
+    return '-'
+  }
+  const digitsOnly = normalized.replace(/\D+/g, '')
+  if (!digitsOnly) {
+    return normalized
+  }
+  const chunks = digitsOnly.match(/.{1,4}/g)
+  return chunks ? chunks.join(' ') : digitsOnly
+}
+
+export function CopyableFriendId({
+  value,
+  empty = '-'
+}: {
+  value: string
+  empty?: string
+}) {
+  const normalized = value.trim()
+  if (!normalized || normalized === '-') {
+    return <span className="mono">{empty}</span>
+  }
+  const formatted = formatFriendIdForDisplay(normalized)
+  return (
+    <Tooltip content={normalized}>
+      <button
+        type="button"
+        className="friend-id-copy-btn mono"
+        aria-label="Copy"
+        onClick={() => safeClipboardWrite(normalized)}
+      >
+        {formatted}
+      </button>
+    </Tooltip>
+  )
+}
+
+export function AccountIdentityCell({
+  t,
+  accountId,
+  name,
+  friendId,
+  gameId
+}: {
+  t: Record<string, string>
+  accountId: unknown
+  name: unknown
+  friendId?: unknown
+  gameId?: unknown
+}) {
+  const idTextRaw = toText(accountId, t)
+  const idText = idTextRaw === '-' ? '-' : `#${idTextRaw}`
+  const nameText = toText(name, t)
+  const friendIdText = toText(friendId, t)
+  const gameIdText = toText(gameId, t)
+  const tooltipParts: string[] = []
+  if (idText !== '-') {
+    tooltipParts.push(`${tr(t, 'col_id', 'ID')} ${idText}`)
+  }
+  if (nameText !== '-') {
+    tooltipParts.push(nameText)
+  }
+  if (gameIdText !== '-') {
+    tooltipParts.push(`${tr(t, 'col_game_id', 'Game ID')} ${gameIdText}`)
+  }
+  if (friendIdText !== '-') {
+    tooltipParts.push(friendIdText)
+  }
+  const tooltipText = tooltipParts.join(' | ')
+
+  return (
+    <Tooltip content={tooltipText}>
+      <div className="account-cell">
+        <div className="account-primary mono">
+          <span>{idText}</span>
+          <span className="account-name">{nameText}</span>
+        </div>
+        {(friendIdText !== '-' || gameIdText !== '-') && (
+          <div className="account-meta">
+            {friendIdText !== '-' && <CopyableFriendId value={friendIdText} />}
+            {gameIdText !== '-' && <span className="text-xs text-muted mono">{gameIdText}</span>}
+          </div>
+        )}
+      </div>
+    </Tooltip>
+  )
 }
 
 export function searchableSelectLocale(t: Record<string, string>) {

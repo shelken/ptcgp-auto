@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
+import { Tooltip } from '@/components/ui/tooltip'
 import { useManagementListQuery } from '@/hooks/use-management-list-query'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
@@ -14,6 +15,7 @@ import { type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 import {
   formatAbsoluteDateTime,
+  formatDateYmd,
   formatDurationExact,
   formatDurationShort,
   formatRelativeDateTime
@@ -21,6 +23,8 @@ import {
 
 import { NotificationsSection } from './management/notifications-section'
 import {
+  AccountIdentityCell,
+  CopyableFriendId,
   InlineNotice,
   ListQueryControls,
   Pager,
@@ -142,6 +146,73 @@ function moveTaskOrderWithFallback(
   return nextOrder
 }
 
+type IntervalPartKey = 'days' | 'hours' | 'minutes' | 'seconds'
+
+interface IntervalParts {
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+}
+
+const INTERVAL_SECONDS_PER_DAY = 86400
+const INTERVAL_SECONDS_PER_HOUR = 3600
+const INTERVAL_SECONDS_PER_MINUTE = 60
+
+function parseNonNegativeInt(value: string): number {
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0
+  }
+  return parsed
+}
+
+function splitIntervalSeconds(totalSeconds: number): IntervalParts {
+  const normalized = Number.isFinite(totalSeconds) && totalSeconds > 0 ? Math.floor(totalSeconds) : 0
+  const days = Math.floor(normalized / INTERVAL_SECONDS_PER_DAY)
+  const hours = Math.floor((normalized % INTERVAL_SECONDS_PER_DAY) / INTERVAL_SECONDS_PER_HOUR)
+  const minutes = Math.floor((normalized % INTERVAL_SECONDS_PER_HOUR) / INTERVAL_SECONDS_PER_MINUTE)
+  const seconds = normalized % INTERVAL_SECONDS_PER_MINUTE
+  return { days, hours, minutes, seconds }
+}
+
+function mergeIntervalSeconds(parts: IntervalParts): number {
+  return (
+    parts.days * INTERVAL_SECONDS_PER_DAY
+    + parts.hours * INTERVAL_SECONDS_PER_HOUR
+    + parts.minutes * INTERVAL_SECONDS_PER_MINUTE
+    + parts.seconds
+  )
+}
+
+function updateIntervalPart(totalSeconds: number, key: IntervalPartKey, rawValue: string): number {
+  const nextParts = splitIntervalSeconds(totalSeconds)
+  nextParts[key] = parseNonNegativeInt(rawValue)
+  return Math.max(1, mergeIntervalSeconds(nextParts))
+}
+
+function currentGameBizDate(): string {
+  const now = new Date()
+  const businessDate = new Date(now)
+  if (now.getHours() < 14) {
+    businessDate.setDate(businessDate.getDate() - 1)
+  }
+  return formatDateYmd(businessDate)
+}
+
+function renderDurationWithTooltip(value: unknown) {
+  const shortText = formatDurationShort(value)
+  if (shortText === '-') {
+    return shortText
+  }
+  const exactText = formatDurationExact(value)
+  return (
+    <Tooltip content={exactText}>
+      <span>{shortText}</span>
+    </Tooltip>
+  )
+}
+
 function useHeaderSort({
   sortBy,
   setPage,
@@ -166,10 +237,14 @@ function useHeaderSort({
 
 function renderRelativeTime(value: unknown, lang: string, t: Record<string, string>) {
   const absolute = formatAbsoluteDateTime(value)
+  const relative = formatRelativeDateTime(value, lang, t)
+  if (absolute === '-' || relative === '-') {
+    return relative
+  }
   return (
-    <span title={absolute === '-' ? undefined : absolute}>
-      {formatRelativeDateTime(value, lang, t)}
-    </span>
+    <Tooltip content={absolute}>
+      <span>{relative}</span>
+    </Tooltip>
   )
 }
 
@@ -549,7 +624,14 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
         <div className="pagination-row">
           <div className="section-title">{tr(t, 'menu_accounts', 'Accounts')}</div>
           <div className="filter-row">
-            <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'filter_account_id_placeholder', 'Search account')} />
+            <input
+              id="accounts-search"
+              className="field-input"
+              name="accounts-search"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder={tr(t, 'filter_account_id_placeholder', 'Search account')}
+            />
             <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
           </div>
         </div>
@@ -589,14 +671,12 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                 <thead>
                   <tr>
                     <SortableHeaderCell
-                      label={tr(t, 'col_id', 'ID')}
+                      label={tr(t, 'col_account', 'Account')}
                       sortKey="id"
                       sortBy={sortBy}
                       sortOrder={sortOrder}
                       onToggle={handleHeaderSort}
                     />
-                    <th>{tr(t, 'col_nickname', 'Nickname')}</th>
-                    <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
                     <th>{tr(t, 'col_plans', 'Plans')}</th>
                     <th>{tr(t, 'col_target_pack', 'Target Pack')}</th>
                     <th>{tr(t, 'col_actions', 'Actions')}</th>
@@ -605,7 +685,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                 <tbody>
                   {items.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center text-muted">{tr(t, 'label_no_data', 'No data')}</td>
+                      <td colSpan={4} className="text-center text-muted">{tr(t, 'label_no_data', 'No data')}</td>
                     </tr>
                   )}
                   {items.map((item) => {
@@ -625,9 +705,15 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
                     return (
                       <tr key={accountId}>
-                        <td className="mono">{toText(item.id)}</td>
-                        <td>{toText(item.nickname || item.display_name, t)}</td>
-                        <td className="mono">{toText(item.friend_id, t)}</td>
+                        <td>
+                          <AccountIdentityCell
+                            t={t}
+                            accountId={item.id}
+                            name={item.nickname || item.display_name}
+                            friendId={item.friend_id}
+                            gameId={item.game_id}
+                          />
+                        </td>
                         <td>{activePlanNames.length > 0 ? activePlanNames.join(', ') : '-'}</td>
                         <td>{targetPack}</td>
                         <td>
@@ -662,13 +748,17 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
             <div className="section-title">{tr(t, 'modal_title_edit_account', 'Edit Account')} #{toText(editingAccount.id, t)}</div>
             <label className="section-subtitle">{tr(t, 'label_nickname', 'Nickname')}</label>
             <input
+              id="account-nickname"
               className="field-input"
+              name="account-nickname"
               value={toText(editingAccount.nickname)}
               onChange={(event) => setEditingAccount((prev) => (prev ? { ...prev, nickname: event.target.value } : null))}
             />
             <label className="section-subtitle">{tr(t, 'label_remark', 'Remark')}</label>
             <textarea
+              id="account-remark"
               className="field-textarea"
+              name="account-remark"
               value={toText(editingAccount.remark)}
               onChange={(event) => setEditingAccount((prev) => (prev ? { ...prev, remark: event.target.value } : null))}
             />
@@ -702,7 +792,9 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                   <div key={planItem.plan_id} className="plan-assoc-item">
                     <label className="filter-row plan-assoc-main">
                       <input
+                        id={`account-plan-active-${planItem.plan_id}`}
                         type="checkbox"
+                        name={`account-plan-active-${planItem.plan_id}`}
                         checked={checked}
                         onChange={(event) => {
                           setEditingPlans((prev) => {
@@ -931,7 +1023,14 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         <div className="pagination-row">
           <div className="section-title">{tr(t, 'menu_plans', 'Plans')}</div>
           <div className="filter-row">
-            <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'label_search', 'Search')} />
+            <input
+              id="plans-search"
+              className="field-input"
+              name="plans-search"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder={tr(t, 'label_search', 'Search')}
+            />
             <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
             <Button type="button" size="sm" onClick={() => openEditor(null)}>{tr(t, 'btn_new_plan', 'New')}</Button>
           </div>
@@ -1064,9 +1163,9 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
               {editingPlanId ? `${tr(t, 'btn_edit', 'Edit')} #${editingPlanId}` : tr(t, 'modal_title_new_plan', 'New Plan')}
             </div>
             <label className="section-subtitle">{tr(t, 'label_name', 'Name')}</label>
-            <input className="field-input" value={planName} onChange={(event) => setPlanName(event.target.value)} />
+            <input id="plan-name" className="field-input" name="plan-name" value={planName} onChange={(event) => setPlanName(event.target.value)} />
             <label className="section-subtitle">{tr(t, 'label_description', 'Description')}</label>
-            <textarea className="field-textarea" value={planDesc} onChange={(event) => setPlanDesc(event.target.value)} />
+            <textarea id="plan-description" className="field-textarea" name="plan-description" value={planDesc} onChange={(event) => setPlanDesc(event.target.value)} />
             <label className="section-subtitle">{tr(t, 'label_task_config', 'Task Config')}</label>
             <div className="section-stack plan-editor-task-list">
               {orderedTasks.map((task, index) => {
@@ -1075,6 +1174,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                   resetType: 'default',
                   intervalSeconds: 3600
                 }
+                const intervalParts = splitIntervalSeconds(config.intervalSeconds)
                 const isFirst = index === 0
                 const isLast = index === orderedTasks.length - 1
                 return (
@@ -1119,7 +1219,9 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                     <div className="filter-row plan-editor-task-row">
                       <label className="filter-row plan-editor-task-main">
                         <input
+                          id={`plan-task-enabled-${task}`}
                           type="checkbox"
+                          name={`plan-task-enabled-${task}`}
                           checked={config.enabled}
                           onChange={(event) => {
                             const enabled = event.target.checked
@@ -1176,23 +1278,38 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                         </SelectContent>
                       </Select>
                       {config.resetType === 'interval' && (
-                        <input
-                          className="field-input plan-editor-interval-input"
-                          type="number"
-                          min={1}
-                          value={config.intervalSeconds}
-                          onChange={(event) => {
-                            const intervalSeconds = Number(event.target.value)
-                            setTaskConfigMap((prev) => ({
-                              ...prev,
-                              [task]: {
-                                ...config,
-                                intervalSeconds: Number.isFinite(intervalSeconds) && intervalSeconds > 0 ? intervalSeconds : 1
-                              }
-                            }))
-                          }}
-                          placeholder={tr(t, 'label_interval_seconds', 'seconds')}
-                        />
+                        <div className="section-stack">
+                          <div className="plan-editor-interval-grid">
+                            {([
+                              { key: 'days', label: tr(t, 'relative_days', 'day') },
+                              { key: 'hours', label: tr(t, 'relative_hours', 'hr') },
+                              { key: 'minutes', label: tr(t, 'relative_minutes', 'min') },
+                              { key: 'seconds', label: tr(t, 'relative_seconds', 'sec') }
+                            ] as Array<{ key: IntervalPartKey; label: string }>).map(({ key, label }) => (
+                              <label key={`${task}-${key}`} className="plan-editor-interval-field" htmlFor={`plan-${task}-${key}`}>
+                                <span className="section-subtitle">{label}</span>
+                                <input
+                                  id={`plan-${task}-${key}`}
+                                  name={`plan-${task}-${key}`}
+                                  className="field-input plan-editor-interval-input"
+                                  type="number"
+                                  min={0}
+                                  value={intervalParts[key]}
+                                  onChange={(event) => {
+                                    setTaskConfigMap((prev) => ({
+                                      ...prev,
+                                      [task]: {
+                                        ...config,
+                                        intervalSeconds: updateIntervalPart(config.intervalSeconds, key, event.target.value)
+                                      }
+                                    }))
+                                  }}
+                                />
+                              </label>
+                            ))}
+                          </div>
+                          <div className="text-xs text-muted">{formatDurationExact(config.intervalSeconds)}</div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1301,7 +1418,14 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
           >
             {tr(t, 'tab_resource_pack_points', 'Pack Points')}
           </Button>
-          <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'filter_account_search_placeholder', 'Search account')} />
+          <input
+            id="resources-search"
+            className="field-input"
+            name="resources-search"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            placeholder={tr(t, 'filter_account_search_placeholder', 'Search account')}
+          />
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
@@ -1373,17 +1497,18 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
               )}
               {items.map((row) => {
                 const accountId = Number(row.account_id ?? 0)
-                const nickname = toText(row.nickname, t)
-                const friendId = toText(row.friend_id, t)
                 const exchangePoints = Number(row.exchange_points)
                 const hourglass = Number(row.pack_hourglass_count)
                 return (
                   <tr key={`resource-stats-${accountId}`}>
                     <td>
-                      <div className="mono">#{accountId} {nickname}</div>
-                      {friendId !== '-' && (
-                        <div className="text-xs text-muted">{tr(t, 'col_friend_id', 'Friend ID')}: {friendId}</div>
-                      )}
+                      <AccountIdentityCell
+                        t={t}
+                        accountId={row.account_id}
+                        name={row.nickname}
+                        friendId={row.friend_id}
+                        gameId={row.game_id}
+                      />
                     </td>
                     <td className="mono">
                       {Number.isFinite(exchangePoints) ? accountNumber.format(exchangePoints) : '-'}
@@ -1433,16 +1558,17 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
               )}
               {items.map((row) => {
                 const accountId = Number(row.account_id ?? 0)
-                const nickname = toText(row.nickname, t)
-                const friendId = toText(row.friend_id, t)
                 const seriesPoints = ((row.series_points as Record<string, unknown> | undefined) ?? {})
                 return (
                   <tr key={`resource-points-${accountId}`}>
                     <td>
-                      <div className="mono">#{accountId} {nickname}</div>
-                      {friendId !== '-' && (
-                        <div className="text-xs text-muted">{tr(t, 'col_friend_id', 'Friend ID')}: {friendId}</div>
-                      )}
+                      <AccountIdentityCell
+                        t={t}
+                        accountId={row.account_id}
+                        name={row.nickname}
+                        friendId={row.friend_id}
+                        gameId={row.game_id}
+                      />
                     </td>
                     {seriesList.map((series) => {
                       const points = Number(seriesPoints[series] ?? NaN)
@@ -1598,7 +1724,9 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           <div className="table-filter-item task-account-filter-item">
             <label className="section-subtitle">{tr(t, 'filter_account', 'Account')}</label>
             <input
+              id="tasks-account-search"
               className="field-input table-control"
+              name="tasks-account-search"
               list="task-account-options"
               value={accountKeyword}
               onChange={(event) => {
@@ -1694,7 +1822,19 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         rows={rows}
         columns={[
           { key: 'id', label: tr(t, 'col_id', 'ID') },
-          { key: 'account_id', label: tr(t, 'col_account', 'Account') },
+          {
+            key: 'account_id',
+            label: tr(t, 'col_account', 'Account'),
+            render: (row) => (
+              <AccountIdentityCell
+                t={t}
+                accountId={row.account_id}
+                name={row.account_name}
+                friendId={row.account_friend_id}
+                gameId={row.account_game_id}
+              />
+            )
+          },
           { key: 'task_type', label: tr(t, 'col_task', 'Task'), render: (row) => taskTypeLabel(t, row.task_type) },
           {
             key: 'status',
@@ -1723,14 +1863,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             key: 'last_duration_seconds',
             label: tr(t, 'col_last_duration', 'Last Duration'),
             sortKey: 'last_duration_seconds',
-            render: (row) => {
-              const text = formatDurationShort(row.last_duration_seconds)
-              if (text === '-') {
-                return text
-              }
-              const exact = formatDurationExact(row.last_duration_seconds)
-              return <span title={exact}>{text}</span>
-            }
+            render: (row) => renderDurationWithTooltip(row.last_duration_seconds)
           },
           {
             key: 'reset_type',
@@ -1765,7 +1898,10 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           {
             key: 'error_message',
             label: tr(t, 'col_error', 'Error'),
-            render: (row) => <TruncatedText text={toText(row.error_message, t)} />
+            render: (row) => {
+              const errorText = toText(row.error_message, t)
+              return <TruncatedText text={errorText} tooltip={errorText} />
+            }
           }
         ]}
         t={t}
@@ -2064,7 +2200,9 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
             <div className="text-xs">{tr(t, 'metadata_current_node', 'Current Node')}: {selectedNodeType} / <span className="mono">{selectedNodeId}</span></div>
             <label className="filter-row">
               <input
+                id="metadata-force-refresh"
                 type="checkbox"
+                name="metadata-force-refresh"
                 checked={forceRefresh}
                 onChange={(event) => setForceRefresh(event.target.checked)}
               />
@@ -2256,7 +2394,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const [pairPageSize, setPairPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'pair_page_size'), 10)
   const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('daily-gift', 'sort_by'), 'updated_at')
   const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('daily-gift', 'sort_order'), 'desc')
-  const [date, setDate] = usePersistedState<string>(managementStateKey('daily-gift', 'date'), '')
+  const [date, setDate] = useState<string>(() => currentGameBizDate())
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('daily-gift', 'account_id'), '')
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
   const datePickerText = useMemo(() => datePickerLocale(t), [t])
@@ -2289,20 +2427,33 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
   const selectedAccountId = toText(query.data?.selected_account_id, t) === '-' ? '' : toText(query.data?.selected_account_id, t)
+  const selectedBizDateLocal = toText(query.data?.selected_biz_date_local, t) === '-' ? '' : toText(query.data?.selected_biz_date_local, t)
   const accountOptions = useMemo(
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]
   )
+  const accountMetaMap = useMemo(() => {
+    const map: Record<string, Record<string, unknown>> = {}
+    for (const account of accounts) {
+      const key = toText(account.id, t)
+      if (key !== '-') {
+        map[key] = account
+      }
+    }
+    return map
+  }, [accounts, t])
 
   useEffect(() => {
-    const currentDate = toText(query.data?.selected_biz_date_local, t)
-    if (currentDate !== '-' && currentDate !== date) {
-      setDate(currentDate)
-    }
     if (selectedAccountId !== accountId) {
       setAccountId(selectedAccountId)
     }
-  }, [accountId, date, query.data, selectedAccountId, t])
+  }, [accountId, selectedAccountId, setAccountId])
+
+  useEffect(() => {
+    if (selectedBizDateLocal && selectedBizDateLocal !== date) {
+      setDate(selectedBizDateLocal)
+    }
+  }, [date, selectedBizDateLocal])
 
   return (
     <section className="surface-card section-stack">
@@ -2449,11 +2600,16 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
                 <tr key={`daily-record-${toText(row.id, t)}`}>
                   <td className="mono">#{toText(row.id, t)}</td>
                   <td>
-                    <div>{toText(row.account_name, t)}</div>
-                    <div className="text-xs text-muted">#{accountIdRow}</div>
+                    <AccountIdentityCell
+                      t={t}
+                      accountId={accountIdRow}
+                      name={row.account_name}
+                      friendId={accountMetaMap[String(accountIdRow)]?.friend_id}
+                      gameId={accountMetaMap[String(accountIdRow)]?.game_id}
+                    />
                   </td>
                   <td>
-                    <div className="mono">{toText(row.target_friend_id, t)}</div>
+                    <CopyableFriendId value={toText(row.target_friend_id, t)} />
                     {Number.isFinite(targetAccountId) && targetAccountId > 0 && (
                       <div className="text-xs text-muted">#{targetAccountId} {accountNameMap[String(targetAccountId)] ?? toText(row.target_name, t)}</div>
                     )}
@@ -2616,12 +2772,29 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_target_account_optional', 'Target Account (optional)')),
     [accounts, t]
   )
+  const accountMetaMap = useMemo(() => {
+    const map: Record<string, Record<string, unknown>> = {}
+    for (const account of accounts) {
+      const key = toText(account.id, t)
+      if (key !== '-') {
+        map[key] = account
+      }
+    }
+    return map
+  }, [accounts, t])
 
   return (
     <section className="surface-card section-stack">
       <div className="section-title">{tr(t, 'menu_friendships', 'Friendships')}</div>
       <div className="form-grid">
-        <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'label_search', 'Search')} />
+        <input
+          id="friendships-search"
+          className="field-input"
+          name="friendships-search"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+          placeholder={tr(t, 'label_search', 'Search')}
+        />
         <SearchableSelect
           value={accountId}
           options={allAccountOptions}
@@ -2646,7 +2819,14 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           placeholder={tr(t, 'label_target_account_optional', 'Target Account (optional)')}
           pageSize={12}
         />
-        <input className="field-input" value={friendIdInput} onChange={(event) => setFriendIdInput(event.target.value)} placeholder={tr(t, 'placeholder_friend_id', 'Friend ID (optional)')} />
+        <input
+          id="friendships-target-friend-id"
+          className="field-input"
+          name="friendships-target-friend-id"
+          value={friendIdInput}
+          onChange={(event) => setFriendIdInput(event.target.value)}
+          placeholder={tr(t, 'placeholder_friend_id', 'Friend ID (optional)')}
+        />
       </div>
       <div className="filter-row">
         <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
@@ -2714,11 +2894,16 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                 <tr key={`friend-request-${toText(row.id, t)}`}>
                   <td className="mono">#{toText(row.id, t)}</td>
                   <td>
-                    <div>{accountNameMap[fromId] ?? fromId}</div>
-                    <div className="text-xs text-muted">#{fromId}</div>
+                    <AccountIdentityCell
+                      t={t}
+                      accountId={fromId}
+                      name={accountNameMap[fromId] ?? fromId}
+                      friendId={accountMetaMap[fromId]?.friend_id}
+                      gameId={accountMetaMap[fromId]?.game_id}
+                    />
                   </td>
                   <td>
-                    <div className="mono">{toText(row.to_friend_id, t)}</div>
+                    <CopyableFriendId value={toText(row.to_friend_id, t)} />
                     {toId !== '-' && <div className="text-xs text-muted">#{toId}</div>}
                   </td>
                   <td>{requestTypeLabel(t, row.request_type)}</td>
@@ -2730,11 +2915,11 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                         {tr(t, 'btn_remove_request', 'Delete Request')}
                       </Button>
                     ) : (
-                      <span title={reasonTitle(requestCancelDisabledReason(t, row.status))}>
+                      <Tooltip content={reasonTitle(requestCancelDisabledReason(t, row.status)) ?? ''}>
                         <Button type="button" size="sm" variant="outline" disabled>
                           {tr(t, 'btn_remove_request', 'Delete Request')}
                         </Button>
-                      </span>
+                      </Tooltip>
                     )}
                   </td>
                 </tr>
@@ -2770,11 +2955,16 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                 <tr key={`friendship-${toText(row.id, t)}`}>
                   <td className="mono">#{toText(row.id, t)}</td>
                   <td>
-                    <div>{accountNameMap[String(rowAccountId)] ?? rowAccountId}</div>
-                    <div className="text-xs text-muted">#{rowAccountId}</div>
+                    <AccountIdentityCell
+                      t={t}
+                      accountId={rowAccountId}
+                      name={accountNameMap[String(rowAccountId)] ?? rowAccountId}
+                      friendId={accountMetaMap[String(rowAccountId)]?.friend_id}
+                      gameId={accountMetaMap[String(rowAccountId)]?.game_id}
+                    />
                   </td>
                   <td>
-                    <div className="mono">{rowFriendId}</div>
+                    <CopyableFriendId value={rowFriendId} />
                     {Number.isFinite(rowFriendAccountId) && rowFriendAccountId > 0 && (
                       <div className="text-xs text-muted">#{rowFriendAccountId} {accountNameMap[String(rowFriendAccountId)] ?? ''}</div>
                     )}
@@ -2860,13 +3050,30 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]
   )
+  const accountMetaMap = useMemo(() => {
+    const map: Record<string, Record<string, unknown>> = {}
+    for (const account of accounts) {
+      const key = toText(account.id, t)
+      if (key !== '-') {
+        map[key] = account
+      }
+    }
+    return map
+  }, [accounts, t])
 
   return (
     <section className="surface-card section-stack">
       <div className="pagination-row">
         <div className="section-title">{tr(t, 'menu_exchange_cards', 'Exchange Cards')}</div>
         <div className="filter-row">
-          <input className="field-input" value={q} onChange={(event) => setQ(event.target.value)} placeholder={tr(t, 'label_search', 'Search')} />
+          <input
+            id="exchange-cards-search"
+            className="field-input"
+            name="exchange-cards-search"
+            value={q}
+            onChange={(event) => setQ(event.target.value)}
+            placeholder={tr(t, 'label_search', 'Search')}
+          />
           <SearchableSelect
             value={accountId}
             options={accountOptions}
@@ -2876,7 +3083,14 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
             pageSize={10}
             className="management-inline-select"
           />
-          <input className="field-input" value={status} onChange={(event) => setStatus(event.target.value)} placeholder={tr(t, 'filter_status', 'Status')} />
+          <input
+            id="exchange-cards-status"
+            className="field-input"
+            name="exchange-cards-status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            placeholder={tr(t, 'filter_status', 'Status')}
+          />
           <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         </div>
       </div>
@@ -2929,8 +3143,16 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
             {rows.map((row) => (
               <tr key={toText(row.id, t)}>
                 <td className="mono">{toText(row.id, t)}</td>
-                <td>{toText(row.from_account_id, t)}</td>
-                <td className="mono">{toText(row.to_friend_id, t)}</td>
+                <td>
+                  <AccountIdentityCell
+                    t={t}
+                    accountId={row.from_account_id}
+                    name={accountMetaMap[toText(row.from_account_id, t)]?.display_name ?? accountMetaMap[toText(row.from_account_id, t)]?.nickname ?? row.from_account_id}
+                    friendId={accountMetaMap[toText(row.from_account_id, t)]?.friend_id}
+                    gameId={accountMetaMap[toText(row.from_account_id, t)]?.game_id}
+                  />
+                </td>
+                <td><CopyableFriendId value={toText(row.to_friend_id, t)} /></td>
                 <td>{toText(row.target_card_id, t)}</td>
                 <td>{renderBadge(exchangeStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
                 <td className="mono">{renderRelativeTime(row.created_at, lang, t)}</td>
@@ -2938,9 +3160,9 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
                   {Boolean(row.can_cancel) ? (
                     <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
                   ) : (
-                    <span title={reasonTitle(exchangeCancelDisabledReason(t, row.status))}>
+                    <Tooltip content={reasonTitle(exchangeCancelDisabledReason(t, row.status)) ?? ''}>
                       <Button type="button" size="sm" variant="outline" disabled>{tr(t, 'btn_cancel_exchange_request', 'Cancel')}</Button>
-                    </span>
+                    </Tooltip>
                   )}
                 </td>
               </tr>

@@ -1,5 +1,5 @@
 export type ThemeMode = 'auto' | 'light' | 'dark'
-export type ThemeScheme = 'light' | 'dark'
+type ThemeScheme = 'light' | 'dark'
 export type ThemeAvailability = 'light' | 'dark' | 'both'
 export const THEME_MODES = ['auto', 'light', 'dark'] as const
 
@@ -59,7 +59,7 @@ export const THEME_REGISTRY = [
 
 export type ThemeName = (typeof THEME_REGISTRY)[number]['id']
 
-export interface ThemeRegistration {
+interface ThemeRegistration {
   id: ThemeName
   availability: ThemeAvailability
   fallbackGroup: string
@@ -189,7 +189,7 @@ export function listThemesByAvailability(availability: ThemeAvailability): Theme
   return THEME_REGISTRY.filter((theme) => theme.availability === availability).map((theme) => theme.id)
 }
 
-export function resolveThemeScheme(mode: ThemeMode): ThemeScheme {
+function resolveThemeScheme(mode: ThemeMode): ThemeScheme {
   if (mode === 'auto') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
@@ -203,11 +203,7 @@ export function alignThemeToMode(mode: ThemeMode, theme: ThemeName): ThemeName {
   return resolveThemeByScheme(theme, mode)
 }
 
-export function resolveAppliedTheme(themeScheme: ThemeScheme, theme: ThemeName): ThemeName {
-  return resolveThemeByScheme(theme, themeScheme)
-}
-
-export function resolveThemeByMode(mode: ThemeMode, theme: ThemeName): ThemeName {
+function resolveThemeByMode(mode: ThemeMode, theme: ThemeName): ThemeName {
   const themeScheme = resolveThemeScheme(mode)
   // auto 模式仍优先使用用户选择的主题，再按 scheme 回退
   return resolveThemeByScheme(theme, themeScheme)

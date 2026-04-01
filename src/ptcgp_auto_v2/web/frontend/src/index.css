@@ -876,9 +876,9 @@ body {
 }
 
 .grid-table {
-  width: 100%;
+  width: max-content;
   border-collapse: collapse;
-  min-width: 680px;
+  min-width: 100%;
   background: var(--paper);
 }
 
@@ -889,6 +889,10 @@ body {
   vertical-align: top;
   text-align: left;
   font-size: 0.78rem;
+  min-width: 6rem;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .grid-table th {
@@ -896,6 +900,11 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.grid-table button {
+  white-space: nowrap;
 }
 
 .mono {
@@ -982,6 +991,47 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.friend-id-copy-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: copy;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.14rem;
+}
+
+.account-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.account-primary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.account-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
 .badge-default,
@@ -1380,8 +1430,23 @@ body {
   min-width: 9.5rem;
 }
 
+.plan-editor-interval-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(4.5rem, 1fr));
+  gap: 0.45rem;
+  width: min(100%, 30rem);
+}
+
+.plan-editor-interval-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
 .plan-editor-interval-input {
-  min-width: 7.2rem;
+  min-width: 0;
+  width: 100%;
 }
 
 :root[data-theme='clay_vibrant'] .badge-default,
@@ -1824,10 +1889,6 @@ body {
     box-shadow: 4px 4px 0 rgba(20, 15, 10, 0.85);
   }
 
-  .grid-table {
-    min-width: 560px;
-  }
-
   .app-header {
     align-items: flex-start;
   }
@@ -1894,6 +1955,11 @@ body {
   .plan-editor-config-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .plan-editor-interval-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
   }
 
   .plan-assoc-item {

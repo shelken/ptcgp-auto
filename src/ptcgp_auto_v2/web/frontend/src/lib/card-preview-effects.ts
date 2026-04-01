@@ -6,7 +6,7 @@ interface CardPreviewLayerRule {
   gradient: string
 }
 
-export interface CardPreviewEffectRule {
+interface CardPreviewEffectRule {
   id: CardPreviewEffectId
   borderGlowBoost: number
   foil: CardPreviewLayerRule
@@ -118,25 +118,21 @@ function rgba(rgb: [number, number, number], alpha: number): string {
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${clampOpacity(alpha).toFixed(3)})`
 }
 
-export interface CardPreviewVisualInput {
+interface CardPreviewVisualInput {
   rarity: string
   rgb?: [number, number, number] | null
   effectId?: CardPreviewEffectId
 }
 
-export function registerCardPreviewEffect(rule: CardPreviewEffectRule): void {
+function registerCardPreviewEffect(rule: CardPreviewEffectRule): void {
   EFFECT_REGISTRY.set(rule.id, rule)
-}
-
-export function listCardPreviewEffects(): CardPreviewEffectRule[] {
-  return Array.from(EFFECT_REGISTRY.values())
 }
 
 export function resolveCardPreviewEffectId(rarity: string): CardPreviewEffectId {
   return resolveEffectByRarity(rarity)
 }
 
-export function resolveCardPreviewEffectRule(effectId: CardPreviewEffectId): CardPreviewEffectRule {
+function resolveCardPreviewEffectRule(effectId: CardPreviewEffectId): CardPreviewEffectRule {
   return EFFECT_REGISTRY.get(effectId) ?? EFFECT_REGISTRY.get('standard')!
 }
 

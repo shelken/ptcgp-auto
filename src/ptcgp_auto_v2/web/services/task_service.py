@@ -172,6 +172,8 @@ def build_tasks_list_context(
             "id": instance.id,
             "account_id": account.id,
             "account_name": account.nickname or account.display_name or str(account.id),
+            "account_friend_id": account.friend_id,
+            "account_game_id": account.game_id,
             "task_type": instance.task_type,
             "status": instance.status,
             "reset_type": summary.effective_reset_type,
