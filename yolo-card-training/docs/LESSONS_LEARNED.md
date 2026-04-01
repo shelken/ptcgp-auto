@@ -110,7 +110,7 @@ https://raw.githubusercontent.com/.../en-US/{set}-{num}.webp
 **错误示例**：
 ```bash
 # ❌ 错误：在根目录执行，使用了根目录的 .venv/
-cd /Users/shelken/Code/MyRepo/ptcgp-auto
+cd /Users/shelken/Code/active/ptcgp-auto
 uv run python yolo-card-training/scripts/train.py
 
 # ❌ 错误：修改 pyproject.toml 后没有 sync
@@ -121,7 +121,7 @@ uv add coremltools
 **正确做法**：
 ```bash
 # ✅ 必须先进入项目目录
-cd /Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training
+cd /Users/shelken/Code/active/ptcgp-auto/yolo-card-training
 
 # ✅ 使用 uv run（会自动使用当前目录的 .venv/）
 uv run python scripts/train.py

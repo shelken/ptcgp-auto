@@ -64,7 +64,7 @@ description: Use when 需要通过 BlueStacks auto- 实例做任务实机烟雾�
 6. 确保 `data` 目录存在
 
    ```bash
-   test -d data || cp -r ~/Code/MyRepo/ptcgp-auto/data ./
+   test -d data || cp -r ~/Code/active/ptcgp-auto/data ./
    ```
 
 7. 执行任务并查看日志
