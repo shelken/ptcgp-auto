@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "coremltools>=9.0",
-  "fastapi>=0.128.0",
+  "fastapi>=0.135.2",
   "loguru>=0.7.0",
   "numpy>=1.14.5,<=2.3.5",
   "opencv-python>=4.8.0",
