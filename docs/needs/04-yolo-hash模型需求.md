@@ -154,11 +154,11 @@ ptcgp-auto/
     └── 04-yolo-hash模型需求.md  # 本文件
 ```
 
-**当前工作目录**：`/Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training/`
+**当前工作目录**：`/Users/shelken/Code/active/ptcgp-auto/yolo-card-training/`
 
 **进入方式**：
 ```bash
-cd /Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training/
+cd /Users/shelken/Code/active/ptcgp-auto/yolo-card-training/
 direnv allow  # 自动加载环境
 ```
 
@@ -262,7 +262,7 @@ model.train(
 
 **进入工作目录**:
 ```bash
-cd /Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training
+cd /Users/shelken/Code/active/ptcgp-auto/yolo-card-training
 ```
 
 **完整训练（1000张 + 100 epochs，约1-2小时）**:
@@ -401,7 +401,7 @@ similarity_threshold = 0.68  # 相似度 ≥ 0.68 才认为是同一张卡
 
 **工作目录**：`yolo-card-training/`
 ```bash
-cd /Users/shelken/Code/MyRepo/ptcgp-auto/yolo-card-training
+cd /Users/shelken/Code/active/ptcgp-auto/yolo-card-training
 direnv allow  # 自动加载环境
 ```
 
