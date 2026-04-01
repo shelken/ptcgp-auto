@@ -1,6 +1,6 @@
 ---
 name: test-tasks
-description: Use when 需要通过 BlueStacks auto- 实例做任务实机烟雾测试、验证 ADB 连接或查看任务实时日志时。
+description: Use when 需要通过 BlueStacks auto- 实例做任务实机测试、验证 ADB 连接或查看任务实时日志时。
 ---
 
 ## 概述
