@@ -16,7 +16,7 @@ dependencies = [
   "sqlmodel>=0.0.16",
   "uiautomator2>=3.5.0",
   "ultralytics>=8.3.0",
-  "uvicorn>=0.40.0",
+  "uvicorn>=0.42.0",
 ]
 
 [dependency-groups]
