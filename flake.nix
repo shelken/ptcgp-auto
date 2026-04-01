@@ -6,20 +6,71 @@
     utils = {
       url = "github:numtide/flake-utils";
     };
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
     {
       nixpkgs,
       utils,
+      git-hooks,
       ...
     }:
     utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        pre-commit-check = git-hooks.lib.${system}.run {
+          src = ./.;
+          hooks = {
+            # Python：局部 unused
+            ruff = {
+              enable = true;
+              name = "ruff";
+              entry = "uv run ruff check src main.py main_v2.py debug_tool.py scripts yolo-card-training/scripts";
+              files = "\\.py$";
+              pass_filenames = false;
+              language = "system";
+            };
+
+            # Python：全局未引用函数/类（vulture）
+            vulture = {
+              enable = true;
+              name = "vulture";
+              entry = "uv run vulture";
+              files = "\\.py$";
+              pass_filenames = false;
+              language = "system";
+            };
+
+            # TS：类型检查 + 局部 unused
+            tsc = {
+              enable = true;
+              name = "tsc";
+              # pass_filenames=false：只要有 ts/tsx 变动就跑一次，不逐文件传
+              entry = "bash -c 'cd src/ptcgp_auto_v2/web/frontend && bun run typecheck'";
+              files = "\\.(ts|tsx)$";
+              pass_filenames = false;
+              language = "system";
+            };
+
+            # TS：未被引用的 export 函数/文件（knip）
+            knip = {
+              enable = true;
+              name = "knip";
+              entry = "bash -c 'cd src/ptcgp_auto_v2/web/frontend && bun run knip'";
+              files = "\\.(ts|tsx)$";
+              pass_filenames = false;
+              language = "system";
+            };
+          };
+        };
       in
       {
+        checks.pre-commit-check = pre-commit-check;
         devShells.default = pkgs.mkShell {
           name = "ptcgp-auto";
 
@@ -35,6 +86,7 @@
           UV_PYTHON_DOWNLOADS = "never";
 
           shellHook = ''
+            ${pre-commit-check.shellHook}
             # 确保 .venv 存在并同步依赖
             # uv sync 会自动根据 pyproject.toml 安装依赖并创建/更新 .venv
             uv sync

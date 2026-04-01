@@ -23,21 +23,31 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-    "vulture>=2.15",
+dev = ["pytest>=9.0.2", "vulture>=2.15"]
+
+[tool.ruff]
+extend-exclude = [".venv", "node_modules"]
+
+[tool.ruff.lint]
+select = ["F"]
+
+[tool.vulture]
+paths = [
+  "src",
+  "main.py",
+  "main_v2.py",
+  "debug_tool.py",
+  "scripts",
+  "yolo-card-training/scripts",
 ]
+exclude = ["*/.venv/*", "*/node_modules/*"]
+ignore_decorators = ["@TaskRegistry.register", "@router.*", "@app.*"]
+min_confidence = 80
 
 [tool.pytest.ini_options]
 # 只收集明确的 tests/ 目录下的测试，避免 scripts/ 等目录里
 # 以 test_ 开头的脚本被 pytest 误当成测试文件。
-testpaths = [
-    "src/ptcgp_auto_v2/tests",
-    "src/ptcgp_auto_v2/web/tests",
-]
+testpaths = ["src/ptcgp_auto_v2/tests", "src/ptcgp_auto_v2/web/tests"]
 
 # 仅识别符合 pytest 默认命名约定的测试文件。
-python_files = [
-    "test_*.py",
-    "*_test.py",
-]
+python_files = ["test_*.py", "*_test.py"]
