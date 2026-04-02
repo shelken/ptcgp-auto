@@ -21,7 +21,6 @@ import {
   Pager,
   QueryTotalSummary,
   type SearchableOption,
-  TruncatedText,
   buildAccountSelectOptions,
   managementStateKey,
   renderBadge,
@@ -38,7 +37,7 @@ function stripMarkdownImages(content: string): string {
     return ''
   }
   return content
-    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+    .replace(/!\[[\s\S]*?]\([^)]+\)/g, '')
     .replace(/<img[^>]*>/gi, '')
 }
 
@@ -52,16 +51,17 @@ function extractNotificationContentText(content: string): string {
 }
 
 const managementThumbFrameStyle: CSSProperties = {
-  width: '2.5rem',
-  height: '3.3rem',
+  width: '3rem',
+  height: '4rem',
   border: '1px solid var(--line)',
-  borderRadius: '0.35rem',
+  borderRadius: '0.45rem',
   background: '#efe8d9',
   overflow: 'hidden',
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'center'
+  justifyContent: 'center',
+  padding: '0.18rem'
 }
 
 const managementThumbImageStyle: CSSProperties = {
@@ -1062,14 +1062,14 @@ export function NotificationsSection({
         <table className="grid-table">
           <thead>
             <tr>
-              <th>{tr(t, 'col_id', 'ID')}</th>
-              <th>{tr(t, 'col_scene', 'Scene')}</th>
+              <th className="table-col-id">{tr(t, 'col_id', 'ID')}</th>
+              <th className="table-col-status">{tr(t, 'col_scene', 'Scene')}</th>
               <th>{tr(t, 'col_title', 'Title')}</th>
-              <th>{tr(t, 'col_description', 'Content')}</th>
-              <th>{tr(t, 'col_account', 'Account')}</th>
-              <th>{tr(t, 'label_read', 'Read')}</th>
-              <th>{tr(t, 'col_time', 'Time')}</th>
-              <th>{tr(t, 'col_actions', 'Actions')}</th>
+              <th className="table-col-image-text">{tr(t, 'col_description', 'Content')}</th>
+              <th className="table-col-account">{tr(t, 'col_account', 'Account')}</th>
+              <th className="table-col-status">{tr(t, 'label_read', 'Read')}</th>
+              <th className="table-col-time">{tr(t, 'col_time', 'Time')}</th>
+              <th className="table-col-actions">{tr(t, 'col_actions', 'Actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1082,18 +1082,18 @@ export function NotificationsSection({
               const contentText = extractNotificationContentText(toText(row.content, t))
               return (
                 <tr key={toText(row.id, t)}>
-                  <td className="mono">{toText(row.id, t)}</td>
-                  <td>
+                  <td className="mono table-col-id">{toText(row.id, t)}</td>
+                  <td className="table-col-status">
                     {renderBadge(
                       toText(row.scene_label, t) || tr(t, `notification_scene_${toText(row.scene, t)}`, toText(row.scene, t)),
                       sceneBadgeVariant(toText(row.scene, t))
                     )}
                   </td>
                   <td>{toText(row.title, t)}</td>
-                  <td>
+                  <td className="table-col-image-text">
                     <div className="notification-row-content">
                       {String(row.image_url ?? '').length > 0 ? (
-                        <div style={managementThumbFrameStyle}>
+                        <div style={managementThumbFrameStyle} className="notification-thumb-frame">
                           <img
                             src={String(row.image_url)}
                             alt={toText(row.title, t)}
@@ -1117,10 +1117,12 @@ export function NotificationsSection({
                           />
                         </div>
                       ) : null}
-                      <TruncatedText text={contentText} tooltip={contentText} className="notification-content-text" />
+                      <div className="notification-content-main">
+                        <div className="notification-content-text">{contentText}</div>
+                      </div>
                     </div>
                   </td>
-                  <td>
+                  <td className="table-col-account">
                     {toText(row.related_account_id, t) === '-'
                       ? '-'
                       : (
@@ -1133,13 +1135,13 @@ export function NotificationsSection({
                           />
                         )}
                   </td>
-                  <td>{renderBadge(Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread'), Boolean(row.is_read) ? 'muted' : 'warning')}</td>
-                  <td className="mono">
+                  <td className="table-col-status">{renderBadge(Boolean(row.is_read) ? tr(t, 'label_read', 'Read') : tr(t, 'label_unread', 'Unread'), Boolean(row.is_read) ? 'muted' : 'warning')}</td>
+                  <td className="mono table-col-time">
                     <Tooltip content={formatAbsoluteDateTime(row.created_at)}>
                       <span>{formatRelativeDateTime(row.created_at, lang, t)}</span>
                     </Tooltip>
                   </td>
-                  <td>
+                  <td className="table-col-actions">
                     <div className="filter-row">
                       {!Boolean(row.is_read) && (
                         <Button type="button" size="sm" variant="outline" onClick={() => markReadMutation.mutate(Number(row.id))}>{tr(t, 'btn_mark_read', 'Mark Read')}</Button>

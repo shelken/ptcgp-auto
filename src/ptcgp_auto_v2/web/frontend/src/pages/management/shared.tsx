@@ -162,7 +162,7 @@ function formatFriendIdForDisplay(raw: string): string {
     return normalized
   }
   const chunks = digitsOnly.match(/.{1,4}/g)
-  return chunks ? chunks.join(' ') : digitsOnly
+  return chunks ? chunks.join('-') : digitsOnly
 }
 
 export function CopyableFriendId({
@@ -178,16 +178,14 @@ export function CopyableFriendId({
   }
   const formatted = formatFriendIdForDisplay(normalized)
   return (
-    <Tooltip content={normalized}>
-      <button
-        type="button"
-        className="friend-id-copy-btn mono"
-        aria-label="Copy"
-        onClick={() => safeClipboardWrite(normalized)}
-      >
-        {formatted}
-      </button>
-    </Tooltip>
+    <button
+      type="button"
+      className="friend-id-copy-btn mono"
+      aria-label="Copy"
+      onClick={() => safeClipboardWrite(normalized)}
+    >
+      {formatted}
+    </button>
   )
 }
 
@@ -209,36 +207,24 @@ export function AccountIdentityCell({
   const nameText = toText(name, t)
   const friendIdText = toText(friendId, t)
   const gameIdText = toText(gameId, t)
-  const tooltipParts: string[] = []
-  if (idText !== '-') {
-    tooltipParts.push(`${tr(t, 'col_id', 'ID')} ${idText}`)
-  }
-  if (nameText !== '-') {
-    tooltipParts.push(nameText)
-  }
-  if (gameIdText !== '-') {
-    tooltipParts.push(`${tr(t, 'col_game_id', 'Game ID')} ${gameIdText}`)
-  }
-  if (friendIdText !== '-') {
-    tooltipParts.push(friendIdText)
-  }
-  const tooltipText = tooltipParts.join(' | ')
 
   return (
-    <Tooltip content={tooltipText}>
-      <div className="account-cell">
-        <div className="account-primary mono">
-          <span>{idText}</span>
-          <span className="account-name">{nameText}</span>
-        </div>
-        {(friendIdText !== '-' || gameIdText !== '-') && (
-          <div className="account-meta">
-            {friendIdText !== '-' && <CopyableFriendId value={friendIdText} />}
-            {gameIdText !== '-' && <span className="text-xs text-muted mono">{gameIdText}</span>}
-          </div>
-        )}
+    <div className="account-cell">
+      <div className="account-primary mono">
+        <span>{idText}</span>
+        <span className="account-name">{nameText}</span>
       </div>
-    </Tooltip>
+      {(friendIdText !== '-' || gameIdText !== '-') && (
+        <div className="account-meta">
+          {friendIdText !== '-' && <CopyableFriendId value={friendIdText} />}
+          {gameIdText !== '-' && (
+            <Tooltip content={gameIdText}>
+              <span className="account-game-id-hint mono">gid</span>
+            </Tooltip>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -262,40 +248,45 @@ export function TruncatedText({
 }) {
   const hint = (tooltip ?? text).trim()
   const textRef = useRef<HTMLSpanElement | null>(null)
-  const [nativeTitle, setNativeTitle] = useState<string | undefined>(undefined)
+  const [truncated, setTruncated] = useState(false)
 
   useEffect(() => {
     const element = textRef.current
     if (!element || !hint) {
-      setNativeTitle(undefined)
+      setTruncated(false)
       return
     }
 
-    const updateTitle = () => {
+    const updateTruncated = () => {
       const isTruncated = element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight
-      setNativeTitle(isTruncated ? hint : undefined)
+      setTruncated(isTruncated)
     }
 
-    updateTitle()
+    updateTruncated()
     if (typeof ResizeObserver !== 'function') {
-      window.addEventListener('resize', updateTitle)
-      return () => window.removeEventListener('resize', updateTitle)
+      window.addEventListener('resize', updateTruncated)
+      return () => window.removeEventListener('resize', updateTruncated)
     }
 
-    const observer = new ResizeObserver(updateTitle)
+    const observer = new ResizeObserver(updateTruncated)
     observer.observe(element)
     return () => observer.disconnect()
   }, [hint, text, className])
 
-  return (
+  const content = (
     <span
       ref={textRef}
-      title={nativeTitle}
       className={className ? `${className} text-truncate-1` : 'text-truncate-1'}
     >
       {text}
     </span>
   )
+
+  if (!truncated || !hint) {
+    return content
+  }
+
+  return <Tooltip content={hint}>{content}</Tooltip>
 }
 
 export function Pager({

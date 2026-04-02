@@ -4,6 +4,7 @@ import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 
 import { Button } from '@/components/ui/button'
+import { Tooltip } from '@/components/ui/tooltip'
 import { buildQuery, fetchJson, requestJson } from '@/lib/api'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { tr } from '@/lib/i18n'
@@ -41,7 +42,7 @@ function stripMarkdownImages(content: string) {
     return ''
   }
   return content
-    .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+    .replace(/!\[[\s\S]*?]\([^)]+\)/g, '')
     .replace(/<img[^>]*>/gi, '')
 }
 
@@ -76,16 +77,17 @@ function renderMarkdownSafely(content: string) {
 }
 
 const drawerThumbFrameStyle: CSSProperties = {
-  width: '3rem',
-  height: '4rem',
+  width: '3.2rem',
+  height: '4.3rem',
   border: '1px solid var(--line)',
-  borderRadius: '0.4rem',
+  borderRadius: '0.45rem',
   background: '#efe8d9',
   overflow: 'hidden',
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'center'
+  justifyContent: 'center',
+  padding: '0.18rem'
 }
 
 const drawerThumbImageStyle: CSSProperties = {
@@ -349,9 +351,11 @@ export function NotificationDrawer({
                       {!item.is_read && <span className="notification-dot" aria-hidden="true" />}
                     </div>
                     <div className="notification-body">{plainText || '-'}</div>
-                    <div className="notification-time" title={formatAbsoluteDateTime(item.created_at)}>
-                      {item.relative_time || formatRelativeDateTime(item.created_at, lang, t)}
-                    </div>
+                    <Tooltip content={formatAbsoluteDateTime(item.created_at)}>
+                      <div className="notification-time">
+                        {item.relative_time || formatRelativeDateTime(item.created_at, lang, t)}
+                      </div>
+                    </Tooltip>
                   </div>
                 </button>
                 {expanded && (

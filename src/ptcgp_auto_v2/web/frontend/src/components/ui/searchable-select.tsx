@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
@@ -44,6 +44,7 @@ export function SearchableSelect({
   const [page, setPage] = useState(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const searchInputId = useId()
 
   const selectedLabel = useMemo(
     () => options.find((item) => item.value === value)?.label ?? '',
@@ -104,6 +105,8 @@ export function SearchableSelect({
       {open && !disabled && (
         <div className="searchable-select-panel">
           <input
+            id={searchInputId}
+            name={searchInputId}
             ref={inputRef}
             className="field-input searchable-select-input"
             value={query}
