@@ -250,6 +250,23 @@ function renderRelativeTime(value: unknown, lang: string, t: Record<string, stri
   )
 }
 
+function renderStatusBadgeWithReason(
+  text: string,
+  variant: 'success' | 'warning' | 'danger' | 'info' | 'muted',
+  reason: unknown
+) {
+  const reasonText = typeof reason === 'string' ? reason.trim() : ''
+  const badge = renderBadge(text, variant)
+  if (!reasonText) {
+    return badge
+  }
+  return (
+    <Tooltip content={reasonText}>
+      <span>{badge}</span>
+    </Tooltip>
+  )
+}
+
 function giftStatusLabel(t: Record<string, string>, value: unknown): string {
   return prefixedLabel(t, 'gift_status', value)
 }
@@ -1183,7 +1200,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                 return (
                   <div
                     key={task}
-                    className={`surface-card section-stack plan-editor-task-item ${dragOverTask === task ? 'is-drag-over' : ''}`}
+                    className={`surface-card section-stack plan-editor-task-item ${dragOverTask === task ? 'is-drag-over' : ''} ${draggingTask === task ? 'is-dragging' : ''}`}
                     onDragOver={(event) => {
                       event.preventDefault()
                       const sourceTask = draggingTaskRef.current || event.dataTransfer.getData('text/plain') || draggingTask
@@ -1227,9 +1244,14 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                         <button
                           type="button"
                           className="plan-editor-drag-handle"
-                          aria-label={tr(t, 'label_drag_sort', 'Drag to sort')}
+                          aria-label={tr(t, 'label_drag_reorder', '拖拽排序')}
                           draggable={orderedTasks.length > 1}
                           onDragStart={(event) => {
+                            const taskItem = event.currentTarget.closest('.plan-editor-task-item')
+                            if (taskItem instanceof HTMLElement) {
+                              const rect = taskItem.getBoundingClientRect()
+                              event.dataTransfer.setDragImage(taskItem, event.clientX - rect.left, event.clientY - rect.top)
+                            }
                             draggingTaskRef.current = task
                             setDraggingTask(task)
                             setDragOverTask(null)
@@ -1859,7 +1881,11 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             label: tr(t, 'col_status', 'Status'),
             headerClassName: 'table-col-status',
             cellClassName: 'table-col-status',
-            render: (row) => renderBadge(statusLabel(t, row.status), statusBadgeVariant(row.status))
+            render: (row) => renderStatusBadgeWithReason(
+              statusLabel(t, row.status),
+              statusBadgeVariant(row.status),
+              row.error_message
+            )
           },
           {
             key: 'dispatch_rank',
@@ -1925,16 +1951,6 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                 return value
               }
               return Boolean(row.target_pack_auto) ? `${value} (${tr(t, 'label_auto', 'Auto')})` : value
-            }
-          },
-          {
-            key: 'error_message',
-            label: tr(t, 'col_error', 'Error'),
-            headerClassName: 'table-col-error',
-            cellClassName: 'table-col-error',
-            render: (row) => {
-              const errorText = toText(row.error_message, t)
-              return <TruncatedText text={errorText} tooltip={errorText} />
             }
           }
         ]}
@@ -2638,13 +2654,19 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
                     />
                   </td>
                   <td>
-                    <CopyableFriendId value={toText(row.target_friend_id, t)} />
+                    <CopyableFriendId t={t} value={toText(row.target_friend_id, t)} />
                     {Number.isFinite(targetAccountId) && targetAccountId > 0 && (
                       <div className="text-xs text-muted">#{targetAccountId} {accountNameMap[String(targetAccountId)] ?? toText(row.target_name, t)}</div>
                     )}
                   </td>
                   <td className="mono">{toText(row.card_label, t)}</td>
-                  <td>{renderBadge(giftStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
+                  <td>
+                    {renderStatusBadgeWithReason(
+                      giftStatusLabel(t, row.status),
+                      statusBadgeVariant(row.status),
+                      row.error_message
+                    )}
+                  </td>
                   <td className="mono">
                     {Number.isFinite(beforeCount) ? String(beforeCount) : '-'}
                     {' -> '}
@@ -2932,7 +2954,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                     />
                   </td>
                   <td>
-                    <CopyableFriendId value={toText(row.to_friend_id, t)} />
+                    <CopyableFriendId t={t} value={toText(row.to_friend_id, t)} />
                     {toId !== '-' && <div className="text-xs text-muted">#{toId}</div>}
                   </td>
                   <td>{requestTypeLabel(t, row.request_type)}</td>
@@ -2993,7 +3015,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                     />
                   </td>
                   <td>
-                    <CopyableFriendId value={rowFriendId} />
+                    <CopyableFriendId t={t} value={rowFriendId} />
                     {Number.isFinite(rowFriendAccountId) && rowFriendAccountId > 0 && (
                       <div className="text-xs text-muted">#{rowFriendAccountId} {accountNameMap[String(rowFriendAccountId)] ?? ''}</div>
                     )}
@@ -3181,7 +3203,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
                     gameId={accountMetaMap[toText(row.from_account_id, t)]?.game_id}
                   />
                 </td>
-                <td><CopyableFriendId value={toText(row.to_friend_id, t)} /></td>
+                <td><CopyableFriendId t={t} value={toText(row.to_friend_id, t)} /></td>
                 <td>{toText(row.target_card_id, t)}</td>
                 <td>{renderBadge(exchangeStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
                 <td className="mono">{renderRelativeTime(row.created_at, lang, t)}</td>
