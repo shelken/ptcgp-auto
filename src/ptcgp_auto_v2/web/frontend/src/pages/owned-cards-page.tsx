@@ -1345,8 +1345,8 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                                       }}
                                     >
                                       {isSelectedRow
-                                        ? tr(t, 'label_selected', 'Selected')
-                                        : tr(t, 'label_select', 'Select')}
+                                        ? tr(t, 'exchange_source_account_selected', '已选为来源')
+                                        : tr(t, 'exchange_set_source_account', '设为来源')}
                                     </Button>
                                   ) : (
                                     <Tooltip content={reasonTitle(row.exchange_action.reason_text) ?? ''}>

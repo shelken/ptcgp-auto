@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -145,11 +146,16 @@ export function buildAccountSelectOptions(
   return items
 }
 
-function safeClipboardWrite(text: string) {
+async function safeClipboardWrite(text: string): Promise<boolean> {
   if (!text || typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-    return
+    return false
   }
-  void navigator.clipboard.writeText(text).catch(() => {})
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function formatFriendIdForDisplay(raw: string): string {
@@ -166,26 +172,60 @@ function formatFriendIdForDisplay(raw: string): string {
 }
 
 export function CopyableFriendId({
+  t,
   value,
   empty = '-'
 }: {
+  t: Record<string, string>
   value: string
   empty?: string
 }) {
   const normalized = value.trim()
+  const [toast, setToast] = useState<{ id: number; level: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!toast) {
+      return
+    }
+    const timer = window.setTimeout(() => setToast(null), 1600)
+    return () => window.clearTimeout(timer)
+  }, [toast])
+
   if (!normalized || normalized === '-') {
     return <span className="mono">{empty}</span>
   }
   const formatted = formatFriendIdForDisplay(normalized)
   return (
-    <button
-      type="button"
-      className="friend-id-copy-btn mono"
-      aria-label="Copy"
-      onClick={() => safeClipboardWrite(normalized)}
-    >
-      {formatted}
-    </button>
+    <>
+      <button
+        type="button"
+        className="friend-id-copy-btn mono"
+        aria-label={tr(t, 'label_copy', '复制')}
+        onClick={async () => {
+          const copied = await safeClipboardWrite(normalized)
+          setToast({
+            id: Date.now(),
+            level: copied ? 'success' : 'error',
+            text: copied
+              ? tr(t, 'msg_copied', '已复制！')
+              : tr(t, 'msg_copy_failed', '复制失败')
+          })
+        }}
+      >
+        {formatted}
+      </button>
+      {toast && typeof document !== 'undefined' && createPortal(
+        <div
+          key={toast.id}
+          className={`copy-toast ${toast.level === 'error' ? 'is-error' : 'is-success'}`}
+          role="status"
+          aria-live="polite"
+        >
+          {toast.text}
+        </div>,
+        document.body
+      )}
+    </>
   )
 }
 
@@ -216,7 +256,7 @@ export function AccountIdentityCell({
       </div>
       {(friendIdText !== '-' || gameIdText !== '-') && (
         <div className="account-meta">
-          {friendIdText !== '-' && <CopyableFriendId value={friendIdText} />}
+          {friendIdText !== '-' && <CopyableFriendId t={t} value={friendIdText} />}
           {gameIdText !== '-' && (
             <Tooltip content={gameIdText}>
               <span className="account-game-id-hint mono">gid</span>
