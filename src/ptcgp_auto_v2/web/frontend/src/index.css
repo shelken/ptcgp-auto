@@ -873,6 +873,7 @@ body {
 .table-wrap {
   overflow-x: auto;
   border: 2px solid var(--line);
+  max-width: 100%;
 }
 
 .grid-table {
@@ -889,9 +890,9 @@ body {
   vertical-align: top;
   text-align: left;
   font-size: 0.78rem;
-  min-width: 6rem;
+  min-width: max(7.5rem, fit-content);
   white-space: normal;
-  word-break: normal;
+  word-break: keep-all;
   overflow-wrap: break-word;
 }
 
@@ -905,6 +906,62 @@ body {
 
 .grid-table button {
   white-space: nowrap;
+}
+
+.table-col-id,
+.table-col-priority,
+.table-col-status,
+.table-col-time,
+.table-col-duration,
+.table-col-count {
+  white-space: nowrap;
+}
+
+.table-col-id {
+  min-width: 4.6rem !important;
+}
+
+.table-col-account {
+  min-width: 15rem !important;
+}
+
+.table-col-task,
+.table-col-rule,
+.table-col-pack,
+.table-col-plan {
+  min-width: 9rem !important;
+}
+
+.table-col-status {
+  min-width: 7rem !important;
+}
+
+.table-col-priority,
+.table-col-duration,
+.table-col-count {
+  min-width: 6.2rem !important;
+}
+
+.table-col-time {
+  min-width: 8.5rem !important;
+}
+
+.table-col-friend-id {
+  min-width: 11rem !important;
+  white-space: nowrap;
+}
+
+.table-col-actions {
+  min-width: 8.5rem !important;
+  white-space: nowrap;
+}
+
+.table-col-image-text {
+  min-width: 18rem !important;
+}
+
+.table-col-error {
+  min-width: 16rem !important;
 }
 
 .mono {
@@ -1002,6 +1059,8 @@ body {
   cursor: copy;
   text-decoration: underline dotted;
   text-underline-offset: 0.14rem;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .account-cell {
@@ -1032,6 +1091,21 @@ body {
   flex-wrap: wrap;
   gap: 0.4rem;
   min-width: 0;
+}
+
+.account-game-id-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.2rem;
+  padding: 0.05rem 0.28rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper-soft);
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.2;
+  cursor: help;
 }
 
 .badge-default,
@@ -1077,9 +1151,9 @@ body {
 }
 
 .tooltip-root {
-  position: relative;
   display: inline-flex;
   max-width: 100%;
+  vertical-align: middle;
 }
 
 .tooltip-trigger {
@@ -1088,13 +1162,9 @@ body {
 }
 
 .tooltip-content {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 0.35rem);
-  transform: translate(-50%, 0.2rem);
-  opacity: 0;
+  position: fixed;
   pointer-events: none;
-  z-index: 130;
+  z-index: 9999;
   min-width: 9rem;
   max-width: min(22rem, 72vw);
   border: 2px solid var(--line);
@@ -1106,13 +1176,6 @@ body {
   line-height: 1.35;
   white-space: normal;
   word-break: break-word;
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.tooltip-root:hover .tooltip-content,
-.tooltip-root:focus-within .tooltip-content {
-  opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .date-picker {
@@ -1339,15 +1402,10 @@ body {
 }
 
 .plan-editor-task-item {
-  cursor: grab;
   transition:
     border-color 0.14s ease,
     box-shadow 0.14s ease,
     background-color 0.14s ease;
-}
-
-.plan-editor-task-item:active {
-  cursor: grabbing;
 }
 
 .plan-editor-task-item:hover {
@@ -1413,6 +1471,22 @@ body {
   align-items: center;
   gap: 0.35rem;
   flex: 0 0 auto;
+}
+
+.plan-editor-drag-handle {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  padding: 0.28rem 0.35rem;
+  min-width: 2rem;
+  cursor: grab;
+}
+
+.plan-editor-drag-handle:active {
+  cursor: grabbing;
 }
 
 .plan-editor-task-item.is-drag-over {

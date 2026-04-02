@@ -494,53 +494,33 @@
 }
 
 .owned-card-exchange-table-frame .grid-table {
-  min-width: 0;
-  width: 100%;
-  table-layout: fixed;
+  min-width: 100%;
+  width: max-content;
+  table-layout: auto;
 }
 
 .owned-card-exchange-table-frame .grid-table th,
 .owned-card-exchange-table-frame .grid-table td {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: keep-all;
 }
 
 .owned-card-exchange-table-frame .grid-table th:nth-child(1),
 .owned-card-exchange-table-frame .grid-table td:nth-child(1) {
-  width: 19%;
+  min-width: 16rem;
 }
 
 .owned-card-exchange-table-frame .grid-table th:nth-child(2),
-.owned-card-exchange-table-frame .grid-table td:nth-child(2) {
-  width: 29%;
-}
-
+.owned-card-exchange-table-frame .grid-table td:nth-child(2),
 .owned-card-exchange-table-frame .grid-table th:nth-child(3),
 .owned-card-exchange-table-frame .grid-table td:nth-child(3) {
-  width: 11%;
+  min-width: 6rem;
+  white-space: nowrap;
 }
 
 .owned-card-exchange-table-frame .grid-table th:nth-child(4),
 .owned-card-exchange-table-frame .grid-table td:nth-child(4) {
-  width: 16%;
-}
-
-.owned-card-exchange-table-frame .grid-table th:nth-child(5),
-.owned-card-exchange-table-frame .grid-table td:nth-child(5) {
-  width: 25%;
-}
-
-.owned-modal-friend-cell {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.45rem;
-}
-
-.owned-modal-friend-cell .mono {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 8rem;
   white-space: nowrap;
 }
 

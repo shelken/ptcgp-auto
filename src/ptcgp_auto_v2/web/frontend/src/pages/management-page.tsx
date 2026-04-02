@@ -56,6 +56,8 @@ interface ColumnDef {
   label: string
   render?: (row: Record<string, unknown>) => ReactNode
   sortKey?: string
+  headerClassName?: string
+  cellClassName?: string
 }
 
 interface AccountPlanItemState {
@@ -188,7 +190,7 @@ function mergeIntervalSeconds(parts: IntervalParts): number {
 function updateIntervalPart(totalSeconds: number, key: IntervalPartKey, rawValue: string): number {
   const nextParts = splitIntervalSeconds(totalSeconds)
   nextParts[key] = parseNonNegativeInt(rawValue)
-  return Math.max(1, mergeIntervalSeconds(nextParts))
+  return mergeIntervalSeconds(nextParts)
 }
 
 function currentGameBizDate(): string {
@@ -428,10 +430,11 @@ function DataGrid({
                     sortBy={sortBy}
                     sortOrder={sortOrder}
                     onToggle={onSortChange}
+                    className={col.headerClassName}
                   />
                 )
               }
-              return <th key={col.key}>{col.label}</th>
+              return <th key={col.key} className={col.headerClassName}>{col.label}</th>
             })}
           </tr>
         </thead>
@@ -444,7 +447,7 @@ function DataGrid({
           {rows.map((row, rowIndex) => (
             <tr key={`${rowIndex}-${toText(row.id, t)}`}>
               {columns.map((col) => (
-                <td key={`${rowIndex}-${col.key}`}>
+                <td key={`${rowIndex}-${col.key}`} className={col.cellClassName}>
                   {col.render ? col.render(row) : toText(row[col.key], t)}
                 </td>
               ))}
@@ -947,8 +950,8 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           return
         }
         form.set(`task_reset_${taskType}`, config.resetType || 'default')
-        if (config.resetType === 'interval' && config.intervalSeconds > 0) {
-          form.set(`task_interval_${taskType}`, String(config.intervalSeconds))
+        if (config.resetType === 'interval') {
+          form.set(`task_interval_${taskType}`, String(Math.max(0, config.intervalSeconds)))
         }
       })
       return requestFormJson<{ ok: boolean; message: string; error?: string }>('/api/react/management/plans', {
@@ -996,7 +999,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
       nextTaskConfigMap[taskType] = {
         enabled: selectedTasks.includes(taskType),
         resetType,
-        intervalSeconds: Number.isFinite(intervalRaw) && intervalRaw > 0 ? intervalRaw : 3600
+        intervalSeconds: Number.isFinite(intervalRaw) && intervalRaw >= 0 ? intervalRaw : 3600
       }
     }
 
@@ -1181,19 +1184,6 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                   <div
                     key={task}
                     className={`surface-card section-stack plan-editor-task-item ${dragOverTask === task ? 'is-drag-over' : ''}`}
-                    draggable={orderedTasks.length > 1}
-                    onDragStart={(event) => {
-                      draggingTaskRef.current = task
-                      setDraggingTask(task)
-                      setDragOverTask(null)
-                      event.dataTransfer.effectAllowed = 'move'
-                      event.dataTransfer.setData('text/plain', task)
-                    }}
-                    onDragEnd={() => {
-                      draggingTaskRef.current = null
-                      setDraggingTask(null)
-                      setDragOverTask(null)
-                    }}
                     onDragOver={(event) => {
                       event.preventDefault()
                       const sourceTask = draggingTaskRef.current || event.dataTransfer.getData('text/plain') || draggingTask
@@ -1234,6 +1224,26 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                         <span className="plan-editor-task-name">{taskTypeLabel(t, task)}</span>
                       </label>
                       <div className="plan-editor-task-actions">
+                        <button
+                          type="button"
+                          className="plan-editor-drag-handle"
+                          aria-label={tr(t, 'label_drag_sort', 'Drag to sort')}
+                          draggable={orderedTasks.length > 1}
+                          onDragStart={(event) => {
+                            draggingTaskRef.current = task
+                            setDraggingTask(task)
+                            setDragOverTask(null)
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', task)
+                          }}
+                          onDragEnd={() => {
+                            draggingTaskRef.current = null
+                            setDraggingTask(null)
+                            setDragOverTask(null)
+                          }}
+                        >
+                          ⋮⋮
+                        </button>
                         <Button
                           type="button"
                           size="sm"
@@ -1821,10 +1831,12 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
       <DataGrid
         rows={rows}
         columns={[
-          { key: 'id', label: tr(t, 'col_id', 'ID') },
+          { key: 'id', label: tr(t, 'col_id', 'ID'), headerClassName: 'table-col-id', cellClassName: 'table-col-id' },
           {
             key: 'account_id',
             label: tr(t, 'col_account', 'Account'),
+            headerClassName: 'table-col-account',
+            cellClassName: 'table-col-account',
             render: (row) => (
               <AccountIdentityCell
                 t={t}
@@ -1835,15 +1847,25 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
               />
             )
           },
-          { key: 'task_type', label: tr(t, 'col_task', 'Task'), render: (row) => taskTypeLabel(t, row.task_type) },
+          {
+            key: 'task_type',
+            label: tr(t, 'col_task', 'Task'),
+            headerClassName: 'table-col-task',
+            cellClassName: 'table-col-task',
+            render: (row) => taskTypeLabel(t, row.task_type)
+          },
           {
             key: 'status',
             label: tr(t, 'col_status', 'Status'),
+            headerClassName: 'table-col-status',
+            cellClassName: 'table-col-status',
             render: (row) => renderBadge(statusLabel(t, row.status), statusBadgeVariant(row.status))
           },
           {
             key: 'dispatch_rank',
             label: tr(t, 'col_dispatch_priority', 'Dispatch Priority'),
+            headerClassName: 'table-col-priority',
+            cellClassName: 'table-col-priority',
             render: (row) => {
               const rank = Number(row.dispatch_rank ?? 0)
               const total = Number(row.dispatch_rank_total ?? 0)
@@ -1857,17 +1879,23 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             key: 'last_completed_at_iso',
             label: tr(t, 'col_last_completed', 'Last Completed'),
             sortKey: 'last_completed_at',
+            headerClassName: 'table-col-time',
+            cellClassName: 'table-col-time',
             render: (row) => renderRelativeTime(row.last_completed_at_iso, lang, t)
           },
           {
             key: 'last_duration_seconds',
             label: tr(t, 'col_last_duration', 'Last Duration'),
             sortKey: 'last_duration_seconds',
+            headerClassName: 'table-col-duration',
+            cellClassName: 'table-col-duration',
             render: (row) => renderDurationWithTooltip(row.last_duration_seconds)
           },
           {
             key: 'reset_type',
             label: tr(t, 'col_reset_type', 'Reset Type'),
+            headerClassName: 'table-col-rule',
+            cellClassName: 'table-col-rule',
             render: (row) => {
               const resetType = toText(row.reset_type, t)
               if (resetType === '-') {
@@ -1880,13 +1908,17 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
             key: 'next_run_at_iso',
             label: tr(t, 'col_next_run', 'Next Run'),
             sortKey: 'next_run_at',
+            headerClassName: 'table-col-time',
+            cellClassName: 'table-col-time',
             render: (row) => renderRelativeTime(row.next_run_at_iso, lang, t)
           },
-          { key: 'plan_name', label: tr(t, 'col_plan', 'Plan') },
-          { key: 'plan_priority', label: tr(t, 'label_priority', 'Priority') },
+          { key: 'plan_name', label: tr(t, 'col_plan', 'Plan'), headerClassName: 'table-col-plan', cellClassName: 'table-col-plan' },
+          { key: 'plan_priority', label: tr(t, 'label_priority', 'Priority'), headerClassName: 'table-col-priority', cellClassName: 'table-col-priority' },
           {
             key: 'target_pack_label',
             label: tr(t, 'col_target_pack', 'Target Pack'),
+            headerClassName: 'table-col-pack',
+            cellClassName: 'table-col-pack',
             render: (row) => {
               const value = toText(row.target_pack_label, t)
               if (value === '-') {
@@ -1898,6 +1930,8 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           {
             key: 'error_message',
             label: tr(t, 'col_error', 'Error'),
+            headerClassName: 'table-col-error',
+            cellClassName: 'table-col-error',
             render: (row) => {
               const errorText = toText(row.error_message, t)
               return <TruncatedText text={errorText} tooltip={errorText} />
@@ -2427,7 +2461,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
   const selectedAccountId = toText(query.data?.selected_account_id, t) === '-' ? '' : toText(query.data?.selected_account_id, t)
-  const selectedBizDateLocal = toText(query.data?.selected_biz_date_local, t) === '-' ? '' : toText(query.data?.selected_biz_date_local, t)
+  const currentBizDateLocal = toText(query.data?.current_biz_date_local, t) === '-' ? '' : toText(query.data?.current_biz_date_local, t)
   const accountOptions = useMemo(
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]
@@ -2449,12 +2483,6 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
     }
   }, [accountId, selectedAccountId, setAccountId])
 
-  useEffect(() => {
-    if (selectedBizDateLocal && selectedBizDateLocal !== date) {
-      setDate(selectedBizDateLocal)
-    }
-  }, [date, selectedBizDateLocal])
-
   return (
     <section className="surface-card section-stack">
       <div className="pagination-row">
@@ -2468,6 +2496,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
               setPairPage(0)
             }}
             placeholder={tr(t, 'date_label', 'Date')}
+            todayValue={currentBizDateLocal || currentGameBizDate()}
             i18n={datePickerText}
           />
           <SearchableSelect

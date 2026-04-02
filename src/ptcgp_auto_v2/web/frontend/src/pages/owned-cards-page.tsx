@@ -19,6 +19,8 @@ import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 import type { BootstrapOptions } from '@/types/api'
 
+import { AccountIdentityCell } from './management/shared'
+
 interface OwnedCardsPageProps {
   lang: string
   options: BootstrapOptions
@@ -60,6 +62,7 @@ interface ExchangeAccountRow {
   account_id: number
   nickname: string
   friend_id: string
+  game_id?: string | null
   count: number
   exchange_points: number | null
   exchange_action: {
@@ -150,18 +153,6 @@ function ownedEmptyText(ownershipScope: string, t: Record<string, string>): stri
     return tr(t, 'owned_cards_all_empty', 'No cards')
   }
   return tr(t, 'owned_cards_empty', 'No owned cards')
-}
-
-async function copyText(value: string): Promise<boolean> {
-  if (!value) {
-    return false
-  }
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    return false
-  }
 }
 
 function CardThumb({
@@ -1048,8 +1039,10 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                       <td>{item.card.rarity}</td>
                       <td className="mono">{item.total_count}</td>
                       <td className="mono">{item.owned_accounts_count}</td>
-                      <td className="mono" title={formatAbsoluteDateTime(item.latest_acquired_at)}>
-                        {formatRelativeDateTime(item.latest_acquired_at, lang, t)}
+                      <td className="mono">
+                        <Tooltip content={formatAbsoluteDateTime(item.latest_acquired_at)}>
+                          <span>{formatRelativeDateTime(item.latest_acquired_at, lang, t)}</span>
+                        </Tooltip>
                       </td>
                       <td>
                         <Button
@@ -1191,11 +1184,17 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                   <div className="owned-modal-exchange-row surface-card">
                     <div className="owned-modal-exchange-account">
                       <div className="text-xs text-muted">{tr(t, 'exchange_from_account', 'Source Account')}</div>
-                      <div className="mono">
-                        {selectedExchangeAccount
-                          ? `${selectedExchangeAccount.nickname || `#${selectedExchangeAccount.account_id}`} (#${selectedExchangeAccount.account_id})`
-                          : tr(t, 'exchange_select_account_first', 'Select one account first')}
-                      </div>
+                      {selectedExchangeAccount ? (
+                        <AccountIdentityCell
+                          t={t}
+                          accountId={selectedExchangeAccount.account_id}
+                          name={selectedExchangeAccount.nickname || `#${selectedExchangeAccount.account_id}`}
+                          friendId={selectedExchangeAccount.friend_id}
+                          gameId={selectedExchangeAccount.game_id}
+                        />
+                      ) : (
+                        <div className="mono">{tr(t, 'exchange_select_account_first', 'Select one account first')}</div>
+                      )}
                     </div>
                     <div className="owned-modal-exchange-target">
                       <label
@@ -1294,67 +1293,46 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                       <table className="grid-table">
                         <thead>
                           <tr>
-                            <th>
+                            <th className="table-col-account">
                               <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('account_id')}>
                                 {tr(t, 'col_account', 'Account')} {getDetailSortIndicator('account_id')}
                               </button>
                             </th>
-                            <th>
-                              <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('friend_id')}>
-                                {tr(t, 'col_friend_id', 'Friend ID')} {getDetailSortIndicator('friend_id')}
-                              </button>
-                            </th>
-                            <th>
+                            <th className="table-col-count">
                               <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('count')}>
                                 {tr(t, 'col_count', 'Count')} {getDetailSortIndicator('count')}
                               </button>
                             </th>
-                            <th>
+                            <th className="table-col-count">
                               <button type="button" className="owned-modal-sort-btn" onClick={() => applyDetailSort('exchange_points')}>
                                 {tr(t, 'col_exchange_points', 'Exchange Points')} {getDetailSortIndicator('exchange_points')}
                               </button>
                             </th>
-                            <th>{tr(t, 'col_actions', 'Actions')}</th>
+                            <th className="table-col-actions">{tr(t, 'col_actions', 'Actions')}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {detailAccounts.length === 0 && (
                             <tr>
-                              <td colSpan={5} className="text-center text-muted">{tr(t, 'exchange_entry_no_available_accounts', 'No eligible accounts')}</td>
+                              <td colSpan={4} className="text-center text-muted">{tr(t, 'exchange_entry_no_available_accounts', 'No eligible accounts')}</td>
                             </tr>
                           )}
                           {detailAccounts.map((row) => {
-                            const rowFriendId = String(row.friend_id ?? '').trim()
                             const isSelectedRow = selectedExchangeAccountId === row.account_id
                             return (
                               <tr key={row.account_id} className={isSelectedRow ? 'owned-exchange-row--selected' : ''}>
-                                <td>{row.nickname || `#${row.account_id}`}</td>
-                                <td>
-                                  <div className="owned-modal-friend-cell">
-                                    <span className="mono">{rowFriendId || '-'}</span>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        void copyText(rowFriendId).then((copied) => {
-                                          setDetailNotice({
-                                            level: copied ? 'success' : 'error',
-                                            text: copied
-                                              ? tr(t, 'msg_copied', 'Copied')
-                                              : tr(t, 'msg_copy_failed', 'Copy failed')
-                                          })
-                                        })
-                                      }}
-                                      disabled={rowFriendId.length === 0}
-                                    >
-                                      {tr(t, 'label_copy', 'Copy')}
-                                    </Button>
-                                  </div>
+                                <td className="table-col-account">
+                                  <AccountIdentityCell
+                                    t={t}
+                                    accountId={row.account_id}
+                                    name={row.nickname || `#${row.account_id}`}
+                                    friendId={row.friend_id}
+                                    gameId={row.game_id}
+                                  />
                                 </td>
-                                <td className="mono">{row.count}</td>
-                                <td className="mono">{row.exchange_points ?? '-'}</td>
-                                <td>
+                                <td className="mono table-col-count">{row.count}</td>
+                                <td className="mono table-col-count">{row.exchange_points ?? '-'}</td>
+                                <td className="table-col-actions">
                                   {row.exchange_action.enabled ? (
                                     <Button
                                       type="button"

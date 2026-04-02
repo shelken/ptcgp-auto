@@ -11,6 +11,7 @@ interface DatePickerProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  todayValue?: string
   i18n?: {
     selectDateLabel?: string
     todayLabel?: string
@@ -44,7 +45,7 @@ function buildCalendarDays(currentMonth: Date): Date[] {
   return days
 }
 
-export function DatePicker({ value, onChange, placeholder, className, disabled = false, i18n }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder, className, disabled = false, todayValue, i18n }: DatePickerProps) {
   const [open, setOpen] = useState(false)
   const selectedDate = useMemo(() => parseDateYmd(value), [value])
   const [viewMonth, setViewMonth] = useState<Date>(() => monthStart(selectedDate ?? new Date()))
@@ -71,7 +72,7 @@ export function DatePicker({ value, onChange, placeholder, className, disabled =
 
   const days = useMemo(() => buildCalendarDays(viewMonth), [viewMonth])
   const currentMonth = viewMonth.getMonth()
-  const today = useMemo(() => formatDateYmd(new Date()), [])
+  const today = useMemo(() => todayValue || formatDateYmd(new Date()), [todayValue])
 
   return (
     <div className={cn('date-picker', className)} ref={rootRef}>
