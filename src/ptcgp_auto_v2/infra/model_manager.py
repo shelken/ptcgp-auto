@@ -6,6 +6,7 @@ YOLO模型管理器
 """
 
 import logging
+import os
 import platform
 import threading
 from pathlib import Path
@@ -173,6 +174,9 @@ class ModelManager:
                 # 延迟导入YOLO，避免启动时加载
                 global YOLO
                 if YOLO is None:
+                    # 依赖由项目环境统一管理，必须在首次导入 ultralytics 前强制关闭运行时自动装包。
+                    os.environ["YOLO_AUTOINSTALL"] = "false"
+                    os.environ["ULTRALYTICS_SKIP_REQUIREMENTS_CHECKS"] = "1"
                     from ultralytics import YOLO as _YOLO
 
                     YOLO = _YOLO
