@@ -113,6 +113,7 @@ def reset_completed_task_instances(
     statement = statement.values(
         status="pending",
         next_run_at=None,
+        status_changed_at=datetime.now(),
         updated_at=datetime.now(),
     )
     result = session.exec(statement)

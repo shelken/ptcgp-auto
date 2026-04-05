@@ -31,44 +31,57 @@ class TaskInstance(SQLModel, table=True):
 
     __tablename__ = "task_instances"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(index=True, description="所属账号 ID，用于关联具体执行账号")
-    task_type: str = Field(description="任务类型标识，如 open_pack / send_card_daily")
+    id: Optional[int] = Field(
+        default=None,
+        primary_key=True,
+        description="任务实例主键；同一账号的每种任务共享一条长期记录",
+    )
+    account_id: int = Field(
+        index=True,
+        description="所属账号 ID；任务调度、批量派发和异常回收都按账号维度展开",
+    )
+    task_type: str = Field(
+        description="任务类型标识，如 open_pack / send_card_daily；与 account_id 一起决定这条记录表示什么任务",
+    )
     status: str = Field(
         default="pending",
-        description="任务实例当前状态：pending/running/completed/failed/skipped/blocked",
+        description="任务实例当前状态；运行态切换决定调度是否可派发和异常回收口径",
     )
     reset_type: str = Field(
         default="daily",
-        description="任务重置规则：daily/weekly/once/interval",
+        description="任务重置规则；只影响 completed 后何时再次进入 pending，不影响 failed 回收",
     )
     error_message: Optional[str] = Field(
         default=None,
-        description="最近一次收敛时记录的错误、跳过或完成原因",
+        description="最近一次收敛结果文本；统一承载错误、跳过原因和完成原因",
+    )
+    status_changed_at: Optional[datetime] = Field(
+        default_factory=datetime.now,
+        description="任务状态最近一次变化时间；专门给 running/blocked/failed/skipped 超时回收使用，不能再混用 updated_at",
     )
     last_completed_at: Optional[datetime] = Field(
         default=None,
-        description="展示用途：最近一次真实完成时间；特殊 completed 场景可保留旧值",
+        description="展示用途的最近完成时间；用于页面展示“上次完成”，不参与异常回收",
     )
     schedule_anchor_at: Optional[datetime] = Field(
         default=None,
-        description="调度用途：本次完成用于计算重置/下次运行的时间锚点",
+        description="调度锚点；completed 后按它计算下次 daily/interval 运行时间",
     )
     last_duration_seconds: Optional[int] = Field(
         default=None,
-        description="任务实例上一次自身执行耗时（秒）",
+        description="上一次任务自身耗时；用于 Web 展示和排查慢任务",
     )
     next_run_at: Optional[datetime] = Field(
         default=None,
-        description="派生缓存：按当前锚点与重置规则计算出的下次可运行时间",
+        description="派生缓存；只有 pending 任务会真正用它判断是否到执行窗口",
     )
     created_at: datetime = Field(
         default_factory=datetime.now,
-        description="任务实例创建时间",
+        description="任务实例首次创建时间；表示这条长期任务记录何时入库",
     )
     updated_at: datetime = Field(
         default_factory=datetime.now,
-        description="任务实例最近一次写库时间",
+        description="任务实例最近一次任意写库时间；用于审计，不再承担状态超时语义",
     )
 
     # 关系
@@ -89,6 +102,9 @@ class TaskInstance(SQLModel, table=True):
             "status": self.status,
             "reset_type": self.reset_type,
             "error_message": self.error_message,
+            "status_changed_at": (
+                self.status_changed_at.isoformat() if self.status_changed_at else None
+            ),
             "last_completed_at": (
                 self.last_completed_at.isoformat() if self.last_completed_at else None
             ),
