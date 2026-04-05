@@ -192,8 +192,12 @@ class TaskInstanceRepository(BaseRepository):
         db_instance = self.session.get(TaskInstance, instance_id)
         if not db_instance:
             return False
+        now = datetime.now()
+        status_changed = False
 
         if status is not _MISSING:
+            if db_instance.status != status:
+                status_changed = True
             db_instance.status = status  # type: ignore[assignment]
         if reset_type is not _MISSING:
             db_instance.reset_type = reset_type  # type: ignore[assignment]
@@ -207,8 +211,9 @@ class TaskInstanceRepository(BaseRepository):
             db_instance.last_duration_seconds = last_duration_seconds  # type: ignore[assignment]
         if next_run_at is not _MISSING:
             db_instance.next_run_at = next_run_at  # type: ignore[assignment]
-
-        db_instance.updated_at = datetime.now()
+        if status_changed:
+            db_instance.status_changed_at = now
+        db_instance.updated_at = now
         self.session.add(db_instance)
         self._finish_write()
         return True
@@ -217,10 +222,11 @@ class TaskInstanceRepository(BaseRepository):
         """批量按 ID 更新任务状态。"""
         if not instance_ids:
             return 0
+        now = datetime.now()
         statement = (
             update(TaskInstance)
             .where(col(TaskInstance.id).in_(instance_ids))
-            .values(status=status, updated_at=datetime.now())
+            .values(status=status, status_changed_at=now, updated_at=now)
         )
         result = self.session.exec(statement)
         self._finish_write()
@@ -244,8 +250,15 @@ class TaskInstanceRepository(BaseRepository):
             db_instance = self.session.get(TaskInstance, instance.id)
             if db_instance is None:
                 continue
-            db_instance.reset_type = instance.reset_type
-            db_instance.next_run_at = instance.next_run_at
+            changed = False
+            if db_instance.reset_type != instance.reset_type:
+                db_instance.reset_type = instance.reset_type
+                changed = True
+            if db_instance.next_run_at != instance.next_run_at:
+                db_instance.next_run_at = instance.next_run_at
+                changed = True
+            if not changed:
+                continue
             db_instance.updated_at = now
             self.session.add(db_instance)
             count += 1
@@ -288,6 +301,10 @@ class TaskInstanceRepository(BaseRepository):
         """重置异常状态任务（支持超时/冷却或强制重置）"""
         now = datetime.now()
         status_col = col(TaskInstance.status)
+        state_changed_col = func.coalesce(
+            col(TaskInstance.status_changed_at),
+            col(TaskInstance.updated_at),
+        )
         if force_all:
             condition = status_col.in_(["running", "blocked", "skipped", "failed"])
         else:
@@ -302,11 +319,11 @@ class TaskInstanceRepository(BaseRepository):
             condition = or_(
                 and_(
                     status_col.in_(["running", "blocked"]),
-                    TaskInstance.updated_at < stale_threshold,
+                    state_changed_col < stale_threshold,
                 ),
                 and_(
                     status_col.in_(["skipped", "failed"]),
-                    TaskInstance.updated_at < skipped_threshold,
+                    state_changed_col < skipped_threshold,
                 ),
             )
 
@@ -318,7 +335,7 @@ class TaskInstanceRepository(BaseRepository):
         statement = (
             update(TaskInstance)
             .where(condition)
-            .values(status="pending", updated_at=now)
+            .values(status="pending", status_changed_at=now, updated_at=now)
         )
         result = self.session.exec(statement)
         self._finish_write()

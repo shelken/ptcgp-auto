@@ -71,6 +71,7 @@ class TaskInstanceSnapshot:
     status: str
     reset_type: str
     error_message: Optional[str]
+    status_changed_at: Optional[datetime]
     last_completed_at: Optional[datetime]
     schedule_anchor_at: Optional[datetime]
     last_duration_seconds: Optional[int]
@@ -90,6 +91,7 @@ class TaskInstanceSnapshot:
             status=instance.status,
             reset_type=instance.reset_type,
             error_message=instance.error_message,
+            status_changed_at=instance.status_changed_at,
             last_completed_at=instance.last_completed_at,
             schedule_anchor_at=instance.schedule_anchor_at,
             last_duration_seconds=instance.last_duration_seconds,
