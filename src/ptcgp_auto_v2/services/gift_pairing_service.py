@@ -2,12 +2,12 @@
 """
 送卡配对服务。
 
-负责根据账号资产排序生成稳定送卡关系，并在任务执行前做增量补齐。
+负责读取固定送卡配对关系，并在缺失时做一次性补齐。
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
-from datetime import datetime, timedelta
 
 from sqlalchemy import case
 from sqlmodel import col, func, select
@@ -40,12 +40,74 @@ class GiftPairingService:
         """判断账号是否已过送卡冷冻期。"""
         return is_account_past_days(created_at, cls.COOLDOWN_DAYS)
 
+    @classmethod
+    def ensure_pair_for_account(cls, account_id: int) -> GiftPairData | None:
+        """读取账号固定送卡配对；若缺失则按既有固定关系补齐一次。"""
+        with session_scope() as session:
+            repos = RepositoryFactory(session)
+            pair_repo = repos.account_gift_pairs()
+            pair = pair_repo.get_by_account(account_id)
+            if pair is not None:
+                cls._refresh_target_friend_snapshot(
+                    pair_repo=pair_repo,
+                    account_repo=repos.accounts(),
+                    pair=pair,
+                )
+                return cls._pair_to_data(pair)
+
+            ranked_accounts = cls._load_ranked_accounts()
+            friend_map = {
+                item["account_id"]: item["friend_id"]
+                for item in ranked_accounts
+                if item["friend_id"]
+            }
+            sorted_ids = [item["account_id"] for item in ranked_accounts]
+            existing_pairs = pair_repo.list_all()
+
+            cls._backfill_reverse_pairs(
+                pair_repo=pair_repo,
+                existing_pairs=existing_pairs,
+                friend_map=friend_map,
+            )
+
+            existing_pair_map = cls._build_existing_pair_map(existing_pairs)
+            missing_pairs = cls.plan_missing_pairs(
+                sorted_account_ids=sorted_ids,
+                existing_pair_map=existing_pair_map,
+            )
+            for left_id, right_id in missing_pairs:
+                left_friend_id = friend_map.get(left_id)
+                right_friend_id = friend_map.get(right_id)
+                if not left_friend_id or not right_friend_id:
+                    continue
+                pair_repo.create_if_missing(
+                    account_id=left_id,
+                    target_friend_id=right_friend_id,
+                    target_account_id=right_id,
+                    strategy=cls.STRATEGY_FIXED_A1_153,
+                )
+                pair_repo.create_if_missing(
+                    account_id=right_id,
+                    target_friend_id=left_friend_id,
+                    target_account_id=left_id,
+                    strategy=cls.STRATEGY_FIXED_A1_153,
+                )
+
+            pair = pair_repo.get_by_account(account_id)
+            if pair is not None:
+                cls._refresh_target_friend_snapshot(
+                    pair_repo=pair_repo,
+                    account_repo=repos.accounts(),
+                    pair=pair,
+                )
+            return cls._pair_to_data(pair) if pair else None
+
     @staticmethod
     def plan_missing_pairs(
         sorted_account_ids: list[int],
         existing_pair_map: dict[int, int],
     ) -> list[tuple[int, int]]:
-        """在既有稳定关系不变的前提下，为未配对账号生成补齐配对。"""
+        """为尚未建立固定关系的账号生成一次性配对。"""
         locked_account_ids = set(existing_pair_map) | set(existing_pair_map.values())
 
         unpaired: list[int] = [
@@ -58,56 +120,6 @@ class GiftPairingService:
         for index in range(0, len(unpaired) - 1, 2):
             pairs.append((unpaired[index], unpaired[index + 1]))
         return pairs
-
-    @classmethod
-    def ensure_pairs_for_account(cls, account_id: int) -> GiftPairData | None:
-        """增量补齐送卡配对，并返回指定账号的当前有效配对。"""
-        ranked_accounts = cls._load_ranked_accounts()
-        friend_map = {
-            item["account_id"]: item["friend_id"]
-            for item in ranked_accounts
-            if item["friend_id"]
-        }
-        sorted_ids = [item["account_id"] for item in ranked_accounts]
-
-        with session_scope() as session:
-            pair_repo = RepositoryFactory(session).account_gift_pairs()
-            active_pairs = pair_repo.get_all_active()
-            active_map = {row.account_id: row for row in active_pairs}
-
-            existing_pair_map = cls._build_valid_existing_pair_map(
-                active_map,
-                friend_map,
-            )
-
-            for row in active_pairs:
-                if row.account_id not in existing_pair_map:
-                    pair_repo.deactivate_active_pair(row.account_id)
-
-            missing_pairs = cls.plan_missing_pairs(
-                sorted_account_ids=sorted_ids,
-                existing_pair_map=existing_pair_map,
-            )
-            for left_id, right_id in missing_pairs:
-                left_friend_id = friend_map.get(left_id)
-                right_friend_id = friend_map.get(right_id)
-                if not left_friend_id or not right_friend_id:
-                    continue
-                pair_repo.upsert_active_pair(
-                    account_id=left_id,
-                    target_friend_id=right_friend_id,
-                    target_account_id=right_id,
-                    strategy=cls.STRATEGY_FIXED_A1_153,
-                )
-                pair_repo.upsert_active_pair(
-                    account_id=right_id,
-                    target_friend_id=left_friend_id,
-                    target_account_id=left_id,
-                    strategy=cls.STRATEGY_FIXED_A1_153,
-                )
-
-            pair = pair_repo.get_active_by_account(account_id)
-            return cls._pair_to_data(pair) if pair else None
 
     @staticmethod
     def _pair_to_data(pair: AccountGiftPair) -> GiftPairData:
@@ -123,41 +135,82 @@ class GiftPairingService:
         )
 
     @staticmethod
-    def _build_valid_existing_pair_map(
-        active_map: dict[int, AccountGiftPair],
+    def _refresh_target_friend_snapshot(
+        *,
+        pair_repo,
+        account_repo,
+        pair: AccountGiftPair,
+    ) -> None:
+        """用目标账号当前 friend_id 刷新配对里的执行快照。"""
+        target_account_id = pair.target_account_id
+        if not isinstance(target_account_id, int):
+            return
+        target_account = account_repo.get_by_id(target_account_id)
+        if target_account is None or not target_account.friend_id:
+            return
+        current_friend_id = str(target_account.friend_id)
+        if pair.target_friend_id == current_friend_id:
+            return
+        if pair.id is None:
+            raise RuntimeError("送卡配对 ID 为空，无法刷新目标快照")
+        pair_repo.update_target_friend_id(pair.id, current_friend_id)
+        pair.target_friend_id = current_friend_id
+
+    @classmethod
+    def _backfill_reverse_pairs(
+        cls,
+        *,
+        pair_repo,
+        existing_pairs: list[AccountGiftPair],
         friend_map: dict[int, str],
-    ) -> dict[int, int]:
-        """构建有效且双向一致的稳定配对映射。"""
-        pair_map: dict[int, int] = {}
-        for account_id, row in active_map.items():
+    ) -> None:
+        """为已有单向固定配对补齐反向记录。"""
+        existing_by_account = {
+            row.account_id: row for row in existing_pairs if row.account_id is not None
+        }
+        for row in existing_pairs:
             target_id = row.target_account_id
-            if target_id is None:
+            if not isinstance(target_id, int):
                 continue
-            reverse = active_map.get(target_id)
-            if reverse is None:
+            if target_id in existing_by_account:
                 continue
-            if reverse.target_account_id != account_id:
+            source_friend_id = friend_map.get(row.account_id)
+            if not source_friend_id:
                 continue
+            reverse = pair_repo.create_if_missing(
+                account_id=target_id,
+                target_friend_id=source_friend_id,
+                target_account_id=row.account_id,
+                strategy=row.strategy or cls.STRATEGY_FIXED_A1_153,
+            )
+            existing_by_account[target_id] = reverse
+            existing_pairs.append(reverse)
 
-            expected_target_friend = friend_map.get(target_id)
-            expected_reverse_friend = friend_map.get(account_id)
-            if not expected_target_friend or not expected_reverse_friend:
+    @staticmethod
+    def _build_existing_pair_map(
+        existing_pairs: list[AccountGiftPair],
+    ) -> dict[int, int]:
+        """基于已建立固定关系锁定账号，避免后续重排。"""
+        existing_by_account = {
+            row.account_id: row for row in existing_pairs if row.account_id is not None
+        }
+        pair_map: dict[int, int] = {}
+        for row in existing_pairs:
+            target_id = row.target_account_id
+            if not isinstance(target_id, int):
                 continue
-            if row.target_friend_id != expected_target_friend:
+            if row.account_id == target_id:
                 continue
-            if reverse.target_friend_id != expected_reverse_friend:
+            reverse = existing_by_account.get(target_id)
+            if reverse is None or reverse.target_account_id != row.account_id:
                 continue
-
-            pair_map[account_id] = target_id
-            pair_map[target_id] = account_id
+            pair_map[row.account_id] = target_id
+            pair_map[target_id] = row.account_id
         return pair_map
 
     @staticmethod
     def _load_ranked_accounts() -> list[dict]:
-        """加载参与送卡的账号并按 SR/SAR 总量排序。"""
-        cooldown_threshold = datetime.now() - timedelta(
-            days=GiftPairingService.COOLDOWN_DAYS
-        )
+        """加载可参与送卡的账号并按 SR/SAR 总量排序。"""
         rarity_score = func.coalesce(
             func.sum(
                 case(
@@ -181,7 +234,6 @@ class GiftPairingService:
                 .where(
                     col(Account.friend_id).is_not(None),
                     col(Account.friend_id) != "",
-                    col(Account.created_at) <= cooldown_threshold,
                 )
                 .group_by(col(Account.id), col(Account.friend_id))
                 .order_by(rarity_score.desc(), col(Account.id).asc())

@@ -221,7 +221,7 @@ class SendCardDailyTask(StatefulTask):
             self.complete()
             return
 
-        pair = GiftPairingService.ensure_pairs_for_account(self.account.id)
+        pair = GiftPairingService.ensure_pair_for_account(self.account.id)
         if pair is None:
             self.skip("无可用送卡目标")
             return

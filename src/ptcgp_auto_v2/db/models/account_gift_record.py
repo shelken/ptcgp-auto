@@ -20,7 +20,14 @@ def _today_local_date() -> str:
 
 
 class AccountGiftRecord(SQLModel, TimestampMixin, table=True):
-    """账号送卡执行记录表。"""
+    """
+    账号送卡执行记录表。
+
+    第一性语义：
+    - 这张表记录「一次业务日内，对某个目标执行送卡」的结果。
+    - `account_gift_pairs` 决定今天应该送给谁；本表记录今天实际有没有送、送到哪一步、是否成功。
+    - 即使后续固定配对被人工调整，历史执行记录也必须保持当时目标快照不变。
+    """
 
     __tablename__: ClassVar[str] = "account_gift_records"
     __table_args__ = (
@@ -32,31 +39,69 @@ class AccountGiftRecord(SQLModel, TimestampMixin, table=True):
         ),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    account_id: int = Field(index=True, description="送卡账号ID")
+    id: Optional[int] = Field(
+        default=None,
+        primary_key=True,
+        description="执行记录主键，仅用于唯一标识一次送卡流水",
+    )
+    account_id: int = Field(
+        index=True,
+        description="送卡发起账号 ID；与目标和业务日共同构成单日唯一记录",
+    )
     target_account_id: Optional[int] = Field(
-        default=None, index=True, description="目标账号ID（系统内账号）"
+        default=None,
+        index=True,
+        description="目标账号 ID（系统内账号）；便于回送统计和 Web 聚合进度",
     )
-    target_friend_id: str = Field(index=True, description="目标账号friend_id")
+    target_friend_id: str = Field(
+        index=True,
+        description="目标 friend_id 快照；即使后续配对调整，历史记录仍保留当次目标",
+    )
 
-    card_id: Optional[int] = Field(default=None, index=True, description="送出的卡牌ID")
-    card_set_code: Optional[str] = Field(default=None, description="送出的卡牌系列代码")
-    card_number: Optional[int] = Field(default=None, description="送出的卡牌编号")
+    card_id: Optional[int] = Field(
+        default=None,
+        index=True,
+        description="送出的卡牌 ID；成功收敛后用于同步双方库存",
+    )
+    card_set_code: Optional[str] = Field(
+        default=None,
+        description="送出的卡牌系列代码；保留轻量快照，便于查询与排查",
+    )
+    card_number: Optional[int] = Field(
+        default=None,
+        description="送出的卡牌编号；与 series 一起用于页面展示和审计",
+    )
 
-    before_count: Optional[int] = Field(default=None, description="送卡前持有数量")
-    after_count: Optional[int] = Field(default=None, description="送卡后持有数量")
+    before_count: Optional[int] = Field(
+        default=None,
+        description="送卡前持有数量；优先来自 UI 识别，用于验证库存扣减是否符合预期",
+    )
+    after_count: Optional[int] = Field(
+        default=None,
+        description="送卡后持有数量；成功后回写 account_cards 时以该值为准",
+    )
     count_source: Optional[str] = Field(
-        default=None, description="数量来源(ui/fallback/db)"
+        default=None,
+        description="数量来源(ui/fallback/db)；用于区分真实识别与兜底推导",
     )
 
-    status: str = Field(default="init", index=True, description="送卡状态")
-    error_code: Optional[str] = Field(
-        default=None, index=True, description="失败错误码"
+    status: str = Field(
+        default="init",
+        index=True,
+        description="送卡状态机当前节点；用于区分未开始、进行中、成功和各类完成态",
     )
-    error_message: Optional[str] = Field(default=None, description="失败详情")
+    error_code: Optional[str] = Field(
+        default=None,
+        index=True,
+        description="失败或完成收敛错误码；给聚合统计和后续排查一个稳定键",
+    )
+    error_message: Optional[str] = Field(
+        default=None,
+        description="失败详情或完成原因文本；便于直接查看当次收敛结果",
+    )
 
     biz_date_local: str = Field(
         default_factory=_today_local_date,
         index=True,
-        description="业务日期（本地日期）",
+        description="业务日期；单日唯一键的一部分，保证同一目标每天只保留一条记录",
     )
