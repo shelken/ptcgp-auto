@@ -48,11 +48,14 @@ class SendCardWakeTargetPostHook(Hook):
         if task.task_type != "send_card_daily":
             return HookResult.CONTINUE, {}
 
-        gift_sent_success = bool(getattr(task, "_gift_sent_success", False))
+        if not hasattr(task, "state_get"):
+            return HookResult.CONTINUE, {}
+
+        gift_sent_success = bool(task.state_get("gift_sent_success", False))
         if not gift_sent_success:
             return HookResult.CONTINUE, {}
 
-        target_account_id = getattr(task, "_target_account_id", None)
+        target_account_id = task.state_get("target_account_id")
         if not isinstance(target_account_id, int):
             return HookResult.CONTINUE, {}
 

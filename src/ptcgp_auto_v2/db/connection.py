@@ -74,6 +74,7 @@ class Database:
     def _init_schema(self):
         """初始化数据库表结构（自动同步模式）"""
         from sqlmodel import SQLModel, create_engine
+        from ptcgp_auto_v2.db import models as _models  # noqa: F401
 
         # 创建用于 Schema 管理的 Engine
         engine = create_engine(
@@ -90,6 +91,7 @@ class Database:
 
         # 2. 自动检查并添加缺失的列 (Auto-Migration)
         self._auto_migrate_columns(engine)
+        self._auto_migrate_special_tables(engine)
 
         # 3. 初始化默认数据
         self._init_default_data(engine)
@@ -148,6 +150,152 @@ class Database:
                             )
             conn.commit()
 
+    def _auto_migrate_special_tables(self, engine):
+        """处理需要重建表或索引的特殊迁移。"""
+        from sqlmodel import inspect, text
+
+        inspector = inspect(engine)
+        if not inspector.has_table("account_gift_pairs"):
+            return
+
+        with engine.connect() as conn:
+            index_rows = conn.execute(
+                text("PRAGMA index_list('account_gift_pairs')")
+            ).fetchall()
+            has_account_unique = False
+            for row in index_rows:
+                name = row[1]
+                is_unique = bool(row[2])
+                if name == "ux_account_gift_pairs_account" and is_unique:
+                    has_account_unique = True
+
+            invalid_pair_count = int(
+                conn.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM account_gift_pairs AS source
+                        LEFT JOIN account_gift_pairs AS reverse
+                          ON reverse.account_id = source.target_account_id
+                         AND reverse.target_account_id = source.account_id
+                        WHERE source.target_account_id IS NULL
+                           OR source.account_id = source.target_account_id
+                           OR reverse.account_id IS NULL
+                        """
+                    )
+                ).scalar_one()
+                or 0
+            )
+
+            if has_account_unique and invalid_pair_count == 0:
+                return
+
+            logger.info(
+                "自动迁移: 重建 account_gift_pairs，只保留双向有效固定配对 (invalid=%s)",
+                invalid_pair_count,
+            )
+            conn.execute(text("DROP TABLE IF EXISTS account_gift_pairs__migration_new"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE account_gift_pairs__migration_new (
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL,
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        account_id INTEGER NOT NULL,
+                        target_account_id INTEGER,
+                        target_friend_id VARCHAR NOT NULL,
+                        strategy VARCHAR NOT NULL,
+                        is_active BOOLEAN NOT NULL
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    WITH dedup_pairs AS (
+                        SELECT
+                            source.created_at,
+                            source.updated_at,
+                            source.id,
+                            source.account_id,
+                            source.target_account_id,
+                            source.target_friend_id,
+                            source.strategy,
+                            source.is_active
+                        FROM account_gift_pairs AS source
+                        WHERE source.id = (
+                            SELECT candidate.id
+                            FROM account_gift_pairs AS candidate
+                            WHERE candidate.account_id = source.account_id
+                            ORDER BY
+                                CASE WHEN candidate.is_active = 1 THEN 0 ELSE 1 END,
+                                candidate.updated_at DESC,
+                                candidate.id DESC
+                            LIMIT 1
+                        )
+                    )
+                    INSERT INTO account_gift_pairs__migration_new (
+                        created_at,
+                        updated_at,
+                        id,
+                        account_id,
+                        target_account_id,
+                        target_friend_id,
+                        strategy,
+                        is_active
+                    )
+                    SELECT
+                        source.created_at,
+                        source.updated_at,
+                        source.id,
+                        source.account_id,
+                        source.target_account_id,
+                        source.target_friend_id,
+                        source.strategy,
+                        1
+                    FROM dedup_pairs AS source
+                    JOIN dedup_pairs AS reverse
+                      ON reverse.account_id = source.target_account_id
+                     AND reverse.target_account_id = source.account_id
+                    WHERE source.account_id != source.target_account_id
+                    """
+                )
+            )
+            conn.execute(text("DROP TABLE account_gift_pairs"))
+            conn.execute(
+                text(
+                    "ALTER TABLE account_gift_pairs__migration_new RENAME TO account_gift_pairs"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX ix_account_gift_pairs_target_friend_id ON account_gift_pairs (target_friend_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX ix_account_gift_pairs_is_active ON account_gift_pairs (is_active)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX ix_account_gift_pairs_account_id ON account_gift_pairs (account_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX ix_account_gift_pairs_target_account_id ON account_gift_pairs (target_account_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX ux_account_gift_pairs_account ON account_gift_pairs (account_id)"
+                )
+            )
+            conn.commit()
+
     def _init_default_data(self, engine):
         """初始化默认数据"""
         from sqlmodel import text
@@ -176,6 +324,17 @@ class Database:
                 conn.execute(text(migrate_sql))
             else:
                 logger.info("跳过账号资源旧字段迁移：accounts.exchange_points 列不存在")
+
+            if self._table_has_column(conn, "task_instances", "status_changed_at"):
+                conn.execute(
+                    text(
+                        """
+                        UPDATE task_instances
+                        SET status_changed_at = updated_at
+                        WHERE status_changed_at IS NULL
+                        """
+                    )
+                )
             conn.commit()
 
     def _table_has_column(self, conn, table_name: str, column_name: str) -> bool:

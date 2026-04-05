@@ -507,7 +507,13 @@ class FetchAccountInfoTask(StatefulTask):
             changed = True
         if changed:
             with session_scope() as session:
-                RepositoryFactory(session).accounts().update(self.account)
+                repos = RepositoryFactory(session)
+                repos.accounts().update(self.account)
+                if self.account.id is not None and friend_id:
+                    repos.account_gift_pairs().sync_target_friend_id_by_target_account(
+                        target_account_id=int(self.account.id),
+                        target_friend_id=friend_id,
+                    )
 
         if self.account.id is None:
             return

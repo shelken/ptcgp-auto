@@ -181,8 +181,8 @@ def list_active_gift_pairs(
     *,
     account_id: int | None,
 ) -> list[AccountGiftPair]:
-    """查询当前有效送卡配对记录。"""
-    statement = select(AccountGiftPair).where(AccountGiftPair.is_active.is_(True))
+    """查询当前送卡配对记录。兼容旧函数名。"""
+    statement = select(AccountGiftPair)
     if account_id is not None:
         statement = statement.where(
             or_(
