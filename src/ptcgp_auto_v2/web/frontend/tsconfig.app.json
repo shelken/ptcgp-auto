@@ -13,10 +13,9 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "types": ["vite/client"],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "node-vibrant/browser": ["src/types/node-vibrant-browser.d.ts"],
+      "@/*": ["./src/*"],
+      "node-vibrant/browser": ["./src/types/node-vibrant-browser.d.ts"],
     },
   },
   "include": ["src"],
