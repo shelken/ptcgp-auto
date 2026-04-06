@@ -4,7 +4,7 @@
     "config:recommended",
     "docker:enableMajor",
     "helpers:pinGitHubActionDigests",
-    "github>shelken/home-ops//.renovate/labels.json5",
+    //"github>shelken/home-ops//.renovate/labels.json5",
     "github>shelken/home-ops//.renovate/semanticCommits.json5",
     "github>shelken/home-ops//.renovate/automerge.json5",
     ":dependencyDashboard",
