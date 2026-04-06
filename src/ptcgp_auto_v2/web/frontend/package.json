@@ -31,7 +31,7 @@
     "@types/node": "25.5.2",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react-swc": "4.0.1",
+    "@vitejs/plugin-react-swc": "4.3.0",
     "knip": "^6.1.1",
     "tailwindcss": "4.2.2",
     "typescript": "5.9.2",
