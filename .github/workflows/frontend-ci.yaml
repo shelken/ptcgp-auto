@@ -17,7 +17,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version-file: src/ptcgp_auto_v2/web/frontend/package.json  # 读 packageManager 字段
+          bun-version-file: src/ptcgp_auto_v2/web/frontend/.bun-version  # 读 packageManager 字段
 
       - name: Install
         run: bun install --frozen-lockfile
