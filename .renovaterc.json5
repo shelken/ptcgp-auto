@@ -12,6 +12,7 @@
     ":semanticCommits",
     ":timezone(Asia/Shanghai)",
   ],
+  mode: "auto",
   dependencyDashboard: true,
   dependencyDashboardTitle: "Renovate Dashboard 🤖",
 }
