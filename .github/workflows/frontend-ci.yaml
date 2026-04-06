@@ -1,0 +1,35 @@
+name: frontend-ci
+
+on:
+  pull_request:
+    paths:
+      - "src/ptcgp_auto_v2/web/frontend/**"
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/ptcgp_auto_v2/web/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: src/ptcgp_auto_v2/web/frontend/package.json  # 读 packageManager 字段
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Build preview & smoke check
+        run: |
+          bunx vite preview --host 0.0.0.0 --port 4173 &
+          bunx wait-on http://127.0.0.1:4173 --timeout 30
+          curl -f http://127.0.0.1:4173
