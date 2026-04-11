@@ -5,6 +5,7 @@
 用于在指定 ROI 内检测模板图标，并根据行与间距进行分组。
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -13,6 +14,9 @@ import numpy as np
 from PIL import Image
 
 from ptcgp_auto_v2.infra.template import TemplateMatcher
+from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
+
+CV_CALL_TIMEOUT_SECONDS = 20.0
 
 
 @dataclass
@@ -33,7 +37,12 @@ class IconGroup:
 
 
 def _pil_to_bgr(image: Image.Image) -> np.ndarray:
-    return cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    return run_failfast_call(
+        logging.getLogger(__name__),
+        "icon_group:pil_to_bgr",
+        CV_CALL_TIMEOUT_SECONDS,
+        lambda: cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR),
+    )
 
 
 def _calc_center(box: Tuple[int, int, int, int]) -> Tuple[float, float]:
@@ -132,7 +141,12 @@ class IconGroupDetector:
             ):
                 continue
 
-            result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+            result = run_failfast_call(
+                logging.getLogger(__name__),
+                f"icon_group:matchTemplate:{template_name}",
+                CV_CALL_TIMEOUT_SECONDS,
+                lambda: cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED),
+            )
             loc = np.where(result >= threshold)
             h, w = template.shape[:2]
             boxes = []

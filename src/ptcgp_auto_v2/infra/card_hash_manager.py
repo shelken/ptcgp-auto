@@ -133,8 +133,8 @@ class CardHashManager:
             with session_scope() as session:
                 return CardRepository(session).update_card_hash(card_id, hash_str)
         except Exception as e:
-            logger.error(f"计算卡牌 {card_id} Hash失败: {e}")
-            return False
+            logger.exception("计算卡牌 Hash 失败: %s", card_id)
+            raise RuntimeError(f"计算卡牌 Hash 失败: {card_id}") from e
 
     def _load_series_hash(self, set_code: str):
         """加载某系列Hash到内存（系列模式）"""

@@ -18,11 +18,13 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_TEMPLATE_THRESHOLD,
     TEMPLATE_BASE_WIDTH,
 )
+from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
 
 logger = logging.getLogger(__name__)
 
 # 定义比 DEBUG(10) 更低的日志级别
 TRACE = 5
+CV_CALL_TIMEOUT_SECONDS = 20.0
 
 
 @dataclass
@@ -106,9 +108,20 @@ class TemplateMatcher:
             return name[:-4]
         return name
 
+    def _call_cv(self, operation: str, func):
+        return run_failfast_call(
+            logger,
+            f"template:{operation}",
+            CV_CALL_TIMEOUT_SECONDS,
+            func,
+        )
+
     def _pil_to_cv2(self, pil_image: Image.Image) -> np.ndarray:
         """PIL Image 转 OpenCV 格式"""
-        return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        return self._call_cv(
+            "pil_to_cv2",
+            lambda: cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR),
+        )
 
     def load_core_templates(self, screen_width: Optional[int] = None):
         """
@@ -127,8 +140,7 @@ class TemplateMatcher:
             return
 
         if not self.templates_dir.exists():
-            logger.warning(f"模板目录不存在: {self.templates_dir}")
-            return
+            raise RuntimeError(f"模板目录不存在: {self.templates_dir}")
 
         count = 0
         # 仅加载一级目录下的 png 文件
@@ -152,7 +164,7 @@ class TemplateMatcher:
         """
         file_path = self.templates_dir / template_path
         if not file_path.exists():
-            logger.warning(f"模板文件不存在: {file_path}")
+            logger.debug(f"模板文件不存在: {file_path}")
             return False
         return self._load_template_file(file_path, is_pack_template=is_pack_template)
 
@@ -171,24 +183,32 @@ class TemplateMatcher:
             if name in self.templates:
                 return False
 
-            img = cv2.imread(str(file_path))
+            img = self._call_cv(
+                f"imread({file_path})",
+                lambda: cv2.imread(str(file_path)),
+            )
             if img is None:
-                logger.warning(f"cv2.imread 返回 None，文件可能损坏: {file_path}")
+                logger.error("模板文件无法解码，视为未命中: %s", file_path)
                 return False
 
             # 按屏幕比例缩放
             if abs(self._current_scale - 1.0) > 0.01:
                 new_w = int(img.shape[1] * self._current_scale)
                 new_h = int(img.shape[0] * self._current_scale)
-                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                img = self._call_cv(
+                    f"resize({file_path})",
+                    lambda: cv2.resize(
+                        img, (new_w, new_h), interpolation=cv2.INTER_AREA
+                    ),
+                )
 
             self.templates[name] = img
             if is_pack_template:
                 self._loaded_pack_templates.append(name)
             return True
         except Exception as e:
-            logger.error(f"加载模板失败 {file_path}: {e}")
-            return False
+            logger.exception("加载模板失败: %s", file_path)
+            raise RuntimeError(f"加载模板失败: {file_path}") from e
 
     def _ensure_templates_loaded(self):
         """确保核心模板已加载"""
@@ -223,8 +243,14 @@ class TemplateMatcher:
         template = self.templates[template_name]
         screen = self._pil_to_cv2(screenshot)
 
-        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        result = self._call_cv(
+            f"matchTemplate({template_name})",
+            lambda: cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED),
+        )
+        _, max_val, _, max_loc = self._call_cv(
+            f"minMaxLoc({template_name})",
+            lambda: cv2.minMaxLoc(result),
+        )
 
         if max_val >= threshold:
             h, w = template.shape[:2]
@@ -289,13 +315,20 @@ class TemplateMatcher:
 
         template_name = self._normalize_name(template_name)
         if template_name not in self.templates:
+            logger.debug(f"模板不存在: {template_name}")
             return 0.0
 
         template = self.templates[template_name]
         screen = self._pil_to_cv2(screenshot)
 
-        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(result)
+        result = self._call_cv(
+            f"matchTemplate.score({template_name})",
+            lambda: cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED),
+        )
+        _, max_val, _, _ = self._call_cv(
+            f"minMaxLoc.score({template_name})",
+            lambda: cv2.minMaxLoc(result),
+        )
 
         return max_val
 
@@ -321,7 +354,7 @@ class TemplateMatcher:
 
         template_name = self._normalize_name(template_name)
         if template_name not in self.templates:
-            logger.warning(f"模板不存在: {template_name}")
+            logger.debug(f"模板不存在: {template_name}")
             return []
 
         threshold = self.threshold if threshold is None else threshold
@@ -333,11 +366,17 @@ class TemplateMatcher:
             new_w = int(template.shape[1] * scale)
             new_h = int(template.shape[0] * scale)
             logger.debug(f"模板缩放后: {new_w} x {new_h}")
-            template = cv2.resize(
-                template, (new_w, new_h), interpolation=cv2.INTER_AREA
+            template = self._call_cv(
+                f"resize.find_all({template_name})",
+                lambda: cv2.resize(
+                    template, (new_w, new_h), interpolation=cv2.INTER_AREA
+                ),
             )
 
-        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        result = self._call_cv(
+            f"matchTemplate.find_all({template_name})",
+            lambda: cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED),
+        )
         # 添加统计信息
         max_conf = result.max()
         mean_conf = result.mean()
@@ -473,8 +512,11 @@ class TemplateMatcher:
         if abs(scale - 1.0) > 0.01:
             new_w = int(template.shape[1] * scale)
             new_h = int(template.shape[0] * scale)
-            template = cv2.resize(
-                template, (new_w, new_h), interpolation=cv2.INTER_AREA
+            template = self._call_cv(
+                f"resize.match({template_name})",
+                lambda: cv2.resize(
+                    template, (new_w, new_h), interpolation=cv2.INTER_AREA
+                ),
             )
 
         # 检查模板不能大于截图
@@ -485,8 +527,14 @@ class TemplateMatcher:
                 )
             return None
 
-        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        result = self._call_cv(
+            f"matchTemplate.scale({template_name})",
+            lambda: cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED),
+        )
+        _, max_val, _, max_loc = self._call_cv(
+            f"minMaxLoc.scale({template_name})",
+            lambda: cv2.minMaxLoc(result),
+        )
 
         if max_val >= threshold:
             h, w = template.shape[:2]
@@ -548,10 +596,7 @@ class TemplateMatcher:
             return None
 
         # 主线程强制解码 + 单次转换，避免多线程触碰 PIL 懒加载
-        try:
-            screenshot.load()
-        except Exception:
-            pass
+        screenshot.load()
         screen = self._pil_to_cv2(screenshot)
 
         # 并行匹配：复用 _match_template_cv2，阈值设为 0 以获取所有分数

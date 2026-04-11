@@ -19,12 +19,19 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_SWIPE_STEPS,
 )
 from ptcgp_auto_v2.config.settings import get_settings
+from ptcgp_auto_v2.utils.dependency_guard import (
+    DependencyCallTimeoutError,
+    run_failfast_call,
+)
 from ptcgp_auto_v2.utils.bluestacks_manager import (
     restart_bluestacks_instance_for_device,
     wait_for_bluestacks_port,
 )
 
 logger = logging.getLogger(__name__)
+
+ADB_CONNECT_TIMEOUT_SECONDS = 15.0
+ADB_DEVICE_CALL_TIMEOUT_SECONDS = 20.0
 
 
 class AdbController:
@@ -68,6 +75,51 @@ class AdbController:
 
         # Root 状态缓存
         self._is_rooted: Optional[bool] = None
+        self._dependency_broken_reason: Optional[str] = None
+
+    def _require_device(self) -> u2.Device:
+        if self._dependency_broken_reason is not None:
+            raise RuntimeError(self._dependency_broken_reason)
+        if not self.device:
+            logger.error("设备未连接: %s", self.address)
+            raise RuntimeError(f"设备未连接: {self.address}")
+        return self.device
+
+    def _mark_dependency_broken(self, operation: str):
+        self.device = None
+        self._dependency_broken_reason = (
+            f"设备底层调用已超时，当前控制器不可继续使用: {self.address} {operation}"
+        )
+        logger.error(self._dependency_broken_reason)
+
+    def _connect_device(self, operation: str):
+        try:
+            return run_failfast_call(
+                logger,
+                f"{self.address}:{operation}",
+                ADB_CONNECT_TIMEOUT_SECONDS,
+                lambda: u2.connect(self.address),
+            )
+        except DependencyCallTimeoutError:
+            self._mark_dependency_broken(operation)
+            raise
+
+    def _call_device(
+        self,
+        operation: str,
+        func,
+        timeout_seconds: float = ADB_DEVICE_CALL_TIMEOUT_SECONDS,
+    ):
+        try:
+            return run_failfast_call(
+                logger,
+                f"{self.address}:{operation}",
+                timeout_seconds,
+                func,
+            )
+        except DependencyCallTimeoutError:
+            self._mark_dependency_broken(operation)
+            raise
 
     def is_rooted(self) -> bool:
         """
@@ -117,7 +169,8 @@ class AdbController:
             True 表示连接成功
         """
         try:
-            self.device = u2.connect(self.address)
+            self.device = self._connect_device("u2.connect")
+            self._dependency_broken_reason = None
             if not self.is_connected():
                 logger.error(f"u2 连接失败: {self.address}")
                 if self._register_connect_failure():
@@ -168,7 +221,8 @@ class AdbController:
 
         for attempt in range(1, 6):
             try:
-                self.device = u2.connect(self.address)
+                self.device = self._connect_device(f"u2.connect.retry#{attempt}")
+                self._dependency_broken_reason = None
                 if not self.is_connected():
                     time.sleep(2.0)
                     continue
@@ -192,13 +246,13 @@ class AdbController:
         if not self.device:
             return
 
-        try:
-            width, height = self.device.window_size()
-            self.screen_width = int(width)
-            self.screen_height = int(height)
-            logger.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
-        except (RuntimeError, ValueError, OSError) as e:
-            logger.warning(f"获取屏幕分辨率失败，使用基准值: {e}")
+        width, height = self._call_device(
+            "window_size",
+            lambda: self._require_device().window_size(),
+        )
+        self.screen_width = int(width)
+        self.screen_height = int(height)
+        logger.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
 
     @property
     def scale_x(self) -> float:
@@ -235,9 +289,12 @@ class AdbController:
         if not self.device:
             return False
         try:
-            self.device.shell("echo ok")
+            self._call_device(
+                "shell.echo_ok",
+                lambda: self._require_device().shell("echo ok"),
+            )
             return True
-        except Exception:
+        except RuntimeError:
             return False
 
     def screenshot(self, lossless: bool = False) -> Optional[Image.Image]:
@@ -250,22 +307,20 @@ class AdbController:
         Returns:
             PIL Image 对象，失败返回 None
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return None
-
-        try:
-            if lossless:
-                result = self.device.screenshot(display_id=0)
-            else:
-                result = self.device.screenshot()
-            if isinstance(result, Image.Image):
-                return result
-            logger.error("截图返回类型异常")
-            return None
-        except (RuntimeError, OSError, ValueError) as e:
-            logger.error(f"截图失败: {e}")
-            return None
+        if lossless:
+            result = self._call_device(
+                "screenshot.lossless",
+                lambda: self._require_device().screenshot(display_id=0),
+            )
+        else:
+            result = self._call_device(
+                "screenshot",
+                lambda: self._require_device().screenshot(),
+            )
+        if not isinstance(result, Image.Image):
+            logger.error("截图返回类型异常: type=%s", type(result).__name__)
+            raise RuntimeError(f"截图返回类型异常: {type(result).__name__}")
+        return result
 
     def tap(self, x: int, y: int):
         """
@@ -274,17 +329,12 @@ class AdbController:
         Args:
             x, y: 点击坐标
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return
-
-        try:
-            self.device.click(x, y)
-            logger.debug("点击: (%s, %s)", x, y)
-            time.sleep(self.wait_after_click)
-
-        except (RuntimeError, OSError) as e:
-            logger.error(f"点击失败: {e}")
+        self._call_device(
+            f"click({x},{y})",
+            lambda: self._require_device().click(x, y),
+        )
+        logger.debug("点击: (%s, %s)", x, y)
+        time.sleep(self.wait_after_click)
 
     def tap_center(self, box: Tuple[int, int, int, int]):
         """
@@ -305,19 +355,14 @@ class AdbController:
             x, y: 坐标
             steps: 按住步数（步数越多越久）
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return
-
-        try:
-            resolved_steps = max(1, int(steps))
-            duration_seconds = self._steps_to_duration_seconds(resolved_steps)
-            self.device.long_click(x, y, duration=duration_seconds)
-            logger.debug("长按: (%s, %s) steps=%s", x, y, resolved_steps)
-            time.sleep(self.wait_after_click)
-
-        except (RuntimeError, OSError) as e:
-            logger.error(f"长按失败: {e}")
+        resolved_steps = max(1, int(steps))
+        duration_seconds = self._steps_to_duration_seconds(resolved_steps)
+        self._call_device(
+            f"long_click({x},{y})",
+            lambda: self._require_device().long_click(x, y, duration=duration_seconds),
+        )
+        logger.debug("长按: (%s, %s) steps=%s", x, y, resolved_steps)
+        time.sleep(self.wait_after_click)
 
     def swipe(
         self, x1: int, y1: int, x2: int, y2: int, steps: int = DEFAULT_SWIPE_STEPS
@@ -330,25 +375,20 @@ class AdbController:
             x2, y2: 结束坐标
             steps: 滑动步数（步数越少越快）
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return
-
-        try:
-            resolved_steps = max(1, int(steps))
-            self.device.swipe(x1, y1, x2, y2, steps=resolved_steps)
-            logger.debug(
-                "滑动: (%s, %s) -> (%s, %s) steps=%s",
-                x1,
-                y1,
-                x2,
-                y2,
-                resolved_steps,
-            )
-            time.sleep(self.wait_after_click)
-
-        except (RuntimeError, OSError) as e:
-            logger.error(f"滑动失败: {e}")
+        resolved_steps = max(1, int(steps))
+        self._call_device(
+            f"swipe({x1},{y1})->({x2},{y2})",
+            lambda: self._require_device().swipe(x1, y1, x2, y2, steps=resolved_steps),
+        )
+        logger.debug(
+            "滑动: (%s, %s) -> (%s, %s) steps=%s",
+            x1,
+            y1,
+            x2,
+            y2,
+            resolved_steps,
+        )
+        time.sleep(self.wait_after_click)
 
     def pinch_in(self, center: Tuple[int, int], scale: float, steps: int):
         """
@@ -381,29 +421,30 @@ class AdbController:
         流程：
         1. 使用 u2 官方 pinch 接口执行缩放
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return
+        resolved_steps = max(2, int(steps))
+        resolved_scale = max(0.05, min(1.0, float(scale)))
+        percent = int(round(resolved_scale * 100))
 
-        try:
-            resolved_steps = max(2, int(steps))
-            resolved_scale = max(0.05, min(1.0, float(scale)))
-            percent = int(round(resolved_scale * 100))
-            ui_object = self.device() if callable(self.device) else self.device
+        def _pinch():
+            device = self._require_device()
+            ui_object = device() if callable(device) else device
             if direction == "in":
                 ui_object.pinch_in(percent=percent, steps=resolved_steps)
             else:
                 ui_object.pinch_out(percent=percent, steps=resolved_steps)
-            logger.debug(
-                "双指%s: center=%s scale=%s steps=%s",
-                "缩小" if direction == "in" else "放大",
-                center,
-                resolved_scale,
-                resolved_steps,
-            )
-            time.sleep(self.wait_after_click)
-        except Exception as e:
-            logger.error(f"双指手势失败: {e}")
+
+        self._call_device(
+            f"pinch_{direction}(percent={percent},steps={resolved_steps})",
+            _pinch,
+        )
+        logger.debug(
+            "双指%s: center=%s scale=%s steps=%s",
+            "缩小" if direction == "in" else "放大",
+            center,
+            resolved_scale,
+            resolved_steps,
+        )
+        time.sleep(self.wait_after_click)
 
     def _steps_to_duration_seconds(self, steps: int) -> float:
         """
@@ -419,17 +460,12 @@ class AdbController:
 
     def press_back(self):
         """按返回键"""
-        if not self.device:
-            logger.error("设备未连接")
-            return
-
-        try:
-            self.device.press("back")
-            logger.debug("按下返回键")
-            time.sleep(self.wait_after_click)
-
-        except (RuntimeError, OSError) as e:
-            logger.error(f"返回键失败: {e}")
+        self._call_device(
+            "press(back)",
+            lambda: self._require_device().press("back"),
+        )
+        logger.debug("按下返回键")
+        time.sleep(self.wait_after_click)
 
     def shell(self, command: str) -> Optional[str]:
         """
@@ -441,20 +477,16 @@ class AdbController:
         Returns:
             命令输出，失败返回 None
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return None
-
-        try:
-            result = self.device.shell(command)
-            if hasattr(result, "output"):
-                return result.output
-            if result is None:
-                return None
-            return str(result)
-        except (RuntimeError, OSError) as e:
-            logger.error(f"执行 shell 失败: {e}")
-            return None
+        result = self._call_device(
+            f"shell({command})",
+            lambda: self._require_device().shell(command),
+        )
+        if hasattr(result, "output"):
+            output = result.output
+            return "" if output is None else str(output)
+        if result is None:
+            return ""
+        return str(result)
 
     def push(self, local_path: str, remote_path: str) -> bool:
         """
@@ -467,17 +499,12 @@ class AdbController:
         Returns:
             True 表示成功
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return False
-
-        try:
-            self.device.push(local_path, remote_path)
-            logger.debug(f"推送文件: {local_path} -> {remote_path}")
-            return True
-        except (RuntimeError, OSError) as e:
-            logger.error(f"推送文件失败: {e}")
-            return False
+        self._call_device(
+            f"push({local_path}->{remote_path})",
+            lambda: self._require_device().push(local_path, remote_path),
+        )
+        logger.debug(f"推送文件: {local_path} -> {remote_path}")
+        return True
 
     def pull(self, remote_path: str, local_path: str) -> bool:
         """
@@ -490,17 +517,12 @@ class AdbController:
         Returns:
             True 表示成功
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return False
-
-        try:
-            self.device.pull(remote_path, local_path)
-            logger.debug(f"拉取文件: {remote_path} -> {local_path}")
-            return True
-        except (RuntimeError, OSError, FileNotFoundError) as e:
-            logger.error(f"拉取文件失败: {e}")
-            return False
+        self._call_device(
+            f"pull({remote_path}->{local_path})",
+            lambda: self._require_device().pull(remote_path, local_path),
+        )
+        logger.debug(f"拉取文件: {remote_path} -> {local_path}")
+        return True
 
     def force_stop(self, package_name: str):
         """
@@ -509,15 +531,11 @@ class AdbController:
         Args:
             package_name: 应用包名
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return
-
-        try:
-            self.device.app_stop(package_name)
-            logger.debug(f"已强制停止应用: {package_name}")
-        except (RuntimeError, OSError) as e:
-            logger.error(f"停止应用失败: {e}")
+        self._call_device(
+            f"app_stop({package_name})",
+            lambda: self._require_device().app_stop(package_name),
+        )
+        logger.debug(f"已强制停止应用: {package_name}")
 
     def start_app(self, package_name: str, activity: Optional[str] = None):
         """
@@ -527,18 +545,19 @@ class AdbController:
             package_name: 应用包名
             activity: Activity 名称（可选）
         """
-        if not self.device:
-            logger.error("设备未连接")
-            return
-
-        try:
-            if activity:
-                self.device.app_start(package_name, activity)
-            else:
-                self.device.app_start(package_name, use_monkey=True)
-            logger.debug(f"已启动应用: {package_name}")
-        except (RuntimeError, OSError) as e:
-            logger.error(f"启动应用失败: {e}")
+        if activity:
+            self._call_device(
+                f"app_start({package_name},{activity})",
+                lambda: self._require_device().app_start(package_name, activity),
+            )
+        else:
+            self._call_device(
+                f"app_start({package_name})",
+                lambda: self._require_device().app_start(
+                    package_name, use_monkey=True
+                ),
+            )
+        logger.debug(f"已启动应用: {package_name}")
 
     def restart_app(
         self,

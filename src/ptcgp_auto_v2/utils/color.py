@@ -12,7 +12,10 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
+
 logger = logging.getLogger(__name__)
+CV_CALL_TIMEOUT_SECONDS = 20.0
 
 # ============================================================
 # 预定义颜色范围 (HSV)
@@ -50,7 +53,12 @@ def check_color_ratio(
     x1, y1, x2, y2 = region
 
     # PIL -> OpenCV (BGR)
-    img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+    img = run_failfast_call(
+        logger,
+        "color.cvtColor.rgb_to_bgr",
+        CV_CALL_TIMEOUT_SECONDS,
+        lambda: cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR),
+    )
     height, width = img.shape[:2]
 
     # 边界检查
@@ -62,11 +70,21 @@ def check_color_ratio(
         return False
 
     roi = img[y1:y2, x1:x2]
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(
-        hsv,
-        np.array(color_config["lower"]),
-        np.array(color_config["upper"]),
+    hsv = run_failfast_call(
+        logger,
+        "color.cvtColor.bgr_to_hsv",
+        CV_CALL_TIMEOUT_SECONDS,
+        lambda: cv2.cvtColor(roi, cv2.COLOR_BGR2HSV),
+    )
+    mask = run_failfast_call(
+        logger,
+        "color.inRange",
+        CV_CALL_TIMEOUT_SECONDS,
+        lambda: cv2.inRange(
+            hsv,
+            np.array(color_config["lower"]),
+            np.array(color_config["upper"]),
+        ),
     )
     ratio = np.count_nonzero(mask) / mask.size
 

@@ -40,6 +40,7 @@ class ModelManager:
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self._model: Optional["YOLO"] = None  # type: ignore
         self._model_ready = threading.Event()
+        self._load_error: Optional[RuntimeError] = None
         self._lock = threading.Lock()
         self._session = requests.Session()
         self._session.headers.update(
@@ -83,10 +84,10 @@ class ModelManager:
 
             return True
         except Exception as e:
-            logger.error(f"下载文件失败 {url}: {e}")
+            logger.exception("下载文件失败: %s", url)
             if local_path.exists():
                 local_path.unlink()
-            return False
+            raise RuntimeError(f"下载文件失败: {url}") from e
 
     def _download_directory(self, api_path: str, local_dir: Path) -> bool:
         """
@@ -134,8 +135,8 @@ class ModelManager:
             return success
 
         except Exception as e:
-            logger.error(f"下载目录失败 {api_path}: {e}")
-            return False
+            logger.exception("下载目录失败: %s", api_path)
+            raise RuntimeError(f"下载目录失败: {api_path}") from e
 
     def download_model(self, force: bool = False) -> bool:
         """从ptcgp-assets下载模型"""
@@ -161,6 +162,7 @@ class ModelManager:
 
         def _load():
             try:
+                self._load_error = None
                 # 降低 coremltools 日志噪音（避免输出 Registering op ...）
                 for name in [
                     "coremltools",
@@ -187,8 +189,7 @@ class ModelManager:
                 if not model_path.exists():
                     logger.info("模型不存在，开始下载...")
                     if not self.download_model():
-                        logger.error("模型下载失败，无法加载")
-                        return
+                        raise RuntimeError("模型下载失败，无法加载")
 
                 # 2. 加载模型（显式指定 OBB 任务，避免 CoreML 无法自动识别）
                 logger.info(f"正在加载YOLO模型: {model_path}")
@@ -198,8 +199,10 @@ class ModelManager:
 
                 logger.info("YOLO模型加载完成，识别功能已就绪")
 
-            except Exception as e:
-                logger.error(f"加载模型失败: {e}", exc_info=True)
+            except Exception:
+                self._load_error = RuntimeError("加载模型失败")
+                logger.exception("加载模型失败")
+                self._model_ready.set()
 
         # 启动后台线程加载模型
         thread = threading.Thread(target=_load, daemon=True, name="ModelLoader")
@@ -208,7 +211,7 @@ class ModelManager:
 
     def is_model_ready(self) -> bool:
         """检查模型是否加载完成"""
-        return self._model_ready.is_set()
+        return self._load_error is None and self._model_ready.is_set()
 
     def wait_for_model(self, timeout: Optional[float] = None) -> bool:
         """
@@ -220,10 +223,18 @@ class ModelManager:
         Returns:
             True表示模型加载完成，False表示超时
         """
-        return self._model_ready.wait(timeout=timeout)
+        if self._model_ready.wait(timeout=timeout):
+            if self._load_error is not None:
+                raise self._load_error
+            return True
+        if self._load_error is not None:
+            raise self._load_error
+        return False
 
     def get_model(self) -> Optional["YOLO"]:  # type: ignore
         """获取已加载的模型"""
+        if self._load_error is not None:
+            raise self._load_error
         with self._lock:
             return self._model
 

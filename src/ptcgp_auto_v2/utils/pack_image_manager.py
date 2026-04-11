@@ -49,7 +49,9 @@ class PackImageManager:
     """
     卡包图片资源管理器
 
-    负责从 GitHub 公共资源下载卡包封面，进行裁剪和缩放处理后保存。
+    之前这里把下载/处理失败直接抛异常，调用方会被整条链路打断。
+    现在恢复为资源准备失败返回 False，让模板匹配调用方自己决定是否降级。
+    该类覆盖卡包图片下载、裁剪保存与模板路径映射，依赖 requests 和 PIL。
     """
 
     def __init__(self, base_dir: str = "templates/packs_auto"):
@@ -95,13 +97,11 @@ class PackImageManager:
 
         logger.info(f"准备卡包图片资源: {booster_name}")
 
-        # 下载图片
         image_data = self.download_pack_image(booster_name)
-        if not image_data:
-            logger.error(f"下载卡包图片失败: {booster_name}")
+        if image_data is None:
+            logger.error("准备卡包图片失败，下载未成功: %s", booster_name)
             return False
 
-        # 处理并保存
         return self.process_and_save(booster_name, image_data)
 
     def is_pack_ready(self, booster_name: str) -> bool:
@@ -147,15 +147,24 @@ class PackImageManager:
                     resp = self.session.get(url, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
                     if resp.status_code == 200 and resp.content:
                         return resp.content
+                    if resp.status_code == 404:
+                        logger.warning(
+                            f"卡包图片不存在: {url} (尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
+                        )
+                        break
                     logger.warning(
                         f"下载失败: {url} (HTTP {resp.status_code}, 尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
                     )
-                except Exception as e:
-                    logger.warning(
-                        f"下载异常: {url} - {e} (尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
+                except Exception:
+                    logger.exception(
+                        "下载卡包图片异常: %s (尝试 %s/%s)",
+                        url,
+                        attempt,
+                        PACK_IMAGE_DOWNLOAD_RETRIES,
                     )
                 time.sleep(0.5 * attempt)
 
+        logger.error("下载卡包图片失败: %s", booster_name)
         return None
 
     def process_and_save(self, booster_name: str, image_data: bytes) -> bool:
@@ -193,8 +202,8 @@ class PackImageManager:
             )
             return True
 
-        except Exception as e:
-            logger.error(f"处理卡包图片失败: {booster_name} - {e}")
+        except Exception:
+            logger.exception("处理卡包图片失败: %s", booster_name)
             return False
 
     def _crop_image(self, img: Image.Image) -> Image.Image:
