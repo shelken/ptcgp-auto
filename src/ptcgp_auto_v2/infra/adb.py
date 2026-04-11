@@ -10,6 +10,8 @@ import time
 from typing import Optional, Tuple
 
 import uiautomator2 as u2
+from adbutils import adb
+from adbutils.errors import AdbError
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import (
@@ -19,20 +21,12 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_SWIPE_STEPS,
 )
 from ptcgp_auto_v2.config.settings import get_settings
-from ptcgp_auto_v2.utils.dependency_guard import (
-    DependencyCallTimeoutError,
-    run_failfast_call,
-)
 from ptcgp_auto_v2.utils.bluestacks_manager import (
     restart_bluestacks_instance_for_device,
     wait_for_bluestacks_port,
 )
 
 logger = logging.getLogger(__name__)
-
-ADB_CONNECT_TIMEOUT_SECONDS = 15.0
-ADB_DEVICE_CALL_TIMEOUT_SECONDS = 20.0
-
 
 class AdbController:
     """
@@ -85,41 +79,99 @@ class AdbController:
             raise RuntimeError(f"设备未连接: {self.address}")
         return self.device
 
-    def _mark_dependency_broken(self, operation: str):
-        self.device = None
-        self._dependency_broken_reason = (
-            f"设备底层调用已超时，当前控制器不可继续使用: {self.address} {operation}"
-        )
-        logger.error(self._dependency_broken_reason)
-
     def _connect_device(self, operation: str):
+        """之前连接阶段会把可恢复的服务占用错误直接抛出。现在在当前线程执行 u2.connect，并在可恢复的 ADB 或无障碍竞态上先修复 transport 再重试。这样可以避免把临时断链误判成设备失活。"""
+        for attempt in range(1, 4):
+            try:
+                return u2.connect(self.address)
+            except Exception as exc:
+                if not self._should_retry_connect(exc):
+                    raise
+                if attempt == 3:
+                    raise
+                if self._should_refresh_transport(exc):
+                    self._refresh_adb_transport(operation)
+                logger.warning(
+                    "u2 服务启动未稳定，等待后重试: %s (%s)",
+                    self.address,
+                    operation,
+                )
+                time.sleep(1.0)
+        raise RuntimeError(f"u2 连接重试失败: {self.address}")
+
+    @staticmethod
+    def _should_retry_connect(exc: Exception) -> bool:
+        """之前只重试单一无障碍占用错误。现在会把 transport 被关闭、设备短暂失联和 uiautomator 启动竞态一并视为可恢复错误。这样连接阶段会先自愈再决定是否失败。"""
+        if isinstance(exc, u2.exceptions.AccessibilityServiceAlreadyRegisteredError):
+            return True
+        if isinstance(exc, AdbError):
+            return True
+        message = str(exc)
+        transient_markers = (
+            "server quit unexpectly",
+            "UiAutomation not connected",
+            "NullPointerException",
+            "AccessibilityServiceAlreadyRegisteredError",
+            "closed",
+            "not found",
+        )
+        return any(marker in message for marker in transient_markers)
+
+    @staticmethod
+    def _should_refresh_transport(exc: Exception) -> bool:
+        """之前所有连接重试都只做等待。现在仅在 transport 断链类错误上执行 ADB 刷新。这样无障碍服务竞态不会被误处理成断线重连。"""
+        if isinstance(exc, AdbError):
+            return True
+        message = str(exc)
+        refresh_markers = (
+            "server quit unexpectly",
+            "UiAutomation not connected",
+            "closed",
+            "not found",
+        )
+        return any(marker in message for marker in refresh_markers)
+
+    def _refresh_adb_transport(self, operation: str):
+        """之前连接重试不会修复旧 transport。现在会先断开再重连当前地址。这样 `adbutils.errors.AdbError: closed` 这类断链能在下一次 u2.connect 前收敛。"""
         try:
-            return run_failfast_call(
-                logger,
-                f"{self.address}:{operation}",
-                ADB_CONNECT_TIMEOUT_SECONDS,
-                lambda: u2.connect(self.address),
+            disconnect_result = adb.disconnect(self.address, raise_error=False)
+            logger.warning(
+                "ADB transport 刷新: disconnect %s (%s) -> %s",
+                self.address,
+                operation,
+                disconnect_result,
             )
-        except DependencyCallTimeoutError:
-            self._mark_dependency_broken(operation)
-            raise
+        except Exception as exc:
+            logger.warning(
+                "ADB transport 断开失败，继续尝试重连: %s (%s) err=%s",
+                self.address,
+                operation,
+                exc,
+            )
+        try:
+            connect_result = adb.connect(self.address)
+            logger.warning(
+                "ADB transport 刷新: connect %s (%s) -> %s",
+                self.address,
+                operation,
+                connect_result,
+            )
+        except Exception as exc:
+            logger.warning(
+                "ADB transport 重连失败: %s (%s) err=%s",
+                self.address,
+                operation,
+                exc,
+            )
 
     def _call_device(
         self,
         operation: str,
         func,
-        timeout_seconds: float = ADB_DEVICE_CALL_TIMEOUT_SECONDS,
     ):
-        try:
-            return run_failfast_call(
-                logger,
-                f"{self.address}:{operation}",
-                timeout_seconds,
-                func,
-            )
-        except DependencyCallTimeoutError:
-            self._mark_dependency_broken(operation)
-            raise
+        """之前设备调用复用后台线程超时包装。现在直接在当前线程执行 uiautomator2 调用，因为后台线程会把截图与 shell 等调用误打成超时。这样能保证执行链路与手工直连一致。"""
+        del operation
+        return func()
 
     def is_rooted(self) -> bool:
         """
@@ -134,7 +186,7 @@ class AdbController:
         try:
             result = self.shell("su -c 'id'")
             self._is_rooted = result is not None and "uid=0" in result
-        except (RuntimeError, OSError):
+        except (RuntimeError, OSError, AdbError):
             self._is_rooted = False
 
         # 记录日志但不频繁打印
@@ -185,7 +237,7 @@ class AdbController:
 
             return True
 
-        except (RuntimeError, ConnectionError, OSError) as e:
+        except (RuntimeError, ConnectionError, OSError, AdbError) as e:
             logger.error(f"u2 连接失败: {e}")
             if self._register_connect_failure():
                 return self._retry_connect_after_restart()
@@ -198,7 +250,7 @@ class AdbController:
             logger.info("设备连接已断开")
 
     def _register_connect_failure(self) -> bool:
-        """记录连接失败并在必要时重启模拟器。"""
+        """之前达到阈值就直接重启模拟器。现在会先做设备健康检查，只在确认实例失活后才允许重启。这样可以避免因为短暂 ADB 断链频繁重启实例。"""
         failures = self._connect_failures.get(self.address, 0) + 1
         self._connect_failures[self.address] = failures
         logger.warning(
@@ -208,9 +260,27 @@ class AdbController:
             self.address,
         )
         if failures >= ADB_CONNECT_FAIL_RESTART_THRESHOLD:
+            if not self._should_restart_emulator():
+                logger.warning("设备健康检查通过，跳过模拟器重启: %s", self.address)
+                self._connect_failures[self.address] = 0
+                return False
             logger.warning("超过连接失败阈值，尝试重启模拟器: %s", self.address)
             restart_bluestacks_instance_for_device(self.address)
             self._connect_failures[self.address] = 0
+            return True
+        return False
+
+    def _should_restart_emulator(self) -> bool:
+        """之前重启前不验证实例是否真的失活。现在先检查端口和 ADB shell 健康。这样只有实例无法自愈时才会消耗一次重启。"""
+        if not wait_for_bluestacks_port(self.address, timeout_seconds=3, interval_seconds=1.0):
+            logger.warning("模拟器端口未就绪，允许重启: %s", self.address)
+            return True
+        try:
+            adb.connect(self.address)
+            device = adb.device(serial=self.address)
+            device.shell(["echo", "ok"])
+        except Exception as exc:
+            logger.warning("设备健康检查失败，允许重启: %s err=%s", self.address, exc)
             return True
         return False
 
@@ -230,7 +300,7 @@ class AdbController:
                 self._update_screen_size()
                 self._reset_connect_failures()
                 return True
-            except (RuntimeError, ConnectionError, OSError) as e:
+            except (RuntimeError, ConnectionError, OSError, AdbError) as e:
                 logger.error(f"u2 重试连接失败: {e}")
                 time.sleep(2.0)
 
@@ -294,7 +364,7 @@ class AdbController:
                 lambda: self._require_device().shell("echo ok"),
             )
             return True
-        except RuntimeError:
+        except (RuntimeError, OSError, AdbError):
             return False
 
     def screenshot(self, lossless: bool = False) -> Optional[Image.Image]:

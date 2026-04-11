@@ -270,11 +270,18 @@ class Settings:
         return settings
 
     def configure_logging(self):
-        """配置日志系统（使用 loguru）"""
+        """之前这里只把控制台级别传给 logger，环境变量里的文件路径不会生效。现在会把 `PTCGP_LOG_FILE` 和 `PTCGP_LOG_FILE_LEVEL` 一并传给日志模块。这样 E2E 和主程序可以复用同一套文件落盘入口。"""
         from ptcgp_auto_v2.utils.logger import intercept_standard_logging, setup_logging
 
+        log_file = os.getenv("PTCGP_LOG_FILE", "").strip() or None
+        log_file_level = os.getenv("PTCGP_LOG_FILE_LEVEL", "").strip() or None
+
         # 初始化 loguru 日志
-        setup_logging(level=self.log_level)
+        setup_logging(
+            level=self.log_level,
+            file_path=log_file,
+            file_level=log_file_level,
+        )
 
         # 拦截标准 logging 输出到 loguru
         intercept_standard_logging()

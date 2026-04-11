@@ -2,12 +2,13 @@
 """
 统一日志模块 - 使用 Loguru
 
-支持按设备/账号显示不同颜色，方便多设备并发时区分日志来源。
+这个文件负责统一组装终端与文件日志输出。这个文件覆盖标准 logging 到 loguru 的转发和设备上下文格式化。这个文件依赖 loguru、threading 与 multiprocessing 保证 E2E 和主程序都能稳定落盘。
 """
 
 import sys
 import logging
 import threading
+import multiprocessing
 
 from loguru import logger
 
@@ -33,10 +34,6 @@ _thread_local = threading.local()
 _device_colors: dict[str, str] = {}
 _color_index = 0
 _color_lock = threading.Lock()
-
-# 是否已初始化
-_initialized = False
-
 
 def _get_context():
     """获取当前线程的上下文"""
@@ -105,24 +102,37 @@ def _format(record):
     )
 
 
-def setup_logging(level: str = "INFO") -> None:
+def setup_logging(
+    level: str = "INFO",
+    *,
+    file_path: str | None = None,
+    file_level: str | None = None,
+) -> None:
     """
-    初始化日志系统
+    之前这里只初始化 stderr handler，`PTCGP_LOG_FILE` 即使被设置也不会生效。现在每次配置日志都会重建 stderr handler，并在给出路径时追加文件 sink。这样 E2E 写入的 `app.log` 路径会真正生成完整日志文件。
 
     Args:
         level: 日志级别 (DEBUG, INFO, WARNING, ERROR)
     """
-    global _initialized
+    is_child_process = multiprocessing.current_process().name != "MainProcess"
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        format=_format,
+        level=level.upper(),
+        colorize=True,
+    )
 
-    # 避免重复添加 handler
-    if not _initialized:
+    normalized_file = (file_path or "").strip()
+    if normalized_file:
         logger.add(
-            sys.stderr,
+            normalized_file,
             format=_format,
-            level=level.upper(),
-            colorize=True,
+            level=(file_level or level).upper(),
+            colorize=False,
+            encoding="utf-8",
+            enqueue=not is_child_process,
         )
-        _initialized = True
 
     # 禁用第三方库的调试日志
     logging.getLogger("PIL").setLevel(logging.WARNING)
