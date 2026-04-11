@@ -14,8 +14,11 @@ from PIL import Image
 
 from ptcgp_auto_v2.config.constants import DEFAULT_OCR_LEVEL
 from ptcgp_auto_v2.config.lang import DEFAULT_OCR_LANGUAGES
+from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
 
 logger = logging.getLogger(__name__)
+
+OCR_CALL_TIMEOUT_SECONDS = 20.0
 
 
 @dataclass
@@ -78,22 +81,16 @@ class OcrEngine:
         Returns:
             OcrResult 列表
         """
-        # 延迟导入 macOS 框架
-        import objc
-        import Quartz
-        import Vision
-        from Foundation import NSData
-
         if image is None:
             logger.error("OCR 输入图片为 None")
-            return []
+            raise RuntimeError("OCR 输入图片为 None")
 
         width = image.width
         height = image.height
 
         if width <= 0 or height <= 0:
             logger.warning(f"OCR 忽略无效图片尺寸: {width}x{height}")
-            return []
+            raise RuntimeError(f"OCR 图片尺寸无效: {width}x{height}")
 
         # 转换图片为 PNG 数据
         try:
@@ -102,108 +99,100 @@ class OcrEngine:
             png_data = buffer.getvalue()
             buffer.close()
         except (ValueError, TypeError) as e:
-            logger.error(f"OCR 图片转换 PNG 失败: {e}")
-            return []
+            logger.exception("OCR 图片转换 PNG 失败")
+            raise RuntimeError("OCR 图片转换 PNG 失败") from e
 
         if not png_data:
             logger.warning("OCR 图片转换后数据为空")
-            return []
+            raise RuntimeError("OCR 图片转换后数据为空")
 
-        results = []
+        return run_failfast_call(
+            logger,
+            "ocr.recognize",
+            OCR_CALL_TIMEOUT_SECONDS,
+            lambda: self._recognize_png(png_data, width, height),
+        )
+
+    def _recognize_png(
+        self,
+        png_data: bytes,
+        width: int,
+        height: int,
+    ) -> List[OcrResult]:
+        import objc
+        import Quartz
+        import Vision
+        from Foundation import NSData
 
         try:
-            try:
-                create_image_source = Quartz.CGImageSourceCreateWithData
-                create_cg_image = Quartz.CGImageSourceCreateImageAtIndex
-            except (AttributeError, KeyError) as e:
-                logger.exception(f"OCR 缺少 Quartz 图片解码接口: {e}")
-                return []
+            create_image_source = Quartz.CGImageSourceCreateWithData
+            create_cg_image = Quartz.CGImageSourceCreateImageAtIndex
+        except (AttributeError, KeyError) as e:
+            logger.exception("OCR 缺少 Quartz 图片解码接口")
+            raise RuntimeError("OCR 缺少 Quartz 图片解码接口") from e
 
-            with objc.autorelease_pool():
-                # 创建 CGImage
-                ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
-                if ns_data is None:
-                    logger.error("无法创建 NSData")
-                    return []
+        results: List[OcrResult] = []
+        with objc.autorelease_pool():
+            ns_data = NSData.dataWithBytes_length_(png_data, len(png_data))
+            if ns_data is None:
+                raise RuntimeError("无法创建 NSData")
 
-                image_source = create_image_source(ns_data, None)
-                if image_source is None:
-                    logger.error("无法创建 CGImageSource")
-                    return []
+            image_source = create_image_source(ns_data, None)
+            if image_source is None:
+                raise RuntimeError("无法创建 CGImageSource")
 
-                cg_image = create_cg_image(image_source, 0, None)
+            cg_image = create_cg_image(image_source, 0, None)
+            if cg_image is None:
+                raise RuntimeError("无法创建 CGImage")
 
-                if cg_image is None:
-                    logger.error("无法创建 CGImage")
-                    return []
-
-                # 创建识别请求
-                request = Vision.VNRecognizeTextRequest.alloc().init()
-
-                # 设置识别级别
-                if self.recognition_level == "fast":
-                    request.setRecognitionLevel_(
-                        Vision.VNRequestTextRecognitionLevelFast
-                    )
-                else:
-                    request.setRecognitionLevel_(
-                        Vision.VNRequestTextRecognitionLevelAccurate
-                    )
-
-                # 设置识别语言
-                request.setRecognitionLanguages_(self.languages)
-                request.setAutomaticallyDetectsLanguage_(True)
-
-                # 执行识别
-                handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-                    cg_image, None
+            request = Vision.VNRecognizeTextRequest.alloc().init()
+            if self.recognition_level == "fast":
+                request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
+            else:
+                request.setRecognitionLevel_(
+                    Vision.VNRequestTextRecognitionLevelAccurate
                 )
 
-                success = handler.performRequests_error_([request], None)
+            request.setRecognitionLanguages_(self.languages)
+            request.setAutomaticallyDetectsLanguage_(True)
 
-                # 处理 PyObjC 可能返回 (bool, error) 元组的情况
-                if isinstance(success, tuple):
-                    success = success[0]
+            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
+                cg_image, None
+            )
+            success = handler.performRequests_error_([request], None)
+            if isinstance(success, tuple):
+                success = success[0]
+            if not success:
+                raise RuntimeError("OCR 请求执行失败")
 
-                if not success:
-                    logger.error("OCR 请求执行失败")
-                    return []
+            observations = request.results()
+            if not observations:
+                return results
 
-                # 处理结果
-                observations = request.results()
+            for observation in observations:
+                top_candidate = observation.topCandidates_(1)
+                if not top_candidate or len(top_candidate) == 0:
+                    continue
+                text = str(top_candidate[0].string())
+                confidence = float(top_candidate[0].confidence())
+                bounding_box = observation.boundingBox()
+                x = bounding_box.origin.x
+                y = bounding_box.origin.y
+                w = bounding_box.size.width
+                h = bounding_box.size.height
 
-                if observations:
-                    for observation in observations:
-                        top_candidate = observation.topCandidates_(1)
-                        if top_candidate and len(top_candidate) > 0:
-                            text = str(top_candidate[0].string())
-                            confidence = float(top_candidate[0].confidence())
+                x1 = int(x * width)
+                y1 = int((1 - y - h) * height)
+                x2 = int((x + w) * width)
+                y2 = int((1 - y) * height)
 
-                            # 转换坐标（Vision 坐标系原点在左下角）
-                            bounding_box = observation.boundingBox()
-                            x = bounding_box.origin.x
-                            y = bounding_box.origin.y
-                            w = bounding_box.size.width
-                            h = bounding_box.size.height
-
-                            x1 = int(x * width)
-                            y1 = int((1 - y - h) * height)
-                            x2 = int((x + w) * width)
-                            y2 = int((1 - y) * height)
-
-                            results.append(
-                                OcrResult(
-                                    text=text,
-                                    box=(x1, y1, x2, y2),
-                                    confidence=confidence,
-                                )
-                            )
-
-        except Exception as e:
-            # PyObjC / Vision / Quartz 的桥接层可能抛出多种异常类型，
-            # OCR 失败应降级为空结果，避免中断整条任务链。
-            logger.exception(f"OCR 引擎内部异常: {e}")
-            return []
+                results.append(
+                    OcrResult(
+                        text=text,
+                        box=(x1, y1, x2, y2),
+                        confidence=confidence,
+                    )
+                )
 
         return results
 

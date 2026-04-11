@@ -121,7 +121,7 @@ class ImageResourceManager:
                 else:
                     logger.warning(f"下载失败({resp.status_code}): {url}")
             except Exception as e:
-                logger.warning(f"下载异常: {url} - {e}")
+                logger.warning(f"下载卡牌图片异常: {url} - {e}")
 
         logger.warning(f"所有格式尝试失败: {set_code}/{card_number}")
         return None

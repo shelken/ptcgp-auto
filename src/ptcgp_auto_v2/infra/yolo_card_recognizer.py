@@ -33,6 +33,7 @@ from ptcgp_auto_v2.config.constants import (
 from ptcgp_auto_v2.infra.adb import AdbController
 from ptcgp_auto_v2.infra.card_hash_manager import CardHashManager
 from ptcgp_auto_v2.infra.model_manager import ModelManager
+from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
 from ptcgp_auto_v2.utils.perceptual_hash import (
     bgr_to_color_pixels,
     calculate_perceptual_hash,
@@ -42,6 +43,8 @@ from ptcgp_auto_v2.utils.perceptual_hash import (
 logger = logging.getLogger(__name__)
 
 UNKNOWN_CARD_NUMBER = -1  # 未匹配卡牌编号占位
+CV_CALL_TIMEOUT_SECONDS = 20.0
+YOLO_INFERENCE_TIMEOUT_SECONDS = 60.0
 
 
 @dataclass
@@ -220,26 +223,20 @@ class YoloCardRecognizer:
         """
         # 1. 确保模型已加载
         if not self.model_manager.is_model_ready():
-            logger.warning("YOLO模型尚未加载完成")
-            return [], 0, []
+            raise RuntimeError("YOLO模型尚未加载完成")
 
         # 2. 确保Hash已就绪（exclude_promo=True 时排除 PROMO 系列）
         if set_code:
             if not self.hash_manager.ensure_series_ready(
                 set_code, exclude_promo=exclude_promo
             ):
-                logger.error(f"无法确保系列 {set_code} Hash就绪")
-                return [], 0, []
+                raise RuntimeError(f"无法确保系列 {set_code} Hash就绪")
         else:
             if not self.hash_manager.load_all_hashes(exclude_promo=exclude_promo):
-                logger.error("无法加载全局Hash索引")
-                return [], 0, []
+                raise RuntimeError("无法加载全局Hash索引")
 
         # 3. 截图
         screenshot = self.adb.screenshot()
-        if not screenshot:
-            logger.error("截图失败")
-            return [], 0, []
 
         # 4. YOLO检测卡牌
         detected_cards = self._detect_cards(screenshot, obb_threshold)
@@ -583,17 +580,31 @@ class YoloCardRecognizer:
         """
         model = self.model_manager.get_model()
         if model is None:
-            logger.warning("YOLO模型未就绪，跳过检测")
-            return []
+            raise RuntimeError("YOLO模型未就绪")
 
         # PIL -> numpy (BGR)
         img_array = np.array(screenshot)
         if len(img_array.shape) == 3 and img_array.shape[2] == 4:
-            img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB)
-        img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            img_array = run_failfast_call(
+                logger,
+                "yolo.cvtColor.rgba_to_rgb",
+                CV_CALL_TIMEOUT_SECONDS,
+                lambda: cv2.cvtColor(img_array, cv2.COLOR_RGBA2RGB),
+            )
+        img_bgr = run_failfast_call(
+            logger,
+            "yolo.cvtColor.rgb_to_bgr",
+            CV_CALL_TIMEOUT_SECONDS,
+            lambda: cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR),
+        )
 
         # YOLO推理
-        results = model(img_bgr, verbose=False)
+        results = run_failfast_call(
+            logger,
+            "yolo.infer",
+            YOLO_INFERENCE_TIMEOUT_SECONDS,
+            lambda: model(img_bgr, verbose=False),
+        )
         result = results[0]
 
         if result.obb is None or len(result.obb) == 0:
@@ -628,8 +639,20 @@ class YoloCardRecognizer:
                     [[0, 0], [target_w, 0], [target_w, target_h], [0, target_h]],
                     dtype=np.float32,
                 )
-                matrix = cv2.getPerspectiveTransform(corners, dst)
-                cropped = cv2.warpPerspective(img_bgr, matrix, (target_w, target_h))
+                matrix = run_failfast_call(
+                    logger,
+                    "yolo.getPerspectiveTransform",
+                    CV_CALL_TIMEOUT_SECONDS,
+                    lambda: cv2.getPerspectiveTransform(corners, dst),
+                )
+                cropped = run_failfast_call(
+                    logger,
+                    "yolo.warpPerspective",
+                    CV_CALL_TIMEOUT_SECONDS,
+                    lambda: cv2.warpPerspective(
+                        img_bgr, matrix, (target_w, target_h)
+                    ),
+                )
                 center_x = corners[:, 0].mean()
                 center_y = corners[:, 1].mean()
                 x1, y1 = int(corners[:, 0].min()), int(corners[:, 1].min())

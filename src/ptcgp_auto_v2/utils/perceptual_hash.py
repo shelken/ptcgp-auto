@@ -8,6 +8,7 @@
 """
 
 import base64
+import logging
 from dataclasses import dataclass
 from typing import List
 
@@ -15,6 +16,11 @@ import cv2
 import numpy as np
 from PIL import Image
 from scipy.fftpack import dct
+
+from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
+
+logger = logging.getLogger(__name__)
+CV_CALL_TIMEOUT_SECONDS = 20.0
 
 # 哈希计算常量
 HASH_SIZE = 96  # 预处理后的图片尺寸
@@ -63,16 +69,36 @@ def pil_to_color_pixels(pil_image: Image.Image) -> ColorPixels:
 def bgr_to_color_pixels(bgr_image: np.ndarray) -> ColorPixels:
     """从 BGR 图片转换为 ColorPixels"""
     if bgr_image.ndim == 2:
-        bgr_image = cv2.cvtColor(bgr_image, cv2.COLOR_GRAY2BGR)
+        bgr_image = run_failfast_call(
+            logger,
+            "perceptual_hash.cvtColor.gray_to_bgr",
+            CV_CALL_TIMEOUT_SECONDS,
+            lambda: cv2.cvtColor(bgr_image, cv2.COLOR_GRAY2BGR),
+        )
     elif bgr_image.shape[2] == 4:
-        bgr_image = cv2.cvtColor(bgr_image, cv2.COLOR_BGRA2BGR)
+        bgr_image = run_failfast_call(
+            logger,
+            "perceptual_hash.cvtColor.bgra_to_bgr",
+            CV_CALL_TIMEOUT_SECONDS,
+            lambda: cv2.cvtColor(bgr_image, cv2.COLOR_BGRA2BGR),
+        )
 
-    resized = cv2.resize(
-        bgr_image,
-        (HASH_SIZE, HASH_SIZE),
-        interpolation=cv2.INTER_CUBIC,
+    resized = run_failfast_call(
+        logger,
+        "perceptual_hash.resize",
+        CV_CALL_TIMEOUT_SECONDS,
+        lambda: cv2.resize(
+            bgr_image,
+            (HASH_SIZE, HASH_SIZE),
+            interpolation=cv2.INTER_CUBIC,
+        ),
     )
-    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+    rgb = run_failfast_call(
+        logger,
+        "perceptual_hash.cvtColor.bgr_to_rgb",
+        CV_CALL_TIMEOUT_SECONDS,
+        lambda: cv2.cvtColor(resized, cv2.COLOR_BGR2RGB),
+    )
 
     color_pixels = ColorPixels(
         r=[0] * (HASH_SIZE * HASH_SIZE),
