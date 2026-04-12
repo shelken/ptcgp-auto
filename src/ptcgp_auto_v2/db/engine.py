@@ -2,14 +2,16 @@
 """
 SQLModel 数据库引擎
 
-提供数据库连接和会话管理。
+这个文件负责 engine 单例和会话边界。
+覆盖 SQLite engine 初始化、连接事件注册和 Session 入口。
+关键依赖是 get_settings、apply_sqlite_pragmas 和 SQLModel Session。
 """
 
 from contextlib import contextmanager
 from typing import Generator
 
 from sqlalchemy import event
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import SingletonThreadPool
 from sqlmodel import Session, create_engine
 
 from ptcgp_auto_v2.config.settings import get_settings
@@ -24,9 +26,9 @@ _engine = None
 
 def get_engine():
     """
-    获取数据库引擎
-
-    使用单例模式，确保全局只有一个引擎实例。
+    变更前文件库场景使用 NullPool，每次创建 Session 都会重建 SQLite 连接。
+    变更后改为 SingletonThreadPool，让同线程会话复用底层连接。
+    变更原因是减少重复 PRAGMA 和 schema 读取开销，同时保持原有事务边界。
     """
     global _engine
     if _engine is None:
@@ -38,12 +40,11 @@ def get_engine():
         get_database()
 
         settings = get_settings()
-        # 当前仅支持 SQLite，本项目同时在多线程场景运行。
-        # 使用 NullPool 避免 QueuePool 在多线程/多连接下的限制与泄漏风险。
+        # poolclass 改为 SingletonThreadPool，原因是热点来自反复建连后的 PRAGMA 与 schema 读取。
         _engine = create_engine(
             f"sqlite:///{settings.db_path}",
             echo=False,
-            poolclass=NullPool,
+            poolclass=SingletonThreadPool,
             connect_args={
                 "check_same_thread": False,
                 "timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,

@@ -2,7 +2,9 @@
 """
 调度器模块
 
-中心调度器，负责管理设备池、生成任务实例、分配任务到空闲设备。
+这个文件负责调度器主循环、账号批量派发和设备协调。
+覆盖任务生成、执行器提交判定和空转退避。
+关键依赖是 DevicePool、RepositoryFactory 和 session_scope。
 """
 
 import logging
@@ -70,13 +72,9 @@ class SchedulerConfig:
 
 class Scheduler:
     """
-    中心调度器
-
-    职责：
-    1. 管理设备池
-    2. 生成待执行任务（每日/每周重置）
-    3. 分配任务到空闲设备
-    4. 监控执行状态
+    这个类负责在设备池和任务仓库之间做中心调度。
+    覆盖任务生成、账号批量派发、执行状态回收和扩缩容检查。
+    关键依赖是 DevicePool、TaskRegistry 和 RepositoryFactory。
     """
 
     def __init__(
@@ -498,13 +496,11 @@ class Scheduler:
 
     def _dispatch_account_tasks(
         self, account: AccountSnapshot, task_instances: list[TaskInstanceSnapshot]
-    ):
+    ) -> bool:
         """
-        批量分配账号的所有任务到同一设备执行
-
-        Args:
-            account: 账号
-            task_instances: 按顺序排列的任务列表
+        变更前这里不返回派发结果，主循环无法区分没抢到设备和已经提交执行器。
+        变更后这里返回是否真正提交执行器，让主循环只在无提交时退避。
+        变更原因是把空转判定收敛到派发入口，避免有任务时忙等。
         """
         # 获取设备（优先获取已登录该账号的设备）
         if account.id is None:
@@ -512,9 +508,10 @@ class Scheduler:
         device = self.device_pool.acquire_for_account(account.id)
         if not device:
             logger.debug(f"账号 {account.display_name} 没有可用设备，等待...")
-            return
+            return False
 
         self._submit_account_executor(device, account, task_instances)
+        return True
 
     def _get_or_reset_prerequisite_instance(
         self,
@@ -638,7 +635,12 @@ class Scheduler:
         self._bind_account_release_on_future(future, account.id)
 
     def _main_loop(self):
-        """调度器主循环（批量任务调度）"""
+        """调度器主循环。
+
+        变更前这里只有部分路径会休眠，待执行任务无法派发时会持续空转。
+        变更后只要本轮没有真正提交工作就按 poll_interval 退避，成功提交则立即进入下一轮。
+        变更原因是压低空转 CPU，同时保持原有派发顺序。
+        """
         while self._running:
             try:
                 # 生成待执行任务
@@ -669,7 +671,11 @@ class Scheduler:
                                 for task in task_instances
                             )
                             if has_init_task:
-                                self._dispatch_account_tasks(account, task_instances)
+                                if not self._dispatch_account_tasks(
+                                    account,
+                                    task_instances,
+                                ):
+                                    time.sleep(self.config.poll_interval)
                                 continue
 
                         self._trigger_multi_device_creation()
@@ -679,11 +685,17 @@ class Scheduler:
                 if batch:
                     # 有待执行任务，优先执行
                     account, task_instances = batch
-                    self._dispatch_account_tasks(account, task_instances)
+                    if self._dispatch_account_tasks(account, task_instances):
+                        continue
+                    time.sleep(self.config.poll_interval)
+                    continue
                 elif self._settings.auto_create_accounts:
                     # 没有待执行任务，且启用自动创建，为每个空闲设备创建新账号
                     self._trigger_multi_device_creation()
                     time.sleep(self.config.poll_interval)
+                    continue
+
+                time.sleep(self.config.poll_interval)
 
             except RuntimeError as e:
                 logger.exception(f"调度器主循环异常: {e}")

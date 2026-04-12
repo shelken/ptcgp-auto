@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""E2E 场景加载与覆盖规则测试。"""
+"""E2E 场景加载与覆盖规则测试。
+
+这个文件负责验证场景发现、配置覆盖和模块加载规则。
+覆盖临时场景装载、错误分支和内置场景可发现性。
+关键依赖是 scenario_loader 和 E2EScenarioConfig。
+"""
 
 from __future__ import annotations
 
@@ -116,6 +121,15 @@ def test_loader_lists_device_case_from_temp_package(
     _write_temp_case(package_dir, "device_case", include_core=False, include_device=True)
 
     assert "device_case" in list_e2e_scenarios("device")
+
+
+@pytest.mark.e2e_core
+def test_builtin_scheduler_idle_backoff_case_is_discoverable():
+    config, module = load_e2e_scenario("scheduler_idle_backoff", "core")
+
+    assert "scheduler_idle_backoff" in list_e2e_scenarios("core")
+    assert config.case_id == "scheduler_idle_backoff"
+    assert callable(getattr(module, "run"))
 
 
 @pytest.mark.e2e_core
