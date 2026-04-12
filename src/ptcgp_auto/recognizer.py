@@ -9,8 +9,8 @@ import numpy as np
 
 from ptcgp_auto.logger import get_logger
 from ptcgp_auto.recognizer_parts.color import ColorDetectorMixin
-from ptcgp_auto.recognizer_parts.constants import COLORS, COLOR_STATES
-from ptcgp_auto.recognizer_parts.ocr import perform_ocr
+from ptcgp_auto.recognizer_parts.constants import COLORS as COLORS, COLOR_STATES as COLOR_STATES
+from ptcgp_auto.recognizer_parts.ocr import perform_ocr as perform_ocr
 from ptcgp_auto.recognizer_parts.template_matcher import TemplateMatcherMixin
 from ptcgp_auto.recognizer_parts.text import TextRecognizerMixin
 
@@ -36,11 +36,3 @@ def get_recognizer() -> Recognizer:
         _recognizer = Recognizer()
     return _recognizer
 
-
-__all__ = [
-    "COLORS",
-    "COLOR_STATES",
-    "Recognizer",
-    "get_recognizer",
-    "perform_ocr",
-]

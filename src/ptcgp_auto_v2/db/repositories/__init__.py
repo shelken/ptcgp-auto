@@ -1,62 +1,42 @@
 # -*- coding: utf-8 -*-
-"""Repository 包导出。"""
+"""
+Repository 包统一导出入口。
 
-from importlib import import_module
-from typing import Any
+作用：
+- 提供 Repository 与工厂类的单一导入路径。
 
-from ptcgp_auto_v2.db.engine import get_engine
+覆盖范围：
+- v2 数据访问层所有 Repository 类型与 RepositoryFactory。
 
-__all__ = [
-    "get_engine",
-    "BaseRepository",
-    "AccountBattleProgressRepository",
-    "BattleTaskConfigRepository",
-    "AccountPackConfigRepository",
-    "AccountPackPointRepository",
-    "AccountCardRepository",
-    "AccountStatRepository",
-    "AccountGiftPairRepository",
-    "AccountGiftRecordRepository",
-    "AccountRepository",
-    "CardRepository",
-    "FriendRequestRepository",
-    "ExchangeCardRequestRepository",
-    "FriendshipRepository",
-    "NotificationRepository",
-    "NotificationConfigRepository",
-    "PackRecordRepository",
-    "TaskInstanceRepository",
-    "TaskPlanRepository",
-    "RepositoryFactory",
-]
+关键依赖：
+- ptcgp_auto_v2.db.engine.get_engine
+- 各具体 Repository 模块与 factory 模块
+"""
 
-_EXPORT_MODULES = {
-    "BaseRepository": "ptcgp_auto_v2.db.repositories.base",
-    "AccountBattleProgressRepository": "ptcgp_auto_v2.db.repositories.account_battle_progress_repository",
-    "BattleTaskConfigRepository": "ptcgp_auto_v2.db.repositories.battle_task_config_repository",
-    "AccountPackConfigRepository": "ptcgp_auto_v2.db.repositories.account_pack_config_repository",
-    "AccountPackPointRepository": "ptcgp_auto_v2.db.repositories.account_pack_point_repository",
-    "AccountCardRepository": "ptcgp_auto_v2.db.repositories.account_card_repository",
-    "AccountStatRepository": "ptcgp_auto_v2.db.repositories.account_stat_repository",
-    "AccountGiftPairRepository": "ptcgp_auto_v2.db.repositories.account_gift_pair_repository",
-    "AccountGiftRecordRepository": "ptcgp_auto_v2.db.repositories.account_gift_record_repository",
-    "AccountRepository": "ptcgp_auto_v2.db.repositories.account_repository",
-    "CardRepository": "ptcgp_auto_v2.db.repositories.card_repository",
-    "FriendRequestRepository": "ptcgp_auto_v2.db.repositories.friend_request_repository",
-    "ExchangeCardRequestRepository": "ptcgp_auto_v2.db.repositories.exchange_card_request_repository",
-    "FriendshipRepository": "ptcgp_auto_v2.db.repositories.friendship_repository",
-    "NotificationRepository": "ptcgp_auto_v2.db.repositories.notification_repository",
-    "NotificationConfigRepository": "ptcgp_auto_v2.db.repositories.notification_config_repository",
-    "PackRecordRepository": "ptcgp_auto_v2.db.repositories.pack_record_repository",
-    "TaskInstanceRepository": "ptcgp_auto_v2.db.repositories.task_instance_repository",
-    "TaskPlanRepository": "ptcgp_auto_v2.db.repositories.task_plan_repository",
-    "RepositoryFactory": "ptcgp_auto_v2.db.repositories.factory",
-}
-
-
-def __getattr__(name: str) -> Any:
-    """按需导出 Repository，避免包初始化时级联导入。"""
-    module_name = _EXPORT_MODULES.get(name)
-    if module_name is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    return getattr(import_module(module_name), name)
+from ptcgp_auto_v2.db.engine import get_engine as get_engine
+from .account_battle_progress_repository import (
+    AccountBattleProgressRepository as AccountBattleProgressRepository,
+)
+from .account_card_repository import AccountCardRepository as AccountCardRepository
+from .account_gift_pair_repository import AccountGiftPairRepository as AccountGiftPairRepository
+from .account_gift_record_repository import AccountGiftRecordRepository as AccountGiftRecordRepository
+from .account_pack_config_repository import AccountPackConfigRepository as AccountPackConfigRepository
+from .account_pack_point_repository import AccountPackPointRepository as AccountPackPointRepository
+from .account_repository import AccountRepository as AccountRepository
+from .account_stat_repository import AccountStatRepository as AccountStatRepository
+from .base import BaseRepository as BaseRepository
+from .battle_task_config_repository import BattleTaskConfigRepository as BattleTaskConfigRepository
+from .card_repository import CardRepository as CardRepository
+from .exchange_card_request_repository import (
+    ExchangeCardRequestRepository as ExchangeCardRequestRepository,
+)
+from .factory import RepositoryFactory as RepositoryFactory
+from .friend_request_repository import FriendRequestRepository as FriendRequestRepository
+from .friendship_repository import FriendshipRepository as FriendshipRepository
+from .notification_config_repository import (
+    NotificationConfigRepository as NotificationConfigRepository,
+)
+from .notification_repository import NotificationRepository as NotificationRepository
+from .pack_record_repository import PackRecordRepository as PackRecordRepository
+from .task_instance_repository import TaskInstanceRepository as TaskInstanceRepository
+from .task_plan_repository import TaskPlanRepository as TaskPlanRepository

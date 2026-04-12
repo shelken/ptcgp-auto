@@ -162,5 +162,3 @@ COMMON_PAGES = [
         "action": "tap_matched",
     },
 ]
-
-__all__ = ["COMMON_PAGES"]

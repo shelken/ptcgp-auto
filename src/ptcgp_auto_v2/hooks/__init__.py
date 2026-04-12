@@ -2,19 +2,10 @@
 """Hook 模块导出"""
 
 from .friend_hooks import (
-    DeleteFriendPostHook,
-    FriendPreHook,
-    ManageFriendshipWakePostHook,
+    DeleteFriendPostHook as DeleteFriendPostHook,
+    FriendPreHook as FriendPreHook,
+    ManageFriendshipWakePostHook as ManageFriendshipWakePostHook,
 )
-from .exchange_hooks import ExchangeDelayPostHook
-from .gift_hooks import SendCardWakeTargetPostHook
-from .gift_hooks import ClaimGiftsPreHook
-
-__all__ = [
-    "FriendPreHook",
-    "DeleteFriendPostHook",
-    "ManageFriendshipWakePostHook",
-    "ExchangeDelayPostHook",
-    "ClaimGiftsPreHook",
-    "SendCardWakeTargetPostHook",
-]
+from .exchange_hooks import ExchangeDelayPostHook as ExchangeDelayPostHook
+from .gift_hooks import SendCardWakeTargetPostHook as SendCardWakeTargetPostHook
+from .gift_hooks import ClaimGiftsPreHook as ClaimGiftsPreHook
