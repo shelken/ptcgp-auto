@@ -52,18 +52,31 @@ class CardHashManager:
             set_code: 系列代码
             exclude_promo: 是否排除 PROMO 系列（开包场景使用）
         """
+        logger.debug(
+            "[HashManager] ensure_series_ready 开始: set_code=%s thread=%s tid=%s manager_id=%s",
+            set_code,
+            threading.current_thread().name,
+            threading.get_ident(),
+            id(self),
+        )
         # 排除 PROMO 系列
         if exclude_promo and set_code.upper().startswith("PROMO"):
             logger.debug(f"[HashManager] 跳过 PROMO 系列: {set_code}")
             return True
 
         # 1. 查询缺失Hash的卡牌
+        logger.debug("[HashManager] 查询缺失 Hash: set_code=%s", set_code)
         with session_scope() as session:
             all_missing = [
                 (card.id, card.number)
                 for card in CardRepository(session).get_cards_without_hash(set_code)
                 if card.id is not None
             ]
+        logger.debug(
+            "[HashManager] 查询缺失 Hash 完成: set_code=%s all_missing=%s",
+            set_code,
+            len(all_missing),
+        )
 
         # 2. 过滤掉已下载失败的卡牌（内存缓存，避免重复尝试）
         missing_cards = [
@@ -90,8 +103,18 @@ class CardHashManager:
 
                 # 3. 下载缺失卡牌的图片
                 card_numbers = [number for _, number in missing_cards]
+                logger.debug(
+                    "[HashManager] 开始下载缺失卡图: set_code=%s missing_cards=%s",
+                    set_code,
+                    len(card_numbers),
+                )
                 downloaded = self._downloader.download_cards_batch(  # type: ignore
                     set_code, card_numbers
+                )
+                logger.debug(
+                    "[HashManager] 下载缺失卡图完成: set_code=%s downloaded=%s",
+                    set_code,
+                    len(downloaded),
                 )
 
                 # 4. 计算Hash并更新数据库
@@ -119,6 +142,13 @@ class CardHashManager:
     def _compute_and_save_hash(self, card_id: int, image_path) -> bool:
         """计算图片Hash并保存到数据库"""
         try:
+            logger.debug(
+                "[HashManager] 计算卡牌 Hash 开始: card_id=%s image_path=%s thread=%s tid=%s",
+                card_id,
+                image_path,
+                threading.current_thread().name,
+                threading.get_ident(),
+            )
             # 读取图片
             pil_img = Image.open(image_path)
 
@@ -130,8 +160,15 @@ class CardHashManager:
             hash_str = encode_hash_to_base64(hash_arr)
 
             # 更新数据库
+            logger.debug("[HashManager] 写入卡牌 Hash: card_id=%s", card_id)
             with session_scope() as session:
-                return CardRepository(session).update_card_hash(card_id, hash_str)
+                updated = CardRepository(session).update_card_hash(card_id, hash_str)
+            logger.debug(
+                "[HashManager] 写入卡牌 Hash 完成: card_id=%s updated=%s",
+                card_id,
+                updated,
+            )
+            return updated
         except Exception as e:
             logger.exception("计算卡牌 Hash 失败: %s", card_id)
             raise RuntimeError(f"计算卡牌 Hash 失败: {card_id}") from e

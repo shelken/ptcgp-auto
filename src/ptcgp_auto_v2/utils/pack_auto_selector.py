@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import threading
+import time
 from bisect import bisect_left
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, cast
@@ -33,6 +35,8 @@ if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account
 
 
+logger = logging.getLogger(__name__)
+
 _HRW_WEEKLY_CACHE: dict[str, dict] = {}
 _HRW_WEEKLY_CACHE_LOCK = threading.RLock()
 
@@ -45,10 +49,18 @@ def select_pack_for_account(
     exclude_set_codes: list[str],
 ) -> Optional[dict]:
     """根据策略返回选中的卡包信息。"""
+    start_time = time.perf_counter()
     if strategy not in PACK_AUTO_STRATEGIES:
         strategy = "latest"
 
     account_key = _build_account_key(account)
+    logger.debug(
+        "[pack_auto] 开始选包: account_key=%s strategy=%s thread=%s tid=%s",
+        account_key,
+        strategy,
+        threading.current_thread().name,
+        threading.get_ident(),
+    )
     candidate_count = 0
     if strategy in ("hrw_progress_balance", "hash_balance"):
         pack, candidate_count = _select_by_weighted_hrw(
@@ -67,8 +79,24 @@ def select_pack_for_account(
             pack = _select_latest_pack(candidates, card_repo)
 
     if not pack:
+        logger.debug(
+            "[pack_auto] 选包失败: account_key=%s strategy=%s candidate_count=%s elapsed_ms=%.2f",
+            account_key,
+            strategy,
+            candidate_count,
+            (time.perf_counter() - start_time) * 1000,
+        )
         return None
 
+    logger.debug(
+        "[pack_auto] 选包完成: account_key=%s strategy=%s candidate_count=%s selected=%s/%s elapsed_ms=%.2f",
+        account_key,
+        strategy,
+        candidate_count,
+        pack.set_code,
+        pack.name,
+        (time.perf_counter() - start_time) * 1000,
+    )
     return {
         "set_code": pack.set_code,
         "booster_name": pack.name,
@@ -387,6 +415,13 @@ def _build_seed_candidates() -> list[str]:
 
 def _load_all_account_keys(current_account_key: str) -> list[str]:
     """加载用于全局分配的账号 key 列表。"""
+    start_time = time.perf_counter()
+    logger.debug(
+        "[pack_auto] 加载账号 key 开始: current_account_key=%s thread=%s tid=%s",
+        current_account_key,
+        threading.current_thread().name,
+        threading.get_ident(),
+    )
     try:
         from ptcgp_auto_v2.db.engine import session_scope
         from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
@@ -401,7 +436,14 @@ def _load_all_account_keys(current_account_key: str) -> list[str]:
 
     if current_account_key and current_account_key not in keys:
         keys.append(current_account_key)
-    return list(dict.fromkeys(keys))
+    deduped = list(dict.fromkeys(keys))
+    logger.debug(
+        "[pack_auto] 加载账号 key 完成: current_account_key=%s count=%s elapsed_ms=%.2f",
+        current_account_key,
+        len(deduped),
+        (time.perf_counter() - start_time) * 1000,
+    )
+    return deduped
 
 
 def _assign_accounts_by_hrw(

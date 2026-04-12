@@ -446,14 +446,51 @@ class PackOpeningTaskBase(StatefulTask):
         if not set_code:
             return
 
-        def _preload():
-            try:
-                self.card_recognizer.hash_manager.ensure_series_ready(set_code)
-                logger.debug(f"目标系列 {set_code} Hash 预加载完成")
-            except Exception as e:
-                logger.warning(f"预加载系列 {set_code} Hash 失败: {e}")
+        account_name = getattr(self.account, "display_name", "unknown")
+        hash_manager = self.card_recognizer.hash_manager
+        logger.debug(
+            "目标系列 Hash 预加载排队: account=%s set_code=%s thread=%s tid=%s hash_manager_id=%s",
+            account_name,
+            set_code,
+            threading.current_thread().name,
+            threading.get_ident(),
+            id(hash_manager),
+        )
 
-        threading.Thread(target=_preload, daemon=True).start()
+        def _preload():
+            logger.debug(
+                "目标系列 Hash 预加载开始: account=%s set_code=%s thread=%s tid=%s hash_manager_id=%s",
+                account_name,
+                set_code,
+                threading.current_thread().name,
+                threading.get_ident(),
+                id(hash_manager),
+            )
+            try:
+                hash_manager.ensure_series_ready(set_code)
+                logger.debug(
+                    "目标系列 Hash 预加载完成: account=%s set_code=%s thread=%s tid=%s hash_manager_id=%s",
+                    account_name,
+                    set_code,
+                    threading.current_thread().name,
+                    threading.get_ident(),
+                    id(hash_manager),
+                )
+            except Exception as e:
+                logger.warning(
+                    "预加载系列 Hash 失败: account=%s set_code=%s thread=%s tid=%s error=%s",
+                    account_name,
+                    set_code,
+                    threading.current_thread().name,
+                    threading.get_ident(),
+                    e,
+                )
+
+        threading.Thread(
+            target=_preload,
+            name=f"pack-hash-preload-{account_name}",
+            daemon=True,
+        ).start()
 
     # ============================================================
     # 通用页面处理器

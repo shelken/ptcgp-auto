@@ -9,6 +9,7 @@
 """
 
 import logging
+import threading
 from typing import TYPE_CHECKING, Optional, cast
 
 from ptcgp_auto_v2.config.constants import (
@@ -191,6 +192,14 @@ class OpenPackTask(PackOpeningTaskBase):
 
         self.state_set("pack_hourglass_count", self._load_pack_hourglass_count())
         logger.info(
+            "open_pack 启动基线: account_id=%s account=%s thread=%s tid=%s pack_hourglass_count=%s",
+            self.account.id,
+            self.account.display_name,
+            threading.current_thread().name,
+            threading.get_ident(),
+            cast(int | None, self.state_get("pack_hourglass_count")),
+        )
+        logger.info(
             "当前开包沙漏数量: %s",
             cast(int | None, self.state_get("pack_hourglass_count")),
         )
@@ -233,6 +242,15 @@ class OpenPackTask(PackOpeningTaskBase):
                     selected["booster_name"],
                     selected.get("strategy"),
                     selected.get("candidate_count"),
+                )
+                logger.debug(
+                    "open_pack 选包基线: account_id=%s account=%s set_code=%s booster=%s thread=%s tid=%s",
+                    self.account.id,
+                    self.account.display_name,
+                    selected["set_code"],
+                    selected["booster_name"],
+                    threading.current_thread().name,
+                    threading.get_ident(),
                 )
             else:
                 self.state_set(

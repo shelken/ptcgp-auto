@@ -8,6 +8,8 @@ SQLModel 数据库引擎
 """
 
 from contextlib import contextmanager
+import logging
+import threading
 from typing import Generator
 
 from sqlalchemy import event
@@ -19,6 +21,8 @@ from ptcgp_auto_v2.db.sqlite_config import (
     SQLITE_BUSY_TIMEOUT_MS,
     apply_sqlite_pragmas,
 )
+
+logger = logging.getLogger(__name__)
 
 # 全局引擎实例（延迟初始化）
 _engine = None
@@ -94,11 +98,36 @@ def session_scope() -> Generator[Session, None, None]:
             # 自动提交
     """
     session = get_session()
+    thread = threading.current_thread()
     try:
         yield session
         session.commit()
-    except Exception:
-        session.rollback()
+    except Exception as e:
+        logger.exception(
+            "session_scope 异常: stage=work_or_commit thread=%s tid=%s error=%s",
+            thread.name,
+            threading.get_ident(),
+            type(e).__name__,
+        )
+        try:
+            session.rollback()
+        except Exception as rollback_error:
+            logger.exception(
+                "session_scope 回滚失败: thread=%s tid=%s error=%s",
+                thread.name,
+                threading.get_ident(),
+                type(rollback_error).__name__,
+            )
+            raise
         raise
     finally:
-        session.close()
+        try:
+            session.close()
+        except Exception as close_error:
+            logger.exception(
+                "session_scope 关闭失败: thread=%s tid=%s error=%s",
+                thread.name,
+                threading.get_ident(),
+                type(close_error).__name__,
+            )
+            raise
