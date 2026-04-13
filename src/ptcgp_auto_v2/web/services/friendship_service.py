@@ -13,6 +13,7 @@ from ptcgp_auto_v2.web.queries.friendship_queries import (
     list_friend_requests,
     list_friendships,
 )
+from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 from ptcgp_auto_v2.web.utils.serialization import serialize_account
 
 
@@ -25,8 +26,41 @@ def build_friendship_context(
     sort_order: str = "desc",
     page: int = 0,
     page_size: int = 10,
+    request_sort_by: str | None = None,
+    request_sort_order: str | None = None,
+    request_page: int | None = None,
+    request_page_size: int | None = None,
+    friendship_sort_by: str | None = None,
+    friendship_sort_order: str | None = None,
+    friendship_page: int | None = None,
+    friendship_page_size: int | None = None,
 ) -> dict:
     """构建好友管理页面所需上下文数据。"""
+    normalized_request_sort_by = request_sort_by or sort_by
+    normalized_request_sort_order = request_sort_order or sort_order
+    normalized_page = normalize_page(page)
+    normalized_page_size = normalize_page_size(page_size)
+    normalized_request_page = (
+        normalized_page if request_page is None else normalize_page(request_page)
+    )
+    normalized_request_page_size = (
+        normalized_page_size
+        if request_page_size is None
+        else normalize_page_size(request_page_size)
+    )
+    normalized_friendship_sort_by = friendship_sort_by or sort_by
+    normalized_friendship_sort_order = friendship_sort_order or sort_order
+    normalized_friendship_page = (
+        normalized_page
+        if friendship_page is None
+        else normalize_page(friendship_page)
+    )
+    normalized_friendship_page_size = (
+        normalized_page_size
+        if friendship_page_size is None
+        else normalize_page_size(friendship_page_size)
+    )
+
     account_repo = AccountRepository(session)
     accounts = [serialize_account(account) for account in account_repo.get_all()]
 
@@ -41,20 +75,21 @@ def build_friendship_context(
     request_result = list_friend_requests(
         session=session,
         account_id=account_id,
+        from_account_id=from_account_id,
         q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=page,
-        page_size=page_size,
+        sort_by=normalized_request_sort_by,
+        sort_order=normalized_request_sort_order,
+        page=normalized_request_page,
+        page_size=normalized_request_page_size,
     )
     friendship_result = list_friendships(
         session=session,
         account_id=account_id,
         q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=page,
-        page_size=page_size,
+        sort_by=normalized_friendship_sort_by,
+        sort_order=normalized_friendship_sort_order,
+        page=normalized_friendship_page,
+        page_size=normalized_friendship_page_size,
     )
 
     if isinstance(request_result, tuple):
@@ -76,19 +111,39 @@ def build_friendship_context(
         "accounts": accounts,
         "requests": request_rows,
         "request_total": request_total,
+        "request_sort_by": normalized_request_sort_by,
+        "request_sort_order": normalized_request_sort_order,
+        "request_page": normalized_request_page,
+        "request_page_size": normalized_request_page_size,
+        "request_has_prev": normalized_request_page > 0,
+        "request_has_next": (
+            (normalized_request_page + 1) * normalized_request_page_size < request_total
+        ),
         "friendships": friendship_rows,
         "friendship_total": friendship_total,
+        "friendship_sort_by": normalized_friendship_sort_by,
+        "friendship_sort_order": normalized_friendship_sort_order,
+        "friendship_page": normalized_friendship_page,
+        "friendship_page_size": normalized_friendship_page_size,
+        "friendship_has_prev": normalized_friendship_page > 0,
+        "friendship_has_next": (
+            (normalized_friendship_page + 1) * normalized_friendship_page_size
+            < friendship_total
+        ),
         "account_name_map": account_name_map,
         "account_friend_id_map": account_friend_id_map,
         "selected_account_id": account_id,
         "selected_from_account_id": from_account_id,
         "q": q,
-        "sort_by": sort_by,
-        "sort_order": sort_order,
-        "page": page,
-        "page_size": page_size,
-        "has_prev": page > 0,
-        "has_next": (page + 1) * page_size < max(request_total, friendship_total),
+        "sort_by": normalized_request_sort_by,
+        "sort_order": normalized_request_sort_order,
+        "page": normalized_request_page,
+        "page_size": normalized_request_page_size,
+        "has_prev": normalized_request_page > 0,
+        "has_next": (
+            (normalized_request_page + 1) * normalized_request_page_size
+            < max(request_total, friendship_total)
+        ),
     }
 
 

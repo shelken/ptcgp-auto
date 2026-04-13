@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { readStorageJson, writeStorageValue } from '@/lib/storage'
+import { readStorageJson, writeStorageValue } from '../lib/storage'
 
 /**
  * localStorage 持久化状态

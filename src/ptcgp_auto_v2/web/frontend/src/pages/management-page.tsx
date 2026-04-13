@@ -22,12 +22,15 @@ import {
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
+import { buildManagementListQueryParams } from './management/list-query'
+import type { ManagementListOption, ManagementListSpec } from './management/list-spec'
+import { useManagementListState } from './management/list-state'
+import { ManagementListToolbar } from './management/list-toolbar'
 import { buildResetCompletedTasksPayload, resolveManagementTaskAccountFilter } from './management/task-filters'
 import {
   AccountIdentityCell,
   CopyableFriendId,
   InlineNotice,
-  ListQueryControls,
   Pager,
   QueryTotalSummary,
   TruncatedText,
@@ -479,11 +482,6 @@ function DataGrid({
 
 function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [q, setQ] = usePersistedState<string>(managementStateKey('accounts', 'q'), '')
-  const [page, setPage] = usePersistedState<number>(managementStateKey('accounts', 'page'), 0)
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('accounts', 'sort_by'), 'id')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('accounts', 'sort_order'), 'asc')
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('accounts', 'page_size'), 10)
   const [editingAccount, setEditingAccount] = useState<Record<string, unknown> | null>(null)
   const [editingPlans, setEditingPlans] = useState<{ accountId: number; items: AccountPlanItemState[] } | null>(null)
   const [currentPlans, setCurrentPlans] = useState<AccountPlanItemState[]>([])
@@ -492,26 +490,52 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   const [boosterOptions, setBoosterOptions] = useState<Array<{ name: string; display_name: string }>>([])
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
-
-  const queryString = useMemo(
-    () =>
-      buildQuery({
-        lang,
-        q,
-        page,
-        page_size: pageSize,
-        sort_by: sortBy,
-        sort_order: sortOrder
-      }),
-    [lang, page, pageSize, q, sortBy, sortOrder]
+  const accountListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'accounts',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    filters: [
+      {
+        key: 'q',
+        kind: 'search',
+        label: tr(t, 'label_search', 'Search'),
+        placeholder: tr(t, 'filter_account_id_placeholder', 'Search account')
+      }
+    ],
+    sort: {
+      defaultBy: 'id',
+      defaultOrder: 'asc',
+      options: [
+        { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+        { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
+        { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
+      ]
+    }
+  }), [t])
+  const {
+    state: accountListState,
+    setFilter: setAccountFilter,
+    setSort: setAccountSort,
+    setPage: setAccountPage,
+    setPageSize: setAccountPageSize
+  } = useManagementListState(accountListSpec)
+  const accountQueryParams = useMemo(
+    () => buildManagementListQueryParams(accountListSpec, accountListState),
+    [accountListSpec, accountListState]
   )
-
-  const query = useQuery({
-    queryKey: ['management-accounts', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/accounts?${queryString}`)
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-accounts',
+    endpoint: 'accounts',
+    lang,
+    params: accountQueryParams
   })
-
-  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    if (accountListState.sortBy === nextSortBy) {
+      setAccountSort(nextSortBy, accountListState.sortOrder === 'asc' ? 'desc' : 'asc')
+      return
+    }
+    setAccountSort(nextSortBy, 'asc')
+  }, [accountListState.sortBy, accountListState.sortOrder, setAccountSort])
 
   const saveAccountMutation = useMutation({
     mutationFn: (payload: { accountId: number; nickname: string; remark: string }) =>
@@ -642,41 +666,15 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   return (
     <section className="section-stack">
       <div className="surface-card section-stack">
-        <div className="pagination-row">
-          <div className="section-title">{tr(t, 'menu_accounts', 'Accounts')}</div>
-          <div className="filter-row">
-            <input
-              id="accounts-search"
-              className="field-input"
-              name="accounts-search"
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-              placeholder={tr(t, 'filter_account_id_placeholder', 'Search account')}
-            />
-            <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
-          </div>
-        </div>
-        <ListQueryControls
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          pageSize={pageSize}
-          sortOptions={[
-            { value: 'id', labelKey: 'col_id', fallback: 'ID' },
-            { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
-            { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
-          ]}
-          onSortByChange={(value) => {
-            setPage(0)
-            setSortBy(value)
-          }}
-          onSortOrderChange={(value) => {
-            setPage(0)
-            setSortOrder(value)
-          }}
-          onPageSizeChange={(value) => {
-            setPage(0)
-            setPageSize(value)
-          }}
+        <div className="section-title">{tr(t, 'menu_accounts', 'Accounts')}</div>
+        <ManagementListToolbar
+          spec={accountListSpec}
+          state={accountListState}
+          searchableLocale={selectLocale}
+          onFilterChange={setAccountFilter}
+          onSortByChange={(value) => setAccountSort(value)}
+          onSortOrderChange={(value) => setAccountSort(accountListState.sortBy, value)}
+          onPageSizeChange={setAccountPageSize}
           t={t}
         />
 
@@ -694,8 +692,8 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                     <SortableHeaderCell
                       label={tr(t, 'col_account', 'Account')}
                       sortKey="id"
-                      sortBy={sortBy}
-                      sortOrder={sortOrder}
+                      sortBy={accountListState.sortBy}
+                      sortOrder={accountListState.sortOrder}
                       onToggle={handleHeaderSort}
                     />
                     <th>{tr(t, 'col_plans', 'Plans')}</th>
@@ -755,8 +753,8 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
               page={Number(query.data.page ?? 0)}
               hasPrev={Boolean(query.data.has_prev)}
               hasNext={Boolean(query.data.has_next)}
-              onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-              onNext={() => setPage((prev) => prev + 1)}
+              onPrev={() => setAccountPage(Math.max(accountListState.page - 1, 0))}
+              onNext={() => setAccountPage(accountListState.page + 1)}
               t={t}
             />
           </>
@@ -908,11 +906,6 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
 function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [q, setQ] = usePersistedState<string>(managementStateKey('plans', 'q'), '')
-  const [page, setPage] = usePersistedState<number>(managementStateKey('plans', 'page'), 0)
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('plans', 'sort_by'), 'id')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('plans', 'sort_order'), 'asc')
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('plans', 'page_size'), 10)
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null)
   const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false)
   const [planName, setPlanName] = useState('')
@@ -926,18 +919,51 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [dragOverTask, setDragOverTask] = useState<string | null>(null)
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const [pendingDeletePlan, setPendingDeletePlan] = useState<{ id: number; name: string } | null>(null)
-
-  const queryString = useMemo(
-    () => buildQuery({ lang, q, page, page_size: pageSize, sort_by: sortBy, sort_order: sortOrder }),
-    [lang, page, pageSize, q, sortBy, sortOrder]
+  const planListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'plans',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    filters: [
+      {
+        key: 'q',
+        kind: 'search',
+        label: tr(t, 'label_search', 'Search'),
+        placeholder: tr(t, 'label_search', 'Search')
+      }
+    ],
+    sort: {
+      defaultBy: 'id',
+      defaultOrder: 'asc',
+      options: [
+        { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+        { value: 'name', labelKey: 'col_name', fallback: 'Name' }
+      ]
+    }
+  }), [t])
+  const {
+    state: planListState,
+    setFilter: setPlanFilter,
+    setSort: setPlanSort,
+    setPage: setPlanPage,
+    setPageSize: setPlanPageSize
+  } = useManagementListState(planListSpec)
+  const planQueryParams = useMemo(
+    () => buildManagementListQueryParams(planListSpec, planListState),
+    [planListSpec, planListState]
   )
-
-  const query = useQuery({
-    queryKey: ['management-plans', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/plans?${queryString}`)
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-plans',
+    endpoint: 'plans',
+    lang,
+    params: planQueryParams
   })
-
-  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    if (planListState.sortBy === nextSortBy) {
+      setPlanSort(nextSortBy, planListState.sortOrder === 'asc' ? 'desc' : 'asc')
+      return
+    }
+    setPlanSort(nextSortBy, 'asc')
+  }, [planListState.sortBy, planListState.sortOrder, setPlanSort])
 
   const reorderTaskByDrag = useCallback((sourceTask: string, targetTask: string) => {
     setTaskOrder((prev) => {
@@ -1041,42 +1067,23 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   return (
     <section className="section-stack">
       <div className="surface-card section-stack">
-        <div className="pagination-row">
-          <div className="section-title">{tr(t, 'menu_plans', 'Plans')}</div>
-          <div className="filter-row">
-            <input
-              id="plans-search"
-              className="field-input"
-              name="plans-search"
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-              placeholder={tr(t, 'label_search', 'Search')}
-            />
-            <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
-            <Button type="button" size="sm" onClick={() => openEditor(null)}>{tr(t, 'btn_new_plan', 'New')}</Button>
-          </div>
-        </div>
-        <ListQueryControls
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          pageSize={pageSize}
-          sortOptions={[
-            { value: 'id', labelKey: 'col_id', fallback: 'ID' },
-            { value: 'name', labelKey: 'col_name', fallback: 'Name' }
-          ]}
-          onSortByChange={(value) => {
-            setPage(0)
-            setSortBy(value)
-          }}
-          onSortOrderChange={(value) => {
-            setPage(0)
-            setSortOrder(value)
-          }}
-          onPageSizeChange={(value) => {
-            setPage(0)
-            setPageSize(value)
-          }}
+        <div className="section-title">{tr(t, 'menu_plans', 'Plans')}</div>
+        <ManagementListToolbar
+          spec={planListSpec}
+          state={planListState}
+          searchableLocale={searchableSelectLocale(t)}
+          onFilterChange={setPlanFilter}
+          onSortByChange={(value) => setPlanSort(value)}
+          onSortOrderChange={(value) => setPlanSort(planListState.sortBy, value)}
+          onPageSizeChange={setPlanPageSize}
           t={t}
+          actions={{
+            trailing: (
+              <Button type="button" size="sm" onClick={() => openEditor(null)}>
+                {tr(t, 'btn_new_plan', 'New')}
+              </Button>
+            )
+          }}
         />
         <InlineNotice notice={notice} />
         <QueryTotalSummary t={t} total={totalRecords} />
@@ -1108,15 +1115,15 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                 <SortableHeaderCell
                   label={tr(t, 'col_id', 'ID')}
                   sortKey="id"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={planListState.sortBy}
+                  sortOrder={planListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_name', 'Name')}
                   sortKey="name"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={planListState.sortBy}
+                  sortOrder={planListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
                 <th>{tr(t, 'col_description', 'Description')}</th>
@@ -1171,8 +1178,8 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           page={Number(query.data?.page ?? 0)}
           hasPrev={Boolean(query.data?.has_prev)}
           hasNext={Boolean(query.data?.has_next)}
-          onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-          onNext={() => setPage((prev) => prev + 1)}
+          onPrev={() => setPlanPage(Math.max(planListState.page - 1, 0))}
+          onNext={() => setPlanPage(planListState.page + 1)}
           t={t}
         />
       </div>
@@ -1376,115 +1383,128 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 }
 
 function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string> }) {
-  const [q, setQ] = usePersistedState<string>(managementStateKey('resources', 'q'), '')
-  const [page, setPage] = usePersistedState<number>(managementStateKey('resources', 'page'), 0)
-  const [view, setView] = usePersistedState<string>(managementStateKey('resources', 'view'), 'stats')
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('resources', 'sort_by'), 'id')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('resources', 'sort_order'), 'asc')
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('resources', 'page_size'), 20)
-
-  const queryString = useMemo(
-    () => buildQuery({ lang, q, page, page_size: pageSize, view, sort_by: sortBy, sort_order: sortOrder }),
-    [lang, page, pageSize, q, sortBy, sortOrder, view]
-  )
-  const query = useQuery({
-    queryKey: ['management-resources', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/resources?${queryString}`)
-  })
-
-  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
-
-  const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
-  const seriesList = (((query.data?.series_list as unknown[]) ?? []) as string[])
-  const accountNumber = new Intl.NumberFormat('en-US')
-  const sortOptions = useMemo<SortOption[]>(() => {
-    if (view === 'pack-points') {
-      return [
+  const resourceListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'resources',
+    defaultPageSize: 20,
+    pageSizeOptions: [10, 20, 50, 100],
+    filters: [
+      {
+        key: 'view',
+        kind: 'select',
+        label: tr(t, 'label_view', 'View'),
+        options: [
+          { value: 'stats', label: tr(t, 'tab_resource_stats', 'Stats') },
+          { value: 'pack-points', label: tr(t, 'tab_resource_pack_points', 'Pack Points') }
+        ]
+      },
+      {
+        key: 'q',
+        kind: 'search',
+        label: tr(t, 'label_search', 'Search'),
+        placeholder: tr(t, 'filter_account_search_placeholder', 'Search account')
+      }
+    ],
+    sort: {
+      defaultBy: 'id',
+      defaultOrder: 'asc',
+      options: [
         { value: 'id', labelKey: 'col_id', fallback: 'ID' },
         { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
-        { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
-        ...seriesList.map((seriesCode) => ({
-          value: `series:${seriesCode}`,
-          labelKey: `series_sort_${seriesCode}`,
-          fallback: `Series Points (${seriesCode})`
-        }))
+        { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
       ]
     }
+  }), [t])
+  const [seriesList, setSeriesList] = useState<string[]>([])
+  const resourceSortOptions = useMemo<SortOption[]>(() => {
     return [
       { value: 'id', labelKey: 'col_id', fallback: 'ID' },
       { value: 'nickname', labelKey: 'col_nickname', fallback: 'Nickname' },
       { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
       { value: 'exchange_points', labelKey: 'col_exchange_points', fallback: 'Exchange Points' },
       { value: 'pack_hourglass_count', labelKey: 'col_pack_hourglass', fallback: 'Pack Hourglass' },
-      { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' }
+      { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+      ...seriesList.map((seriesCode) => ({
+        value: `series:${seriesCode}`,
+        labelKey: `series_sort_${seriesCode}`,
+        fallback: `Series Points (${seriesCode})`
+      }))
     ]
-  }, [seriesList, view])
+  }, [seriesList])
+  const {
+    state: resourceListState,
+    setFilter: setResourceFilter,
+    setSort: setResourceSort,
+    setPage: setResourcePage,
+    setPageSize: setResourcePageSize
+  } = useManagementListState(resourceListSpec, {
+    sortOptions: resourceSortOptions
+  })
+  const resourceQueryParams = useMemo(
+    () => buildManagementListQueryParams(resourceListSpec, resourceListState),
+    [resourceListSpec, resourceListState]
+  )
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-resources',
+    endpoint: 'resources',
+    lang,
+    params: resourceQueryParams
+  })
+  const handleHeaderSort = useCallback((nextSortBy: string) => {
+    if (resourceListState.sortBy === nextSortBy) {
+      setResourceSort(nextSortBy, resourceListState.sortOrder === 'asc' ? 'desc' : 'asc')
+      return
+    }
+    setResourceSort(nextSortBy, 'asc')
+  }, [resourceListState.sortBy, resourceListState.sortOrder, setResourceSort])
+
+  const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
+  useEffect(() => {
+    setSeriesList((((query.data?.series_list as unknown[]) ?? []) as string[]))
+  }, [query.data?.series_list])
+  const view = resourceListState.filters.view || 'stats'
+  const visibleResourceSortOptions = useMemo(
+    () => resourceSortOptions.filter((option) => {
+      if (view === 'pack-points') {
+        return option.value === 'id'
+          || option.value === 'nickname'
+          || option.value === 'friend_id'
+          || option.value.startsWith('series:')
+      }
+      return !option.value.startsWith('series:')
+    }),
+    [resourceSortOptions, view]
+  )
+  useEffect(() => {
+    const statsSortFields = new Set(['id', 'nickname', 'friend_id', 'exchange_points', 'pack_hourglass_count', 'updated_at'])
+    const packPointSortFields = new Set(['id', 'nickname', 'friend_id'])
+    const isSeriesSort = resourceListState.sortBy.startsWith('series:')
+    if (view === 'stats' && (isSeriesSort || !statsSortFields.has(resourceListState.sortBy))) {
+      setResourceSort('id', 'asc')
+      return
+    }
+    if (view === 'pack-points' && !isSeriesSort && !packPointSortFields.has(resourceListState.sortBy)) {
+      setResourceSort('id', 'asc')
+    }
+  }, [resourceListState.sortBy, setResourceSort, view])
+  const accountNumber = new Intl.NumberFormat('en-US')
 
   return (
     <section className="surface-card section-stack">
-      <div className="pagination-row">
-        <div className="section-title">{tr(t, 'menu_resources', 'Resources')}</div>
-        <div className="filter-row">
-          <Button
-            type="button"
-            size="sm"
-            variant={view === 'stats' ? 'default' : 'outline'}
-            onClick={() => {
-              setView('stats')
-              setSortBy('id')
-              setSortOrder('asc')
-              setPage(0)
-            }}
-          >
-            {tr(t, 'tab_resource_stats', 'Stats')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={view === 'pack-points' ? 'default' : 'outline'}
-            onClick={() => {
-              setView('pack-points')
-              setSortBy('id')
-              setSortOrder('asc')
-              setPage(0)
-            }}
-          >
-            {tr(t, 'tab_resource_pack_points', 'Pack Points')}
-          </Button>
-          <input
-            id="resources-search"
-            className="field-input"
-            name="resources-search"
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            placeholder={tr(t, 'filter_account_search_placeholder', 'Search account')}
-          />
-          <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
-        </div>
-      </div>
-      <ListQueryControls
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        pageSize={pageSize}
-        sortOptions={sortOptions.map((option) =>
+      <div className="section-title">{tr(t, 'menu_resources', 'Resources')}</div>
+      <ManagementListToolbar
+        spec={resourceListSpec}
+        state={resourceListState}
+        sortOptions={visibleResourceSortOptions.map((option) =>
           option.value.startsWith('series:')
             ? { ...option, fallback: `${tr(t, 'label_series_points', 'Series Points')} (${option.value.split(':')[1]})` }
             : option
         )}
-        onSortByChange={(value) => {
-          setPage(0)
-          setSortBy(value)
-        }}
-        onSortOrderChange={(value) => {
-          setPage(0)
-          setSortOrder(value)
-        }}
-        onPageSizeChange={(value) => {
-          setPage(0)
-          setPageSize(value)
-        }}
+        searchableLocale={searchableSelectLocale(t)}
+        onFilterChange={setResourceFilter}
+        onSortByChange={(value) => setResourceSort(value)}
+        onSortOrderChange={(value) => setResourceSort(resourceListState.sortBy, value)}
+        onPageSizeChange={setResourcePageSize}
         t={t}
-        pageSizeOptions={[10, 20, 50, 100]}
       />
 
       {view === 'stats' ? (
@@ -1495,29 +1515,29 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                 <SortableHeaderCell
                   label={tr(t, 'col_account', 'Account')}
                   sortKey="id"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={resourceListState.sortBy}
+                  sortOrder={resourceListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_exchange_points', 'Exchange Points')}
                   sortKey="exchange_points"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={resourceListState.sortBy}
+                  sortOrder={resourceListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_pack_hourglass', 'Pack Hourglass')}
                   sortKey="pack_hourglass_count"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={resourceListState.sortBy}
+                  sortOrder={resourceListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_updated_at', 'Updated At')}
                   sortKey="updated_at"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={resourceListState.sortBy}
+                  sortOrder={resourceListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
               </tr>
@@ -1564,8 +1584,8 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                 <SortableHeaderCell
                   label={tr(t, 'col_account', 'Account')}
                   sortKey="id"
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
+                  sortBy={resourceListState.sortBy}
+                  sortOrder={resourceListState.sortOrder}
                   onToggle={handleHeaderSort}
                 />
                 {seriesList.map((series) => (
@@ -1573,8 +1593,8 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                     key={`series-header-${series}`}
                     label={series}
                     sortKey={`series:${series}`}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
+                    sortBy={resourceListState.sortBy}
+                    sortOrder={resourceListState.sortOrder}
                     onToggle={handleHeaderSort}
                     className="mono"
                   />
@@ -1623,8 +1643,8 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
         hasNext={Boolean(query.data?.has_next)}
-        onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setResourcePage(Math.max(resourceListState.page - 1, 0))}
+        onNext={() => setResourcePage(resourceListState.page + 1)}
         t={t}
       />
     </section>
@@ -1633,15 +1653,59 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
 
 function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = usePersistedState<number>(managementStateKey('tasks', 'page'), 0)
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('tasks', 'page_size'), 20)
-  const [status, setStatus] = usePersistedState<string>(managementStateKey('tasks', 'status'), '')
-  const [taskType, setTaskType] = usePersistedState<string>(managementStateKey('tasks', 'task_type'), '')
-  const [accountKeyword, setAccountKeyword] = usePersistedState<string>(managementStateKey('tasks', 'account_keyword'), '')
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('tasks', 'sort_by'), 'dispatch_priority')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('tasks', 'sort_order'), 'asc')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const taskListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'tasks',
+    defaultPageSize: 20,
+    pageSizeOptions: [10, 20, 50, 100],
+    filters: [
+      {
+        key: 'status',
+        kind: 'select',
+        label: tr(t, 'filter_status', 'Status'),
+        emptyLabel: tr(t, 'label_all', 'All'),
+        optionsKey: 'status'
+      },
+      {
+        key: 'task_type',
+        kind: 'select',
+        label: tr(t, 'filter_task', 'Task'),
+        emptyLabel: tr(t, 'label_all', 'All'),
+        optionsKey: 'task_type'
+      },
+      {
+        key: 'account_keyword',
+        kind: 'text',
+        label: tr(t, 'filter_account', 'Account'),
+        placeholder: tr(t, 'filter_account_id_placeholder', 'Account ID / nickname / friend id'),
+        datalistKey: 'account_keyword'
+      }
+    ],
+    sort: {
+      defaultBy: 'dispatch_priority',
+      defaultOrder: 'asc',
+      options: [
+        { value: 'dispatch_priority', labelKey: 'col_dispatch_priority', fallback: 'Dispatch Priority' },
+        { value: 'last_completed_at', labelKey: 'col_last_completed', fallback: 'Last Completed' },
+        { value: 'last_duration_seconds', labelKey: 'col_last_duration', fallback: 'Last Duration' },
+        { value: 'next_run_at', labelKey: 'col_next_run', fallback: 'Next Run' }
+      ],
+      lockedOrderBy: {
+        dispatch_priority: 'asc'
+      }
+    }
+  }), [t])
+  const {
+    state: taskListState,
+    setFilter: setTaskFilter,
+    setSort: setTaskSort,
+    setPage: setTaskPage,
+    setPageSize: setTaskPageSize
+  } = useManagementListState(taskListSpec)
+  const status = taskListState.filters.status ?? ''
+  const taskType = taskListState.filters.task_type ?? ''
+  const accountKeyword = taskListState.filters.account_keyword ?? ''
 
   const normalizedAccountKeyword = accountKeyword.trim()
   const { selectedAccountId, selectedAccountQuery } = resolveManagementTaskAccountFilter(accountKeyword)
@@ -1655,27 +1719,32 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     enabled: normalizedAccountKeyword.length > 0
   })
 
-  const queryString = useMemo(
-    () =>
-      buildQuery({
-        lang,
-        page,
-        page_size: pageSize,
-        status: status || undefined,
-        task_type: taskType || undefined,
-        account_id: selectedAccountId || undefined,
-        account_q: selectedAccountQuery || undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder
-      }),
-    [lang, page, pageSize, selectedAccountId, selectedAccountQuery, sortBy, sortOrder, status, taskType]
+  const taskQueryParams = useMemo(
+    () => ({
+      ...buildManagementListQueryParams(taskListSpec, taskListState),
+      status: status || undefined,
+      task_type: taskType || undefined,
+      account_id: selectedAccountId || undefined,
+      account_q: selectedAccountQuery || undefined
+    }),
+    [selectedAccountId, selectedAccountQuery, status, taskListSpec, taskListState, taskType]
   )
-  const query = useQuery({
-    queryKey: ['management-tasks', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/tasks?${queryString}`)
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-tasks',
+    endpoint: 'tasks',
+    lang,
+    params: taskQueryParams
   })
 
-  const handleHeaderSort = useHeaderSort({ sortBy, setPage, setSortBy, setSortOrder })
+  const handleHeaderSort = useHeaderSort({
+    sortBy: taskListState.sortBy,
+    setPage: (value) => setTaskPage(typeof value === 'function' ? value(taskListState.page) : value),
+    setSortBy: (value) => setTaskSort(typeof value === 'function' ? value(taskListState.sortBy) : value),
+    setSortOrder: (value) => {
+      const nextValue = typeof value === 'function' ? value(taskListState.sortOrder) : value
+      setTaskSort(taskListState.sortBy, nextValue)
+    }
+  })
 
   const resetMutation = useMutation({
     mutationFn: () =>
@@ -1699,98 +1768,45 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const taskTypeOptions = ((query.data?.task_types as unknown[]) ?? []) as string[]
   const accountOptions = ((accountOptionsQuery.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[]
   const totalRecords = toTotalCount(query.data?.total, rows.length)
+  const taskToolbarOptions = useMemo<Record<string, string[] | ManagementListOption[]>>(
+    () => ({
+      status: statusOptions.map((value) => ({ value, label: statusLabel(t, value) })),
+      task_type: taskTypeOptions.map((value) => ({ value, label: taskTypeLabel(t, value) })),
+      account_keyword: accountOptions.map((item) => {
+        const id = toText(item.id, t)
+        const displayName = toText(item.display_name || item.nickname, t)
+        const friendId = toText(item.friend_id, t)
+        return `${id} ${displayName} (${friendId})`
+      })
+    }),
+    [accountOptions, statusOptions, t, taskTypeOptions]
+  )
 
   return (
     <section className="surface-card section-stack">
       <div className="section-title">{tr(t, 'menu_tasks', 'Tasks')}</div>
-
-      <div className="table-toolbar-layout table-toolbar--dense management-query-controls">
-        <div className="table-toolbar-zone table-toolbar-zone--left">
-          <div className="table-filter-item">
-            <label className="section-subtitle">{tr(t, 'filter_status', 'Status')}</label>
-            <Select
-              value={encodeSelectValue(status)}
-              onValueChange={(value) => {
-                setPage(0)
-                setStatus(decodeSelectValue(value))
-              }}
+      <ManagementListToolbar
+        spec={taskListSpec}
+        state={taskListState}
+        dynamicOptions={taskToolbarOptions}
+        searchableLocale={searchableSelectLocale(t)}
+        onFilterChange={setTaskFilter}
+        onSortByChange={(value) => setTaskSort(value)}
+        onSortOrderChange={(value) => setTaskSort(taskListState.sortBy, value)}
+        onPageSizeChange={setTaskPageSize}
+        t={t}
+        actions={{
+          trailing: (
+            <Button
+              size="sm"
+              type="button"
+              onClick={() => setShowResetConfirm((previous) => !previous)}
             >
-              <SelectTrigger className="field-select table-control">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={encodeSelectValue('')}>{tr(t, 'label_all', 'All')}</SelectItem>
-                {statusOptions.map((item) => (
-                  <SelectItem key={`task-status-${item}`} value={item}>
-                    {statusLabel(t, item)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="table-filter-item">
-            <label className="section-subtitle">{tr(t, 'filter_task', 'Task')}</label>
-            <Select
-              value={encodeSelectValue(taskType)}
-              onValueChange={(value) => {
-                setPage(0)
-                setTaskType(decodeSelectValue(value))
-              }}
-            >
-              <SelectTrigger className="field-select table-control">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={encodeSelectValue('')}>{tr(t, 'label_all', 'All')}</SelectItem>
-                {taskTypeOptions.map((item) => (
-                  <SelectItem key={`task-type-${item}`} value={item}>
-                    {taskTypeLabel(t, item)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="table-filter-item task-account-filter-item">
-            <label className="section-subtitle">{tr(t, 'filter_account', 'Account')}</label>
-            <input
-              id="tasks-account-search"
-              className="field-input table-control"
-              name="tasks-account-search"
-              list="task-account-options"
-              value={accountKeyword}
-              onChange={(event) => {
-                setPage(0)
-                setAccountKeyword(event.target.value)
-              }}
-              placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID / nickname / friend id')}
-            />
-            <datalist id="task-account-options">
-              {accountOptions.map((item) => {
-                const id = toText(item.id, t)
-                const displayName = toText(item.display_name || item.nickname, t)
-                const friendId = toText(item.friend_id, t)
-                const optionLabel = `${id} ${displayName} (${friendId})`
-                return <option key={id} value={optionLabel} />
-              })}
-            </datalist>
-          </div>
-        </div>
-
-        <div className="table-toolbar-zone table-toolbar-zone--right">
-          <Button size="sm" type="button" variant="outline" onClick={() => setPage(0)}>
-            {tr(t, 'label_search', 'Search')}
-          </Button>
-          <Button
-            size="sm"
-            type="button"
-            onClick={() => setShowResetConfirm((previous) => !previous)}
-          >
-            {tr(t, 'btn_reset_completed', 'Reset Completed')}
-          </Button>
-        </div>
-      </div>
+              {tr(t, 'btn_reset_completed', 'Reset Completed')}
+            </Button>
+          )
+        }}
+      />
       {showResetConfirm && (
         <div className="surface-card section-stack">
           <div className="text-xs text-danger">
@@ -1817,35 +1833,6 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           </div>
         </div>
       )}
-
-      <ListQueryControls
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        pageSize={pageSize}
-        sortOptions={[
-          { value: 'dispatch_priority', labelKey: 'col_dispatch_priority', fallback: 'Dispatch Priority' },
-          { value: 'last_completed_at', labelKey: 'col_last_completed', fallback: 'Last Completed' },
-          { value: 'last_duration_seconds', labelKey: 'col_last_duration', fallback: 'Last Duration' },
-          { value: 'next_run_at', labelKey: 'col_next_run', fallback: 'Next Run' }
-        ]}
-        onSortByChange={(value) => {
-          setPage(0)
-          setSortBy(value)
-          if (value === 'dispatch_priority') {
-            setSortOrder('asc')
-          }
-        }}
-        onSortOrderChange={(value) => {
-          setPage(0)
-          setSortOrder(value)
-        }}
-        onPageSizeChange={(value) => {
-          setPage(0)
-          setPageSize(value)
-        }}
-        t={t}
-        disableSortOrder={sortBy === 'dispatch_priority'}
-      />
       <InlineNotice notice={notice} />
       <QueryTotalSummary t={t} total={totalRecords} />
 
@@ -1954,8 +1941,8 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           }
         ]}
         t={t}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
+        sortBy={taskListState.sortBy}
+        sortOrder={taskListState.sortOrder}
         onSortChange={handleHeaderSort}
       />
 
@@ -1963,8 +1950,8 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
         hasNext={Boolean(query.data?.has_next)}
-        onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setTaskPage(Math.max(taskListState.page - 1, 0))}
+        onNext={() => setTaskPage(taskListState.page + 1)}
         t={t}
       />
     </section>
@@ -2437,35 +2424,69 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
 }
 
 function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string> }) {
-  const [page, setPage] = usePersistedState<number>(managementStateKey('daily-gift', 'page'), 0)
-  const [pairPage, setPairPage] = usePersistedState<number>(managementStateKey('daily-gift', 'pair_page'), 0)
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'page_size'), 10)
-  const [pairPageSize, setPairPageSize] = usePersistedState<number>(managementStateKey('daily-gift', 'pair_page_size'), 10)
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('daily-gift', 'sort_by'), 'updated_at')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('daily-gift', 'sort_order'), 'desc')
   const [date, setDate] = useState<string>(() => currentGameBizDate())
-  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('daily-gift', 'account_id'), '')
+  const [selectedAccountIdState, setSelectedAccountIdState] = usePersistedState<string>(
+    managementStateKey('daily-gift', 'account_id'),
+    ''
+  )
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
   const datePickerText = useMemo(() => datePickerLocale(t), [t])
-
-  const queryString = useMemo(
-    () =>
-      buildQuery({
-        lang,
-        page,
-        page_size: pageSize,
-        pair_page: pairPage,
-        pair_page_size: pairPageSize,
-        sort_by: sortBy,
-        sort_order: sortOrder,
+  const dailyGiftRecordSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'daily-gift-records',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    sort: {
+      defaultBy: 'updated_at',
+      defaultOrder: 'desc',
+      options: [
+        { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+        { value: 'account_id', labelKey: 'col_account_id', fallback: 'Account ID' },
+        { value: 'status', labelKey: 'col_status', fallback: 'Status' }
+      ]
+    }
+  }), [t])
+  const dailyGiftPairSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'daily-gift-pairs',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    queryKeys: {
+      page: 'pair_page',
+      pageSize: 'pair_page_size'
+    }
+  }), [])
+  const {
+    state: dailyGiftRecordState,
+    setSort: setDailyGiftRecordSort,
+    setPage: setDailyGiftRecordPage,
+    setPageSize: setDailyGiftRecordPageSize
+  } = useManagementListState(dailyGiftRecordSpec)
+  const {
+    state: dailyGiftPairState,
+    setPage: setDailyGiftPairPage,
+    setPageSize: setDailyGiftPairPageSize
+  } = useManagementListState(dailyGiftPairSpec)
+  const queryParams = useMemo(
+    () => ({
+      ...buildManagementListQueryParams(dailyGiftRecordSpec, dailyGiftRecordState, {
         biz_date_local: date || undefined,
-        account_id: accountId || undefined
+        account_id: selectedAccountIdState || undefined
       }),
-    [accountId, date, lang, page, pageSize, pairPage, pairPageSize, sortBy, sortOrder]
+      ...buildManagementListQueryParams(dailyGiftPairSpec, dailyGiftPairState)
+    }),
+    [
+      dailyGiftPairSpec,
+      dailyGiftPairState,
+      dailyGiftRecordSpec,
+      dailyGiftRecordState,
+      date,
+      selectedAccountIdState
+    ]
   )
-  const query = useQuery({
-    queryKey: ['management-daily-gift', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/daily-gift?${queryString}`)
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-daily-gift',
+    endpoint: 'daily-gift',
+    lang,
+    params: queryParams
   })
 
   const records = ((query.data?.records as unknown[]) ?? []) as Record<string, unknown>[]
@@ -2493,10 +2514,10 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   }, [accounts, t])
 
   useEffect(() => {
-    if (selectedAccountId !== accountId) {
-      setAccountId(selectedAccountId)
+    if (selectedAccountId !== selectedAccountIdState) {
+      setSelectedAccountIdState(selectedAccountId)
     }
-  }, [accountId, selectedAccountId, setAccountId])
+  }, [selectedAccountId, selectedAccountIdState, setSelectedAccountIdState])
 
   return (
     <section className="surface-card section-stack">
@@ -2507,26 +2528,29 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
             value={date}
             onChange={(value) => {
               setDate(value)
-              setPage(0)
-              setPairPage(0)
+              setDailyGiftRecordPage(0)
+              setDailyGiftPairPage(0)
             }}
             placeholder={tr(t, 'date_label', 'Date')}
             todayValue={currentBizDateLocal || currentGameBizDate()}
             i18n={datePickerText}
           />
-          <SearchableSelect
-            value={accountId}
-            options={accountOptions}
-            onValueChange={(value) => {
-              setAccountId(value)
-              setPage(0)
-              setPairPage(0)
-            }}
-            {...selectLocale}
-            placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
-            pageSize={12}
-          />
-          <Button type="button" size="sm" variant="outline" onClick={() => { setPage(0); setPairPage(0) }}>{tr(t, 'label_search', 'Search')}</Button>
+          <div className="table-filter-item">
+            <label className="section-subtitle">{tr(t, 'col_account', 'Account')}</label>
+            <SearchableSelect
+              value={selectedAccountIdState}
+              options={accountOptions}
+              onValueChange={(value) => {
+                setSelectedAccountIdState(value)
+                setDailyGiftRecordPage(0)
+                setDailyGiftPairPage(0)
+              }}
+              {...selectLocale}
+              placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
+              pageSize={12}
+              className="management-inline-select"
+            />
+          </div>
         </div>
       </div>
 
@@ -2540,8 +2564,8 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
               variant={date === item ? 'default' : 'outline'}
               onClick={() => {
                 setDate(item)
-                setPage(0)
-                setPairPage(0)
+                setDailyGiftRecordPage(0)
+                setDailyGiftPairPage(0)
               }}
             >
               {item}
@@ -2569,50 +2593,16 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         </div>
       </div>
 
-      <ListQueryControls
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        pageSize={pageSize}
-        sortOptions={[
-          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
-          { value: 'account_id', labelKey: 'col_account_id', fallback: 'Account ID' },
-          { value: 'status', labelKey: 'col_status', fallback: 'Status' }
-        ]}
-        onSortByChange={(value) => {
-          setPage(0)
-          setSortBy(value)
-        }}
-        onSortOrderChange={(value) => {
-          setPage(0)
-          setSortOrder(value)
-        }}
-        onPageSizeChange={(value) => {
-          setPage(0)
-          setPageSize(value)
-        }}
+      <ManagementListToolbar
+        spec={dailyGiftRecordSpec}
+        state={dailyGiftRecordState}
+        searchableLocale={selectLocale}
+        onFilterChange={() => {}}
+        onSortByChange={(value) => setDailyGiftRecordSort(value)}
+        onSortOrderChange={(value) => setDailyGiftRecordSort(dailyGiftRecordState.sortBy, value)}
+        onPageSizeChange={setDailyGiftRecordPageSize}
         t={t}
       />
-      <div className="filter-row">
-        <span className="text-xs text-muted">{tr(t, 'label_pair_page_size', 'Pair Page Size')}</span>
-        <Select
-          value={encodeSelectValue(String(pairPageSize))}
-          onValueChange={(value) => {
-            setPairPage(0)
-            setPairPageSize(Number(decodeSelectValue(value)))
-          }}
-        >
-          <SelectTrigger className="field-select">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[10, 20, 50, 100].map((value) => (
-              <SelectItem key={value} value={String(value)}>
-                {value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
       <QueryTotalSummary t={t} total={totalRecords} />
 
       <div className="section-subtitle">{tr(t, 'section_daily_gift_records', 'Gift Records')}</div>
@@ -2682,12 +2672,22 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
         hasNext={Boolean(query.data?.has_next)}
-        onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setDailyGiftRecordPage(Math.max(dailyGiftRecordState.page - 1, 0))}
+        onNext={() => setDailyGiftRecordPage(dailyGiftRecordState.page + 1)}
         t={t}
       />
 
       <div className="section-subtitle">{tr(t, 'section_daily_gift_pair_progress', 'Pair Send Progress')}</div>
+      <ManagementListToolbar
+        spec={dailyGiftPairSpec}
+        state={dailyGiftPairState}
+        searchableLocale={selectLocale}
+        onFilterChange={() => {}}
+        onSortByChange={() => {}}
+        onSortOrderChange={() => {}}
+        onPageSizeChange={setDailyGiftPairPageSize}
+        t={t}
+      />
       <div className="table-wrap">
         <table className="grid-table">
           <thead>
@@ -2724,8 +2724,8 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         page={Number(query.data?.pair_page ?? 0)}
         hasPrev={Boolean(query.data?.pair_has_prev)}
         hasNext={Boolean(query.data?.pair_has_next)}
-        onPrev={() => setPairPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPairPage((prev) => prev + 1)}
+        onPrev={() => setDailyGiftPairPage(Math.max(dailyGiftPairState.page - 1, 0))}
+        onNext={() => setDailyGiftPairPage(dailyGiftPairState.page + 1)}
         t={t}
       />
     </section>
@@ -2733,10 +2733,6 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
 }
 function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = usePersistedState<number>(managementStateKey('friendships', 'page'), 0)
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('friendships', 'page_size'), 10)
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('friendships', 'sort_by'), 'created_at')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('friendships', 'sort_order'), 'desc')
   const [q, setQ] = usePersistedState<string>(managementStateKey('friendships', 'q'), '')
   const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('friendships', 'account_id'), '')
   const [fromAccountId, setFromAccountId] = usePersistedState<string>(managementStateKey('friendships', 'from_account_id'), '')
@@ -2744,24 +2740,76 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   const [friendIdInput, setFriendIdInput] = useState('')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
+  const requestListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'friendships-requests',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    queryKeys: {
+      page: 'request_page',
+      pageSize: 'request_page_size',
+      sortBy: 'request_sort_by',
+      sortOrder: 'request_sort_order'
+    },
+    sort: {
+      defaultBy: 'created_at',
+      defaultOrder: 'desc',
+      options: [
+        { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+        { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+        { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' },
+        { value: 'to_friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
+        { value: 'status', labelKey: 'col_status', fallback: 'Status' }
+      ]
+    }
+  }), [t])
+  const friendshipListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'friendships-list',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    queryKeys: {
+      page: 'friendship_page',
+      pageSize: 'friendship_page_size',
+      sortBy: 'friendship_sort_by',
+      sortOrder: 'friendship_sort_order'
+    },
+    sort: {
+      defaultBy: 'created_at',
+      defaultOrder: 'desc',
+      options: [
+        { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+        { value: 'account_id', labelKey: 'col_account_id', fallback: 'Account ID' },
+        { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
+      ]
+    }
+  }), [t])
+  const {
+    state: requestListState,
+    setSort: setRequestSort,
+    setPage: setRequestPage,
+    setPageSize: setRequestPageSize
+  } = useManagementListState(requestListSpec)
+  const {
+    state: friendshipListState,
+    setSort: setFriendshipSort,
+    setPage: setFriendshipPage,
+    setPageSize: setFriendshipPageSize
+  } = useManagementListState(friendshipListSpec)
 
-  const queryString = useMemo(
-    () =>
-      buildQuery({
-        lang,
-        page,
-        page_size: pageSize,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        q,
-        account_id: accountId || undefined,
-        from_account_id: fromAccountId || undefined
-      }),
-    [accountId, fromAccountId, lang, page, pageSize, q, sortBy, sortOrder]
+  const friendshipQueryParams = useMemo(
+    () => ({
+      q,
+      account_id: accountId || undefined,
+      from_account_id: fromAccountId || undefined,
+      ...buildManagementListQueryParams(requestListSpec, requestListState),
+      ...buildManagementListQueryParams(friendshipListSpec, friendshipListState)
+    }),
+    [accountId, friendshipListSpec, friendshipListState, fromAccountId, q, requestListSpec, requestListState]
   )
-  const query = useQuery({
-    queryKey: ['management-friendships', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/friendships?${queryString}`)
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-friendships',
+    endpoint: 'friendships',
+    lang,
+    params: friendshipQueryParams
   })
 
   const addMutation = useMutation({
@@ -2842,13 +2890,21 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           className="field-input"
           name="friendships-search"
           value={q}
-          onChange={(event) => setQ(event.target.value)}
+          onChange={(event) => {
+            setQ(event.target.value)
+            setRequestPage(0)
+            setFriendshipPage(0)
+          }}
           placeholder={tr(t, 'label_search', 'Search')}
         />
         <SearchableSelect
           value={accountId}
           options={allAccountOptions}
-          onValueChange={setAccountId}
+          onValueChange={(value) => {
+            setAccountId(value)
+            setRequestPage(0)
+            setFriendshipPage(0)
+          }}
           {...selectLocale}
           placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
           pageSize={12}
@@ -2856,7 +2912,10 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         <SearchableSelect
           value={fromAccountId}
           options={fromAccountOptions}
-          onValueChange={setFromAccountId}
+          onValueChange={(value) => {
+            setFromAccountId(value)
+            setRequestPage(0)
+          }}
           {...selectLocale}
           placeholder={tr(t, 'label_from_account', 'From Account')}
           pageSize={12}
@@ -2879,44 +2938,27 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         />
       </div>
       <div className="filter-row">
-        <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
         <Button type="button" size="sm" onClick={() => addMutation.mutate()}>{tr(t, 'btn_create_add_request', 'Create Add Request')}</Button>
         <Button type="button" size="sm" variant="outline" onClick={() => deleteMutation.mutate(undefined)}>{tr(t, 'btn_create_delete_request', 'Create Delete Request')}</Button>
       </div>
       <InlineNotice notice={notice} />
-      <ListQueryControls
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        pageSize={pageSize}
-        sortOptions={[
-          { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
-          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
-          { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' },
-          { value: 'to_friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
-          { value: 'status', labelKey: 'col_status', fallback: 'Status' },
-          { value: 'account_id', labelKey: 'col_account_id', fallback: 'Account ID' },
-          { value: 'friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' }
-        ]}
-        onSortByChange={(value) => {
-          setPage(0)
-          setSortBy(value)
-        }}
-        onSortOrderChange={(value) => {
-          setPage(0)
-          setSortOrder(value)
-        }}
-        onPageSizeChange={(value) => {
-          setPage(0)
-          setPageSize(value)
-        }}
-        t={t}
-      />
       <div className="section-stack">
         <QueryTotalSummary t={t} total={requestsTotal} label={tr(t, 'section_friend_requests', 'Requests')} />
         <QueryTotalSummary t={t} total={friendshipsTotal} label={tr(t, 'section_friendships', 'Friendships')} />
       </div>
 
       <div className="section-subtitle">{tr(t, 'section_friend_requests', 'Requests')}</div>
+      <ManagementListToolbar
+        spec={requestListSpec}
+        state={requestListState}
+        dynamicOptions={{}}
+        searchableLocale={selectLocale}
+        onFilterChange={() => {}}
+        onSortByChange={(value) => setRequestSort(value)}
+        onSortOrderChange={(value) => setRequestSort(requestListState.sortBy, value)}
+        onPageSizeChange={setRequestPageSize}
+        t={t}
+      />
       <div className="table-wrap">
         <table className="grid-table">
           <thead>
@@ -2978,8 +3020,27 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           </tbody>
         </table>
       </div>
+      <Pager
+        page={Number(query.data?.request_page ?? 0)}
+        hasPrev={Boolean(query.data?.request_has_prev)}
+        hasNext={Boolean(query.data?.request_has_next)}
+        onPrev={() => setRequestPage(Math.max(requestListState.page - 1, 0))}
+        onNext={() => setRequestPage(requestListState.page + 1)}
+        t={t}
+      />
 
       <div className="section-subtitle">{tr(t, 'section_friendships', 'Friendships')}</div>
+      <ManagementListToolbar
+        spec={friendshipListSpec}
+        state={friendshipListState}
+        dynamicOptions={{}}
+        searchableLocale={selectLocale}
+        onFilterChange={() => {}}
+        onSortByChange={(value) => setFriendshipSort(value)}
+        onSortOrderChange={(value) => setFriendshipSort(friendshipListState.sortBy, value)}
+        onPageSizeChange={setFriendshipPageSize}
+        t={t}
+      />
       <div className="table-wrap">
         <table className="grid-table">
           <thead>
@@ -3042,13 +3103,12 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           </tbody>
         </table>
       </div>
-
       <Pager
-        page={Number(query.data?.page ?? 0)}
-        hasPrev={Boolean(query.data?.has_prev)}
-        hasNext={Boolean(query.data?.has_next)}
-        onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPage((prev) => prev + 1)}
+        page={Number(query.data?.friendship_page ?? 0)}
+        hasPrev={Boolean(query.data?.friendship_has_prev)}
+        hasNext={Boolean(query.data?.friendship_has_next)}
+        onPrev={() => setFriendshipPage(Math.max(friendshipListState.page - 1, 0))}
+        onNext={() => setFriendshipPage(friendshipListState.page + 1)}
         t={t}
       />
     </section>
@@ -3056,33 +3116,62 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
 }
 function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = usePersistedState<number>(managementStateKey('exchange-cards', 'page'), 0)
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('exchange-cards', 'page_size'), 10)
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('exchange-cards', 'sort_by'), 'created_at')
-  const [sortOrder, setSortOrder] = usePersistedState<SortOrder>(managementStateKey('exchange-cards', 'sort_order'), 'desc')
-  const [q, setQ] = usePersistedState<string>(managementStateKey('exchange-cards', 'q'), '')
-  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('exchange-cards', 'account_id'), '')
-  const [status, setStatus] = usePersistedState<string>(managementStateKey('exchange-cards', 'status'), '')
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
+  const exchangeListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'exchange-cards',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    filters: [
+      {
+        key: 'q',
+        kind: 'search',
+        label: tr(t, 'label_search', 'Search'),
+        placeholder: tr(t, 'label_search', 'Search')
+      },
+      {
+        key: 'account_id',
+        kind: 'account-select',
+        label: tr(t, 'col_account_id', 'Account ID'),
+        placeholder: tr(t, 'label_all_accounts', 'All Accounts'),
+        optionsKey: 'account_id'
+      },
+      {
+        key: 'status',
+        kind: 'select',
+        label: tr(t, 'filter_status', 'Status'),
+        emptyLabel: tr(t, 'label_all_status', 'All Status'),
+        optionsKey: 'status'
+      }
+    ],
+    sort: {
+      defaultBy: 'created_at',
+      defaultOrder: 'desc',
+      options: [
+        { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+        { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+        { value: 'target_card_id', labelKey: 'col_card', fallback: 'Card' },
+        { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' }
+      ]
+    }
+  }), [t])
+  const {
+    state: exchangeListState,
+    setFilter: setExchangeFilter,
+    setSort: setExchangeSort,
+    setPage: setExchangePage,
+    setPageSize: setExchangePageSize
+  } = useManagementListState(exchangeListSpec)
 
-  const queryString = useMemo(
-    () =>
-      buildQuery({
-        lang,
-        page,
-        page_size: pageSize,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        q,
-        account_id: accountId || undefined,
-        status: status || undefined
-      }),
-    [accountId, lang, page, pageSize, q, sortBy, sortOrder, status]
+  const exchangeQueryParams = useMemo(
+    () => buildManagementListQueryParams(exchangeListSpec, exchangeListState),
+    [exchangeListSpec, exchangeListState]
   )
-  const query = useQuery({
-    queryKey: ['management-exchange-cards', queryString],
-    queryFn: () => fetchJson<Record<string, unknown>>(`/api/react/management/exchange-cards?${queryString}`)
+  const { query } = useManagementListQuery<Record<string, unknown>>({
+    queryKey: 'management-exchange-cards',
+    endpoint: 'exchange-cards',
+    lang,
+    params: exchangeQueryParams
   })
 
   const cancelMutation = useMutation({
@@ -3096,9 +3185,23 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   const rows = ((query.data?.requests as unknown[]) ?? []) as Record<string, unknown>[]
   const totalRecords = toTotalCount(query.data?.total_items, rows.length)
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
+  const statusOptions = useMemo(
+    () => (((query.data?.status_options as unknown[]) ?? []) as string[]),
+    [query.data?.status_options]
+  )
   const accountOptions = useMemo(
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]
+  )
+  const exchangeToolbarOptions = useMemo<Record<string, SearchableOption[] | ManagementListOption[]>>(
+    () => ({
+      account_id: accountOptions,
+      status: statusOptions.map((value) => ({
+        value,
+        label: exchangeStatusLabel(t, value)
+      }))
+    }),
+    [accountOptions, statusOptions, t]
   )
   const accountMetaMap = useMemo(() => {
     const map: Record<string, Record<string, unknown>> = {}
@@ -3113,60 +3216,17 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
 
   return (
     <section className="surface-card section-stack">
-      <div className="pagination-row">
-        <div className="section-title">{tr(t, 'menu_exchange_cards', 'Exchange Cards')}</div>
-        <div className="filter-row">
-          <input
-            id="exchange-cards-search"
-            className="field-input"
-            name="exchange-cards-search"
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
-            placeholder={tr(t, 'label_search', 'Search')}
-          />
-          <SearchableSelect
-            value={accountId}
-            options={accountOptions}
-            onValueChange={setAccountId}
-            {...selectLocale}
-            placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
-            pageSize={10}
-            className="management-inline-select"
-          />
-          <input
-            id="exchange-cards-status"
-            className="field-input"
-            name="exchange-cards-status"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-            placeholder={tr(t, 'filter_status', 'Status')}
-          />
-          <Button type="button" size="sm" variant="outline" onClick={() => setPage(0)}>{tr(t, 'label_search', 'Search')}</Button>
-        </div>
-      </div>
+      <div className="section-title">{tr(t, 'menu_exchange_cards', 'Exchange Cards')}</div>
       <InlineNotice notice={notice} />
-      <ListQueryControls
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        pageSize={pageSize}
-        sortOptions={[
-          { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
-          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
-          { value: 'target_card_id', labelKey: 'col_card', fallback: 'Card' },
-          { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' }
-        ]}
-        onSortByChange={(value) => {
-          setPage(0)
-          setSortBy(value)
-        }}
-        onSortOrderChange={(value) => {
-          setPage(0)
-          setSortOrder(value)
-        }}
-        onPageSizeChange={(value) => {
-          setPage(0)
-          setPageSize(value)
-        }}
+      <ManagementListToolbar
+        spec={exchangeListSpec}
+        state={exchangeListState}
+        dynamicOptions={exchangeToolbarOptions}
+        searchableLocale={selectLocale}
+        onFilterChange={setExchangeFilter}
+        onSortByChange={(value) => setExchangeSort(value)}
+        onSortOrderChange={(value) => setExchangeSort(exchangeListState.sortBy, value)}
+        onPageSizeChange={setExchangePageSize}
         t={t}
       />
       <QueryTotalSummary t={t} total={totalRecords} />
@@ -3225,8 +3285,8 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
         hasNext={Boolean(query.data?.has_next)}
-        onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setExchangePage(Math.max(exchangeListState.page - 1, 0))}
+        onNext={() => setExchangePage(exchangeListState.page + 1)}
         t={t}
       />
     </section>

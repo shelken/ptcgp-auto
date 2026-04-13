@@ -35,6 +35,7 @@ FRIENDSHIP_SORT_FIELDS = {
 def _build_friend_requests_statement(
     *,
     account_id: int | None,
+    from_account_id: int | None,
     q: str,
     sort_by: str,
     sort_order: str,
@@ -47,6 +48,10 @@ def _build_friend_requests_statement(
                 col(AccountFriendRequest.from_account_id) == account_id,
                 col(AccountFriendRequest.to_account_id) == account_id,
             )
+        )
+    if from_account_id is not None:
+        statement = statement.where(
+            col(AccountFriendRequest.from_account_id) == from_account_id
         )
 
     q_text = q.strip()
@@ -126,6 +131,7 @@ def _build_friendships_statement(
 def list_friend_requests(
     session: Session,
     account_id: int | None = None,
+    from_account_id: int | None = None,
     limit: int = 100,
     q: str = "",
     sort_by: str = "created_at",
@@ -136,6 +142,7 @@ def list_friend_requests(
     """按条件查询好友请求，兼容旧版全量和新版分页模式。"""
     statement = _build_friend_requests_statement(
         account_id=account_id,
+        from_account_id=from_account_id,
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,

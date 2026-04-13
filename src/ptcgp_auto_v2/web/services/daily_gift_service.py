@@ -18,6 +18,7 @@ from ptcgp_auto_v2.web.queries.daily_gift_queries import (
     list_active_gift_pairs,
     list_all_accounts,
     list_daily_gift_pair_records,
+    normalize_daily_gift_record_sort,
 )
 from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
 
@@ -274,6 +275,10 @@ def build_daily_gift_context(
     normalized_page_size = normalize_page_size(page_size)
     normalized_pair_page = normalize_page(pair_page)
     normalized_pair_page_size = normalize_page_size(pair_page_size)
+    normalized_sort_by, normalized_sort_order = normalize_daily_gift_record_sort(
+        sort_by,
+        sort_order,
+    )
 
     accounts = list_all_accounts(session=session)
     account_name_map = _build_account_name_map(accounts)
@@ -287,8 +292,8 @@ def build_daily_gift_context(
         session=session,
         biz_date_local=selected_date,
         account_id=account_id,
-        sort_by=sort_by,
-        sort_order=sort_order,
+        sort_by=normalized_sort_by,
+        sort_order=normalized_sort_order,
         page=normalized_page,
         page_size=normalized_page_size,
     )
@@ -315,8 +320,8 @@ def build_daily_gift_context(
         "page_size": normalized_page_size,
         "has_prev": normalized_page > 0,
         "has_next": has_next,
-        "sort_by": sort_by,
-        "sort_order": sort_order,
+        "sort_by": normalized_sort_by,
+        "sort_order": normalized_sort_order,
         "pair_send_status_rows": pair_section["pair_send_status_rows"],
         "pair_total": pair_section["pair_total"],
         "pair_page": normalized_pair_page,

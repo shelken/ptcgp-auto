@@ -27,14 +27,19 @@ RECORD_SORT_FIELDS = {
 }
 
 
-def _normalize_record_sort(sort_by: str, sort_order: str) -> tuple[str, str]:
+def normalize_daily_gift_record_sort(
+    sort_by: str, sort_order: str
+) -> tuple[str, str]:
     """规范化送卡记录排序字段。"""
-    return normalize_sort_params(
+    normalized_sort_by, normalized_sort_order = normalize_sort_params(
         sort_by=sort_by,
         sort_order=sort_order,
         allowed_fields=RECORD_SORT_FIELDS,
         default_field="updated_at",
     )
+    if sort_order not in {"asc", "desc"}:
+        return normalized_sort_by, "desc"
+    return normalized_sort_by, normalized_sort_order
 
 
 def _build_record_query(
@@ -121,7 +126,7 @@ def fetch_daily_gift_records_page(
     )
     total = count_rows(session, statement)
 
-    normalized_sort_by, normalized_sort_order = _normalize_record_sort(
+    normalized_sort_by, normalized_sort_order = normalize_daily_gift_record_sort(
         sort_by,
         sort_order,
     )

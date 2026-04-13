@@ -8,10 +8,7 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.models import Account
-from ptcgp_auto_v2.web.routers.react_api_common import (
-    json_response,
-    normalize_pagination_params,
-)
+from ptcgp_auto_v2.web.routers.react_api_common import json_response
 from ptcgp_auto_v2.web.services.friendship_service import (
     build_friendship_context,
     cancel_pending_request,
@@ -34,13 +31,17 @@ async def get_management_friendships(
     sort_order: str = Query(default="desc"),
     page: int = Query(default=0),
     page_size: int = Query(default=10),
+    request_sort_by: str | None = Query(default=None),
+    request_sort_order: str | None = Query(default=None),
+    request_page: int | None = Query(default=None),
+    request_page_size: int | None = Query(default=None),
+    friendship_sort_by: str | None = Query(default=None),
+    friendship_sort_order: str | None = Query(default=None),
+    friendship_page: int | None = Query(default=None),
+    friendship_page_size: int | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取好友管理页面数据。"""
-    normalized_page, normalized_page_size = normalize_pagination_params(
-        page=page,
-        page_size=page_size,
-    )
     context = build_friendship_context(
         session=session,
         account_id=parse_optional_int(account_id),
@@ -48,8 +49,16 @@ async def get_management_friendships(
         q=q,
         sort_by=sort_by,
         sort_order=sort_order,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        page=page,
+        page_size=page_size,
+        request_sort_by=request_sort_by,
+        request_sort_order=request_sort_order,
+        request_page=request_page,
+        request_page_size=request_page_size,
+        friendship_sort_by=friendship_sort_by,
+        friendship_sort_order=friendship_sort_order,
+        friendship_page=friendship_page,
+        friendship_page_size=friendship_page_size,
     )
     return json_response(context)
 

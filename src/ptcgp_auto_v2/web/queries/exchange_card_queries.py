@@ -22,6 +22,19 @@ SORT_FIELDS = {
 }
 
 
+def normalize_exchange_request_sort(sort_by: str, sort_order: str) -> tuple[str, str]:
+    """归一化交换请求排序参数。"""
+    normalized_sort_by, normalized_sort_order = normalize_sort_params(
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_fields=SORT_FIELDS,
+        default_field="created_at",
+    )
+    if str(sort_order).lower() not in {"asc", "desc"}:
+        return normalized_sort_by, "desc"
+    return normalized_sort_by, normalized_sort_order
+
+
 def _build_exchange_requests_statement(
     *,
     account_id: Optional[int],
@@ -54,11 +67,8 @@ def _build_exchange_requests_statement(
             )
         )
 
-    normalized_sort_by, normalized_sort_order = normalize_sort_params(
-        sort_by=sort_by,
-        sort_order=sort_order,
-        allowed_fields=SORT_FIELDS,
-        default_field="created_at",
+    normalized_sort_by, normalized_sort_order = normalize_exchange_request_sort(
+        sort_by, sort_order
     )
     sort_column = resolve_sort_column(
         sort_by=normalized_sort_by,

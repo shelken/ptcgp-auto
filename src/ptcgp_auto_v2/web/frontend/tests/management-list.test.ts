@@ -1,0 +1,359 @@
+import { describe, expect, test } from 'bun:test'
+
+describe('管理页统一列表状态', () => {
+  test('非法持久化值应收敛到 spec 默认值与锁定排序方向', async () => {
+    const { normalizeManagementListState } = await import('../src/pages/management/list-state-utils')
+
+    const spec = {
+      storageKey: 'notifications',
+      defaultPageSize: 10,
+      pageSizeOptions: [10, 20, 50],
+      filters: [
+        { key: 'q', kind: 'search' },
+        { key: 'scene', kind: 'select', options: ['', 'rare_card_obtained', 'task_status'] }
+      ],
+      sort: {
+        defaultBy: 'created_at',
+        defaultOrder: 'desc',
+        options: [
+          { value: 'created_at' },
+          { value: 'title' }
+        ],
+        lockedOrderBy: {
+          created_at: 'desc'
+        }
+      }
+    } as const
+
+    expect(
+      normalizeManagementListState(spec, {
+        page: -4,
+        pageSize: 999,
+        sortBy: 'unknown',
+        sortOrder: 'asc',
+        filters: {
+          q: '  system warning  ',
+          scene: 'invalid-scene'
+        }
+      })
+    ).toEqual({
+      page: 0,
+      pageSize: 10,
+      sortBy: 'created_at',
+      sortOrder: 'desc',
+      filters: {
+        q: 'system warning',
+        scene: ''
+      }
+    })
+  })
+
+  test('动作上下文应从当前查询参数构造并补齐空筛选字段', async () => {
+    const { buildManagementListQueryParams } = await import('../src/pages/management/list-query')
+    const { buildManagementListActionPayload } = await import('../src/pages/management/list-actions')
+
+    const spec = {
+      storageKey: 'notifications',
+      defaultPageSize: 10,
+      pageSizeOptions: [10, 20, 50],
+      filters: [
+        { key: 'q', kind: 'search' },
+        { key: 'scene', kind: 'select', options: ['', 'rare_card_obtained', 'task_status'] },
+        { key: 'account_id', kind: 'select', options: ['', '1', '2'] },
+        { key: 'is_read', kind: 'select', options: ['', 'true', 'false'] }
+      ],
+      sort: {
+        defaultBy: 'created_at',
+        defaultOrder: 'desc',
+        options: [
+          { value: 'created_at' },
+          { value: 'title' }
+        ]
+      }
+    } as const
+
+    const params = buildManagementListQueryParams(spec, {
+      page: 2,
+      pageSize: 20,
+      sortBy: 'title',
+      sortOrder: 'asc',
+      filters: {
+        q: 'rare card',
+        scene: 'task_status',
+        account_id: '',
+        is_read: 'false'
+      }
+    })
+
+    expect(
+      buildManagementListActionPayload({
+        params,
+        fields: ['scene', 'account_id', 'is_read', 'q', 'sort_by', 'sort_order', 'page', 'page_size'],
+        missingValue: null
+      })
+    ).toEqual({
+      scene: 'task_status',
+      account_id: null,
+      is_read: 'false',
+      q: 'rare card',
+      sort_by: 'title',
+      sort_order: 'asc',
+      page: 2,
+      page_size: 20
+    })
+  })
+
+  test('动态筛选和动态排序选项到达后应收敛旧持久化脏值', async () => {
+    const { normalizeManagementListRuntimeState } = await import('../src/pages/management/list-state-utils')
+
+    const spec = {
+      storageKey: 'resources',
+      defaultPageSize: 20,
+      pageSizeOptions: [10, 20, 50, 100],
+      filters: [
+        {
+          key: 'view',
+          kind: 'select',
+          options: [
+            { value: 'stats', label: 'Stats' },
+            { value: 'pack-points', label: 'Pack Points' }
+          ]
+        },
+        {
+          key: 'account_id',
+          kind: 'account-select',
+          label: 'Account',
+          optionsKey: 'account_id'
+        },
+        {
+          key: 'status',
+          kind: 'select',
+          label: 'Status',
+          optionsKey: 'status'
+        }
+      ],
+      sort: {
+        defaultBy: 'id',
+        defaultOrder: 'asc',
+        options: [
+          { value: 'id' },
+          { value: 'nickname' }
+        ]
+      }
+    } as const
+
+    expect(
+      normalizeManagementListRuntimeState(
+        spec,
+        {
+          page: 0,
+          pageSize: 20,
+          sortBy: 'series:A2',
+          sortOrder: 'desc',
+          filters: {
+            view: 'stats',
+            account_id: '99',
+            status: 'done'
+          }
+        },
+        {
+          dynamicOptions: {
+            account_id: [
+              { value: '', label: 'All', searchText: 'All' },
+              { value: '1', label: '1 Ash', searchText: '1 Ash' }
+            ],
+            status: [
+              { value: 'pending', label: 'Pending' },
+              { value: 'completed', label: 'Completed' }
+            ]
+          },
+          sortOptions: [
+            { value: 'id' },
+            { value: 'nickname' }
+          ]
+        }
+      )
+    ).toEqual({
+      page: 0,
+      pageSize: 20,
+      sortBy: 'id',
+      sortOrder: 'desc',
+      filters: {
+        view: 'stats',
+        account_id: '',
+        status: ''
+      }
+    })
+
+    expect(
+      normalizeManagementListRuntimeState(
+        spec,
+        {
+          page: 0,
+          pageSize: 20,
+          sortBy: 'series:A2',
+          sortOrder: 'desc',
+          filters: {
+            view: 'pack-points',
+            account_id: '1',
+            status: 'completed'
+          }
+        },
+        {
+          dynamicOptions: {
+            account_id: [
+              { value: '', label: 'All', searchText: 'All' },
+              { value: '1', label: '1 Ash', searchText: '1 Ash' }
+            ],
+            status: [
+              { value: 'pending', label: 'Pending' },
+              { value: 'completed', label: 'Completed' }
+            ]
+          },
+          sortOptions: [
+            { value: 'id' },
+            { value: 'nickname' },
+            { value: 'series:A2' }
+          ]
+        }
+      )
+    ).toEqual({
+      page: 0,
+      pageSize: 20,
+      sortBy: 'series:A2',
+      sortOrder: 'desc',
+      filters: {
+        view: 'pack-points',
+        account_id: '1',
+        status: 'completed'
+      }
+    })
+  })
+
+  test('无排序列表应只构造自己的分页参数并省略排序参数', async () => {
+    const { normalizeManagementListState } = await import('../src/pages/management/list-state-utils')
+    const { buildManagementListQueryParams } = await import('../src/pages/management/list-query')
+
+    const spec = {
+      storageKey: 'daily-gift-pairs',
+      defaultPageSize: 10,
+      pageSizeOptions: [10, 20, 50, 100],
+      queryKeys: {
+        page: 'pair_page',
+        pageSize: 'pair_page_size'
+      },
+      filters: [
+        {
+          key: 'account_id',
+          kind: 'account-select',
+          label: 'Account',
+          optionsKey: 'account_id'
+        }
+      ]
+    } as const
+
+    const state = normalizeManagementListState(spec, {
+      page: 2,
+      pageSize: 50,
+      sortBy: 'updated_at',
+      sortOrder: 'desc',
+      filters: {
+        account_id: '12'
+      }
+    })
+
+    expect(state).toEqual({
+      page: 2,
+      pageSize: 50,
+      sortBy: '',
+      sortOrder: 'asc',
+      filters: {
+        account_id: '12'
+      }
+    })
+
+    expect(buildManagementListQueryParams(spec, state)).toEqual({
+      pair_page: 2,
+      pair_page_size: 50,
+      account_id: '12'
+    })
+  })
+
+  test('多表页面应让记录表和配对表各自维护独立 query state', async () => {
+    const { buildManagementListQueryParams } = await import('../src/pages/management/list-query')
+
+    const recordSpec = {
+      storageKey: 'daily-gift-records',
+      defaultPageSize: 10,
+      pageSizeOptions: [10, 20, 50, 100],
+      filters: [
+        {
+          key: 'account_id',
+          kind: 'account-select',
+          label: 'Account',
+          optionsKey: 'account_id'
+        }
+      ],
+      sort: {
+        defaultBy: 'updated_at',
+        defaultOrder: 'desc',
+        options: [
+          { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
+          { value: 'status', labelKey: 'col_status', fallback: 'Status' }
+        ]
+      }
+    } as const
+
+    const pairSpec = {
+      storageKey: 'daily-gift-pairs',
+      defaultPageSize: 10,
+      pageSizeOptions: [10, 20, 50, 100],
+      queryKeys: {
+        page: 'pair_page',
+        pageSize: 'pair_page_size'
+      },
+      filters: [
+        {
+          key: 'account_id',
+          kind: 'account-select',
+          label: 'Account',
+          optionsKey: 'account_id'
+        }
+      ]
+    } as const
+
+    const recordParams = buildManagementListQueryParams(recordSpec, {
+      page: 1,
+      pageSize: 20,
+      sortBy: 'status',
+      sortOrder: 'asc',
+      filters: {
+        account_id: '3'
+      }
+    })
+
+    const pairParams = buildManagementListQueryParams(pairSpec, {
+      page: 4,
+      pageSize: 100,
+      sortBy: '',
+      sortOrder: 'asc',
+      filters: {
+        account_id: '3'
+      }
+    })
+
+    expect(recordParams).toEqual({
+      page: 1,
+      page_size: 20,
+      sort_by: 'status',
+      sort_order: 'asc',
+      account_id: '3'
+    })
+
+    expect(pairParams).toEqual({
+      pair_page: 4,
+      pair_page_size: 100,
+      account_id: '3'
+    })
+  })
+})

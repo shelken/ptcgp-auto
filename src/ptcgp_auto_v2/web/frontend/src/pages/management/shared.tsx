@@ -369,7 +369,8 @@ export function ListQueryControls({
   onSortOrderChange,
   onPageSizeChange,
   t,
-  disableSortOrder = false
+  disableSortOrder = false,
+  showSortControls = true
 }: {
   sortBy: string
   sortOrder: 'asc' | 'desc'
@@ -381,43 +382,48 @@ export function ListQueryControls({
   onPageSizeChange: (value: number) => void
   t: Record<string, string>
   disableSortOrder?: boolean
+  showSortControls?: boolean
 }) {
   const options = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 20, 50, 100]
   return (
     <div className="table-toolbar-layout table-toolbar--dense management-query-controls">
       <div className="table-toolbar-zone table-toolbar-zone--left">
-        <div className="table-filter-item">
-          <label className="section-subtitle">{tr(t, 'label_sort_by', 'Sort By')}</label>
-          <Select value={encodeSelectValue(sortBy)} onValueChange={(value) => onSortByChange(decodeSelectValue(value))}>
-            <SelectTrigger className="field-select table-control">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {sortOptions.map((option) => (
-                <SelectItem key={option.value} value={encodeSelectValue(option.value)}>
-                  {tr(t, option.labelKey, option.fallback)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {showSortControls && (
+          <>
+            <div className="table-filter-item">
+              <label className="section-subtitle">{tr(t, 'label_sort_by', 'Sort By')}</label>
+              <Select value={encodeSelectValue(sortBy)} onValueChange={(value) => onSortByChange(decodeSelectValue(value))}>
+                <SelectTrigger className="field-select table-control">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortOptions.map((option) => (
+                    <SelectItem key={option.value} value={encodeSelectValue(option.value)}>
+                      {tr(t, option.labelKey, option.fallback)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <div className="table-filter-item">
-          <label className="section-subtitle">{tr(t, 'label_sort_order', 'Order')}</label>
-          <Select
-            value={encodeSelectValue(sortOrder)}
-            disabled={disableSortOrder}
-            onValueChange={(value) => onSortOrderChange(decodeSelectValue(value) as 'asc' | 'desc')}
-          >
-            <SelectTrigger className="field-select table-control">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
-              <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+            <div className="table-filter-item">
+              <label className="section-subtitle">{tr(t, 'label_sort_order', 'Order')}</label>
+              <Select
+                value={encodeSelectValue(sortOrder)}
+                disabled={disableSortOrder}
+                onValueChange={(value) => onSortOrderChange(decodeSelectValue(value) as 'asc' | 'desc')}
+              >
+                <SelectTrigger className="field-select table-control">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
+                  <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="table-toolbar-zone table-toolbar-zone--right">

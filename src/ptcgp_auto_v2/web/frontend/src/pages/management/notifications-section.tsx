@@ -2,22 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
-import { SearchableSelect } from '@/components/ui/searchable-select'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useInfiniteTrigger } from '@/hooks/use-infinite-trigger'
 import { useManagementListQuery } from '@/hooks/use-management-list-query'
 import { usePersistedState } from '@/hooks/use-persisted-state'
-import { buildQuery, requestJson } from '@/lib/api'
+import { requestJson } from '@/lib/api'
 import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 
+import { buildManagementListActionPayload } from './list-actions'
+import { buildManagementListQueryParams } from './list-query'
+import type { ManagementListOption, ManagementListSpec } from './list-spec'
+import { useManagementListState } from './list-state'
+import { ManagementListToolbar } from './list-toolbar'
 import {
   AccountIdentityCell,
   InlineNotice,
   type InlineNoticeState,
-  ListQueryControls,
   Pager,
   QueryTotalSummary,
   type SearchableOption,
@@ -81,46 +83,136 @@ export function NotificationsSection({
   assets: CardImageAssets
 }) {
   const queryClient = useQueryClient()
-  const [page, setPage] = usePersistedState<number>(managementStateKey('notifications', 'page'), 0)
-  const [pageSize, setPageSize] = usePersistedState<number>(managementStateKey('notifications', 'page_size'), 10)
-  const [sortBy, setSortBy] = usePersistedState<string>(managementStateKey('notifications', 'sort_by'), 'created_at')
-  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('notifications', 'sort_order'), 'desc')
-  const [scene, setScene] = usePersistedState<string>(managementStateKey('notifications', 'scene'), '')
-  const [accountId, setAccountId] = usePersistedState<string>(managementStateKey('notifications', 'account_id'), '')
-  const [isRead, setIsRead] = usePersistedState<string>(managementStateKey('notifications', 'is_read'), '')
-  const [q, setQ] = usePersistedState<string>(managementStateKey('notifications', 'q'), '')
   const [configState, setConfigState] = useState<
     Record<string, { enabled: boolean; enabledWebhook: boolean; extraConfig: Record<string, unknown> }>
   >({})
   const [cardPickerOpen, setCardPickerOpen] = useState(false)
   const [cardPickerScene, setCardPickerScene] = usePersistedState<string>(managementStateKey('notifications', 'picker_scene'), 'rare_card_obtained')
-  const [cardPickerQ, setCardPickerQ] = usePersistedState<string>(managementStateKey('notifications', 'picker_q'), '')
-  const [cardPickerRarity, setCardPickerRarity] = usePersistedState<string>(managementStateKey('notifications', 'picker_rarity'), '')
-  const [cardPickerSetCode, setCardPickerSetCode] = usePersistedState<string>(managementStateKey('notifications', 'picker_set_code'), '')
-  const [cardPickerPackName, setCardPickerPackName] = usePersistedState<string>(managementStateKey('notifications', 'picker_pack_name'), '')
-  const [cardPickerSortBy, setCardPickerSortBy] = usePersistedState<string>(managementStateKey('notifications', 'picker_sort_by'), 'id')
-  const [cardPickerSortOrder, setCardPickerSortOrder] = usePersistedState<'asc' | 'desc'>(managementStateKey('notifications', 'picker_sort_order'), 'asc')
-  const [cardPickerPage, setCardPickerPage] = usePersistedState<number>(managementStateKey('notifications', 'picker_page'), 0)
-  const [cardPickerPageSize, setCardPickerPageSize] = usePersistedState<number>(managementStateKey('notifications', 'picker_page_size'), 24)
   const [cardPickerSelectedIds, setCardPickerSelectedIds] = useState<number[]>([])
   const [cardPickerCardsAccum, setCardPickerCardsAccum] = useState<Record<string, unknown>[]>([])
   const cardPickerGridRef = useRef<HTMLDivElement | null>(null)
   const [selectedCardNameMap, setSelectedCardNameMap] = useState<Record<number, string>>({})
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
   const selectLocale = useMemo(() => searchableSelectLocale(t), [t])
+  const notificationListSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'notifications',
+    defaultPageSize: 10,
+    pageSizeOptions: [10, 20, 50, 100],
+    filters: [
+      {
+        key: 'scene',
+        kind: 'account-select',
+        label: tr(t, 'col_scene', 'Scene'),
+        placeholder: tr(t, 'label_all_scenes', 'All Scenes'),
+        optionsKey: 'scene'
+      },
+      {
+        key: 'account_id',
+        kind: 'account-select',
+        label: tr(t, 'col_account_id', 'Account ID'),
+        placeholder: tr(t, 'label_all_accounts', 'All Accounts'),
+        optionsKey: 'account_id'
+      },
+      {
+        key: 'is_read',
+        kind: 'select',
+        label: tr(t, 'col_status', 'Status'),
+        emptyLabel: tr(t, 'label_all_status', 'All Status'),
+        options: [
+          { value: 'false', label: tr(t, 'label_unread', 'Unread') },
+          { value: 'true', label: tr(t, 'label_read', 'Read') }
+        ]
+      },
+      {
+        key: 'q',
+        kind: 'search',
+        label: tr(t, 'label_search', 'Search'),
+        placeholder: tr(t, 'notification_search_placeholder', 'Search title/content/account')
+      }
+    ],
+    sort: {
+      defaultBy: 'created_at',
+      defaultOrder: 'desc',
+      options: [
+        { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
+        { value: 'title', labelKey: 'col_title', fallback: 'Title' },
+        { value: 'scene', labelKey: 'col_scene', fallback: 'Scene' }
+      ]
+    }
+  }), [t])
+  const notificationCardPickerSpec = useMemo<ManagementListSpec>(() => ({
+    storageKey: 'notifications-card-picker',
+    defaultPageSize: 24,
+    pageSizeOptions: [24, 36, 48, 60],
+    queryKeys: {
+      page: 'card_selector_page',
+      pageSize: 'card_selector_page_size',
+      sortBy: 'card_selector_sort_by',
+      sortOrder: 'card_selector_sort_order'
+    },
+    filters: [
+      {
+        key: 'q',
+        kind: 'search',
+        queryKey: 'card_selector_q',
+        label: tr(t, 'label_search', 'Search'),
+        placeholder: tr(t, 'notification_card_search_placeholder', 'Search card name/number/set')
+      },
+      {
+        key: 'rarity',
+        kind: 'select',
+        queryKey: 'card_selector_rarity',
+        label: tr(t, 'label_rarity', 'Rarity'),
+        optionsKey: 'rarity',
+        emptyLabel: tr(t, 'label_all_rarities', 'All Rarities')
+      },
+      {
+        key: 'set_code',
+        kind: 'searchable-select',
+        queryKey: 'card_selector_set_code',
+        label: tr(t, 'label_set', 'Set'),
+        placeholder: tr(t, 'label_all_sets', 'All Sets'),
+        optionsKey: 'set_code',
+        pageSize: 10
+      },
+      {
+        key: 'pack_name',
+        kind: 'searchable-select',
+        queryKey: 'card_selector_pack_name',
+        label: tr(t, 'label_pack', 'Pack'),
+        placeholder: tr(t, 'label_all_packs', 'All Packs'),
+        optionsKey: 'pack_name',
+        pageSize: 10
+      }
+    ],
+    sort: {
+      defaultBy: 'id',
+      defaultOrder: 'asc',
+      options: [
+        { value: 'id', labelKey: 'col_id', fallback: 'ID' },
+        { value: 'number', labelKey: 'col_number', fallback: 'Number' },
+        { value: 'name', labelKey: 'col_name', fallback: 'Name' }
+      ]
+    }
+  }), [t])
+  const {
+    state: notificationListState,
+    setFilter: setNotificationFilter,
+    setSort: setNotificationSort,
+    setPage: setNotificationPage,
+    setPageSize: setNotificationPageSize
+  } = useManagementListState(notificationListSpec)
+  const {
+    state: cardPickerListState,
+    setFilter: setCardPickerFilter,
+    setSort: setCardPickerSort,
+    setPage: setCardPickerPage,
+    setPageSize: setCardPickerPageSize
+  } = useManagementListState(notificationCardPickerSpec)
 
   const notificationQueryParams = useMemo(
-    () => ({
-      page,
-      page_size: pageSize,
-      sort_by: sortBy,
-      sort_order: sortOrder,
-      scene: scene || undefined,
-      account_id: accountId || undefined,
-      is_read: isRead || undefined,
-      q
-    }),
-    [accountId, isRead, page, pageSize, q, scene, sortBy, sortOrder]
+    () => buildManagementListQueryParams(notificationListSpec, notificationListState),
+    [notificationListSpec, notificationListState]
   )
   const { query } = useManagementListQuery<Record<string, unknown>>({
     queryKey: 'management-notifications',
@@ -132,50 +224,31 @@ export function NotificationsSection({
   const cardPickerQueryParams = useMemo(
     () => ({
       scene: cardPickerScene,
-      card_selector_q: cardPickerQ || undefined,
-      card_selector_rarity: cardPickerRarity || undefined,
-      card_selector_set_code: cardPickerSetCode || undefined,
-      card_selector_pack_name: cardPickerPackName || undefined,
-      card_selector_sort_by: cardPickerSortBy,
-      card_selector_sort_order: cardPickerSortOrder,
-      card_selector_page: cardPickerPage,
-      card_selector_page_size: cardPickerPageSize,
+      ...buildManagementListQueryParams(notificationCardPickerSpec, cardPickerListState),
       notify_card_ids: cardPickerSelectedIds
     }),
     [
-      cardPickerPackName,
-      cardPickerPage,
-      cardPickerPageSize,
-      cardPickerQ,
-      cardPickerRarity,
       cardPickerScene,
       cardPickerSelectedIds,
-      cardPickerSetCode,
-      cardPickerSortBy,
-      cardPickerSortOrder
+      cardPickerListState,
+      notificationCardPickerSpec
     ]
   )
   const cardPickerFilterKey = useMemo(
-    () =>
-      buildQuery({
+    () => {
+      const { card_selector_page: _page, ...params } = buildManagementListQueryParams(
+        notificationCardPickerSpec,
+        cardPickerListState
+      )
+      return JSON.stringify({
         scene: cardPickerScene,
-        card_selector_q: cardPickerQ || undefined,
-        card_selector_rarity: cardPickerRarity || undefined,
-        card_selector_set_code: cardPickerSetCode || undefined,
-        card_selector_pack_name: cardPickerPackName || undefined,
-        card_selector_sort_by: cardPickerSortBy,
-        card_selector_sort_order: cardPickerSortOrder,
-        card_selector_page_size: cardPickerPageSize
-      }),
+        ...params
+      })
+    },
     [
-      cardPickerPackName,
-      cardPickerPageSize,
-      cardPickerQ,
-      cardPickerRarity,
       cardPickerScene,
-      cardPickerSetCode,
-      cardPickerSortBy,
-      cardPickerSortOrder
+      cardPickerListState,
+      notificationCardPickerSpec
     ]
   )
 
@@ -195,10 +268,11 @@ export function NotificationsSection({
   const markAllMutation = useMutation({
     mutationFn: () => requestJson<{ ok: boolean; message: string }>('/api/react/management/notifications/mark-all-read', {
       method: 'POST',
-      body: {
-        scene: scene || null,
-        account_id: accountId || null
-      }
+      body: buildManagementListActionPayload({
+        params: notificationQueryParams,
+        fields: ['scene', 'account_id'],
+        missingValue: null
+      })
     }),
     onSuccess: (result) => {
       setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
@@ -229,14 +303,11 @@ export function NotificationsSection({
         method: 'POST',
         body: {
           notification_id: notificationId,
-          scene: scene || null,
-          account_id: accountId || null,
-          is_read: isRead || null,
-          q,
-          sort_by: sortBy,
-          sort_order: sortOrder,
-          page,
-          page_size: pageSize
+          ...buildManagementListActionPayload({
+            params: notificationQueryParams,
+            fields: ['scene', 'account_id', 'is_read', 'q', 'sort_by', 'sort_order', 'page', 'page_size'],
+            missingValue: null
+          })
         }
       }),
     onSuccess: (result) => setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
@@ -291,6 +362,13 @@ export function NotificationsSection({
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]
   )
+  const notificationToolbarOptions = useMemo<Record<string, SearchableOption[] | ManagementListOption[]>>(
+    () => ({
+      scene: sceneSelectOptions,
+      account_id: accountSelectOptions
+    }),
+    [accountSelectOptions, sceneSelectOptions]
+  )
   const accountMetaMap = useMemo(() => {
     const map: Record<string, Record<string, unknown>> = {}
     for (const account of accounts) {
@@ -322,17 +400,6 @@ export function NotificationsSection({
       }>),
     [cardPickerQuery.data?.pack_names]
   )
-  const cardPickerRaritySelectOptions = useMemo<SearchableOption[]>(
-    () => [
-      { value: '', label: tr(t, 'label_all_rarities', 'All Rarities') },
-      ...cardPickerRarityCodes.map((code) => ({
-        value: code,
-        label: t[`rarity_${code}`] ?? code,
-        searchText: code
-      }))
-    ],
-    [cardPickerRarityCodes, t]
-  )
   const cardPickerSetSelectOptions = useMemo<SearchableOption[]>(
     () => [
       { value: '', label: tr(t, 'label_all_sets', 'All Sets') },
@@ -359,13 +426,24 @@ export function NotificationsSection({
     () => (((cardPickerQuery.data?.selected_cards as unknown[]) ?? []) as Record<string, unknown>[]),
     [cardPickerQuery.data?.selected_cards]
   )
+  const cardPickerToolbarOptions = useMemo<Record<string, SearchableOption[] | ManagementListOption[]>>(
+    () => ({
+      rarity: cardPickerRarityCodes.map((code) => ({
+        value: code,
+        label: t[`rarity_${code}`] ?? code
+      })),
+      set_code: cardPickerSetSelectOptions,
+      pack_name: cardPickerPackSelectOptions
+    }),
+    [cardPickerPackSelectOptions, cardPickerRarityCodes, cardPickerSetSelectOptions, t]
+  )
   const cardPickerHasNext = Boolean(cardPickerQuery.data?.card_selector_has_next)
   const cardPickerLoadMore = useCallback(() => {
     if (!cardPickerOpen || cardPickerQuery.isFetching || !cardPickerHasNext) {
       return
     }
-    setCardPickerPage((prev) => prev + 1)
-  }, [cardPickerHasNext, cardPickerOpen, cardPickerQuery.isFetching])
+    setCardPickerPage(cardPickerListState.page + 1)
+  }, [cardPickerHasNext, cardPickerListState.page, cardPickerOpen, cardPickerQuery.isFetching, setCardPickerPage])
   const cardPickerSentinelRef = useInfiniteTrigger({
     enabled: cardPickerOpen && cardPickerHasNext && !cardPickerQuery.isFetching,
     onLoadMore: cardPickerLoadMore,
@@ -439,7 +517,7 @@ export function NotificationsSection({
     }
     const pageCards = (((cardPickerQuery.data.cards as unknown[]) ?? []) as Record<string, unknown>[])
     setCardPickerCardsAccum((prev) => {
-      if (cardPickerPage <= 0) {
+      if (cardPickerListState.page <= 0) {
         return pageCards
       }
       const existingIds = new Set(
@@ -457,7 +535,7 @@ export function NotificationsSection({
       }
       return next
     })
-  }, [cardPickerOpen, cardPickerPage, cardPickerQuery.data])
+  }, [cardPickerListState.page, cardPickerOpen, cardPickerQuery.data])
 
   useEffect(() => {
     if (!cardPickerOpen) {
@@ -559,101 +637,28 @@ export function NotificationsSection({
   return (
     <section className="surface-card section-stack">
       <div className="section-title">{tr(t, 'notification_center', 'Notifications')}</div>
-
-      <div className="table-toolbar-layout table-toolbar--dense notification-toolbar-react">
-        <div className="table-toolbar-zone table-toolbar-zone--left notification-toolbar-react-left">
-          <div className="table-filter-item">
-            <label className="section-subtitle">{tr(t, 'col_scene', 'Scene')}</label>
-            <SearchableSelect
-              value={scene}
-              options={sceneSelectOptions}
-              onValueChange={(value) => {
-                setPage(0)
-                setScene(value)
-              }}
-              {...selectLocale}
-              placeholder={tr(t, 'label_all_scenes', 'All Scenes')}
-              pageSize={8}
-            />
-          </div>
-
-          <div className="table-filter-item">
-            <label className="section-subtitle">{tr(t, 'col_account_id', 'Account ID')}</label>
-            <SearchableSelect
-              value={accountId}
-              options={accountSelectOptions}
-              onValueChange={(value) => {
-                setPage(0)
-                setAccountId(value)
-              }}
-              {...selectLocale}
-              placeholder={tr(t, 'label_all_accounts', 'All Accounts')}
-              pageSize={10}
-            />
-          </div>
-
-          <div className="table-filter-item">
-            <label className="section-subtitle">{tr(t, 'col_status', 'Status')}</label>
-            <Select value={encodeSelectValue(isRead)} onValueChange={(value) => setIsRead(decodeSelectValue(value))}>
-              <SelectTrigger className="field-select table-control">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={encodeSelectValue('')}>{tr(t, 'label_all_status', 'All Status')}</SelectItem>
-                <SelectItem value="false">{tr(t, 'label_unread', 'Unread')}</SelectItem>
-                <SelectItem value="true">{tr(t, 'label_read', 'Read')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="table-filter-item notification-filter-item--search">
-            <label className="section-subtitle">{tr(t, 'label_search', 'Search')}</label>
-            <input
-              id="notifications-search"
-              name="notifications-search"
-              className="field-input table-control"
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
-              placeholder={tr(t, 'notification_search_placeholder', 'Search title/content/account')}
-            />
-          </div>
-        </div>
-
-        <div className="table-toolbar-zone table-toolbar-zone--right notification-toolbar-react-right">
-          <Button type="button" size="sm" variant="outline" className="notification-action-btn" onClick={() => setPage(0)}>
-            {tr(t, 'label_search', 'Search')}
-          </Button>
-          <Button type="button" size="sm" className="notification-action-btn" onClick={() => markAllMutation.mutate()}>
-            {tr(t, 'mark_all_read', tr(t, 'btn_mark_all_read', 'Mark All Read'))}
-          </Button>
-          <Button type="button" size="sm" variant="outline" className="notification-action-btn notification-test-btn" onClick={() => testWebhookMutation.mutate(null)}>
-            {tr(t, 'btn_test_webhook', 'Test Webhook')}
-          </Button>
-        </div>
-      </div>
-
-      <ListQueryControls
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        pageSize={pageSize}
-        sortOptions={[
-          { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
-          { value: 'title', labelKey: 'col_title', fallback: 'Title' },
-          { value: 'scene', labelKey: 'col_scene', fallback: 'Scene' }
-        ]}
-        onSortByChange={(value) => {
-          setPage(0)
-          setSortBy(value)
-        }}
-        onSortOrderChange={(value) => {
-          setPage(0)
-          setSortOrder(value)
-        }}
-        onPageSizeChange={(value) => {
-          setPage(0)
-          setPageSize(value)
-        }}
+      <ManagementListToolbar
+        spec={notificationListSpec}
+        state={notificationListState}
+        dynamicOptions={notificationToolbarOptions}
+        searchableLocale={selectLocale}
+        onFilterChange={setNotificationFilter}
+        onSortByChange={(value) => setNotificationSort(value)}
+        onSortOrderChange={(value) => setNotificationSort(notificationListState.sortBy, value)}
+        onPageSizeChange={setNotificationPageSize}
         t={t}
+        actions={{
+          trailing: (
+            <>
+              <Button type="button" size="sm" className="notification-action-btn" onClick={() => markAllMutation.mutate()}>
+                {tr(t, 'mark_all_read', tr(t, 'btn_mark_all_read', 'Mark All Read'))}
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="notification-action-btn notification-test-btn" onClick={() => testWebhookMutation.mutate(null)}>
+                {tr(t, 'btn_test_webhook', 'Test Webhook')}
+              </Button>
+            </>
+          )
+        }}
       />
       <InlineNotice notice={notice} />
       <QueryTotalSummary t={t} total={totalRecords} />
@@ -861,107 +866,17 @@ export function NotificationsSection({
             </div>
 
             <div className="section-stack">
-              <div className="filter-row">
-                <input
-                  id="notification-card-picker-search"
-                  name="notification-card-picker-search"
-                  className="field-input"
-                  value={cardPickerQ}
-                  placeholder={tr(t, 'notification_card_search_placeholder', 'Search card name/number/set')}
-                  onChange={(event) => {
-                    setCardPickerQ(event.target.value)
-                    setCardPickerPage(0)
-                  }}
-                />
-                <SearchableSelect
-                  value={cardPickerRarity}
-                  options={cardPickerRaritySelectOptions}
-                  onValueChange={(value) => {
-                    setCardPickerRarity(value)
-                    setCardPickerPage(0)
-                  }}
-                  {...selectLocale}
-                  placeholder={tr(t, 'label_all_rarities', 'All Rarities')}
-                  pageSize={10}
-                />
-                <SearchableSelect
-                  value={cardPickerSetCode}
-                  options={cardPickerSetSelectOptions}
-                  onValueChange={(value) => {
-                    setCardPickerSetCode(value)
-                    setCardPickerPage(0)
-                  }}
-                  {...selectLocale}
-                  placeholder={tr(t, 'label_all_sets', 'All Sets')}
-                  pageSize={10}
-                />
-                <SearchableSelect
-                  value={cardPickerPackName}
-                  options={cardPickerPackSelectOptions}
-                  onValueChange={(value) => {
-                    setCardPickerPackName(value)
-                    setCardPickerPage(0)
-                  }}
-                  {...selectLocale}
-                  placeholder={tr(t, 'label_all_packs', 'All Packs')}
-                  pageSize={10}
-                />
-              </div>
-
-              <div className="filter-row">
-                <span className="text-xs text-muted">{tr(t, 'label_sort_by', 'Sort By')}</span>
-                <Select
-                  value={encodeSelectValue(cardPickerSortBy)}
-                  onValueChange={(value) => {
-                    setCardPickerSortBy(decodeSelectValue(value))
-                    setCardPickerPage(0)
-                  }}
-                >
-                  <SelectTrigger className="field-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="id">{tr(t, 'col_id', 'ID')}</SelectItem>
-                    <SelectItem value="number">{tr(t, 'col_number', 'Number')}</SelectItem>
-                    <SelectItem value="name">{tr(t, 'col_name', 'Name')}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted">{tr(t, 'label_sort_order', 'Order')}</span>
-                <Select
-                  value={encodeSelectValue(cardPickerSortOrder)}
-                  onValueChange={(value) => {
-                    setCardPickerSortOrder(decodeSelectValue(value) as 'asc' | 'desc')
-                    setCardPickerPage(0)
-                  }}
-                >
-                  <SelectTrigger className="field-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
-                    <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted">{tr(t, 'label_page_size', 'Page Size')}</span>
-                <Select
-                  value={encodeSelectValue(String(cardPickerPageSize))}
-                  onValueChange={(value) => {
-                    setCardPickerPageSize(Number(decodeSelectValue(value)))
-                    setCardPickerPage(0)
-                  }}
-                >
-                  <SelectTrigger className="field-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[24, 36, 48, 60].map((value) => (
-                      <SelectItem key={`picker-size-${value}`} value={String(value)}>
-                        {value}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <ManagementListToolbar
+                spec={notificationCardPickerSpec}
+                state={cardPickerListState}
+                dynamicOptions={cardPickerToolbarOptions}
+                searchableLocale={selectLocale}
+                onFilterChange={setCardPickerFilter}
+                onSortByChange={(value) => setCardPickerSort(value)}
+                onSortOrderChange={(value) => setCardPickerSort(cardPickerListState.sortBy, value)}
+                onPageSizeChange={setCardPickerPageSize}
+                t={t}
+              />
 
               <div className="text-xs text-muted">
                 {tr(t, 'total_items_label', 'Total')}: {toText(cardPickerQuery.data?.card_selector_total, t)}
@@ -1160,8 +1075,8 @@ export function NotificationsSection({
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}
         hasNext={Boolean(query.data?.has_next)}
-        onPrev={() => setPage((prev) => Math.max(prev - 1, 0))}
-        onNext={() => setPage((prev) => prev + 1)}
+        onPrev={() => setNotificationPage(Math.max(notificationListState.page - 1, 0))}
+        onNext={() => setNotificationPage(notificationListState.page + 1)}
         t={t}
       />
     </section>

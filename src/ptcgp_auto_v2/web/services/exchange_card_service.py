@@ -7,10 +7,14 @@ from typing import Any, Optional
 from sqlmodel import Session, select
 
 from ptcgp_auto_v2.db.engine import session_scope
-from ptcgp_auto_v2.db.models import Account
+from ptcgp_auto_v2.db.models import Account, ExchangeCardRequest
 from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.services import ExchangeCardService as CoreExchangeCardService
-from ptcgp_auto_v2.web.queries.exchange_card_queries import list_exchange_requests
+from ptcgp_auto_v2.web.queries._query_helpers import normalize_pagination
+from ptcgp_auto_v2.web.queries.exchange_card_queries import (
+    list_exchange_requests,
+    normalize_exchange_request_sort,
+)
 from ptcgp_auto_v2.web.utils.serialization import serialize_account
 
 
@@ -55,15 +59,23 @@ def build_exchange_card_context(
     page_size: int = 10,
 ) -> dict[str, Any]:
     """构建交换记录管理视图数据。"""
+    normalized_sort_by, normalized_sort_order = normalize_exchange_request_sort(
+        sort_by, sort_order
+    )
+    normalized_page, normalized_page_size = normalize_pagination(
+        page=page,
+        page_size=page_size,
+        max_size=100,
+    )
     result = list_exchange_requests(
         session=session,
         account_id=account_id,
         status=status,
         q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=page,
-        page_size=page_size,
+        sort_by=normalized_sort_by,
+        sort_order=normalized_sort_order,
+        page=normalized_page,
+        page_size=normalized_page_size,
     )
     if isinstance(result, tuple):
         requests, total_items = result
@@ -86,19 +98,27 @@ def build_exchange_card_context(
         data = row.model_dump()
         data["can_cancel"] = row.status in {"sending", "sended"}
         rows.append(data)
+    status_options = sorted(
+        {
+            str(item)
+            for item in session.exec(select(ExchangeCardRequest.status).distinct()).all()
+            if item
+        }
+    )
 
     return {
         "requests": rows,
         "total_items": total_items,
-        "page": page,
-        "page_size": page_size,
-        "has_prev": page > 0,
-        "has_next": (page + 1) * page_size < total_items,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "has_prev": normalized_page > 0,
+        "has_next": (normalized_page + 1) * normalized_page_size < total_items,
         "q": q,
-        "sort_by": sort_by,
-        "sort_order": sort_order,
+        "sort_by": normalized_sort_by,
+        "sort_order": normalized_sort_order,
         "accounts": accounts,
         "account_name_map": account_name_map,
+        "status_options": status_options,
         "selected_account_id": account_id,
         "selected_status": status or "",
     }
