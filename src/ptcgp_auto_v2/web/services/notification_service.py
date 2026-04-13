@@ -35,10 +35,9 @@ from ptcgp_auto_v2.web.queries.notification_queries import (
     normalize_card_picker_sort,
     normalize_notification_sort,
 )
+from ptcgp_auto_v2.web.services._list_query_state import build_list_query_state
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_choice,
-    normalize_page,
-    normalize_page_size,
 )
 from ptcgp_auto_v2.web.utils.i18n import resolve_card_name_from_data, resolve_label_json
 from ptcgp_auto_v2.web.utils.serialization import serialize_account
@@ -188,22 +187,28 @@ def build_notification_card_selector_context(
     page_size: int = 24,
 ) -> dict[str, Any]:
     """构建通知配置卡牌选择器上下文。"""
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size, max_size=60)
-    normalized_sort_by, normalized_sort_order = normalize_card_picker_sort(
+    normalized_sort_by, _ = normalize_card_picker_sort(
         sort_by, sort_order
+    )
+    list_state = build_list_query_state(
+        q=q,
+        sort_by=normalized_sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+        max_page_size=60,
     )
 
     cards, total = list_notification_selectable_cards(
         session=session,
-        q=q,
+        q=list_state.normalized_q,
         rarity=rarity,
         set_code=set_code,
         pack_name=pack_name,
-        sort_by=normalized_sort_by,
-        sort_order=normalized_sort_order,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        sort_by=list_state.sort_by,
+        sort_order=list_state.sort_order,
+        page=list_state.page,
+        page_size=list_state.page_size,
     )
     card_repo = CardRepository(session)
     set_options = [
@@ -233,13 +238,13 @@ def build_notification_card_selector_context(
         "card_selector_rarity": rarity,
         "card_selector_set_code": set_code,
         "card_selector_pack_name": pack_name,
-        "card_selector_sort_by": normalized_sort_by,
-        "card_selector_sort_order": normalized_sort_order,
-        "card_selector_page": normalized_page,
-        "card_selector_page_size": normalized_page_size,
+        "card_selector_sort_by": list_state.sort_by,
+        "card_selector_sort_order": list_state.sort_order,
+        "card_selector_page": list_state.page,
+        "card_selector_page_size": list_state.page_size,
         "card_selector_total": total,
-        "card_selector_has_prev": normalized_page > 0,
-        "card_selector_has_next": (normalized_page + 1) * normalized_page_size < total,
+        "card_selector_has_prev": list_state.has_prev,
+        "card_selector_has_next": list_state.has_next(total=total),
         "rarity_codes": list_rarity_codes(session),
         "set_codes": set_options,
         "pack_names": pack_options,
@@ -264,22 +269,27 @@ def build_notifications_context(
     config_repo.ensure_all_scenes()
 
     normalized_scene = normalize_scene(scene)
-    normalized_sort_by, normalized_sort_order = normalize_notification_sort(
+    normalized_sort_by, _ = normalize_notification_sort(
         sort_by, sort_order
     )
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size)
+    list_state = build_list_query_state(
+        q=q,
+        sort_by=normalized_sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
 
     notifications, total = list_notifications(
         session=session,
         scene=normalized_scene or None,
         account_id=account_id,
         is_read=is_read,
-        q=q,
-        sort_by=normalized_sort_by,
-        sort_order=normalized_sort_order,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        q=list_state.normalized_q,
+        sort_by=list_state.sort_by,
+        sort_order=list_state.sort_order,
+        page=list_state.page,
+        page_size=list_state.page_size,
     )
 
     from ptcgp_auto_v2.web.utils.i18n import get_current_lang
@@ -328,12 +338,9 @@ def build_notifications_context(
         "selected_account_id": account_id,
         "selected_is_read": is_read,
         "q": q,
-        "sort_by": normalized_sort_by,
-        "sort_order": normalized_sort_order,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": normalized_page > 0,
-        "has_next": (normalized_page + 1) * normalized_page_size < total,
+        "sort_by": list_state.sort_by,
+        "sort_order": list_state.sort_order,
+        **list_state.page_meta(total=total),
         "accounts": accounts,
         "account_name_map": account_name_map,
         "configs": config_views,
@@ -389,15 +396,20 @@ def build_notification_panel_context(
     """
     from ptcgp_auto_v2.web.utils.i18n import get_current_lang
 
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size, max_size=50)
+    list_state = build_list_query_state(
+        sort_by="created_at",
+        sort_order="desc",
+        page=page,
+        page_size=page_size,
+        max_page_size=50,
+    )
     notifications, unread_count, total_count = _list_panel_notifications(
         session=session,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        page=list_state.page,
+        page_size=list_state.page_size,
     )
-    has_more = (normalized_page + 1) * normalized_page_size < total_count
-    next_page = normalized_page + 1 if has_more else normalized_page
+    has_more = list_state.has_next(total=total_count)
+    next_page = list_state.page + 1 if has_more else list_state.page
 
     current_lang = get_current_lang()
     image_payload_map = _build_notification_image_payloads(
@@ -416,8 +428,8 @@ def build_notification_panel_context(
         "next_page": next_page,
         "unread_count": unread_count,
         "total_count": total_count,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
+        "page": list_state.page,
+        "page_size": list_state.page_size,
     }
 
 
