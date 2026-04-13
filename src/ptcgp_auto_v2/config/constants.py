@@ -128,7 +128,7 @@ HASH_CROP_SIDE_RATIO = 0.03  # 左右各裁剪3%
 DETECT_HASH_VARIANT_TOP_TRIMS = [0.0, 0.04, 0.08, 0.12]
 
 # 高稀有度卡牌范围（用于记录账号卡牌）
-HIGH_RARITY_TARGETS = ["RR", "AR", "SR", "SAR", "IM", "UR", "S", "SSR"]
+HIGH_RARITY_TARGETS = ["R", "RR", "AR", "SR", "SAR", "IM", "UR", "S", "SSR"]
 
 # 通知状态配置
 NOTIFICATION_TASK_STATUS_DEFAULTS = ["failed", "blocked", "timeout"]
