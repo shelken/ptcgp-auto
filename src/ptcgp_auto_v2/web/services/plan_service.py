@@ -9,11 +9,8 @@ from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models.task_plan import TaskPlan
 from ptcgp_auto_v2.db.repositories import AccountRepository, TaskPlanRepository
 from ptcgp_auto_v2.web.utils.form_utils import safe_get_string
-from ptcgp_auto_v2.web.utils.filter_utils import (
-    normalize_query_text,
-    normalize_page,
-    normalize_page_size,
-    normalize_sort_order,
+from ptcgp_auto_v2.web.services._list_query_state import (
+    build_sorted_list_query_state,
 )
 from ptcgp_auto_v2.web.utils.serialization import serialize_task_plan
 
@@ -33,34 +30,31 @@ def build_plans_list_context(
     page_size: int = 10,
 ) -> dict:
     """构建计划列表视图上下文（统一列表协议：q/sort/page）。"""
-    normalized_q = normalize_query_text(q)
-    allowed_sort_fields = {"id", "name"}
-    normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
-    normalized_sort_order = normalize_sort_order(sort_order)
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size)
+    list_state = build_sorted_list_query_state(
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+        allowed_sort_fields={"id", "name"},
+        default_sort_by="id",
+    )
     repo = TaskPlanRepository(session)
     plans_page, total = repo.list_page(
-        q=normalized_q,
-        sort_by=normalized_sort_by,
-        sort_order=normalized_sort_order,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        q=list_state.normalized_q,
+        sort_by=list_state.sort_by,
+        sort_order=list_state.sort_order,
+        page=list_state.page,
+        page_size=list_state.page_size,
     )
     plans_page = [_serialize_plan(item) for item in plans_page]
-    has_prev = normalized_page > 0
-    has_next = (normalized_page + 1) * normalized_page_size < total
 
     return {
         "items": plans_page,
         "q": q,
-        "sort_by": normalized_sort_by,
-        "sort_order": normalized_sort_order,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": has_prev,
-        "has_next": has_next,
-        "total": total,
+        "sort_by": list_state.sort_by,
+        "sort_order": list_state.sort_order,
+        **list_state.page_meta(total=total),
     }
 
 

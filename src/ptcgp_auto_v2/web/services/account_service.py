@@ -17,12 +17,7 @@ from ptcgp_auto_v2.db.repositories import (
     TaskPlanRepository,
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
-from ptcgp_auto_v2.web.utils.filter_utils import (
-    normalize_query_text,
-    normalize_page,
-    normalize_page_size,
-    normalize_sort_order,
-)
+from ptcgp_auto_v2.web.services._list_query_state import build_sorted_list_query_state
 from ptcgp_auto_v2.web.utils.serialization import (
     serialize_account,
     serialize_task_plan,
@@ -109,38 +104,38 @@ def build_accounts_list_context(
     repo = AccountRepository(session)
     accounts = repo.get_all()
 
-    normalized_q = normalize_query_text(q)
-    allowed_sort_fields = {"id", "nickname", "friend_id"}
-    normalized_sort_by = sort_by if sort_by in allowed_sort_fields else "id"
-    normalized_sort_order = normalize_sort_order(sort_order)
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size)
+    list_state = build_sorted_list_query_state(
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+        allowed_sort_fields={"id", "nickname", "friend_id"},
+        default_sort_by="id",
+    )
 
-    if normalized_q:
-        accounts = [item for item in accounts if _match_account(item, normalized_q)]
+    if list_state.normalized_q:
+        accounts = [item for item in accounts if _match_account(item, list_state.normalized_q)]
 
     def _sort_value(item: Account):
-        if normalized_sort_by == "nickname":
+        if list_state.sort_by == "nickname":
             return (item.nickname or item.display_name or "").lower()
-        if normalized_sort_by == "friend_id":
+        if list_state.sort_by == "friend_id":
             return (item.friend_id or "").lower()
         return item.id or 0
 
     accounts = sorted(
         accounts,
         key=_sort_value,
-        reverse=(normalized_sort_order == "desc"),
+        reverse=(list_state.sort_order == "desc"),
     )
 
     total = len(accounts)
-    start = normalized_page * normalized_page_size
-    end = start + normalized_page_size
+    start, end = list_state.page_bounds()
     page_accounts = accounts[start:end]
     accounts_page = [
         _serialize_account(item, include_assocs=True) for item in page_accounts
     ]
-    has_prev = normalized_page > 0
-    has_next = end < total
 
     config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
     all_configs = session.exec(config_stm).all()
@@ -155,13 +150,9 @@ def build_accounts_list_context(
             pack_configs_map=pack_configs_map,
         ),
         "q": q,
-        "sort_by": normalized_sort_by,
-        "sort_order": normalized_sort_order,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": has_prev,
-        "has_next": has_next,
-        "total": total,
+        "sort_by": list_state.sort_by,
+        "sort_order": list_state.sort_order,
+        **list_state.page_meta(total=total),
     }
 
 def build_account_edit_context(account_id: int) -> dict | None:

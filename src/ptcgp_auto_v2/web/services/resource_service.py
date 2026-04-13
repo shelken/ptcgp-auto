@@ -7,14 +7,10 @@ from typing import Any
 
 from sqlmodel import Session
 
+from ptcgp_auto_v2.web.services._list_query_state import build_list_query_state
 from ptcgp_auto_v2.web.queries.resource_queries import (
     list_account_resources,
     list_pack_point_resources,
-)
-from ptcgp_auto_v2.web.utils.filter_utils import (
-    normalize_page,
-    normalize_page_size,
-    normalize_sort_order,
 )
 
 
@@ -76,18 +72,22 @@ def build_resources_context(
     """构建资源页上下文。"""
     normalized_view = _normalize_resource_view(view)
     normalized_sort_by = _normalize_sort_by_for_view(normalized_view, sort_by)
-    normalized_sort_order = normalize_sort_order(sort_order)
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size)
+    list_state = build_list_query_state(
+        q=q,
+        sort_by=normalized_sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+    )
 
     if normalized_view == PACK_POINTS_VIEW:
         result = list_pack_point_resources(
             session=session,
-            q=q,
-            sort_by=normalized_sort_by,
-            sort_order=normalized_sort_order,
-            page=normalized_page,
-            page_size=normalized_page_size,
+            q=list_state.raw_q,
+            sort_by=list_state.sort_by,
+            sort_order=list_state.sort_order,
+            page=list_state.page,
+            page_size=list_state.page_size,
         )
         items = result["rows"]
         total = result["total"]
@@ -95,25 +95,20 @@ def build_resources_context(
     else:
         items, total = list_account_resources(
             session=session,
-            q=q,
-            sort_by=normalized_sort_by,
-            sort_order=normalized_sort_order,
-            page=normalized_page,
-            page_size=normalized_page_size,
+            q=list_state.raw_q,
+            sort_by=list_state.sort_by,
+            sort_order=list_state.sort_order,
+            page=list_state.page,
+            page_size=list_state.page_size,
         )
         series_list = []
 
-    end = (normalized_page + 1) * normalized_page_size
     return {
         "view": normalized_view,
         "items": items,
         "q": q,
-        "sort_by": normalized_sort_by,
-        "sort_order": normalized_sort_order,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": normalized_page > 0,
-        "has_next": end < total,
-        "total": total,
+        "sort_by": list_state.sort_by,
+        "sort_order": list_state.sort_order,
+        **list_state.page_meta(total=total),
         "series_list": series_list,
     }
