@@ -129,17 +129,6 @@ def rebind_test_runtime(db_path: Path, device_addresses: list[str]):
     get_database(db_path)
 
 
-def configure_runtime_from_env(default_device: str = "127.0.0.1:29999") -> Path:
-    """从环境变量恢复测试运行时配置（供子进程使用）。"""
-    raw_db_path = os.getenv(E2E_DB_PATH_ENV)
-    if not raw_db_path:
-        raise RuntimeError(f"missing env: {E2E_DB_PATH_ENV}")
-    db_path = Path(raw_db_path)
-    device = os.getenv(E2E_DEVICE_ENV, default_device)
-    rebind_test_runtime(db_path, [device])
-    return db_path
-
-
 def get_task_reset_type(task_type: str) -> str:
     """读取任务类型对应的 reset_type。"""
     task_class = TaskRegistry.get(task_type)
@@ -238,15 +227,6 @@ class SchedulerHarness:
         rebind_test_runtime(self.db_path, self.device_addresses)
         return Scheduler(device_addresses=self.device_addresses, config=config)
 
-    def start_scheduler(self, config: SchedulerConfig) -> Scheduler:
-        """启动调度器后台主循环。"""
-        scheduler = self.create_scheduler(config)
-        scheduler.start()
-        self._scheduler = scheduler
-        logger.info("start_scheduler ok")
-        self._trace_event("start_scheduler")
-        return scheduler
-
     def stop_scheduler(self):
         """停止当前调度器。"""
         if self._scheduler is None:
@@ -257,19 +237,6 @@ class SchedulerHarness:
         self._scheduler = None
         logger.info("stop_scheduler done")
         self._trace_event("stop_scheduler_done")
-
-    def override_scheduler_lease_timeout(self, scheduler: Scheduler, timeout_seconds: int):
-        """覆盖调度器卡死检测超时时间（兼容旧方法名）。"""
-        scheduler.config.stale_task_timeout = int(timeout_seconds)
-        scheduler.config.stale_task_check_interval = min(
-            scheduler.config.stale_task_check_interval,
-            1,
-        )
-        runtime_supervisor = getattr(scheduler, "_runtime_supervisor", None)
-        if runtime_supervisor is not None:
-            runtime_supervisor.lease_timeout_seconds = int(timeout_seconds)
-        logger.info("override stale timeout to %ss", timeout_seconds)
-        self._trace_event("override_stale_timeout", timeout_seconds=timeout_seconds)
 
     def wait_until(
         self,
@@ -361,34 +328,6 @@ class SchedulerHarness:
         with session_scope() as session:
             session.exec(statement)
 
-    def signal_worker(self, worker_pid: int, sig: int) -> bool:
-        """向 worker 发送信号。"""
-        if worker_pid <= 0:
-            logger.error("signal_worker invalid pid=%s sig=%s", worker_pid, sig)
-            self._trace_event("signal_worker_invalid_pid", worker_pid=worker_pid, sig=sig)
-            return False
-        try:
-            os.kill(worker_pid, sig)
-        except ProcessLookupError:
-            logger.debug("signal_worker pid not found pid=%s sig=%s", worker_pid, sig)
-            self._trace_event(
-                "signal_worker_pid_not_found",
-                worker_pid=worker_pid,
-                sig=sig,
-            )
-            return False
-        except PermissionError:
-            logger.error("signal_worker permission denied pid=%s sig=%s", worker_pid, sig)
-            self._trace_event(
-                "signal_worker_permission_denied",
-                worker_pid=worker_pid,
-                sig=sig,
-            )
-            return False
-        logger.info("signal_worker ok pid=%s sig=%s", worker_pid, sig)
-        self._trace_event("signal_worker_ok", worker_pid=worker_pid, sig=sig)
-        return True
-
     def collect_process_runtime_state(
         self,
         pid: int,
@@ -421,28 +360,6 @@ class SchedulerHarness:
             "matched_libraries": matched_libraries,
         }
         self._trace_event("process_runtime_state", **payload)
-        return payload
-
-    def collect_runtime_process_metrics(
-        self,
-        *,
-        scheduler: Scheduler,
-        worker_pid: int,
-        patterns: Optional[list[str]] = None,
-    ) -> dict[str, object]:
-        """采集当前测试进程和设备 worker 进程的指标。"""
-        payload = {
-            "controller": self.collect_process_runtime_state(
-                os.getpid(),
-                patterns=patterns,
-            ),
-            "worker": self.collect_process_runtime_state(
-                worker_pid,
-                patterns=patterns,
-            ),
-            "recognition": None,
-        }
-        self._trace_event("runtime_process_metrics", **payload)
         return payload
 
     def snapshot_runtime(

@@ -19,25 +19,12 @@ class _FakeTaskRepo:
         return None
 
 
-class _FakeRunLeaseRepo:
-    def get_active_by_account_id(self, account_id: int):
-        del account_id
-        return None
-
-    def get_latest_by_account_id(self, account_id: int):
-        del account_id
-        return None
-
-
 class _FakeRepositoryFactory:
     def __init__(self, session):
         del session
 
     def task_instances(self):
         return _FakeTaskRepo()
-
-    def run_leases(self):
-        return _FakeRunLeaseRepo()
 
 
 class _FakeDevicePool:

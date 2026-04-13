@@ -66,8 +66,6 @@ class Database:
                 timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
             )
             apply_sqlite_pragmas(self._local.connection)
-            # 使用 Row 对象方便按列名访问
-            self._local.connection.row_factory = sqlite3.Row
 
         return self._local.connection
 
