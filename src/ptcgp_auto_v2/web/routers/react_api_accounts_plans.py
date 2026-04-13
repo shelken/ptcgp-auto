@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session
 
@@ -33,6 +35,23 @@ from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 router = APIRouter()
 
 
+def _build_basic_list_query_params(
+    raw: Mapping[str, object],
+    *,
+    default_sort_by: str,
+    default_sort_order: str,
+    default_page_size: int,
+) -> dict[str, object]:
+    """统一解析基础列表查询参数。"""
+    return {
+        "q": str(raw.get("q") or ""),
+        "sort_by": str(raw.get("sort_by") or default_sort_by),
+        "sort_order": str(raw.get("sort_order") or default_sort_order),
+        "page": int(raw.get("page") or 0),
+        "page_size": int(raw.get("page_size") or default_page_size),
+    }
+
+
 @router.get("/management/accounts")
 async def get_management_accounts(
     q: str = Query(default=""),
@@ -43,14 +62,22 @@ async def get_management_accounts(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取账号管理数据。"""
+    query_params = _build_basic_list_query_params(
+        {
+            "q": q,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
+        },
+        default_sort_by="id",
+        default_sort_order="asc",
+        default_page_size=10,
+    )
     return json_response(
         build_accounts_list_context(
             session=session,
-            q=q,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            page=page,
-            page_size=page_size,
+            **query_params,
         )
     )
 
@@ -136,14 +163,22 @@ async def get_management_plans(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取计划管理数据。"""
+    query_params = _build_basic_list_query_params(
+        {
+            "q": q,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
+        },
+        default_sort_by="id",
+        default_sort_order="asc",
+        default_page_size=10,
+    )
     return json_response(
         build_plans_list_context(
             session=session,
-            q=q,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            page=page,
-            page_size=page_size,
+            **query_params,
         )
     )
 

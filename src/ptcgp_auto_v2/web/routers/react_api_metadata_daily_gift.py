@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session
 
@@ -19,6 +21,20 @@ from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 
 
 router = APIRouter()
+
+
+def _build_daily_gift_query_params(raw: Mapping[str, object]) -> dict[str, object]:
+    """统一解析每日送卡页面查询参数。"""
+    return {
+        "biz_date_local": raw.get("biz_date_local"),
+        "account_id": parse_optional_int(raw.get("account_id")),
+        "sort_by": str(raw.get("sort_by") or "updated_at"),
+        "sort_order": str(raw.get("sort_order") or "desc"),
+        "page": parse_optional_int(raw.get("page")) or 0,
+        "page_size": parse_optional_int(raw.get("page_size")) or 10,
+        "pair_page": parse_optional_int(raw.get("pair_page")) or 0,
+        "pair_page_size": parse_optional_int(raw.get("pair_page_size")) or 10,
+    }
 
 
 @router.get("/management/metadata")
@@ -93,16 +109,21 @@ async def get_management_daily_gift(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取每日送卡页面数据。"""
+    query_params = _build_daily_gift_query_params(
+        {
+            "biz_date_local": biz_date_local,
+            "account_id": account_id,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
+            "pair_page": pair_page,
+            "pair_page_size": pair_page_size,
+        }
+    )
     return json_response(
         build_daily_gift_context(
             session=session,
-            biz_date_local=biz_date_local,
-            account_id=parse_optional_int(account_id),
-            sort_by=sort_by,
-            sort_order=sort_order,
-            page=page,
-            page_size=page_size,
-            pair_page=pair_page,
-            pair_page_size=pair_page_size,
+            **query_params,
         )
     )
