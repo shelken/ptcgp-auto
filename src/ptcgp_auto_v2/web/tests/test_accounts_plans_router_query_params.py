@@ -24,8 +24,8 @@ def test_build_basic_list_query_params_normalizes_basic_fields() -> None:
         "q": " ash ",
         "sort_by": "nickname",
         "sort_order": "desc",
-        "page": -3,
-        "page_size": 999,
+        "page": 0,
+        "page_size": 100,
     }
 
 

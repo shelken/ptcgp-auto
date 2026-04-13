@@ -9,7 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.account_service import (
     build_account_edit_context,
     build_account_plans_context,
@@ -29,6 +32,7 @@ from ptcgp_auto_v2.web.services.plan_service import (
     delete_plan_by_id,
     upsert_plan_from_form,
 )
+from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
@@ -43,12 +47,18 @@ def _build_basic_list_query_params(
     default_page_size: int,
 ) -> dict[str, object]:
     """统一解析基础列表查询参数。"""
+    page = parse_optional_int(raw.get("page"))
+    page_size = parse_optional_int(raw.get("page_size"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page if page is not None else 0,
+        page_size=page_size if page_size is not None else default_page_size,
+    )
     return {
         "q": str(raw.get("q") or ""),
         "sort_by": str(raw.get("sort_by") or default_sort_by),
         "sort_order": str(raw.get("sort_order") or default_sort_order),
-        "page": int(raw.get("page") or 0),
-        "page_size": int(raw.get("page_size") or default_page_size),
+        "page": normalized_page,
+        "page_size": normalized_page_size,
     }
 
 

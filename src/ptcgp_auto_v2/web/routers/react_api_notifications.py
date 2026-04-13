@@ -68,6 +68,33 @@ def _build_notification_list_query_params(
     }
 
 
+def _build_notification_card_picker_query_params(
+    raw: Mapping[str, object],
+    *,
+    selected_card_ids: list[int],
+) -> dict[str, object]:
+    """统一解析通知卡牌选择器查询参数。"""
+    page = parse_optional_int(raw.get("card_selector_page"))
+    page_size = parse_optional_int(raw.get("card_selector_page_size"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page if page is not None else 0,
+        page_size=page_size if page_size is not None else 24,
+        max_size=60,
+    )
+    return {
+        "scene": normalize_scene(raw.get("scene")) or "rare_card_obtained",
+        "selected_card_ids": selected_card_ids,
+        "q": str(raw.get("card_selector_q") or ""),
+        "rarity": str(raw.get("card_selector_rarity") or ""),
+        "set_code": str(raw.get("card_selector_set_code") or ""),
+        "pack_name": str(raw.get("card_selector_pack_name") or ""),
+        "sort_by": str(raw.get("card_selector_sort_by") or "id"),
+        "sort_order": str(raw.get("card_selector_sort_order") or "asc"),
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }
+
+
 @router.get("/notifications/count")
 async def get_notifications_count():
     """获取顶部通知未读数量。"""
@@ -222,24 +249,25 @@ async def get_management_notification_card_picker(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取通知配置卡牌选择器数据。"""
-    selected_ids = parse_unique_int_ids(request.query_params.getlist("notify_card_ids"))
-    normalized_page, normalized_page_size = normalize_pagination_params(
-        page=card_selector_page,
-        page_size=card_selector_page_size,
-        max_size=60,
+    query_params = _build_notification_card_picker_query_params(
+        {
+            "scene": scene,
+            "card_selector_q": card_selector_q,
+            "card_selector_rarity": card_selector_rarity,
+            "card_selector_set_code": card_selector_set_code,
+            "card_selector_pack_name": card_selector_pack_name,
+            "card_selector_sort_by": card_selector_sort_by,
+            "card_selector_sort_order": card_selector_sort_order,
+            "card_selector_page": card_selector_page,
+            "card_selector_page_size": card_selector_page_size,
+        },
+        selected_card_ids=parse_unique_int_ids(
+            request.query_params.getlist("notify_card_ids")
+        ),
     )
     context = build_notification_card_selector_context(
         session=session,
-        scene=normalize_scene(scene) or "rare_card_obtained",
-        selected_card_ids=selected_ids,
-        q=card_selector_q,
-        rarity=card_selector_rarity,
-        set_code=card_selector_set_code,
-        pack_name=card_selector_pack_name,
-        sort_by=card_selector_sort_by,
-        sort_order=card_selector_sort_order,
-        page=normalized_page,
-        page_size=normalized_page_size,
+        **query_params,
     )
     return json_response(context)
 
