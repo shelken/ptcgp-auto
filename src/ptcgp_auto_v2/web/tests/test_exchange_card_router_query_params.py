@@ -46,8 +46,8 @@ def test_build_exchange_card_list_query_params_normalizes_list_scope() -> None:
         "q": " mewtwo ",
         "sort_by": "created_at",
         "sort_order": "desc",
-        "page": -5,
-        "page_size": 999,
+        "page": 0,
+        "page_size": 100,
     }
 
 

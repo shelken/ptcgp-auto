@@ -10,7 +10,10 @@ from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
 from ptcgp_auto_v2.db.models import Account
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.friendship_service import (
     build_friendship_context,
     cancel_pending_request,
@@ -24,24 +27,54 @@ from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 router = APIRouter()
 
 
+def _normalize_optional_pagination_value(raw: object, *, kind: str) -> int | None:
+    """统一归一化好友双表可选分页参数，保留缺省继承语义。"""
+    value = parse_optional_int(raw)
+    if value is None:
+        return None
+    if kind == "page":
+        normalized_page, _ = normalize_pagination_params(page=value, page_size=10)
+        return normalized_page
+    _, normalized_page_size = normalize_pagination_params(page=0, page_size=value)
+    return normalized_page_size
+
+
 def _build_friendship_list_query_params(raw: Mapping[str, object]) -> dict[str, object]:
     """统一解析好友列表查询参数，保持双表状态语义一致。"""
+    page = parse_optional_int(raw.get("page"))
+    page_size = parse_optional_int(raw.get("page_size"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page if page is not None else 0,
+        page_size=page_size if page_size is not None else 10,
+    )
     return {
         "account_id": parse_optional_int(raw.get("account_id")),
         "from_account_id": parse_optional_int(raw.get("from_account_id")),
         "q": str(raw.get("q") or ""),
         "sort_by": str(raw.get("sort_by") or "created_at"),
         "sort_order": str(raw.get("sort_order") or "desc"),
-        "page": parse_optional_int(raw.get("page")) or 0,
-        "page_size": parse_optional_int(raw.get("page_size")) or 10,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
         "request_sort_by": raw.get("request_sort_by"),
         "request_sort_order": raw.get("request_sort_order"),
-        "request_page": parse_optional_int(raw.get("request_page")),
-        "request_page_size": parse_optional_int(raw.get("request_page_size")),
+        "request_page": _normalize_optional_pagination_value(
+            raw.get("request_page"),
+            kind="page",
+        ),
+        "request_page_size": _normalize_optional_pagination_value(
+            raw.get("request_page_size"),
+            kind="page_size",
+        ),
         "friendship_sort_by": raw.get("friendship_sort_by"),
         "friendship_sort_order": raw.get("friendship_sort_order"),
-        "friendship_page": parse_optional_int(raw.get("friendship_page")),
-        "friendship_page_size": parse_optional_int(raw.get("friendship_page_size")),
+        "friendship_page": _normalize_optional_pagination_value(
+            raw.get("friendship_page"),
+            kind="page",
+        ),
+        "friendship_page_size": _normalize_optional_pagination_value(
+            raw.get("friendship_page_size"),
+            kind="page_size",
+        ),
     }
 
 

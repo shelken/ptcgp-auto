@@ -9,7 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.daily_gift_service import build_daily_gift_context
 from ptcgp_auto_v2.web.services.metadata_service import (
     build_metadata_context,
@@ -25,15 +28,27 @@ router = APIRouter()
 
 def _build_daily_gift_query_params(raw: Mapping[str, object]) -> dict[str, object]:
     """统一解析每日送卡页面查询参数。"""
+    page = parse_optional_int(raw.get("page"))
+    page_size = parse_optional_int(raw.get("page_size"))
+    pair_page = parse_optional_int(raw.get("pair_page"))
+    pair_page_size = parse_optional_int(raw.get("pair_page_size"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page if page is not None else 0,
+        page_size=page_size if page_size is not None else 10,
+    )
+    normalized_pair_page, normalized_pair_page_size = normalize_pagination_params(
+        page=pair_page if pair_page is not None else 0,
+        page_size=pair_page_size if pair_page_size is not None else 10,
+    )
     return {
         "biz_date_local": raw.get("biz_date_local"),
         "account_id": parse_optional_int(raw.get("account_id")),
         "sort_by": str(raw.get("sort_by") or "updated_at"),
         "sort_order": str(raw.get("sort_order") or "desc"),
-        "page": parse_optional_int(raw.get("page")) or 0,
-        "page_size": parse_optional_int(raw.get("page_size")) or 10,
-        "pair_page": parse_optional_int(raw.get("pair_page")) or 0,
-        "pair_page_size": parse_optional_int(raw.get("pair_page_size")) or 10,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "pair_page": normalized_pair_page,
+        "pair_page_size": normalized_pair_page_size,
     }
 
 

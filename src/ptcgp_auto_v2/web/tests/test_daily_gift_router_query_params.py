@@ -25,8 +25,8 @@ def test_build_daily_gift_query_params_normalizes_shared_and_pair_params() -> No
         "account_id": 7,
         "sort_by": "updated_at",
         "sort_order": "desc",
-        "page": -3,
-        "page_size": 999,
+        "page": 0,
+        "page_size": 100,
         "pair_page": 2,
         "pair_page_size": 50,
     }

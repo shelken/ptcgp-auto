@@ -9,12 +9,15 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlmodel import Session
 
 from ptcgp_auto_v2.db.engine import get_fastapi_session
+from ptcgp_auto_v2.web.routers.react_api_common import (
+    json_response,
+    normalize_pagination_params,
+)
 from ptcgp_auto_v2.web.services.exchange_card_service import (
     build_exchange_card_context,
     cancel_exchange_request,
     create_exchange_request_with_task,
 )
-from ptcgp_auto_v2.web.routers.react_api_common import json_response
 from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
@@ -38,14 +41,20 @@ def _build_exchange_card_list_query_params(
     raw: Mapping[str, object],
 ) -> dict[str, int | str | None]:
     """统一解析交换记录列表查询参数。"""
+    page = parse_optional_int(raw.get("page"))
+    page_size = parse_optional_int(raw.get("page_size"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page if page is not None else 0,
+        page_size=page_size if page_size is not None else 10,
+    )
     return {
         "account_id": parse_optional_int(raw.get("account_id")),
         "status": str(raw.get("status") or "").strip() or None,
         "q": str(raw.get("q") or ""),
         "sort_by": str(raw.get("sort_by") or "created_at"),
         "sort_order": str(raw.get("sort_order") or "desc"),
-        "page": parse_optional_int(raw.get("page")) or 0,
-        "page_size": parse_optional_int(raw.get("page_size")) or 10,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
     }
 
 
