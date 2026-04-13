@@ -20,7 +20,7 @@
 - 把当前任务 plan 写入项目根目录`PLAN.md`，写新计划前先清空旧内容
 - 主代理使用子代理做完整审阅
 - 子代理报问题后先复核再修；修完后由**同一个**子代理复审
-- 全部完成后统一执行 lint、unused 检查、测试、`pre-commit run`，然后提交
+- 全部完成后统一执行 `pre-commit run`，然后提交
 
 ## 重构原则
 
@@ -47,6 +47,7 @@
 ## Git 工作流
 
 - 提交前检查所有函数/常量/变量，清理未使用代码；Python 用 vulture/ruff(uv)，TS/JS 用 knip/ESLint(bun)；必须`pre-commit run`
+- 提交格式看`git-commit`,注意多行message换行问题
 
 ## **代码质量原则**
 
