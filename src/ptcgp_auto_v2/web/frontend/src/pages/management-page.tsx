@@ -10,7 +10,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { useManagementListQuery } from '@/hooks/use-management-list-query'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
-import { buildQuery, fetchJson, requestFormJson, requestJson } from '@/lib/api'
+import { fetchJson, requestFormJson, requestJson } from '@/lib/api'
 import { type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 import {
@@ -22,11 +22,22 @@ import {
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
+import {
+  buildMetadataExecutePayload,
+  buildMetadataPreviewPayload,
+  buildMetadataQueryString
+} from './management/metadata-query'
 import { buildManagementListQueryParams } from './management/list-query'
 import type { ManagementListOption, ManagementListSpec } from './management/list-spec'
 import { useManagementListState } from './management/list-state'
 import { ManagementListToolbar } from './management/list-toolbar'
 import { buildResetCompletedTasksPayload, resolveManagementTaskAccountFilter } from './management/task-filters'
+import {
+  buildAccountPlansQuery,
+  buildPackConfigQuery,
+  buildPlanEditorQuery,
+  buildTaskAccountOptionsQuery
+} from './management/management-queries'
 import {
   AccountIdentityCell,
   CopyableFriendId,
@@ -581,7 +592,9 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   const autoPackMap = (query.data?.auto_pack_map as Record<string, Record<string, unknown>>) ?? {}
 
   async function openPlansEditor(accountId: number) {
-    const data = await fetchJson<Record<string, unknown>>(`/api/react/management/accounts/${accountId}/plans?${buildQuery({ lang })}`)
+    const data = await fetchJson<Record<string, unknown>>(
+      `/api/react/management/accounts/${accountId}/plans?${buildAccountPlansQuery(lang)}`
+    )
     const current = ((data.current_assocs as unknown[]) ?? []) as Record<string, unknown>[]
     const available = ((data.available_plans as unknown[]) ?? []) as Record<string, unknown>[]
 
@@ -611,7 +624,9 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
 
   async function openPackConfigEditor(accountId: number) {
     const [config, sets] = await Promise.all([
-      fetchJson<Record<string, unknown>>(`/api/react/management/accounts/${accountId}/pack-config?${buildQuery({ lang })}`),
+      fetchJson<Record<string, unknown>>(
+        `/api/react/management/accounts/${accountId}/pack-config?${buildPackConfigQuery(lang)}`
+      ),
       fetchJson<Array<{ code: string; display_name: string }>>('/api/react/management/card-sets')
     ])
     const setCode = String(config.selected_set_code ?? '')
@@ -1028,7 +1043,9 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 
   async function openEditor(planId: number | null) {
     setPendingDeletePlan(null)
-    const data = await fetchJson<Record<string, unknown>>(`/api/react/management/plans/edit?${buildQuery({ lang, plan_id: planId ?? undefined })}`)
+    const data = await fetchJson<Record<string, unknown>>(
+      `/api/react/management/plans/edit?${buildPlanEditorQuery(lang, planId)}`
+    )
     const plan = (data.plan as Record<string, unknown> | null) ?? null
     const availableTasks = ((data.available_tasks as unknown[]) ?? []) as string[]
     const selectedTasks = ((plan?.task_types_list as unknown[]) ?? []) as string[]
@@ -1714,7 +1731,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     queryKey: ['management-task-account-options', normalizedAccountKeyword],
     queryFn: () =>
       fetchJson<{ accounts: Array<Record<string, unknown>> }>(
-        `/api/react/management/tasks/account-options?${buildQuery({ q: normalizedAccountKeyword })}`
+        `/api/react/management/tasks/account-options?${buildTaskAccountOptionsQuery(accountKeyword)}`
       ),
     enabled: normalizedAccountKeyword.length > 0
   })
@@ -1974,15 +1991,15 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
 
   const queryString = useMemo(
     () =>
-      buildQuery({
+      buildMetadataQueryString({
         lang,
-        ui_step: uiStep,
-        selected_node_type: selectedNodeType,
-        selected_node_id: selectedNodeId,
-        selected_set_code: selectedSetCode || undefined,
-        selected_pack_name: selectedPackName || undefined,
-        current_action: currentAction,
-        snapshot_id: snapshotId || undefined
+        uiStep,
+        nodeType: selectedNodeType,
+        nodeId: selectedNodeId,
+        setCode: selectedSetCode,
+        packName: selectedPackName,
+        action: currentAction,
+        snapshotId
       }),
     [currentAction, lang, selectedNodeId, selectedNodeType, selectedPackName, selectedSetCode, snapshotId, uiStep]
   )
@@ -1997,12 +2014,12 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
     mutationFn: (action: string) =>
       requestJson<Record<string, unknown>>('/api/react/management/metadata/preview', {
         method: 'POST',
-        body: {
+        body: buildMetadataPreviewPayload({
           action,
-          node_type: selectedNodeType,
-          node_id: selectedNodeId,
-          force_refresh: forceRefresh
-        }
+          nodeType: selectedNodeType,
+          nodeId: selectedNodeId,
+          forceRefresh
+        })
       }),
     onSuccess: (result, action) => {
       const nextSnapshotId = typeof result.snapshot_id === 'string' ? result.snapshot_id : ''
@@ -2018,9 +2035,7 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
     mutationFn: () =>
       requestJson<Record<string, unknown>>('/api/react/management/metadata/execute', {
         method: 'POST',
-        body: {
-          snapshot_id: snapshotId
-        }
+        body: buildMetadataExecutePayload(snapshotId)
       }),
     onSuccess: (result) => {
       setExecuteResult(result)

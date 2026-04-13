@@ -356,4 +356,76 @@ describe('管理页统一列表状态', () => {
       account_id: '3'
     })
   })
+  
+  test('管理页编辑器查询应统一构造', async () => {
+    const {
+      buildAccountPlansQuery,
+      buildPackConfigQuery,
+      buildPlanEditorQuery,
+      buildTaskAccountOptionsQuery
+    } = await import('../src/pages/management/management-queries')
+
+    expect(buildAccountPlansQuery('zh')).toBe('lang=zh')
+    expect(buildPackConfigQuery('en-US')).toBe('lang=en-US')
+    expect(buildPlanEditorQuery('en', 3)).toBe('lang=en&plan_id=3')
+    expect(buildPlanEditorQuery('en', null)).toBe('lang=en')
+    expect(buildTaskAccountOptionsQuery(' foo ')).toBe('q=foo')
+    expect(buildTaskAccountOptionsQuery('      ')).toBe('')
+  })
+
+  test('metadata 查询参数应由专用 helper 统一构造并省略空字段', async () => {
+    const {
+      buildMetadataExecutePayload,
+      buildMetadataPreviewPayload,
+      buildMetadataQueryString
+    } = await import('../src/pages/management/metadata-query')
+
+    expect(
+      buildMetadataQueryString({
+        lang: 'zh-CN',
+        uiStep: 2,
+        nodeType: 'pack',
+        nodeId: 'A2-001',
+        setCode: '',
+        packName: 'Mew Pack',
+        action: 'update_data',
+        snapshotId: ''
+      })
+    ).toBe(
+      'lang=zh-CN&ui_step=2&selected_node_type=pack&selected_node_id=A2-001&selected_pack_name=Mew+Pack&current_action=update_data'
+    )
+
+    expect(
+      buildMetadataQueryString({
+        lang: 'en',
+        uiStep: 3,
+        nodeType: 'card',
+        nodeId: '25',
+        setCode: 'A2',
+        packName: 'Mew Pack',
+        action: 'update_chinese',
+        snapshotId: 'snap-1'
+      })
+    ).toBe(
+      'lang=en&ui_step=3&selected_node_type=card&selected_node_id=25&selected_set_code=A2&selected_pack_name=Mew+Pack&current_action=update_chinese&snapshot_id=snap-1'
+    )
+
+    expect(
+      buildMetadataPreviewPayload({
+        action: 'update_data',
+        nodeType: 'pack',
+        nodeId: 'A2-001',
+        forceRefresh: true
+      })
+    ).toEqual({
+      action: 'update_data',
+      node_type: 'pack',
+      node_id: 'A2-001',
+      force_refresh: true
+    })
+
+    expect(buildMetadataExecutePayload('snap-1')).toEqual({
+      snapshot_id: 'snap-1'
+    })
+  })
 })
