@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlmodel import Session
 
@@ -33,6 +35,37 @@ from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 router = APIRouter()
+
+
+def _build_notification_scope_params(
+    raw: Mapping[str, object],
+) -> dict[str, int | str | None]:
+    """统一解析通知筛选范围，保证列表与批量动作使用同一语义。"""
+    return {
+        "scene": normalize_scene(raw.get("scene")) or None,
+        "account_id": parse_optional_int(raw.get("account_id")),
+    }
+
+
+def _build_notification_list_query_params(
+    raw: Mapping[str, object],
+) -> dict[str, object]:
+    """统一解析通知列表查询参数。"""
+    page = parse_optional_int(raw.get("page"))
+    page_size = parse_optional_int(raw.get("page_size"))
+    normalized_page, normalized_page_size = normalize_pagination_params(
+        page=page if page is not None else 0,
+        page_size=page_size if page_size is not None else 10,
+    )
+    return {
+        **_build_notification_scope_params(raw),
+        "is_read": parse_bool_flag(raw.get("is_read")),
+        "q": str(raw.get("q") or ""),
+        "sort_by": str(raw.get("sort_by") or "created_at"),
+        "sort_order": str(raw.get("sort_order") or "desc"),
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+    }
 
 
 @router.get("/notifications/count")
@@ -73,10 +106,8 @@ async def post_mark_notification_read_for_panel(notification_id: int):
 async def post_mark_all_notifications_read_for_panel(request: Request):
     """顶部通知抽屉：批量标记已读。"""
     body = await request.json()
-    count = mark_all_notifications_as_read(
-        scene=normalize_scene(body.get("scene")) or None,
-        account_id=parse_optional_int(body.get("account_id")),
-    )
+    scope = _build_notification_scope_params(body)
+    count = mark_all_notifications_as_read(**scope)
     return json_response({"ok": True, "count": count})
 
 
@@ -93,21 +124,19 @@ async def get_management_notifications(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取通知管理页面数据。"""
-    normalized_page, normalized_page_size = normalize_pagination_params(
-        page=page,
-        page_size=page_size,
+    query_params = _build_notification_list_query_params(
+        {
+            "scene": scene,
+            "account_id": account_id,
+            "is_read": is_read,
+            "q": q,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
+        }
     )
-    context = build_notifications_context(
-        session=session,
-        scene=normalize_scene(scene) or None,
-        account_id=parse_optional_int(account_id),
-        is_read=parse_bool_flag(is_read),
-        q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=normalized_page,
-        page_size=normalized_page_size,
-    )
+    context = build_notifications_context(session=session, **query_params)
     return json_response(context)
 
 
@@ -122,10 +151,8 @@ async def post_mark_notification_read(notification_id: int):
 async def post_mark_all_notifications_read(request: Request):
     """批量标记通知已读。"""
     body = await request.json()
-    count = mark_all_notifications_as_read(
-        scene=normalize_scene(body.get("scene")) or None,
-        account_id=parse_optional_int(body.get("account_id")),
-    )
+    scope = _build_notification_scope_params(body)
+    count = mark_all_notifications_as_read(**scope)
     _, t = get_current_i18n()
     message_template = t.get("notification_marked_read") or "已标记 {count} 条通知为已读"
     return json_response(
@@ -225,18 +252,7 @@ async def post_notification_test_webhook(
     """发送通知测试 Webhook。"""
     body = await request.json()
     notification_id = parse_optional_int(body.get("notification_id"))
-    scene = normalize_scene(body.get("scene")) or None
-    account_id = parse_optional_int(body.get("account_id"))
-    q = str(body.get("q") or "")
-    sort_by = str(body.get("sort_by") or "created_at")
-    sort_order = str(body.get("sort_order") or "desc")
-    page = parse_optional_int(body.get("page")) or 0
-    page_size = parse_optional_int(body.get("page_size")) or 10
-    parsed_is_read = parse_bool_flag(body.get("is_read"))
-    normalized_page, normalized_page_size = normalize_pagination_params(
-        page=page,
-        page_size=page_size,
-    )
+    query_params = _build_notification_list_query_params(body)
 
     _, t = get_current_i18n()
     notification = None
@@ -246,14 +262,7 @@ async def post_notification_test_webhook(
     if notification is None:
         context = build_notifications_context(
             session=session,
-            scene=scene,
-            account_id=account_id,
-            is_read=parsed_is_read,
-            q=q,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            page=normalized_page,
-            page_size=normalized_page_size,
+            **query_params,
         )
         notifications = context.get("notifications") or []
         notification = notifications[0] if notifications else None
