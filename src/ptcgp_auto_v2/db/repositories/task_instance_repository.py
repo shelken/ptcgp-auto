@@ -71,31 +71,6 @@ class TaskInstanceRepository(BaseRepository):
             )
         )
 
-    def get_next_pending(self) -> Optional[TaskInstance]:
-        """获取下一个待执行的任务实例"""
-        now = datetime.now()
-        statement = (
-            select(TaskInstance)
-            .where(build_due_pending_condition(now))
-            .options(*self._account_options())
-            .order_by(col(TaskInstance.created_at))
-            .limit(1)
-        )
-        return self.session.exec(statement).first()
-
-    def get_pending_by_account(self, account_id: int) -> list[TaskInstance]:
-        """获取账号的所有待执行任务（不排序，由调度器决定顺序）"""
-        now = datetime.now()
-        statement = (
-            select(TaskInstance)
-            .where(
-                TaskInstance.account_id == account_id,
-                build_due_pending_condition(now),
-            )
-            .options(*self._account_options())
-        )
-        return list(self.session.exec(statement).all())
-
     def get_pending_by_account_ids(
         self, account_ids: list[int]
     ) -> dict[int, list[TaskInstance]]:
@@ -165,10 +140,6 @@ class TaskInstanceRepository(BaseRepository):
             TaskInstance.status == TaskStatus.RUNNING.value,
         )
         return {account_id for account_id in self.session.exec(statement).all()}
-
-    def has_running_tasks(self, account_id: int) -> bool:
-        """检查账号是否有正在执行的任务"""
-        return account_id in self.get_running_account_ids([account_id])
 
     def create(self, instance: TaskInstance) -> TaskInstance:
         """创建任务实例"""

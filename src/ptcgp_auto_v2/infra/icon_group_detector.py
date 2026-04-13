@@ -7,7 +7,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -94,15 +94,6 @@ def _nms_boxes(
 class IconGroupDetector:
     def __init__(self, template_matcher: Optional[TemplateMatcher] = None):
         self.template_matcher = template_matcher or TemplateMatcher()
-
-    def load_templates(
-        self, templates: Iterable[str], screen_width: Optional[int] = None
-    ):
-        if screen_width:
-            self.template_matcher.set_screen_width(screen_width)
-        for template_path in templates:
-            normalized_path = _normalize_template_path(template_path)
-            self.template_matcher.load_template(normalized_path)
 
     def detect_icons(
         self,
@@ -263,18 +254,6 @@ def _build_group(
 
 def count_icons(template_name: str, hits: List[IconHit]) -> int:
     return sum(1 for hit in hits if hit.template_name == template_name)
-
-
-def filter_groups(
-    template_name: str,
-    groups: List[IconGroup],
-    min_count: int = 1,
-) -> List[IconGroup]:
-    return [
-        group
-        for group in groups
-        if group.template_name == template_name and group.count >= min_count
-    ]
 
 
 def find_group_by_rarity(

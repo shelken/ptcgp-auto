@@ -31,9 +31,7 @@ class Device:
     address: str  # ADB 地址，如 "127.0.0.1:5555"
     status: DeviceStatus = DeviceStatus.AVAILABLE
     current_account_id: Optional[int] = None  # 当前登录的账号 ID
-    last_used_at: Optional[datetime] = None
-    is_creating_account: bool = False  # 是否正在创建新账号
-    became_idle_at: Optional[datetime] = None  # 进入空闲状态的时间
+    became_idle_at: Optional[datetime] = None  # 用于自动缩容：进入空闲状态的时间
 
     @property
     def is_available(self) -> bool:
@@ -55,12 +53,13 @@ class Device:
         注意：不更新 current_account_id，该字段仅在 executor 实际完成账号切换后更新。
         """
         self.status = DeviceStatus.BUSY
-        self.last_used_at = datetime.now()
+        # 自动缩容依赖 became_idle_at 判断空闲时长
         self.became_idle_at = None
 
     def mark_available(self):
         """标记设备为空闲状态"""
         self.status = DeviceStatus.AVAILABLE
+        # 自动缩容依赖 became_idle_at 判断空闲时长
         self.became_idle_at = datetime.now()
         # 【修复】清空当前账号ID，允许创建流程占用设备
         self.current_account_id = None
@@ -103,14 +102,6 @@ class DevicePool:
         """可用设备数"""
         with self._lock:
             return sum(1 for d in self._devices.values() if d.is_available)
-
-    @property
-    def busy_count(self) -> int:
-        """忙碌设备数"""
-        with self._lock:
-            return sum(
-                1 for d in self._devices.values() if d.status == DeviceStatus.BUSY
-            )
 
     def acquire(self) -> Optional[Device]:
         """
@@ -215,11 +206,6 @@ class DevicePool:
                 return False
             self._devices.pop(address, None)
             return True
-
-    def get_creating_count(self) -> int:
-        """获取正在创建账号的设备数"""
-        with self._lock:
-            return sum(1 for d in self._devices.values() if d.is_creating_account)
 
     def get_status_summary(self) -> dict:
         """

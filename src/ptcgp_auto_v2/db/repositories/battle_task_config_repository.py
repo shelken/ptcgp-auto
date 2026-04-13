@@ -29,19 +29,6 @@ class BattleTaskConfigRepository(BaseRepository):
         )
         return list(self.session.exec(statement).all())
 
-    def create_config(
-        self, account_id: int, task_instance_id: int, stop_conditions: list[dict]
-    ) -> BattleTaskConfig:
-        """创建对战任务配置"""
-        config = BattleTaskConfig(
-            account_id=account_id,
-            task_instance_id=task_instance_id,
-            stop_conditions=json.dumps(stop_conditions),
-        )
-        self.session.add(config)
-        self._finish_write(config)
-        return config
-
     def get_stop_conditions(self, task_instance_id: int) -> list[dict]:
         """获取停止条件配置"""
         config = self.get_by_task_instance(task_instance_id)

@@ -105,19 +105,6 @@ class YoloCardRecognizer:
         self.model_manager = model_manager
         self.hash_manager = hash_manager
 
-    def scan_pack_result(
-        self,
-        set_code: str,
-        obb_threshold: float = DEFAULT_OBB_THRESHOLD,
-        similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
-    ) -> List[DetectedCard]:
-        """扫描开包结果页，返回识别到的卡牌列表"""
-        return self.scan(
-            set_code=set_code,
-            obb_threshold=obb_threshold,
-            similarity_threshold=similarity_threshold,
-        )
-
     def scan(
         self,
         set_code: Optional[str] = None,
@@ -519,56 +506,6 @@ class YoloCardRecognizer:
             seen.add(key)
             variants.append(hash_arr)
         return variants
-
-    # 重复检测去重阈值（基于1080x1920标准分辨率）
-    BASE_DUPLICATE_DISTANCE_THRESHOLD = 50  # 中心点距离小于此值认为是重复检测
-
-    def _remove_duplicates(
-        self, detected: List[CardDetectionInfo]
-    ) -> List[CardDetectionInfo]:
-        """
-        去除重复检测结果（基于中心点距离）
-
-        当YOLO检测到同一张卡多次时，保留置信度最高的那个
-        注意：只去除相同坐标的重复检测，保留不同位置的真实重复卡
-        """
-        if len(detected) <= 1:
-            return detected
-
-        # 按置信度降序排列
-        sorted_cards = sorted(detected, key=lambda x: x.confidence, reverse=True)
-
-        unique_cards: List[CardDetectionInfo] = []
-        distance_threshold = self.adb.scaled_y(self.BASE_DUPLICATE_DISTANCE_THRESHOLD)
-
-        for card in sorted_cards:
-            is_duplicate = False
-            for unique in unique_cards:
-                # 计算中心点距离
-                dist = np.sqrt(
-                    (card.center[0] - unique.center[0]) ** 2
-                    + (card.center[1] - unique.center[1]) ** 2
-                )
-                if dist < distance_threshold:
-                    is_duplicate = True
-                    logger.debug(
-                        f"检测到重复卡: #{card.index}(conf={card.confidence:.3f}) "
-                        f"与 #{unique.index}(conf={unique.confidence:.3f}) "
-                        f"距离={dist:.1f}px，已过滤"
-                    )
-                    break
-
-            if not is_duplicate:
-                unique_cards.append(card)
-
-        # 按原始索引重新排序
-        unique_cards.sort(key=lambda x: x.index)
-
-        filtered_count = len(detected) - len(unique_cards)
-        if filtered_count > 0:
-            logger.debug(f"已过滤 {filtered_count} 个重复检测")
-
-        return unique_cards
 
     def _detect_cards(
         self, screenshot: Image.Image, conf_threshold: float

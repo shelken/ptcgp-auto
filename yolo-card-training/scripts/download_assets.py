@@ -25,7 +25,6 @@ from tqdm import tqdm
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 CARDS_DIR = DATA_DIR / "raw" / "cards"  # 卡牌放在 data/raw/cards/[set]/ 目录下
-BACKGROUNDS_DIR = DATA_DIR / "raw" / "backgrounds"
 
 # 使用用户维护的繁体中文 PNG 资源
 CARDS_BASE_URL = "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/images/zh-TW/cards-by-set"

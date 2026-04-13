@@ -5,7 +5,6 @@
 提供通知记录的数据访问方法。
 """
 
-from datetime import datetime
 from typing import List, Optional
 
 from sqlmodel import col, func, select
@@ -122,19 +121,3 @@ class NotificationRepository(BaseRepository):
             self._finish_write()
             return True
         return False
-
-    def delete_old_notifications(self, days: int = 30) -> int:
-        """删除超过指定天数的已读通知"""
-        threshold = datetime.now().timestamp() - days * 24 * 60 * 60
-        threshold_dt = datetime.fromtimestamp(threshold)
-        statement = select(Notification).where(
-            Notification.is_read == True,  # noqa: E712
-            Notification.created_at < threshold_dt,
-        )
-        notifications = self.session.exec(statement).all()
-        count = 0
-        for notification in notifications:
-            self.session.delete(notification)
-            count += 1
-        self._finish_write()
-        return count

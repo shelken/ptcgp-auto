@@ -598,12 +598,6 @@ def pinch_out(
     adb.pinch_out(center=center, scale=scale, steps=steps)
     return ActionResult.ok(wait=wait)
 
-
-def center_point(adb) -> Tuple[int, int]:
-    """获取屏幕中心坐标"""
-    return adb.center_x(), adb.center_y()
-
-
 def swipe_pack_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取开包滑动坐标（从左到右）"""
     start_x = adb.scaled_x(BASE_SWIPE_PACK_START_X)

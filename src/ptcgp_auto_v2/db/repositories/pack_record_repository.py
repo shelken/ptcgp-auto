@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 import logging
-from datetime import datetime
 from typing import Any, List, Optional
 
 from sqlalchemy import tuple_
 from sqlmodel import col, func, select
 
 from ptcgp_auto_v2.db.models import PackCard, PackRecord, PackRecordType
-from ptcgp_auto_v2.utils.game_time import get_game_day_window
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -24,38 +22,6 @@ class PackRecordRepository(BaseRepository):
             .order_by(col(PackRecord.opened_at).desc())
         )
         return list(self.session.exec(statement).all())
-
-    def get_today(self, account_id: int) -> Optional[PackRecord]:
-        """获取账号今日的开包记录"""
-        day_start, day_end = get_game_day_window()
-        statement = (
-            select(PackRecord)
-            .where(
-                PackRecord.account_id == account_id,
-                PackRecord.opened_at >= day_start,
-                PackRecord.opened_at < day_end,
-            )
-            .order_by(col(PackRecord.opened_at).desc())
-            .limit(1)
-        )
-        return self.session.exec(statement).first()
-
-    def has_opened_today(self, account_id: int) -> bool:
-        """检查账号今日是否已开包"""
-        return self.get_today(account_id) is not None
-
-    def has_opened_within_hours(self, account_id: int, hours: int = 12) -> bool:
-        """检查账号在指定小时内是否已开包"""
-        threshold = datetime.fromtimestamp(datetime.now().timestamp() - hours * 3600)
-        statement = (
-            select(PackRecord)
-            .where(
-                PackRecord.account_id == account_id,
-                PackRecord.opened_at >= threshold,
-            )
-            .limit(1)
-        )
-        return self.session.exec(statement).first() is not None
 
     def create(self, record: PackRecord) -> PackRecord:
         """创建开包记录"""
@@ -134,16 +100,6 @@ class PackRecordRepository(BaseRepository):
         if count > 0:
             self._finish_write()
             logger.info(f"已迁移 {count} 条旧开包记录")
-
-    def count_by_account(self, account_id: int) -> int:
-        """统计账号的开包总数"""
-        statement = (
-            select(func.count())
-            .select_from(PackRecord)
-            .where(PackRecord.account_id == account_id)
-        )
-        result = self.session.exec(statement).one()
-        return result or 0
 
     def delete(self, record_id: int) -> bool:
         """删除开包记录"""

@@ -7,7 +7,7 @@ from typing import Dict, List, Callable
 
 from ptcgp_auto import config
 from ptcgp_auto.logger import get_logger
-from .utils import ScrollHelper, go_back
+from .utils import go_back
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,6 @@ class LevelActions:
         self.recognizer = recognizer
         self.state = state
         self._should_switch_to_higher_priority_level = should_switch_checker
-        self._scroll_helper = ScrollHelper(adb, recognizer, max_attempts=10, ratio=0.21)
 
     def select_level(
         self,

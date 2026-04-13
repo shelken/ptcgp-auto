@@ -55,21 +55,3 @@ class AccountBattleProgressRepository(BaseRepository):
 
         self._finish_write(record)
         return True
-
-    def get_incomplete_levels(
-        self, account_id: int, set_code: str
-    ) -> list[AccountBattleProgress]:
-        """获取指定系列下所有未完成的等级"""
-        statement = select(AccountBattleProgress).where(
-            AccountBattleProgress.account_id == account_id,
-            AccountBattleProgress.set_code == set_code,
-            AccountBattleProgress.status == "in_progress",
-        )
-        return list(self.session.exec(statement).all())
-
-    def get_all_progress(self, account_id: int) -> list[AccountBattleProgress]:
-        """获取账号所有对战进度"""
-        statement = select(AccountBattleProgress).where(
-            AccountBattleProgress.account_id == account_id
-        )
-        return list(self.session.exec(statement).all())

@@ -8,7 +8,6 @@ from sqlalchemy import and_, distinct, func, or_
 from sqlmodel import col, select
 
 from ptcgp_auto_v2.db.models import AccountCard, Card, CardPack, CardSet, Pack
-from ptcgp_auto_v2.utils.card_naming import parse_card_number_from_filename
 from .base import BaseRepository
 
 logger = logging.getLogger(__name__)
@@ -226,27 +225,6 @@ class CardRepository(BaseRepository):
             return None
         return self._to_data(CardData, card)
 
-    def get_card_by_template_name(
-        self, set_code: str, template_name: str
-    ) -> Optional[CardData]:
-        """
-        根据模板名称获取卡牌
-
-        Args:
-            set_code: 系列代码 (如 A1)
-            template_name: 模板名称 (如 "001_Bulbasaur" 或 "025")
-
-        Returns:
-            Card对象或None
-        """
-        # 尝试提取开头的数字部分
-        number = parse_card_number_from_filename(template_name)
-        if number is not None:
-            return self.get_card_by_set_and_number(set_code, number)
-
-        logger.warning(f"Failed to parse card number from template: {template_name}")
-        return None
-
     def upsert_card(self, card: Card) -> int | None:
         """更新或创建卡牌。"""
         statement = select(Card).where(
@@ -274,13 +252,6 @@ class CardRepository(BaseRepository):
         self._finish_write(card)
         return int(card.id) if card.id is not None else None
 
-    def clear_card_packs(self, card_id: int):
-        """清除卡牌的卡包关联"""
-        statement = select(CardPack).where(CardPack.card_id == card_id)
-        for item in self.session.exec(statement).all():
-            self.session.delete(item)
-        self._finish_write()
-
     def add_card_pack(self, card_id: int, pack_name: str):
         """添加卡牌与卡包的关联"""
         statement = select(CardPack).where(
@@ -289,18 +260,6 @@ class CardRepository(BaseRepository):
         if self.session.exec(statement).first():
             return
         self.session.add(CardPack(card_id=card_id, pack_name=pack_name))
-        self._finish_write()
-
-    def remove_card_pack(self, card_id: int, pack_name: str):
-        """移除卡牌与指定卡包的关联。"""
-        statement = select(CardPack).where(
-            CardPack.card_id == card_id,
-            CardPack.pack_name == pack_name,
-        )
-        row = self.session.exec(statement).first()
-        if not row:
-            return
-        self.session.delete(row)
         self._finish_write()
 
     def get_card_pack_names(self, card_id: int) -> list[str]:
@@ -373,33 +332,6 @@ class CardRepository(BaseRepository):
             for pack_name, label_data in self.session.exec(statement).all()
         }
 
-    def get_latest_set_with_pack(self) -> Optional[tuple[CardSetData, PackData]]:
-        """
-        获取最新发布的系列及其一个随机子包
-
-        Returns:
-            (CardSetData, PackData) 元组，如果没有则返回 None
-            排除 promo/PROMO 开头的系列（不区分大小写）
-        """
-        import random
-        from sqlalchemy import func
-
-        statement = (
-            select(CardSet)
-            .where(func.upper(col(CardSet.code)).not_like("PROMO%"))
-            .order_by(CardSet.release_date.desc())
-        )
-        latest_set = self.session.exec(statement).first()
-        if not latest_set:
-            logger.warning("未找到非 promo 的系列")
-            return None
-        pack_statement = select(Pack).where(Pack.set_code == latest_set.code)
-        packs = [self._to_data(PackData, pack) for pack in self.session.exec(pack_statement).all()]
-        if not packs:
-            logger.warning(f"系列 {latest_set.code} 没有关联的子包")
-            return None
-        return self._to_data(CardSetData, latest_set), random.choice(packs)
-
     def get_cards_by_set(self, set_code: str) -> List[CardData]:
         """获取系列下的所有卡牌。"""
         statement = select(Card).where(Card.set_code == set_code).order_by(Card.number)
@@ -447,29 +379,3 @@ class CardRepository(BaseRepository):
             for number, hash_value in self.session.exec(statement).all()
             if hash_value is not None
         }
-
-    def get_card_pack_names_batch(
-        self, card_ids: list[int], exclude_promo: bool = False
-    ) -> dict[int, list[str]]:
-        """批量获取卡牌关联的子包名称。
-
-        Args:
-            card_ids: 卡牌ID列表
-            exclude_promo: 是否排除 PROMO 前缀的子包
-
-        Returns:
-            {card_id: [pack_name, ...]} 映射
-        """
-        if not card_ids:
-            return {}
-        statement = select(CardPack.card_id, CardPack.pack_name).where(
-            col(CardPack.card_id).in_(card_ids)
-        )
-        if exclude_promo:
-            statement = statement.where(
-                func.upper(col(CardPack.pack_name)).not_like("PROMO%")
-            )
-        mapping: dict[int, list[str]] = {}
-        for card_id, pack_name in self.session.exec(statement).all():
-            mapping.setdefault(card_id, []).append(pack_name)
-        return mapping

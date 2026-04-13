@@ -22,7 +22,6 @@ from ptcgp_auto_v2.config.lang import (
 )
 from ptcgp_auto_v2.config.notification import (
     SCENE_RARE_CARD,
-    SCENE_SYSTEM_WARNING,
     SCENE_TASK_STATUS,
 )
 from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
@@ -37,7 +36,7 @@ from ptcgp_auto_v2.db.repositories import (
 )
 
 if TYPE_CHECKING:
-    from ptcgp_auto_v2.db.models import Account, Card, Pack, TaskInstance
+    from ptcgp_auto_v2.db.models import Account, TaskInstance
 
 logger = logging.getLogger(__name__)
 
@@ -164,54 +163,6 @@ class Notifier:
             content += f"\n\n![{card_name}]({image_url})"
         return content
 
-    def notify_rare_card(
-        self,
-        account: "Account",
-        card: "Card",
-        rarity: str,
-        pack: Optional["Pack"] = None,
-        image_url: Optional[str] = None,
-        message: Optional[str] = None,
-    ) -> bool:
-        """
-        稀有卡牌通知
-
-        Args:
-            account: 账号
-            card: 卡牌
-            rarity: 稀有度代码（如 R, RR, SR）
-            image_url: 卡牌图片 URL
-
-        Returns:
-            是否发送通知
-        """
-        account_name = self._resolve_account_name(account)
-        pack_name = ""
-        if pack is not None:
-            web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
-            pack_name = resolve_localized_text(
-                raw_data=getattr(pack, "label_data", None),
-                web_lang=web_lang,
-                fallback=str(getattr(pack, "name", "")),
-            )
-        card_id = getattr(card, "id", None)
-        card_number = getattr(card, "number", None)
-        if card_id is None or card_number is None:
-            return False
-        return self.notify_rare_card_data(
-            account_id=getattr(account, "id", None),
-            account_name=account_name,
-            card_id=int(card_id),
-            card_name=str(getattr(card, "name", "")),
-            card_data=getattr(card, "data", None),
-            set_code=str(getattr(card, "set_code", "") or ""),
-            card_number=int(card_number),
-            rarity=rarity,
-            pack_name=pack_name,
-            image_url=image_url,
-            message=message,
-        )
-
     def notify_rare_card_data(
         self,
         *,
@@ -331,33 +282,6 @@ class Notifier:
             account_id=account.id if account else None,
             task_instance_id=task_instance.id,
         )
-
-    def notify_system_warning(self, title: str, message: str) -> bool:
-        """
-        系统警告通知
-
-        Args:
-            title: 警告标题
-            message: 警告内容
-
-        Returns:
-            是否发送通知
-        """
-        now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 内联 _format_now
-        content = f"{message}\n时间: {now_text}"  # 内联 _build_system_warning_content
-
-        return self.notify(
-            scene=SCENE_SYSTEM_WARNING,
-            title=title,
-            content=content,
-        )
-
-    def send_webhook_test(self) -> bool:
-        """发送企业微信测试消息（仅 Webhook，不落库）。"""
-        title = "企业微信通知测试"
-        now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 内联 _format_now
-        content = f"这是一条来自 PTCGP Auto Web 的测试消息\n时间: {now_text}"
-        return self.send_webhook_notification(title=title, content=content)
 
     def send_webhook_notification(
         self,

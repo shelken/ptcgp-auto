@@ -420,59 +420,6 @@ class CardHashManager:
 
         return scored_items[:topk]
 
-    def get_loaded_sets(self) -> Set[str]:
-        """获取已加载的系列列表"""
-        return self._loaded_sets.copy()
-
-    def is_all_loaded(self) -> bool:
-        """检查是否已加载所有系列"""
-        return self._all_loaded
-
-    def clear_failed_cache(self, set_code: Optional[str] = None) -> int:
-        """
-        强制刷新：清空下载失败缓存
-
-        使用场景：当远程仓库补充了缺失的卡牌后，调用此方法重新尝试下载
-
-        Args:
-            set_code: 指定系列代码则只清空该系列的失败缓存，为None则清空全部
-
-        Returns:
-            清空的缓存条目数量
-        """
-        if set_code is None:
-            count = len(self._failed_downloads)
-            self._failed_downloads.clear()
-            logger.info(f"已清空所有失败缓存（共 {count} 条）")
-            return count
-        else:
-            # 只清空指定系列的失败缓存
-            to_remove = {
-                k for k in self._failed_downloads if k.startswith(f"{set_code}/")
-            }
-            for key in to_remove:
-                self._failed_downloads.discard(key)
-            logger.info(f"已清空系列 {set_code} 的失败缓存（共 {len(to_remove)} 条）")
-            return len(to_remove)
-
-    def get_failed_count(self, set_code: Optional[str] = None) -> int:
-        """
-        获取下载失败的卡牌数量
-
-        Args:
-            set_code: 指定系列代码则只统计该系列，为None则统计全部
-
-        Returns:
-            失败缓存条目数量
-        """
-        if set_code is None:
-            return len(self._failed_downloads)
-        else:
-            return sum(
-                1 for k in self._failed_downloads if k.startswith(f"{set_code}/")
-            )
-
-
 # 全局单例实例
 _card_hash_manager_instance: Optional[CardHashManager] = None
 _card_hash_manager_lock = threading.Lock()

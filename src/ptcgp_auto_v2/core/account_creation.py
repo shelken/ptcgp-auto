@@ -68,9 +68,6 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         scheduler.device_pool.release(device)
         return False
 
-    # 标记设备正在创建账号
-    device.is_creating_account = True
-
     try:
         logger.info(f"准备创建新账号，重置设备 {device.address} 环境")
 
@@ -173,6 +170,4 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         logger.exception(f"触发新账号创建失败: {e}")
         return False
     finally:
-        # 取消设备创建标记并归还
-        device.is_creating_account = False
         scheduler.device_pool.release(device)

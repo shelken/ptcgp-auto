@@ -89,16 +89,6 @@ class NotificationConfigRepository(BaseRepository):
         except json.JSONDecodeError:
             return {}
 
-    def is_enabled(self, scene: str) -> bool:
-        """检查场景是否启用"""
-        config = self.get_or_create(scene)
-        return config.enabled
-
-    def is_webhook_enabled(self, scene: str) -> bool:
-        """检查场景是否启用 Webhook"""
-        config = self.get_or_create(scene)
-        return config.enabled and config.enabled_webhook
-
     def _get_default_config(self, scene: str) -> Dict[str, Any]:
         """获取场景默认配置"""
         return build_default_scene_config(scene)

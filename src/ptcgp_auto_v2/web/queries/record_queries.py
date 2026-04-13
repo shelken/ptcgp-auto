@@ -28,40 +28,6 @@ def _apply_pack_record_filters(query, rarity: list[str], card_type: list[str]):
             query = query.where(col(Card.type).in_(card_type))
     return query
 
-
-def fetch_records(
-    session: Session,
-    page: int,
-    page_size: int,
-    rarity: list[str],
-    card_type: list[str],
-) -> tuple[list[PackRecord], bool]:
-    """查询开包记录（支持筛选与分页）并返回是否还有下一页。"""
-    normalized_page, normalized_page_size = normalize_pagination(
-        page=page,
-        page_size=page_size,
-        max_size=100,
-    )
-    query = (
-        select(PackRecord)
-        .options(
-            selectinload(PackRecord.cards).selectinload(PackCard.card),
-            selectinload(PackRecord.account),
-        )
-        .distinct()
-        .order_by(desc(PackRecord.opened_at))
-    )
-
-    query = _apply_pack_record_filters(query, rarity, card_type)
-    rows, has_next = fetch_window_rows(
-        session=session,
-        statement=query,
-        page=normalized_page,
-        page_size=normalized_page_size,
-    )
-    return rows, has_next
-
-
 def fetch_display_entity_records(
     session: Session,
     page: int,

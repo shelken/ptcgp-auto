@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import List, Optional
 
 from ptcgp_auto_v2.config.constants import (
-    APP_ACTIVITY,
     APP_PACKAGE,
     BASE_SCREEN_HEIGHT,
     BASE_SCREEN_WIDTH,
@@ -21,7 +20,6 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_MAX_SCROLL_ATTEMPTS,
     DEFAULT_MAX_WORKERS,
-    DEFAULT_OCR_LEVEL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_RETRY_DELAY,
     DEFAULT_TASK_GENERATION_INTERVAL,
@@ -37,7 +35,7 @@ from ptcgp_auto_v2.config.constants import (
     SCALE_PACK_OPENING_SWIPE,
     SCALE_PACK_SERIES_SELECT,
 )
-from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, DEFAULT_OCR_LANGUAGES
+from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +112,6 @@ class Settings:
 
     # 应用配置
     app_package: str = APP_PACKAGE
-    app_activity: str = APP_ACTIVITY
 
     @property
     def app_data_dir(self) -> str:
@@ -130,11 +127,6 @@ class Settings:
     def shared_prefs_dir(self) -> str:
         """shared_prefs 目录路径"""
         return f"{self.app_data_dir}/shared_prefs"
-
-    @property
-    def main_activity(self) -> str:
-        """应用主 Activity"""
-        return f"{self.app_package}/{self.app_activity}"
 
     @property
     def files_to_clean_on_switch(self) -> list[str]:
@@ -154,8 +146,6 @@ class Settings:
     base_screen_height: int = BASE_SCREEN_HEIGHT
 
     # 识别配置
-    ocr_languages: List[str] = field(default_factory=lambda: DEFAULT_OCR_LANGUAGES)
-    ocr_recognition_level: str = DEFAULT_OCR_LEVEL  # "fast" or "accurate"
     template_threshold: float = DEFAULT_TEMPLATE_THRESHOLD
 
     # 语言配置

@@ -18,19 +18,6 @@ TEMPLATES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "template
 # ROI 缓存文件
 ROI_CACHE_FILE = Path("/tmp/ptcgp_crop_roi_cache.json")
 
-
-def _load_cached_roi() -> Optional[Tuple[int, int, int, int]]:
-    """加载缓存的 ROI"""
-    if not ROI_CACHE_FILE.exists():
-        return None
-    try:
-        with open(ROI_CACHE_FILE, "r") as f:
-            data = json.load(f)
-            return tuple(data["roi"])
-    except Exception:
-        return None
-
-
 def _save_cached_roi(roi: Tuple[int, int, int, int]):
     """保存 ROI 到缓存"""
     try:

@@ -80,12 +80,6 @@ class ExchangeCardRequestRepository(BaseRepository):
         row = self.session.get(ExchangeCardRequest, request_id)
         return None if row is None else self._to_data(ExchangeCardRequestSnapshot, row)
 
-    def get_active_by_account(
-        self, from_account_id: int
-    ) -> Optional[ExchangeCardRequest]:
-        """查询账号当前活跃请求（sending/sended）。"""
-        return self._get_active_by_account_with_session(from_account_id)
-
     def get_active_by_account_data(
         self, from_account_id: int
     ) -> Optional[ExchangeCardRequestSnapshot]:
@@ -181,19 +175,6 @@ class ExchangeCardRequestRepository(BaseRepository):
             next_check_at=None,
             expire_at=None,
         )
-
-    def clear_waiting_window(self, request_id: int) -> bool:
-        """清除等待窗口相关字段。"""
-        return self.update_fields_by_id(
-            request_id,
-            cancel_reason=None,
-            next_check_at=None,
-            expire_at=None,
-        )
-
-    def set_waiting_expire_at(self, request_id: int, expire_at: Optional[datetime]) -> bool:
-        """设置等待窗口过期时间。"""
-        return self.update_fields_by_id(request_id, expire_at=expire_at)
 
     def set_cancel_reason(self, request_id: int, reason: Optional[str]) -> bool:
         """设置取消原因。"""

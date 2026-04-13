@@ -197,37 +197,7 @@ class StateManager:
             logger.info(f"[状态] {level} - {pack_id} 已标记为完成")
         self.save()
 
-    def get_incomplete_packs(self, level: str) -> list:
-        """获取指定等级未完成的卡包 ID 列表（系列_左分母_右分母）"""
-        if level in self.state["levels"]:
-            packs = self.state["levels"][level].get("packs", {})
-            return [pack_id for pack_id, done in packs.items() if not done]
-        return []
-
     # ===== 系列状态 =====
-
-    def get_current_series(self) -> str:
-        """获取当前系列"""
-        default = config.SERIES[0] if config.SERIES else "A"
-        return self.state.get("current_series", default)
-
-    def set_current_series(self, series: str):
-        """设置当前系列"""
-        self.state["current_series"] = series
-        self.save()
-
-    def switch_to_next_series(self) -> Optional[str]:
-        """切换到下一个系列，返回新系列名，如果没有更多系列返回 None"""
-        current = self.get_current_series()
-        try:
-            current_index = config.SERIES.index(current)
-            if current_index + 1 < len(config.SERIES):
-                next_series = config.SERIES[current_index + 1]
-                self.set_current_series(next_series)
-                return next_series
-        except ValueError:
-            pass
-        return None  # 没有更多系列
 
     # ===== 用户信息 =====
 
@@ -250,32 +220,11 @@ class StateManager:
         logger.info(f"[状态] 已保存用户信息: {username} ({friend_id})")
         self.save()
 
-    def has_user_db(self) -> bool:
-        """检查是否已有数据库用户信息"""
-        return self.state.get("user_db") is not None
-
-    def get_user_db(self) -> Optional[Dict]:
-        """获取数据库用户信息"""
-        return self.state.get("user_db")
-
-    def set_user_db(self, user_db: Dict):
-        """设置数据库用户信息"""
-        self.state["user_db"] = user_db
-        logger.info("[状态] 已保存数据库用户信息")
-        self.save()
-
     # ===== 工具方法 =====
 
     def needs_initialization(self) -> bool:
         """判断是否需要初始化状态（回单人对战主页读取）"""
         return self.state.get("current_level") is None
-
-    def get_next_incomplete_level(self) -> Optional[str]:
-        """获取下一个未完成的等级"""
-        for level in config.BATTLE_LEVELS:
-            if not self.is_level_complete(level):
-                return level
-        return None
 
     def print_status(self):
         """打印当前状态摘要"""

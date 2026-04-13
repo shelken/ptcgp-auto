@@ -49,44 +49,6 @@ class ColorDetectorMixin:
 
         return ratio >= threshold
 
-    def check_green(
-        self,
-        screenshot: Image.Image,
-        region: Tuple[int, int, int, int],
-        threshold: float = 0.1,
-    ) -> bool:
-        """便捷方法：检测区域内是否有足够的绿色"""
-        return self.check_color_ratio(
-            screenshot,
-            region,
-            COLORS["green"]["lower"],
-            COLORS["green"]["upper"],
-            threshold,
-        )
-
-    def get_color_ratio(
-        self,
-        screenshot: Image.Image,
-        region: Tuple[int, int, int, int],
-        hsv_lower: Tuple[int, int, int],
-        hsv_upper: Tuple[int, int, int],
-    ) -> float:
-        """获取区域内指定颜色的占比（用于调试）"""
-        x1, y1, x2, y2 = region
-        img = self.pil_to_cv2(screenshot)
-
-        height, width = img.shape[:2]
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(width, x2), min(height, y2)
-
-        if x2 <= x1 or y2 <= y1:
-            return 0.0
-
-        roi = img[y1:y2, x1:x2]
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, np.array(hsv_lower), np.array(hsv_upper))
-        return np.count_nonzero(mask) / mask.size
-
     def _calculate_color_region(
         self,
         anchor_box: Tuple[int, int, int, int],

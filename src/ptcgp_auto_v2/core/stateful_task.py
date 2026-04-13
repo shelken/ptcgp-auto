@@ -125,10 +125,6 @@ class StatefulTask(Task):
         """读取当前页面。"""
         return cast(str | None, self.state_get(PAGE_CURRENT_KEY))
 
-    def get_previous_page(self) -> str | None:
-        """读取上一页面。"""
-        return cast(str | None, self.state_get(PAGE_PREVIOUS_KEY))
-
     def set_current_page(self, page_name: str) -> bool:
         """更新当前页面并返回是否发生页面切换。"""
         current_page = self.get_current_page()

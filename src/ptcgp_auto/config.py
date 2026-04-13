@@ -51,7 +51,6 @@ ALLOW_RESTART_ON_HOME_FAIL = False
 WAIT_AFTER_CLICK = 0.5  # 点击后等待
 WAIT_PAGE_TRANSITION = 1  # 页面切换等待
 WAIT_BATTLE_CHECK_INTERVAL = 5  # 对局中检测间隔
-WAIT_BATTLE_TIMEOUT = 600  # 对局超时时间（10分钟）
 
 # 无法识别界面的阈值（连续多少次触发通知）
 UNRECOGNIZED_THRESHOLD = 15
@@ -83,17 +82,8 @@ PACK_TEMPLATE_SCALES = {
     "pack_detail": 1.0,  # 单包详情页（最大）
 }
 
-# 调试输出目录
-DEBUG_DIR = "debug_output"
-
 # 弹窗按钮文字（用于滚动循环中检测遮挡弹窗）
 POPUP_BUTTONS = ["OK", "确认", "確認", "取消"]
-
-# 等级目前总牌组数（截止红莲烈焰）1410
-expert_decks = 91  # 首次获得沙漏 7
-advanced_decks = 95  # 首次获得沙漏 5
-intermediate_decks = 76  # # 首次获得沙漏 3
-beginner_decks = 35  # 首次获得沙漏 2
 
 # 初始大概 12 级，打完40级 28x12=336
 # 任天堂账号赠送 36

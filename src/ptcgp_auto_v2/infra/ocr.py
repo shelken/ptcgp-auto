@@ -256,30 +256,3 @@ class OcrEngine:
                 return result
 
         return None
-
-    def find_all_text(
-        self,
-        image: Image.Image,
-        target: str,
-        exact_match: bool = False,
-    ) -> List[OcrResult]:
-        """
-        在图片中查找所有匹配的文字
-
-        Args:
-            image: PIL Image 对象
-            target: 要查找的文字
-            exact_match: 是否精确匹配
-
-        Returns:
-            匹配的 OcrResult 列表
-        """
-        results = self.recognize(image)
-        target_lower, target_normalized = self._normalize_text(target)
-        matches = []
-
-        for result in results:
-            if self._matches(target_lower, target_normalized, result.text, exact_match):
-                matches.append(result)
-
-        return matches

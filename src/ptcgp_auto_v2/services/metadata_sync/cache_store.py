@@ -31,10 +31,3 @@ class TTLCacheStore:
         ttl = ttl_seconds if ttl_seconds is not None else self._ttl_seconds
         expires_at = datetime.now() + timedelta(seconds=ttl)
         self._store[key] = (expires_at, value)
-
-    def invalidate_prefix(self, prefix: str) -> int:
-        """按前缀失效缓存键。"""
-        keys = [key for key in self._store if key.startswith(prefix)]
-        for key in keys:
-            self._store.pop(key, None)
-        return len(keys)

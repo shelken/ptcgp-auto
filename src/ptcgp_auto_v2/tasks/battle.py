@@ -335,8 +335,6 @@ class BattleTask(StatefulTask):
         self._stop_conditions: list[StopCondition] = []
         self._start_time: Optional[datetime] = None
         self._battle_count: int = 0
-        self._hourglass_before: int = 0
-        self._hourglass_gained: int = 0
         # 系列选择缓存：该系列的所有子包候选
         self._series_pack_candidates: list[PackCandidate] = []
         # 标记是否已预加载模板

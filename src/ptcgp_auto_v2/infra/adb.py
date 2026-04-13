@@ -350,10 +350,6 @@ class AdbController:
         """返回当前屏幕中心y位置"""
         return self.screen_height // 2
 
-    def scaled_point(self, x: int, y: int) -> tuple[int, int]:
-        """缩放坐标点"""
-        return self.scaled_x(x), self.scaled_y(y)
-
     def is_connected(self) -> bool:
         """检查设备是否已连接"""
         if not self.device:

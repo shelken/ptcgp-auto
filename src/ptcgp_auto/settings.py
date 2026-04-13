@@ -91,16 +91,6 @@ def load_dotenv() -> None:
         os.environ.setdefault(key, value)
 
 
-def get_env_value(env_name: str, typ: type, default: Any) -> Any:
-    """Get value from environment with type conversion."""
-    value = os.environ.get(env_name)
-    if value is None:
-        return default
-    if typ is bool:
-        return value.lower() in ("true", "1", "yes")
-    return typ(value)
-
-
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser from config definitions."""
     parser = argparse.ArgumentParser(

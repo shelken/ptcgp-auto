@@ -197,15 +197,6 @@ def list_active_gift_pairs(
     )
     return list(session.exec(statement).all())
 
-
-def list_accounts_by_ids(session: Session, account_ids: set[int]) -> list[Account]:
-    """按账号 ID 批量查询账号信息。"""
-    if not account_ids:
-        return []
-    statement = select(Account).where(col(Account.id).in_(sorted(account_ids)))
-    return list(session.exec(statement).all())
-
-
 def list_all_accounts(session: Session) -> list[Account]:
     """查询全部账号，用于筛选器选项。"""
     statement = select(Account).order_by(col(Account.id))

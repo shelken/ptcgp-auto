@@ -59,10 +59,6 @@ class TaskPlan(SQLModel, table=True):
         except (json.JSONDecodeError, TypeError):
             return []
 
-    def task_types_json(self) -> str:
-        """将 task_types 列表转换为 JSON 字符串（兼容旧接口）"""
-        return self.task_types
-
     def to_dict(self) -> dict:
         """转换为字典"""
         return {

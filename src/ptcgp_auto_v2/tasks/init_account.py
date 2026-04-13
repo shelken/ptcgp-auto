@@ -192,13 +192,6 @@ class InitAccountPhase(Enum):
     """新账号初始化任务阶段（仅用于页面间流转）"""
 
     INIT = auto()  # 初始化
-    SELECT_COUNTRY = auto()  # 选择国家/地区
-    TERMS_PRIVACY = auto()  # 条款与隐私
-    CREATE_SAVE = auto()  # 创建存档
-    ACCOUNT_LINK = auto()  # 账号链接
-    SET_NICKNAME = auto()  # 设置昵称
-    SELECT_PACK = auto()  # 选择初始卡包
-    SWIPE_OPEN = auto()  # 滑动开包引导
     COMPLETED = auto()  # 初始化完成
 
 

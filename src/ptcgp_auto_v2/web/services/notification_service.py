@@ -32,7 +32,6 @@ from ptcgp_auto_v2.tasks import TaskRegistry
 from ptcgp_auto_v2.web.queries.notification_queries import (
     list_notification_selectable_cards,
     list_notifications,
-    list_recent_notifications,
     normalize_card_picker_sort,
     normalize_notification_sort,
 )
@@ -373,20 +372,6 @@ def _build_notification_list_rows(
         rows.append(row)
     return rows
 
-
-def build_recent_notifications_context(
-    session: Session,
-    limit: int = 5,
-) -> dict[str, Any]:
-    """构建最近通知下拉内容上下文。"""
-    return {
-        "notifications": [
-            item.model_dump()
-            for item in list_recent_notifications(session, limit=limit)
-        ],
-    }
-
-
 def build_notification_panel_context(
     session: Session,
     page: int = 0,
@@ -519,45 +504,6 @@ def _extract_image_url(content: str) -> str | None:
         return match.group(1)
     return None
 
-
-def build_notification_image_payload(
-    notification: Notification,
-    session: Session,
-    lang: str,
-) -> dict[str, str | None]:
-    """统一构造通知图片 URL（普通 markdown / 稀有卡牌同源规则）。"""
-    image_url = _extract_image_url(notification.content)
-    image_webp_url = _build_image_webp_fallback_url(image_url)
-
-    if notification.scene == "rare_card_obtained" and notification.related_card_id:
-        card = session.get(Card, notification.related_card_id)
-        if card is not None and card.set_code and card.number is not None:
-            card_image_url, card_image_webp_url = build_card_image_urls(
-                set_code=card.set_code,
-                card_number=card.number,
-                lang=lang,
-                width=400,
-            )
-            return {
-                "image_url": card_image_url,
-                "image_webp_url": card_image_webp_url,
-            }
-
-    card_image_url, card_image_webp_url = _build_notification_card_asset_urls(
-        notification=notification,
-        session=session,
-        lang=lang,
-    )
-    if card_image_url:
-        image_url = card_image_url
-        image_webp_url = card_image_webp_url
-
-    return {
-        "image_url": image_url,
-        "image_webp_url": image_webp_url,
-    }
-
-
 def _build_notification_image_payloads(
     notifications: list[Notification],
     session: Session,
@@ -686,37 +632,6 @@ def _extract_card_name_and_rarity(content: str) -> tuple[str, str] | None:
         return legacy_match.group("name").strip(), legacy_match.group("rarity").strip()
 
     return None
-
-
-def _build_notification_card_asset_urls(
-    notification: Notification,
-    session: Session,
-    lang: str,
-) -> tuple[str | None, str | None]:
-    """按拥有卡同源规则生成通知缩略图 URL（png + webp）。"""
-    if notification.scene != "rare_card_obtained":
-        return None, None
-
-    parsed = _extract_card_name_and_rarity(notification.content or "")
-    if not parsed:
-        return None, None
-
-    card_name, rarity_code = parsed
-    cards = list(session.exec(select(Card).where(Card.name == card_name)).all())
-    card = next(
-        (item for item in cards if item.rarity == rarity_code),
-        cards[0] if cards else None,
-    )
-    if card is None or not card.set_code or card.number is None:
-        return None, None
-
-    return build_card_image_urls(
-        set_code=card.set_code,
-        card_number=card.number,
-        lang=lang,
-        width=400,
-    )
-
 
 def _build_image_webp_fallback_url(image_url: str | None) -> str | None:
     """基于原图 URL 生成 webp 回退地址。"""

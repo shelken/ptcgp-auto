@@ -59,11 +59,6 @@ class AccountRepository(BaseRepository):
         statement = select(Account).where(Account.game_id == game_id)
         return self.session.exec(statement).first()
 
-    def get_by_friend_id(self, friend_id: str) -> Optional[Account]:
-        """根据朋友 ID 获取账号"""
-        statement = select(Account).where(Account.friend_id == friend_id)
-        return self.session.exec(statement).first()
-
     def get_friend_ref_by_id(self, account_id: int) -> Optional[AccountFriendRef]:
         """根据账号 ID 获取好友关系所需的最小纯数据。"""
         statement = select(Account.id, Account.friend_id).where(Account.id == account_id)
@@ -85,20 +80,6 @@ class AccountRepository(BaseRepository):
         statement = select(func.count()).select_from(Account)
         result = self.session.exec(statement).one()
         return result or 0
-
-    def get_accounts_without_friend_id(self) -> list[Account]:
-        """获取所有没有 friend_id 的账号（用于补全任务）"""
-        statement = (
-            select(Account)
-            .where((col(Account.friend_id).is_(None)) | (Account.friend_id == ""))
-            .order_by(col(Account.id))
-        )
-        return list(self.session.exec(statement).all())
-
-    def get_accounts_with_plans(self) -> list[Account]:
-        """获取所有有任务计划的账号（包括新旧关联）"""
-        statement = select(Account).options(*self._account_options()).order_by(col(Account.id))
-        return list(self.session.exec(statement).all())
 
     def list_accounts_by_plan_id(self, plan_id: int) -> list[Account]:
         """获取关联指定计划的账号列表。"""
@@ -182,17 +163,6 @@ class AccountRepository(BaseRepository):
         self._finish_write()
         return True
 
-    def update_friend_id(self, account_id: int, friend_id: str) -> bool:
-        """更新账号的 friend_id"""
-        account = self.session.get(Account, account_id)
-        if not account:
-            return False
-        account.friend_id = friend_id
-        account.updated_at = datetime.now()
-        self.session.add(account)
-        self._finish_write()
-        return True
-
     def delete(self, account_id: int) -> bool:
         """删除账号"""
         account = self.session.get(Account, account_id)
@@ -201,10 +171,6 @@ class AccountRepository(BaseRepository):
         self.session.delete(account)
         self._finish_write()
         return True
-
-    def assign_task_plan(self, account_id: int, plan_id: int) -> bool:
-        """为账号分配主任务计划（设置为最高优先级）"""
-        return self.add_secondary_plan(account_id, plan_id, priority=10)
 
     def add_secondary_plan(
         self, account_id: int, plan_id: int, priority: int = 0

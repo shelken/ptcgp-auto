@@ -117,19 +117,6 @@ def setup_logging(port: int = None, level: str = "INFO", color: str = None):
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.WARNING)
 
 
-def set_port(port: int, color: str = None):
-    """设置当前上下文的端口号
-
-    Args:
-        port: 端口号
-        color: 端口颜色（可选）
-    """
-    global _port, _port_color
-    _port = str(port)
-    _port_color = color if color else "white"
-    _port_colors[_port] = _port_color
-
-
 def set_username(username: str):
     """设置当前上下文的用户名"""
     global _username

@@ -16,7 +16,6 @@ from ptcgp_auto_v2.core.task_base import (
     ActionResult,
     ResetType,
     TaskRegistry,
-    TaskResult,
 )
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
@@ -149,9 +148,6 @@ class FetchAccountInfoTask(StatefulTask):
             or pack_hourglass_count is None
         )
 
-    def setup(self) -> bool:
-        return True
-
     def on_start(self):
         """初始化任务运行状态。"""
         self.state.reset()
@@ -166,25 +162,6 @@ class FetchAccountInfoTask(StatefulTask):
                 "holdings_scan_rounds": 0,
             }
         )
-
-    def check_completion(self) -> Optional[TaskResult]:
-        """检查任务完成状态"""
-        if self.is_completed():
-            friend_id = cast(Optional[str], self.state_get("friend_id"))
-            nickname = cast(Optional[str], self.state_get("nickname"))
-            level = cast(Optional[int], self.state_get("level"))
-            exchange_points = cast(Optional[int], self.state_get("exchange_points"))
-            pack_hourglass_count = cast(
-                Optional[int], self.state_get("pack_hourglass_count")
-            )
-            if friend_id or nickname or exchange_points is not None:
-                return TaskResult.ok(
-                    message=f"获取完成: friend_id={friend_id}, nickname={nickname}, "
-                    f"level={level}, exchange_points={exchange_points}, "
-                    f"pack_hourglass_count={pack_hourglass_count}"
-                )
-            return TaskResult.fail("未能获取账号信息")
-        return None
 
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         """未映射页面兜底。"""

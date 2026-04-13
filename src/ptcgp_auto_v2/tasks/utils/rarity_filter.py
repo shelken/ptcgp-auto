@@ -47,10 +47,7 @@ FILTER_SCROLL_WAIT = 1.2
 @dataclass
 class FilterPanelState:
     """筛选面板状态。"""
-
-    cleared: bool = False
-    scrolled: bool = False
-    ok_scrolled: bool = False
+    pass
 
 
 @dataclass

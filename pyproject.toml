@@ -48,9 +48,13 @@ paths = [
   "scripts",
   "yolo-card-training/scripts",
 ]
-exclude = ["*/.venv/*", "*/node_modules/*"]
+exclude = [
+  "*/.venv/*",
+  "*/node_modules/*",
+]
 ignore_decorators = ["@TaskRegistry.register", "@router.*", "@app.*"]
-min_confidence = 80
+min_confidence = 60
+ignore_names = ["_handle_*", "action_*", "on_start", "handle_unknown_page", "pytest_*"]
 
 [tool.pytest.ini_options]
 # 只收集明确的 tests/ 目录下的测试，避免 scripts/ 等目录里

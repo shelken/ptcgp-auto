@@ -90,18 +90,6 @@ def list_notifications(
     )
     return rows, total
 
-
-def list_recent_notifications(session: Session, limit: int = 5) -> list[Notification]:
-    """获取最近通知（按创建时间倒序）。"""
-    normalized_limit = min(max(limit, 1), 20)
-    statement = (
-        select(Notification)
-        .order_by(col(Notification.created_at).desc())
-        .limit(normalized_limit)
-    )
-    return list(session.exec(statement).all())
-
-
 CARD_SORT_FIELDS = {
     "id": col(Card.id),
     "number": col(Card.number),

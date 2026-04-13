@@ -35,7 +35,6 @@ class ResetType(Enum):
     """任务重置类型"""
 
     DAILY = "daily"  # 每日重置
-    WEEKLY = "weekly"  # 每周重置
     ONCE = "once"  # 一次性任务
     INTERVAL = "interval"  # 按时间间隔重置（需要配置 interval_seconds）
 
@@ -553,16 +552,6 @@ class TaskRegistry:
     def all_types(cls) -> list[str]:
         """获取所有已注册的任务类型"""
         return list(cls._tasks.keys())
-
-    @classmethod
-    def all_tasks(cls) -> dict[str, type[Task]]:
-        """获取所有已注册的任务类"""
-        return cls._tasks.copy()
-
-    @classmethod
-    def is_registered(cls, task_type: str) -> bool:
-        """检查任务类型是否已注册"""
-        return task_type in cls._tasks
 
     @classmethod
     def clear(cls):

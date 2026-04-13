@@ -136,14 +136,6 @@ RARITY_META = {
     },
 }
 
-# 基于 RARITY_META 的稀有度优先级列表（高 -> 低）
-RARITY_PRIORITY = sorted(
-    RARITY_META.keys(),
-    key=lambda r: RARITY_META[r]["priority"],
-    reverse=True
-)
-
-
 # 兼容旧接口：rarity_code -> (template_name, count)
 RARITY_CODE_REVERSE = {
     code: (meta["template"], meta["count"]) for code, meta in RARITY_META.items()

@@ -388,13 +388,3 @@ def get_database(db_path: Optional[Path] = None) -> Database:
         if _db_instance is None:
             _db_instance = Database(db_path)
         return _db_instance
-
-
-def reset_database():
-    """重置全局数据库实例（仅用于测试）"""
-    global _db_instance
-
-    with _db_lock:
-        if _db_instance is not None:
-            _db_instance.close()
-            _db_instance = None

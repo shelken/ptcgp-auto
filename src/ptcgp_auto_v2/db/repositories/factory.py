@@ -20,7 +20,6 @@ from .card_repository import CardRepository
 from .exchange_card_request_repository import ExchangeCardRequestRepository
 from .friend_request_repository import FriendRequestRepository
 from .friendship_repository import FriendshipRepository
-from .notification_config_repository import NotificationConfigRepository
 from .notification_repository import NotificationRepository
 from .pack_record_repository import PackRecordRepository
 from .task_instance_repository import TaskInstanceRepository
@@ -75,9 +74,6 @@ class RepositoryFactory:
 
     def notifications(self) -> NotificationRepository:
         return NotificationRepository(self.session)
-
-    def notification_configs(self) -> NotificationConfigRepository:
-        return NotificationConfigRepository(self.session)
 
     def pack_records(self) -> PackRecordRepository:
         return PackRecordRepository(self.session)

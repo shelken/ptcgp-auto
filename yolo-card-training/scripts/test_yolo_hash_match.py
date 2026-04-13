@@ -89,34 +89,6 @@ def bgr_to_color_pixels(bgr_image: np.ndarray) -> ColorPixels:
     return color_pixels
 
 
-def _compute_dct_slow(pixels: list) -> list:
-    """
-    原始实现 - 纯 Python 四重循环（最慢版本）
-    用于对比测试，展示为什么需要优化
-    """
-    n = int(np.sqrt(len(pixels)))
-    if n * n != len(pixels):
-        raise ValueError("像素长度不是平方数")
-
-    result = [0.0] * (FREQ_SIZE * FREQ_SIZE)
-    for u in range(FREQ_SIZE):
-        for v in range(FREQ_SIZE):
-            total = 0.0
-            # 内层双重循环遍历所有像素
-            for y in range(n):
-                for x in range(n):
-                    total += (
-                        pixels[y * n + x]
-                        * np.cos(((2 * x + 1) * u * np.pi) / (2 * n))
-                        * np.cos(((2 * y + 1) * v * np.pi) / (2 * n))
-                    )
-            cu = 1 / np.sqrt(2) if u == 0 else 1
-            cv = 1 / np.sqrt(2) if v == 0 else 1
-            result[u * FREQ_SIZE + v] = ((2 * cu * cv) / n) * total
-
-    return result
-
-
 def _compute_dct(pixels: list) -> list:
     """计算 DCT - 使用 scipy 加速版"""
     try:
@@ -381,12 +353,6 @@ def detect_and_crop_cards(
         )
 
     return cropped_cards
-
-
-def calculate_card_hash(warped_bgr: np.ndarray):
-    """计算卡牌哈希"""
-    color_pixels = bgr_to_color_pixels(warped_bgr)
-    return calculate_perceptual_hash(color_pixels)
 
 
 def test_recognition(

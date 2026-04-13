@@ -6,7 +6,6 @@
 """
 
 import logging
-from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from PIL import Image
@@ -17,30 +16,6 @@ from ptcgp_auto_v2.infra.ocr import OcrEngine
 from ptcgp_auto_v2.infra.template import TemplateMatcher, TemplateMatch
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class PageMatch:
-    """页面匹配结果"""
-
-    page_name: str
-    page_info: dict
-    match_type: str  # "text" or "template"
-    matched_text: Optional[str] = None
-    matched_template: Optional[str] = None
-    box: Optional[Tuple[int, int, int, int]] = None
-    ocr_results: List[dict] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        """转换为字典格式"""
-        return {
-            "page_name": self.page_name,
-            "match_type": self.match_type,
-            "matched_text": self.matched_text,
-            "matched_template": self.matched_template,
-            "box": self.box,
-        }
-
 
 class PageDetector:
     """
@@ -91,10 +66,6 @@ class PageDetector:
             pages: 任务专用页面规则列表
         """
         self.task_pages = pages
-
-    def clear_task_pages(self):
-        """清除任务专用页面规则"""
-        self.task_pages = []
 
     def _get_merged_pages(self) -> List[dict]:
         """
@@ -283,10 +254,6 @@ class PageDetector:
                 }
         return None
 
-    def get_last_screenshot(self) -> Optional[Image.Image]:
-        """获取最近一次截图"""
-        return self._last_screenshot
-
     def _log_ocr_results(self, ocr_results: List[dict]):
         """打印 OCR 识别结果（调试用）"""
         if not logger.isEnabledFor(logging.DEBUG):
@@ -306,10 +273,6 @@ class PageDetector:
             else:
                 items.append(f'"{text}"')
         logger.debug(f"OCR({len(ocr_results)}): {', '.join(items)}")
-
-    def get_last_ocr_results(self) -> List[dict]:
-        """获取最近一次 OCR 结果"""
-        return self._last_ocr_results
 
     def get_last_page_context(self) -> tuple[Optional[Image.Image], List[dict]]:
         """获取最近一次页面上下文（截图 + OCR 结果）"""

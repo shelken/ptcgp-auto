@@ -191,24 +191,6 @@ class AdbController:
         except Exception as e:
             logger.error(f"拖动失败: {e}")
 
-    def drag_centers(
-        self,
-        box1: Tuple[int, int, int, int],
-        box2: Tuple[int, int, int, int],
-        duration: int = 500,
-    ):
-        """从一个矩形中心拖动到另一个矩形中心
-
-        Args:
-            box1: 起始矩形区域
-            box2: 结束矩形区域
-            duration: 拖动持续时间（毫秒）
-        """
-        x1 = (box1[0] + box1[2]) // 2
-        y1 = (box1[1] + box1[3]) // 2
-        x2 = (box2[0] + box2[2]) // 2
-        y2 = (box2[1] + box2[3]) // 2
-        self.drag(x1, y1, x2, y2, duration)
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int, duration: int = 300):
         """滑动屏幕
@@ -331,15 +313,3 @@ class AdbController:
             logger.debug(f"截图已保存: {filepath}")
             return str(filepath)
         return None
-
-
-# 便捷的全局实例
-_controller: Optional[AdbController] = None
-
-
-def get_controller() -> AdbController:
-    """获取全局 ADB 控制器实例"""
-    global _controller
-    if _controller is None:
-        _controller = AdbController()
-    return _controller

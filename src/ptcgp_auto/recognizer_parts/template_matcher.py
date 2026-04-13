@@ -85,7 +85,7 @@ class TemplateMatcherMixin:
         screen = self.pil_to_cv2(screenshot)
 
         result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
 
         if max_val >= threshold:
             h, w = template.shape[:2]
@@ -190,39 +190,6 @@ class TemplateMatcherMixin:
             f"[模板@{scale:.2f}] 未找到 {template_name}, 最高置信度={max_val:.2f}"
         )
         return None
-
-    def get_template_confidence_at_scale(
-        self,
-        screenshot: Image.Image,
-        template_name: str,
-        scale: float,
-    ) -> float:
-        """获取指定缩放比例下的匹配置信度"""
-        if not self.templates:
-            self._load_templates()
-
-        template_name = _normalize_template_name(template_name)
-        if template_name not in self.templates:
-            return 0.0
-
-        template = self.templates[template_name]
-
-        # 缩放模板
-        if abs(scale - 1.0) > 0.01:
-            new_w = int(template.shape[1] * scale)
-            new_h = int(template.shape[0] * scale)
-            template = cv2.resize(template, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-        screen = self.pil_to_cv2(screenshot)
-
-        # 检查模板不能大于截图
-        if template.shape[0] > screen.shape[0] or template.shape[1] > screen.shape[1]:
-            return 0.0
-
-        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(result)
-
-        return max_val
 
     def find_all_templates(
         self,

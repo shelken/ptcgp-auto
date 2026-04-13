@@ -107,11 +107,6 @@ class Scheduler:
         """全局配置"""
         return self._settings
 
-    @property
-    def is_running(self) -> bool:
-        """调度器是否正在运行"""
-        return self._running
-
     @contextmanager
     def _repository_scope(self):
         """为一次高层调度动作提供统一的 Repository 工厂。"""
@@ -772,29 +767,6 @@ class Scheduler:
             logger.info("收到中断信号")
         finally:
             self.stop(wait=True)
-
-    def get_status(self) -> dict[str, Any]:
-        """
-        获取调度器状态
-
-        Returns:
-            包含调度器状态信息的字典
-        """
-        device_status = self.device_pool.get_status_summary()
-
-        with self._repository_scope() as repos:
-            task_instance_repo = repos.task_instances()
-            pending_count = task_instance_repo.count_by_status(TaskStatus.PENDING.value)
-            running_count = task_instance_repo.count_by_status(TaskStatus.RUNNING.value)
-
-        return {
-            "running": self._running,
-            "devices": device_status,
-            "tasks": {
-                "pending": pending_count,
-                "running": running_count,
-            },
-        }
 
     def run_single_task(
         self,

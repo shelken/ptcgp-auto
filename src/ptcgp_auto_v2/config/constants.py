@@ -36,7 +36,6 @@ ADB_CONNECT_FAIL_RESTART_THRESHOLD = 3  # 连接失败重启模拟器阈值
 
 # 应用配置
 APP_PACKAGE = "jp.pokemon.pokemontcgp"
-APP_ACTIVITY = "com.unity3d.player.UnityPlayerActivity"
 
 # 屏幕配置
 BASE_SCREEN_WIDTH = 1080  # 基准分辨率宽度
@@ -92,10 +91,6 @@ SCALE_PACK_SERIES_SELECT = 1.15  # 旧值: 0.23
 SCALE_PACK_LIST = 4.1
 # 点击开包前比例
 SCALE_PACK_DETAIL = 5.1
-# 游戏主页 比例
-SCALE_PACK_HOME = 2.52
-# 「pack_opening_select」 比例
-SCALE_PACK_OPENING_SELECT = 4.46
 # 「pack_opening_swipe」 比例
 SCALE_PACK_OPENING_SWIPE = 7.32
 # 「battle_series_select」 对战任务系列选择页面比例
