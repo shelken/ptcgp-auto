@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlmodel import Session
 
@@ -20,6 +22,40 @@ from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 
 
 router = APIRouter()
+
+
+def _build_friendship_list_query_params(raw: Mapping[str, object]) -> dict[str, object]:
+    """统一解析好友列表查询参数，保持双表状态语义一致。"""
+    return {
+        "account_id": parse_optional_int(raw.get("account_id")),
+        "from_account_id": parse_optional_int(raw.get("from_account_id")),
+        "q": str(raw.get("q") or ""),
+        "sort_by": str(raw.get("sort_by") or "created_at"),
+        "sort_order": str(raw.get("sort_order") or "desc"),
+        "page": parse_optional_int(raw.get("page")) or 0,
+        "page_size": parse_optional_int(raw.get("page_size")) or 10,
+        "request_sort_by": raw.get("request_sort_by"),
+        "request_sort_order": raw.get("request_sort_order"),
+        "request_page": parse_optional_int(raw.get("request_page")),
+        "request_page_size": parse_optional_int(raw.get("request_page_size")),
+        "friendship_sort_by": raw.get("friendship_sort_by"),
+        "friendship_sort_order": raw.get("friendship_sort_order"),
+        "friendship_page": parse_optional_int(raw.get("friendship_page")),
+        "friendship_page_size": parse_optional_int(raw.get("friendship_page_size")),
+    }
+
+
+def _build_friendship_action_params(
+    raw: Mapping[str, object],
+    *,
+    target_field: str,
+) -> dict[str, int | str | None]:
+    """统一解析好友动作参数，减少 add/delete 重复字段处理。"""
+    return {
+        "from_account_id": parse_optional_int(raw.get("from_account_id")),
+        "to_account_id": parse_optional_int(raw.get("to_account_id")),
+        "target_value": str(raw.get(target_field) or "").strip(),
+    }
 
 
 @router.get("/management/friendships")
@@ -42,24 +78,26 @@ async def get_management_friendships(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取好友管理页面数据。"""
-    context = build_friendship_context(
-        session=session,
-        account_id=parse_optional_int(account_id),
-        from_account_id=parse_optional_int(from_account_id),
-        q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=page,
-        page_size=page_size,
-        request_sort_by=request_sort_by,
-        request_sort_order=request_sort_order,
-        request_page=request_page,
-        request_page_size=request_page_size,
-        friendship_sort_by=friendship_sort_by,
-        friendship_sort_order=friendship_sort_order,
-        friendship_page=friendship_page,
-        friendship_page_size=friendship_page_size,
+    query_params = _build_friendship_list_query_params(
+        {
+            "account_id": account_id,
+            "from_account_id": from_account_id,
+            "q": q,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
+            "request_sort_by": request_sort_by,
+            "request_sort_order": request_sort_order,
+            "request_page": request_page,
+            "request_page_size": request_page_size,
+            "friendship_sort_by": friendship_sort_by,
+            "friendship_sort_order": friendship_sort_order,
+            "friendship_page": friendship_page,
+            "friendship_page_size": friendship_page_size,
+        }
     )
+    context = build_friendship_context(session=session, **query_params)
     return json_response(context)
 
 
@@ -70,9 +108,10 @@ async def post_friendship_add(
 ):
     """创建添加好友请求。"""
     body = await request.json()
-    from_account_id = parse_optional_int(body.get("from_account_id"))
-    to_account_id = parse_optional_int(body.get("to_account_id"))
-    to_friend_id = str(body.get("to_friend_id") or "").strip()
+    action_params = _build_friendship_action_params(body, target_field="to_friend_id")
+    from_account_id = action_params["from_account_id"]
+    to_account_id = action_params["to_account_id"]
+    to_friend_id = str(action_params["target_value"])
 
     if not to_friend_id and to_account_id:
         target_account = session.get(Account, to_account_id)
@@ -109,9 +148,10 @@ async def post_friendship_delete(
 ):
     """创建删除好友请求。"""
     body = await request.json()
-    from_account_id = parse_optional_int(body.get("from_account_id"))
-    to_account_id = parse_optional_int(body.get("to_account_id"))
-    friend_id = str(body.get("friend_id") or "").strip()
+    action_params = _build_friendship_action_params(body, target_field="friend_id")
+    from_account_id = action_params["from_account_id"]
+    to_account_id = action_params["to_account_id"]
+    friend_id = str(action_params["target_value"])
 
     if not friend_id and to_account_id:
         target_account = session.get(Account, to_account_id)

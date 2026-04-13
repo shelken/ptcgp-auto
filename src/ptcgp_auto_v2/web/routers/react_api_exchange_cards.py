@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlmodel import Session
 
@@ -19,15 +21,44 @@ from ptcgp_auto_v2.web.utils.i18n import get_current_i18n
 router = APIRouter()
 
 
+def _build_exchange_card_create_params(
+    raw: Mapping[str, object],
+) -> dict[str, int | str | None]:
+    """统一解析交换请求创建参数。"""
+    return {
+        "from_account_id": parse_optional_int(raw.get("from_account_id")),
+        "to_account_id": parse_optional_int(raw.get("to_account_id")),
+        "target_card_id": parse_optional_int(raw.get("target_card_id")),
+        "to_friend_id": str(raw.get("to_friend_id") or "").strip(),
+        "target_card_rarity": str(raw.get("target_card_rarity") or ""),
+    }
+
+
+def _build_exchange_card_list_query_params(
+    raw: Mapping[str, object],
+) -> dict[str, int | str | None]:
+    """统一解析交换记录列表查询参数。"""
+    return {
+        "account_id": parse_optional_int(raw.get("account_id")),
+        "status": str(raw.get("status") or "").strip() or None,
+        "q": str(raw.get("q") or ""),
+        "sort_by": str(raw.get("sort_by") or "created_at"),
+        "sort_order": str(raw.get("sort_order") or "desc"),
+        "page": parse_optional_int(raw.get("page")) or 0,
+        "page_size": parse_optional_int(raw.get("page_size")) or 10,
+    }
+
+
 @router.post("/exchange-cards/requests")
 async def create_exchange_request(request: Request):
     """创建交换请求。"""
     body = await request.json()
-    from_account_id = parse_optional_int(body.get("from_account_id"))
-    to_account_id = parse_optional_int(body.get("to_account_id"))
-    target_card_id = parse_optional_int(body.get("target_card_id"))
-    to_friend_id = str(body.get("to_friend_id") or "").strip()
-    target_card_rarity = str(body.get("target_card_rarity") or "")
+    create_params = _build_exchange_card_create_params(body)
+    from_account_id = create_params["from_account_id"]
+    to_account_id = create_params["to_account_id"]
+    target_card_id = create_params["target_card_id"]
+    to_friend_id = str(create_params["to_friend_id"])
+    target_card_rarity = str(create_params["target_card_rarity"])
 
     ok = False
     if from_account_id and target_card_id and to_friend_id:
@@ -65,16 +96,18 @@ async def get_management_exchange_cards(
     session: Session = Depends(get_fastapi_session),
 ):
     """获取交换卡页面数据。"""
-    context = build_exchange_card_context(
-        session=session,
-        account_id=parse_optional_int(account_id),
-        status=status or None,
-        q=q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        page=page,
-        page_size=page_size,
+    query_params = _build_exchange_card_list_query_params(
+        {
+            "account_id": account_id,
+            "status": status,
+            "q": q,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
+        }
     )
+    context = build_exchange_card_context(session=session, **query_params)
     return json_response(context)
 
 
