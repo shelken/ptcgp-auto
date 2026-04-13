@@ -2,17 +2,18 @@
 """数据库 engine 连接复用测试。
 
 这个文件负责验证 engine 连接复用修复。
-覆盖同线程连接复用、PRAGMA 保持和 session_scope 事务语义。
+覆盖连接池类型、跨线程并发访问、PRAGMA 保持和 session_scope 事务语义。
 关键依赖是 Settings、get_engine 和 session_scope。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Barrier, Lock, Thread
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.pool import SingletonThreadPool
+from sqlalchemy.pool import QueuePool
 from sqlmodel import Session
 
 from ptcgp_auto_v2.config.settings import Settings, set_settings
@@ -20,18 +21,6 @@ from ptcgp_auto_v2.db import connection as connection_module
 from ptcgp_auto_v2.db import engine as engine_module
 from ptcgp_auto_v2.db.engine import get_engine, session_scope
 from ptcgp_auto_v2.db.sqlite_config import SQLITE_BUSY_TIMEOUT_MS
-
-
-def _raw_dbapi_connection(session: Session):
-    """变更前这些测试没有统一读取底层连接的入口。变更后这里兼容 SQLAlchemy 代理层，稳定拿到真实 DBAPI 连接。变更原因是直接比较同线程 Session 是否复用同一条连接。"""
-    pooled_connection = session.connection().connection
-    driver_connection = getattr(pooled_connection, "driver_connection", None)
-    if driver_connection is not None:
-        return driver_connection
-    dbapi_connection = getattr(pooled_connection, "dbapi_connection", None)
-    if dbapi_connection is not None:
-        return dbapi_connection
-    return pooled_connection
 
 
 def _prepare_probe_table():
@@ -88,23 +77,43 @@ def isolated_engine(tmp_path: Path):
         set_settings(original_settings or Settings.from_env())
 
 
-def test_engine_uses_singleton_thread_pool(isolated_engine):
+def test_engine_uses_queue_pool(isolated_engine):
     assert isolated_engine.name == "engine_pooling.db"
     engine = get_engine()
 
-    assert isinstance(engine.pool, SingletonThreadPool)
+    assert isinstance(engine.pool, QueuePool)
 
 
-def test_sessions_reuse_same_connection_in_same_thread(isolated_engine):
+def test_engine_handles_more_threads_than_previous_singleton_pool_limit(isolated_engine):
     assert isolated_engine.name == "engine_pooling.db"
-    engine = get_engine()
+    thread_count = 8
+    barrier = Barrier(thread_count)
+    errors: list[str] = []
+    errors_lock = Lock()
 
-    with Session(engine) as first_session:
-        first_connection = _raw_dbapi_connection(first_session)
-    with Session(engine) as second_session:
-        second_connection = _raw_dbapi_connection(second_session)
+    def _worker(worker_id: int):
+        try:
+            barrier.wait(timeout=5)
+            with Session(get_engine()) as session:
+                statement = text("SELECT :value").bindparams(value=worker_id)
+                value = session.exec(statement).one()
+                assert int(value[0]) == worker_id
+        except Exception as exc:
+            with errors_lock:
+                errors.append(f"worker-{worker_id}:{type(exc).__name__}:{exc}")
 
-    assert first_connection is second_connection
+    threads = [
+        Thread(target=_worker, args=(worker_id,), name=f"db-pool-{worker_id}")
+        for worker_id in range(thread_count)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+        if thread.is_alive():
+            errors.append(f"{thread.name}:Timeout:thread still alive")
+
+    assert not errors
 
 
 def test_sqlite_pragmas_remain_applied_when_connection_is_reused(isolated_engine):

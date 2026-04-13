@@ -13,7 +13,7 @@ import threading
 from typing import Generator
 
 from sqlalchemy import event
-from sqlalchemy.pool import SingletonThreadPool
+from sqlalchemy.pool import QueuePool
 from sqlmodel import Session, create_engine
 
 from ptcgp_auto_v2.config.settings import get_settings
@@ -31,8 +31,8 @@ _engine = None
 def get_engine():
     """
     变更前文件库场景使用 NullPool，每次创建 Session 都会重建 SQLite 连接。
-    变更后改为 SingletonThreadPool，让同线程会话复用底层连接。
-    变更原因是减少重复 PRAGMA 和 schema 读取开销，同时保持原有事务边界。
+    中间版本改成 SingletonThreadPool，但多线程守护模式会在唯一线程数超过 pool_size 时随机关闭仍在使用的连接。
+    变更后改为 QueuePool，继续复用 SQLite 连接，同时去掉按线程身份回收连接的风险。
     """
     global _engine
     if _engine is None:
@@ -44,11 +44,11 @@ def get_engine():
         get_database()
 
         settings = get_settings()
-        # poolclass 改为 SingletonThreadPool，原因是热点来自反复建连后的 PRAGMA 与 schema 读取。
+        # 这里显式使用 QueuePool，原因是守护模式长期运行且线程数会波动，需要稳定复用连接。
         _engine = create_engine(
             f"sqlite:///{settings.db_path}",
             echo=False,
-            poolclass=SingletonThreadPool,
+            poolclass=QueuePool,
             connect_args={
                 "check_same_thread": False,
                 "timeout": SQLITE_BUSY_TIMEOUT_MS / 1000,
