@@ -70,6 +70,7 @@ def _build_tasks_page_url(
     status: list[str],
     task_type: list[str],
     account_id: int | None,
+    account_q: str,
     sort_by: str,
     sort_order: str,
 ) -> str:
@@ -86,6 +87,8 @@ def _build_tasks_page_url(
         params.append(("task_type", item))
     if account_id is not None:
         params.append(("account_id", account_id))
+    if account_q:
+        params.append(("account_q", account_q))
     if sort_by:
         params.append(("sort_by", sort_by))
     if sort_order:
@@ -101,6 +104,7 @@ def build_tasks_list_context(
     status: list[str] | None = None,
     task_type: list[str] | None = None,
     account_id: int | None = None,
+    account_q: str = "",
     sort_by: str = "",
     sort_order: str = "asc",
 ) -> dict[str, Any]:
@@ -117,6 +121,7 @@ def build_tasks_list_context(
         status=normalized_status,
         task_type=normalized_task_type,
         account_id=account_id,
+        account_q=account_q,
         sort_by=sort_by,
         sort_order=sort_order,
     )
@@ -224,6 +229,7 @@ def build_tasks_list_context(
             status=normalized_status,
             task_type=normalized_task_type,
             account_id=account_id,
+            account_q=account_q,
             sort_by=sort_by,
             sort_order=sort_order,
         ),
@@ -233,6 +239,7 @@ def build_tasks_list_context(
             status=normalized_status,
             task_type=normalized_task_type,
             account_id=account_id,
+            account_q=account_q,
             sort_by=sort_by,
             sort_order=sort_order,
         ),
@@ -289,6 +296,7 @@ def build_task_list_render_context(
         status=status,
         task_type=task_type,
         account_id=account_id,
+        account_q=account_q,
         sort_by=sort_by,
         sort_order=sort_order,
     )
@@ -313,6 +321,7 @@ def reset_completed_tasks_by_filters(
     status: list[str],
     task_type: list[str],
     account_id: int | None,
+    account_q: str,
 ) -> int:
     """按筛选条件重置已完成任务为待执行。"""
     return reset_completed_task_instances(
@@ -320,4 +329,5 @@ def reset_completed_tasks_by_filters(
         status=status,
         task_type=task_type,
         account_id=account_id,
+        account_q=account_q,
     )

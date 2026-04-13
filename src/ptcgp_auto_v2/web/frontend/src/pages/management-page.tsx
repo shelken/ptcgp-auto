@@ -22,6 +22,7 @@ import {
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
+import { buildResetCompletedTasksPayload, resolveManagementTaskAccountFilter } from './management/task-filters'
 import {
   AccountIdentityCell,
   CopyableFriendId,
@@ -1643,9 +1644,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   const normalizedAccountKeyword = accountKeyword.trim()
-  const selectedAccountMatch = normalizedAccountKeyword.match(/^(\d+)/)
-  const selectedAccountId = selectedAccountMatch?.[1] ?? ''
-  const selectedAccountQuery = selectedAccountId ? '' : normalizedAccountKeyword
+  const { selectedAccountId, selectedAccountQuery } = resolveManagementTaskAccountFilter(accountKeyword)
 
   const accountOptionsQuery = useQuery({
     queryKey: ['management-task-account-options', normalizedAccountKeyword],
@@ -1682,11 +1681,11 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     mutationFn: () =>
       requestJson<{ ok: boolean; message: string }>('/api/react/management/tasks/reset-completed', {
         method: 'POST',
-        body: {
-          status: status ? [status] : [],
-          task_type: taskType ? [taskType] : [],
-          account_id: selectedAccountId || null
-        }
+        body: buildResetCompletedTasksPayload({
+          status,
+          taskType,
+          accountKeyword
+        })
       }),
     onSuccess: (result) => {
       setNotice({ level: result.ok ? 'success' : 'error', text: result.message })

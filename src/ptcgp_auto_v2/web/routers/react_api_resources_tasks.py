@@ -116,12 +116,14 @@ async def post_reset_completed_tasks(
         item for item in body.get("task_type", []) if isinstance(item, str) and item
     ]
     account_id = parse_optional_int(body.get("account_id"))
+    account_q = str(body.get("account_q") or "").strip()
 
     reset_count = reset_completed_tasks_by_filters(
         session=session,
         status=status,
         task_type=task_type,
         account_id=account_id,
+        account_q=account_q,
     )
     _, t = get_current_i18n()
     if reset_count > 0:

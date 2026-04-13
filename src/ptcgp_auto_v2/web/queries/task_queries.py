@@ -2,18 +2,36 @@ from typing import Any, cast
 
 from datetime import datetime
 
-from sqlalchemy import update
-from sqlmodel import Session, select, col, func
+from sqlalchemy import String, cast as sa_cast, or_, update
+from sqlmodel import Session, col, func, select
 from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.core.scheduling_service import build_task_instance_order_by
-from ptcgp_auto_v2.db.models.task_instance import TaskInstance
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
+from ptcgp_auto_v2.db.models.task_instance import TaskInstance
 from ptcgp_auto_v2.web.queries._query_helpers import (
     fetch_window_rows,
     normalize_pagination,
 )
+
+
+def _build_account_id_filter_query(account_q: str) -> Any | None:
+    """按账号关键字构建账号 ID 子查询。"""
+    normalized_account_q = (account_q or "").strip()
+    if not normalized_account_q:
+        return None
+
+    like_value = f"%{normalized_account_q}%"
+    filters: list[Any] = [
+        sa_cast(Account.nickname, String).ilike(like_value),
+        sa_cast(Account.friend_id, String).ilike(like_value),
+        sa_cast(Account.game_id, String).ilike(like_value),
+    ]
+    if normalized_account_q.isdigit():
+        filters.append(col(Account.id) == int(normalized_account_q))
+
+    return select(Account.id).where(or_(*filters))
 
 
 def _build_task_instance_filters(
@@ -22,6 +40,7 @@ def _build_task_instance_filters(
     status: list[str],
     task_type: list[str],
     account_id: int | None,
+    account_q: str,
 ) -> Any:
     """为任务查询语句附加统一过滤条件。"""
     if status:
@@ -30,6 +49,9 @@ def _build_task_instance_filters(
         statement = statement.where(col(TaskInstance.task_type).in_(task_type))
     if account_id is not None:
         statement = statement.where(TaskInstance.account_id == account_id)
+    account_id_filter_query = _build_account_id_filter_query(account_q)
+    if account_id_filter_query is not None:
+        statement = statement.where(TaskInstance.account_id.in_(account_id_filter_query))
     return statement
 
 
@@ -40,6 +62,7 @@ def fetch_task_instances(
     status: list[str],
     task_type: list[str],
     account_id: int | None,
+    account_q: str,
     sort_by: str,
     sort_order: str,
 ) -> tuple[list[TaskInstance], bool, int]:
@@ -60,6 +83,7 @@ def fetch_task_instances(
         status=status,
         task_type=task_type,
         account_id=account_id,
+        account_q=account_q,
     )
 
     total_statement = _build_task_instance_filters(
@@ -67,6 +91,7 @@ def fetch_task_instances(
         status=status,
         task_type=task_type,
         account_id=account_id,
+        account_q=account_q,
     )
     total = int(session.exec(total_statement).one())
 
@@ -85,6 +110,7 @@ def reset_completed_task_instances(
     status: list[str],
     task_type: list[str],
     account_id: int | None,
+    account_q: str,
 ) -> int:
     """按筛选条件重置已完成任务为待执行。"""
     normalized_status = [item for item in status if item]
@@ -108,6 +134,9 @@ def reset_completed_task_instances(
         statement = statement.where(TaskInstance.task_type != "init_account")
     if account_id is not None:
         statement = statement.where(TaskInstance.account_id == account_id)
+    account_id_filter_query = _build_account_id_filter_query(account_q)
+    if account_id_filter_query is not None:
+        statement = statement.where(TaskInstance.account_id.in_(account_id_filter_query))
 
     # 手动重置已完成任务时，清空 next_run_at，确保调度按“立即可执行”优先处理。
     statement = statement.values(
