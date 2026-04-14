@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """拥有卡牌路由参数解析回归测试。"""
 
+from ptcgp_auto_v2.web.routers import react_api_owned_cards
 from ptcgp_auto_v2.web.routers.react_api_owned_cards import (
     _build_owned_card_detail_query_params,
     _build_owned_card_exchange_accounts_query_params,
@@ -95,3 +96,15 @@ def test_build_owned_card_exchange_accounts_query_params_normalizes_list_scope()
         "sort_by": "account_id",
         "sort_order": "asc",
     }
+
+
+def test_owned_card_detail_route_exposes_unified_ownership_scope_query() -> None:
+    detail_route = next(
+        route
+        for route in react_api_owned_cards.router.routes
+        if getattr(route, "path", "") == "/owned-cards/{card_id}/detail"
+    )
+
+    query_param_names = [param.name for param in detail_route.dependant.query_params]
+
+    assert "ownership_scope" in query_param_names

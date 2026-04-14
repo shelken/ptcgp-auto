@@ -210,13 +210,15 @@ async def get_owned_cards_stats(
 @router.get("/owned-cards/{card_id}/detail")
 async def get_owned_card_detail(
     card_id: int,
-    ownership_state: str = Query(default="owned"),
+    ownership_scope: str | None = Query(default=None),
+    ownership_state: str | None = Query(default=None),
     page_size: int = Query(default=10),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取卡牌详情和交换账号数据。"""
     query_params = _build_owned_card_detail_query_params(
         {
+            "ownership_scope": ownership_scope,
             "ownership_state": ownership_state,
             "page_size": page_size,
         }
