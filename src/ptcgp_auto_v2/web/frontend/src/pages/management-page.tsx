@@ -25,7 +25,8 @@ import { NotificationsSection } from './management/notifications-section'
 import {
   buildMetadataExecutePayload,
   buildMetadataPreviewPayload,
-  buildMetadataQueryString
+  buildMetadataQueryString,
+  buildMetadataRequestContext
 } from './management/metadata-query'
 import { buildManagementListQueryParams } from './management/list-query'
 import type { ManagementListOption, ManagementListSpec } from './management/list-spec'
@@ -1988,6 +1989,18 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
   const [executeResult, setExecuteResult] = useState<Record<string, unknown> | null>(null)
   const [checkResult, setCheckResult] = useState<Record<string, unknown> | null>(null)
   const [notice, setNotice] = useState<InlineNoticeState | null>(null)
+  const metadataRequestContext = useMemo(
+    () =>
+      buildMetadataRequestContext({
+        nodeType: selectedNodeType,
+        nodeId: selectedNodeId,
+        setCode: selectedSetCode,
+        packName: selectedPackName,
+        action: currentAction,
+        snapshotId
+      }),
+    [currentAction, selectedNodeId, selectedNodeType, selectedPackName, selectedSetCode, snapshotId]
+  )
 
   const queryString = useMemo(
     () =>
@@ -2001,7 +2014,7 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
         action: currentAction,
         snapshotId
       }),
-    [currentAction, lang, selectedNodeId, selectedNodeType, selectedPackName, selectedSetCode, snapshotId, uiStep]
+    [lang, metadataRequestContext, uiStep]
   )
 
   const query = useQuery({
@@ -2016,9 +2029,10 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
         method: 'POST',
         body: buildMetadataPreviewPayload({
           action,
-          nodeType: selectedNodeType,
-          nodeId: selectedNodeId,
-          forceRefresh
+          nodeType: metadataRequestContext.selected_node_type,
+          nodeId: metadataRequestContext.selected_node_id,
+          forceRefresh,
+          snapshotId: metadataRequestContext.snapshot_id
         })
       }),
     onSuccess: (result, action) => {
@@ -2035,7 +2049,7 @@ function MetadataSection({ lang, t }: { lang: string; t: Record<string, string> 
     mutationFn: () =>
       requestJson<Record<string, unknown>>('/api/react/management/metadata/execute', {
         method: 'POST',
-        body: buildMetadataExecutePayload(snapshotId)
+        body: buildMetadataExecutePayload(metadataRequestContext.snapshot_id ?? '')
       }),
     onSuccess: (result) => {
       setExecuteResult(result)

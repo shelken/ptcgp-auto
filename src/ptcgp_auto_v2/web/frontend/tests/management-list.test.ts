@@ -428,4 +428,50 @@ describe('管理页统一列表状态', () => {
       snapshot_id: 'snap-1'
     })
   })
+
+  test('metadata helper 应共享当前 action/snapshot 并驱动 preview/execute payload', async () => {
+    const {
+      buildMetadataExecutePayload,
+      buildMetadataPreviewPayload,
+      buildMetadataRequestContext
+    } = await import('../src/pages/management/metadata-query')
+
+    const context = buildMetadataRequestContext({
+      nodeType: 'card',
+      nodeId: '05',
+      setCode: 'A2',
+      packName: 'Mew Pack',
+      action: 'update_chinese',
+      snapshotId: 'snap-2'
+    })
+
+    expect(context).toEqual({
+      selected_node_type: 'card',
+      selected_node_id: '05',
+      selected_set_code: 'A2',
+      selected_pack_name: 'Mew Pack',
+      current_action: 'update_chinese',
+      snapshot_id: 'snap-2'
+    })
+
+    expect(
+      buildMetadataPreviewPayload({
+        action: context.current_action,
+        nodeType: context.selected_node_type,
+        nodeId: context.selected_node_id,
+        forceRefresh: true,
+        snapshotId: context.snapshot_id ?? ''
+      })
+    ).toEqual({
+      action: 'update_chinese',
+      node_type: 'card',
+      node_id: '05',
+      force_refresh: true,
+      snapshot_id: 'snap-2'
+    })
+
+    expect(buildMetadataExecutePayload(context.snapshot_id ?? '')).toEqual({
+      snapshot_id: 'snap-2'
+    })
+  })
 })
