@@ -9,15 +9,18 @@ from ptcgp_auto_v2.db.repositories import (
     ExchangeCardRequestRepository,
 )
 from ptcgp_auto_v2.services import ExchangeCardService
+from ptcgp_auto_v2.web.services._list_query_state import (
+    build_list_query_state,
+    build_sorted_list_query_state,
+)
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_choice,
-    normalize_page,
-    normalize_page_size,
-    normalize_sort_order,
+    normalize_query_text,
 )
 from ptcgp_auto_v2.web.utils.i18n import get_current_i18n, resolve_card_name_from_data
 
 OWNERSHIP_SCOPES = {"owned", "missing", "all"}
+OWNED_CARD_SORT_FIELDS = {"acquired", "rarity", "count"}
 EXCHANGE_ACCOUNT_SORT_FIELDS = {
     "account_id",
     "friend_id",
@@ -43,13 +46,23 @@ def _build_owned_card_filters(
     ownership_scope: str,
 ) -> dict[str, Any]:
     """构建仓储查询参数。"""
+    def _normalize_values(values: list[str] | None) -> list[str]:
+        if not values:
+            return []
+        result: list[str] = []
+        for item in values:
+            text = str(item).strip()
+            if text:
+                result.append(text)
+        return result
+
     return {
-        "account_query": account_id,
-        "rarities": rarity or [],
-        "card_types": card_type or [],
-        "set_codes": set_code or [],
-        "pack_names": pack_name or [],
-        "elements": element or [],
+        "account_query": normalize_query_text(account_id or ""),
+        "rarities": _normalize_values(rarity),
+        "card_types": _normalize_values(card_type),
+        "set_codes": _normalize_values(set_code),
+        "pack_names": _normalize_values(pack_name),
+        "elements": _normalize_values(element),
         "ownership_scope": ownership_scope,
     }
 
@@ -65,25 +78,24 @@ def _attach_card_display_names(items: list[dict[str, Any]]) -> None:
             )
 
 
-def _normalize_exchange_account_sort(
-    sort_by: str,
-    sort_order: str,
-) -> tuple[str, str]:
-    """归一化交换账号表格排序参数。"""
-    normalized_sort_by = (
-        sort_by if sort_by in EXCHANGE_ACCOUNT_SORT_FIELDS else "account_id"
-    )
-    return normalized_sort_by, normalize_sort_order(sort_order)
+def _normalize_owned_card_sort(sort_by: str) -> str:
+    """归一化拥有卡牌主列表排序字段。"""
+    return sort_by if sort_by in OWNED_CARD_SORT_FIELDS else "acquired"
 
 
 def _matches_exchange_account_keyword(item: dict[str, Any], keyword: str) -> bool:
     """判断账号行是否命中关键词。"""
-    if not keyword:
+    normalized_keyword = keyword.lower().strip()
+    if not normalized_keyword:
         return True
     account_id = str(item.get("account_id") or "").lower()
     friend_id = str(item.get("friend_id") or "").lower()
     nickname = str(item.get("nickname") or "").lower()
-    return keyword in account_id or keyword in friend_id or keyword in nickname
+    return (
+        normalized_keyword in account_id
+        or normalized_keyword in friend_id
+        or normalized_keyword in nickname
+    )
 
 
 def _sort_exchange_account_rows(
@@ -133,8 +145,13 @@ def build_owned_cards_list_context(
         - has_next: 是否有下一页
         - total: 总数量
     """
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size)
+    list_state = build_list_query_state(
+        q="",
+        sort_by=_normalize_owned_card_sort(sort_by),
+        sort_order="asc",
+        page=page,
+        page_size=page_size,
+    )
     normalized_scope = _normalize_ownership_scope(ownership_scope)
     filters = _build_owned_card_filters(
         account_id=account_id,
@@ -148,15 +165,13 @@ def build_owned_cards_list_context(
 
     repo = AccountCardRepository(session)
     items = repo.list_owned_cards(
-        page=normalized_page,
-        page_size=normalized_page_size,
+        page=list_state.page,
+        page_size=list_state.page_size,
         **filters,
-        sort_by=sort_by,
+        sort_by=list_state.sort_by,
     )
 
-    has_next = len(items) > normalized_page_size
-    items = items[:normalized_page_size]
-    has_prev = normalized_page > 0
+    items = items[: list_state.page_size]
 
     total = repo.count_cards_by_scope(
         **filters,
@@ -165,11 +180,8 @@ def build_owned_cards_list_context(
 
     return {
         "items": items,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": has_prev,
-        "has_next": has_next,
-        "total": total,
+        "sort_by": list_state.sort_by,
+        **list_state.page_meta(total=total),
         "ownership_scope": normalized_scope,
     }
 
@@ -210,7 +222,7 @@ def build_owned_card_modal_context(
     session: Session,
     card_id: int,
     page_size: int = 10,
-    ownership_state: str = "owned",
+    ownership_scope: str = "owned",
 ) -> dict[str, Any] | None:
     """构建已拥有卡牌详情弹窗所需数据。"""
     card = session.get(Card, card_id)
@@ -227,15 +239,15 @@ def build_owned_card_modal_context(
         sort_order="asc",
     )
     exchange_blocked = not ExchangeCardService.is_exchangeable(card.rarity)
+    normalized_scope = _normalize_ownership_scope(ownership_scope)
     return {
         "card": card,
         "card_display_name": resolve_card_name_from_data(
             card.data,
             fallback=card.name,
         ),
-        "ownership_state": (
-            _normalize_ownership_scope(ownership_state)
-        ),
+        "ownership_scope": normalized_scope,
+        "ownership_state": normalized_scope,
         "exchange_blocked": exchange_blocked,
         "total_accounts": table_context["total_items"],
         "total_count": table_context["total_count"],
@@ -293,11 +305,15 @@ def build_owned_card_exchange_accounts_context(
     sort_order: str = "asc",
 ) -> dict[str, Any]:
     """构建已拥有卡牌弹窗中的交换账号分页表格上下文。"""
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size, max_size=50)
-    normalized_sort_by, normalized_sort_order = _normalize_exchange_account_sort(
-        sort_by,
-        sort_order,
+    list_state = build_sorted_list_query_state(
+        q=q,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        page_size=page_size,
+        allowed_sort_fields=EXCHANGE_ACCOUNT_SORT_FIELDS,
+        default_sort_by="account_id",
+        max_page_size=50,
     )
 
     card = session.get(Card, card_id)
@@ -305,15 +321,12 @@ def build_owned_card_exchange_accounts_context(
         return {
             "card": None,
             "accounts": [],
+            "q": list_state.normalized_q,
+            "sort_by": list_state.sort_by,
+            "sort_order": list_state.sort_order,
+            **list_state.page_meta(total=0),
             "total_items": 0,
             "total_count": 0,
-            "page": normalized_page,
-            "page_size": normalized_page_size,
-            "has_prev": False,
-            "has_next": False,
-            "q": q,
-            "sort_by": normalized_sort_by,
-            "sort_order": normalized_sort_order,
         }
 
     repo = AccountCardRepository(session)
@@ -321,10 +334,9 @@ def build_owned_card_exchange_accounts_context(
     data = repo.get_owned_card_accounts(card_id)
     exchangeable = ExchangeCardService.is_exchangeable(card.rarity)
 
-    keyword = q.lower()
     filtered: list[dict[str, Any]] = []
     for item in data["accounts"]:
-        if not _matches_exchange_account_keyword(item, keyword):
+        if not _matches_exchange_account_keyword(item, list_state.normalized_q):
             continue
         row = dict(item)
         account_id = row.get("account_id")
@@ -336,26 +348,22 @@ def build_owned_card_exchange_accounts_context(
 
     _sort_exchange_account_rows(
         filtered,
-        sort_by=normalized_sort_by,
-        sort_order=normalized_sort_order,
+        sort_by=list_state.sort_by,
+        sort_order=list_state.sort_order,
     )
 
     total_items = len(filtered)
-    start = normalized_page * normalized_page_size
-    end = start + normalized_page_size
+    start, end = list_state.page_bounds()
     paged_items = filtered[start:end]
 
     return {
         "card": card,
         "accounts": paged_items,
         "exchange_blocked": not exchangeable,
+        "q": list_state.normalized_q,
+        "sort_by": list_state.sort_by,
+        "sort_order": list_state.sort_order,
+        **list_state.page_meta(total=total_items),
         "total_items": total_items,
         "total_count": int(data.get("total_count") or 0),
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": normalized_page > 0,
-        "has_next": end < total_items,
-        "q": q,
-        "sort_by": normalized_sort_by,
-        "sort_order": normalized_sort_order,
     }

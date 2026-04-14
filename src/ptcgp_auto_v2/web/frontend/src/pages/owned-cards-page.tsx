@@ -20,6 +20,14 @@ import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-displ
 import type { BootstrapOptions } from '@/types/api'
 
 import { AccountIdentityCell } from './management/shared'
+import {
+  buildOwnedCardDetailQueryParams,
+  buildOwnedCardExchangeAccountsQueryParams,
+  buildOwnedCardsListQueryParams,
+  buildOwnedCardsStatsQueryParams,
+  type OwnedCardExchangeAccountsQueryState,
+  type OwnedCardsMainQueryState
+} from './owned-cards-query'
 
 interface OwnedCardsPageProps {
   lang: string
@@ -106,6 +114,7 @@ const OWNED_GRID_COLS_MAX = 7
 const OWNED_GRID_COLS_DEFAULT = 5
 type DetailSortField = 'account_id' | 'friend_id' | 'nickname' | 'count' | 'exchange_points'
 type DetailNoticeLevel = 'success' | 'error'
+type OwnedCardsViewMode = 'grid' | 'list'
 
 interface DetailNoticeState {
   level: DetailNoticeLevel
@@ -262,7 +271,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [selectedPackNames, setSelectedPackNames] = useState<string[]>(() => parseSearchList(searchParams, 'owned_pack'))
   const [sortBy, setSortBy] = useState(() => searchParams.get('owned_sort') ?? 'acquired')
   const [ownershipScope, setOwnershipScope] = useState(() => searchParams.get('owned_scope') ?? 'owned')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => (searchParams.get('owned_view') === 'list' ? 'list' : 'grid'))
+  const [viewMode, setViewMode] = useState<OwnedCardsViewMode>(() => (searchParams.get('owned_view') === 'list' ? 'list' : 'grid'))
   const [gridCols, setGridCols] = useState(() => restoreOwnedGridCols())
   const [showCounts, setShowCounts] = useState(() => searchParams.get('owned_counts') !== 'hide')
   const [listPage, setListPage] = useState(() => {
@@ -373,39 +382,62 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     sortBy
   ])
 
-  const baseFilterParams = useMemo(
+  const mainQueryState = useMemo<OwnedCardsMainQueryState>(
     () => ({
-      lang,
-      account_id: accountQuery,
-      ownership_scope: ownershipScope,
+      accountId: accountQuery,
+      ownershipScope,
       rarity: selectedRarity,
-      card_type: selectedTypes,
+      cardType: selectedTypes,
+      setCode: selectedSetCodes,
+      packName: selectedPackNames,
       element: selectedElements,
-      set_code: selectedSetCodes,
-      pack_name: selectedPackNames
+      sortBy,
+      page: listPage,
+      pageSize: OWNED_PAGE_SIZE
     }),
-    [accountQuery, lang, ownershipScope, selectedElements, selectedPackNames, selectedRarity, selectedSetCodes, selectedTypes]
+    [
+      accountQuery,
+      ownershipScope,
+      selectedRarity,
+      selectedTypes,
+      selectedSetCodes,
+      selectedPackNames,
+      selectedElements,
+      sortBy,
+      listPage
+    ]
   )
 
-  const baseParams = useMemo(
+  const mainStatsQueryParams = useMemo(
+    () => buildOwnedCardsStatsQueryParams(mainQueryState),
+    [mainQueryState]
+  )
+
+  const mainListBaseQueryParams = useMemo(
     () => ({
-      ...baseFilterParams,
-      sort_by: sortBy
+      ...mainStatsQueryParams,
+      sort_by: mainQueryState.sortBy
     }),
-    [baseFilterParams, sortBy]
+    [mainQueryState.sortBy, mainStatsQueryParams]
   )
 
   const listQueryString = useMemo(
     () =>
       buildQuery({
-        ...baseParams,
-        page: listPage,
-        page_size: OWNED_PAGE_SIZE
+        lang,
+        ...buildOwnedCardsListQueryParams(mainQueryState)
       }),
-    [baseParams, listPage]
+    [lang, mainQueryState]
   )
 
-  const statsQueryString = useMemo(() => buildQuery(baseFilterParams), [baseFilterParams])
+  const statsQueryString = useMemo(
+    () =>
+      buildQuery({
+        lang,
+        ...mainStatsQueryParams
+      }),
+    [lang, mainStatsQueryParams]
+  )
 
   const listQuery = useQuery({
     queryKey: ['owned-list', listQueryString],
@@ -415,11 +447,12 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   })
 
   const gridQuery = useInfiniteQuery({
-    queryKey: ['owned-grid', baseParams],
+    queryKey: ['owned-grid', lang, mainListBaseQueryParams],
     queryFn: ({ pageParam }) =>
       fetchJson<OwnedCardsResponse>(
         `/api/react/owned-cards?${buildQuery({
-          ...baseParams,
+          lang,
+          ...mainListBaseQueryParams,
           page: pageParam,
           page_size: OWNED_PAGE_SIZE
         })}`
@@ -436,32 +469,43 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     refetchInterval: 60000
   })
 
+  const detailQueryParams = useMemo(
+    () =>
+      buildOwnedCardDetailQueryParams({
+        lang,
+        ownershipScope,
+        pageSize: detailPageSize
+      }),
+    [detailPageSize, lang, ownershipScope]
+  )
+
   const detailQuery = useQuery({
     queryKey: ['owned-detail', detailCardId, lang, ownershipScope, detailPageSize],
     queryFn: () =>
       fetchJson<CardDetailResponse>(
-        `/api/react/owned-cards/${detailCardId}/detail?${buildQuery({
-          lang,
-          ownership_state: ownershipScope,
-          page_size: detailPageSize
-        })}`
+        `/api/react/owned-cards/${detailCardId}/detail?${buildQuery(detailQueryParams)}`
       ),
     enabled: detailCardId !== null
   })
+
+  const detailAccountsQueryState = useMemo<OwnedCardExchangeAccountsQueryState>(
+    () => ({
+      lang,
+      q: detailQ,
+      sortBy: detailSortBy,
+      sortOrder: detailSortOrder,
+      page: detailPage,
+      pageSize: detailPageSize
+    }),
+    [detailPage, detailPageSize, detailQ, detailSortBy, detailSortOrder, lang]
+  )
 
   const detailTableQueryString = useMemo(
     () =>
       detailCardId === null
         ? ''
-        : buildQuery({
-            lang,
-            page: detailPage,
-            page_size: detailPageSize,
-            q: detailQ,
-            sort_by: detailSortBy,
-            sort_order: detailSortOrder
-          }),
-    [detailCardId, detailPage, detailPageSize, detailQ, detailSortBy, detailSortOrder, lang]
+        : buildQuery(buildOwnedCardExchangeAccountsQueryParams(detailAccountsQueryState)),
+    [detailAccountsQueryState, detailCardId]
   )
 
   const detailTableQuery = useQuery({
