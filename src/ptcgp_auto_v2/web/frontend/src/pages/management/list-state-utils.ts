@@ -75,6 +75,33 @@ function normalizeSortState(
   }
 }
 
+function resolveDefaultSortState(
+  spec: ManagementListSpec
+): Pick<ManagementListState, 'sortBy' | 'sortOrder'> {
+  return normalizeSortState(spec, {
+    sortBy: spec.sort?.defaultBy,
+    sortOrder: spec.sort?.defaultOrder
+  })
+}
+
+function resolveSortDefaultOrder(
+  spec: ManagementListSpec,
+  sortBy: string
+): ManagementListSortOrder {
+  const lockedOrder = spec.sort?.lockedOrderBy?.[sortBy]
+  if (lockedOrder) {
+    return lockedOrder
+  }
+  if (sortBy === spec.sort?.defaultBy) {
+    return spec.sort.defaultOrder
+  }
+  return 'asc'
+}
+
+function reverseSortOrder(sortOrder: ManagementListSortOrder): ManagementListSortOrder {
+  return sortOrder === 'asc' ? 'desc' : 'asc'
+}
+
 export function normalizeManagementListState(
   spec: ManagementListSpec,
   rawState: PersistedManagementListState | null | undefined
@@ -99,6 +126,60 @@ export function normalizeManagementListState(
     sortBy,
     sortOrder,
     filters
+  }
+}
+
+export function applyManagementListSortClick(
+  spec: ManagementListSpec,
+  state: ManagementListState,
+  clickedSortBy: string
+): ManagementListState {
+  if (!spec.sort) {
+    return state
+  }
+
+  const allowedSortValues = new Set(spec.sort.options.map((item) => item.value))
+  if (!allowedSortValues.has(clickedSortBy)) {
+    return state
+  }
+
+  const defaultSortState = resolveDefaultSortState(spec)
+  const nextPage = 0
+  const nextSortOrder = resolveSortDefaultOrder(spec, clickedSortBy)
+  const lockedOrder = spec.sort.lockedOrderBy?.[clickedSortBy]
+
+  if (state.sortBy !== clickedSortBy) {
+    return {
+      ...state,
+      page: nextPage,
+      sortBy: clickedSortBy,
+      sortOrder: nextSortOrder
+    }
+  }
+
+  if (lockedOrder) {
+    return {
+      ...state,
+      page: nextPage,
+      sortBy: defaultSortState.sortBy,
+      sortOrder: defaultSortState.sortOrder
+    }
+  }
+
+  if (state.sortOrder === nextSortOrder) {
+    return {
+      ...state,
+      page: nextPage,
+      sortBy: clickedSortBy,
+      sortOrder: reverseSortOrder(nextSortOrder)
+    }
+  }
+
+  return {
+    ...state,
+    page: nextPage,
+    sortBy: defaultSortState.sortBy,
+    sortOrder: defaultSortState.sortOrder
   }
 }
 

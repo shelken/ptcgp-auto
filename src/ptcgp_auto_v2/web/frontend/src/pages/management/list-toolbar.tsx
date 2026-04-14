@@ -86,11 +86,8 @@ export function ManagementListToolbar({
   spec,
   state,
   dynamicOptions,
-  sortOptions,
   actions,
   onFilterChange,
-  onSortByChange,
-  onSortOrderChange,
   onPageSizeChange,
   searchableLocale,
   t
@@ -98,11 +95,8 @@ export function ManagementListToolbar({
   spec: ManagementListSpec
   state: ManagementListState
   dynamicOptions?: ManagementListDynamicOptions
-  sortOptions?: readonly { value: string; labelKey: string; fallback: string }[]
   actions?: ManagementListToolbarActions
   onFilterChange: (key: string, value: string) => void
-  onSortByChange: (value: string) => void
-  onSortOrderChange: (value: 'asc' | 'desc') => void
   onPageSizeChange: (value: number) => void
   searchableLocale: {
     searchPlaceholder: string
@@ -195,17 +189,10 @@ export function ManagementListToolbar({
       </div>
 
       <ListQueryControls
-        sortBy={state.sortBy}
-        sortOrder={state.sortOrder}
         pageSize={state.pageSize}
-        sortOptions={spec.sort ? [...(sortOptions ?? spec.sort.options)] : []}
         pageSizeOptions={[...spec.pageSizeOptions]}
-        onSortByChange={onSortByChange}
-        onSortOrderChange={onSortOrderChange}
         onPageSizeChange={onPageSizeChange}
         t={t}
-        disableSortOrder={spec.sort?.lockedOrderBy?.[state.sortBy] !== undefined}
-        showSortControls={spec.sort !== undefined}
       />
     </>
   )

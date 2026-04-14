@@ -1,4 +1,4 @@
-import { type Dispatch, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
@@ -14,11 +14,8 @@ import { fetchJson, requestFormJson, requestJson } from '@/lib/api'
 import { type CardImageAssets } from '@/lib/card-image'
 import { tr } from '@/lib/i18n'
 import {
-  formatAbsoluteDateTime,
   formatDateYmd,
   formatDurationExact,
-  formatDurationShort,
-  formatRelativeDateTime
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
@@ -33,6 +30,7 @@ import { buildManagementListQueryParams } from './management/list-query'
 import type { ManagementListOption, ManagementListSpec } from './management/list-spec'
 import { useManagementListState } from './management/list-state'
 import { ManagementListToolbar } from './management/list-toolbar'
+import { buildTaskTableColumns } from './management/task-table'
 import { buildResetCompletedTasksPayload, resolveManagementTaskAccountFilter } from './management/task-filters'
 import {
   buildAccountPlansQuery,
@@ -44,17 +42,23 @@ import {
   AccountIdentityCell,
   CopyableFriendId,
   InlineNotice,
+  ManagementDataGrid,
   Pager,
   QueryTotalSummary,
+  SortableHeaderCell,
   TruncatedText,
   buildAccountSelectOptions,
   managementStateKey,
   renderBadge,
+  renderRelativeTime,
+  renderStatusBadgeWithReason,
   searchableSelectLocale,
+  statusBadgeVariant,
   statusLabel,
   taskTypeLabel,
   toText,
   toTotalCount,
+  type ManagementColumnDef,
   type InlineNoticeState,
   type SearchableOption,
   type SortOption
@@ -64,17 +68,6 @@ interface ManagementPageProps {
   lang: string
   t: Record<string, string>
   assets: CardImageAssets
-}
-
-type SortOrder = 'asc' | 'desc'
-
-interface ColumnDef {
-  key: string
-  label: string
-  render?: (row: Record<string, unknown>) => ReactNode
-  sortKey?: string
-  headerClassName?: string
-  cellClassName?: string
 }
 
 interface AccountPlanItemState {
@@ -219,71 +212,6 @@ function currentGameBizDate(): string {
   return formatDateYmd(businessDate)
 }
 
-function renderDurationWithTooltip(value: unknown) {
-  const shortText = formatDurationShort(value)
-  if (shortText === '-') {
-    return shortText
-  }
-  const exactText = formatDurationExact(value)
-  return (
-    <Tooltip content={exactText}>
-      <span>{shortText}</span>
-    </Tooltip>
-  )
-}
-
-function useHeaderSort({
-  sortBy,
-  setPage,
-  setSortBy,
-  setSortOrder
-}: {
-  sortBy: string
-  setPage: Dispatch<SetStateAction<number>>
-  setSortBy: Dispatch<SetStateAction<string>>
-  setSortOrder: Dispatch<SetStateAction<SortOrder>>
-}) {
-  return useCallback((nextSortBy: string) => {
-    setPage(0)
-    if (sortBy === nextSortBy) {
-      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortBy(nextSortBy)
-    setSortOrder('asc')
-  }, [setPage, setSortBy, setSortOrder, sortBy])
-}
-
-function renderRelativeTime(value: unknown, lang: string, t: Record<string, string>) {
-  const absolute = formatAbsoluteDateTime(value)
-  const relative = formatRelativeDateTime(value, lang, t)
-  if (absolute === '-' || relative === '-') {
-    return relative
-  }
-  return (
-    <Tooltip content={absolute}>
-      <span>{relative}</span>
-    </Tooltip>
-  )
-}
-
-function renderStatusBadgeWithReason(
-  text: string,
-  variant: 'success' | 'warning' | 'danger' | 'info' | 'muted',
-  reason: unknown
-) {
-  const reasonText = typeof reason === 'string' ? reason.trim() : ''
-  const badge = renderBadge(text, variant)
-  if (!reasonText) {
-    return badge
-  }
-  return (
-    <Tooltip content={reasonText}>
-      <span>{badge}</span>
-    </Tooltip>
-  )
-}
-
 function giftStatusLabel(t: Record<string, string>, value: unknown): string {
   return prefixedLabel(t, 'gift_status', value)
 }
@@ -311,42 +239,6 @@ function requestTypeLabel(t: Record<string, string>, value: unknown): string {
 
 function requestStatusLabel(t: Record<string, string>, value: unknown): string {
   return prefixedLabel(t, 'friend_request_status', value)
-}
-
-function SortableHeaderCell({
-  label,
-  sortKey,
-  sortBy,
-  sortOrder,
-  onToggle,
-  className
-}: {
-  label: string
-  sortKey: string
-  sortBy: string
-  sortOrder: SortOrder
-  onToggle: (sortKey: string) => void
-  className?: string
-}) {
-  const isActive = sortBy === sortKey
-  const direction = isActive ? (sortOrder === 'asc' ? '↑' : '↓') : ''
-  return (
-    <th
-      role="button"
-      tabIndex={0}
-      className={className}
-      style={{ cursor: 'pointer', userSelect: 'none' }}
-      onClick={() => onToggle(sortKey)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onToggle(sortKey)
-        }
-      }}
-    >
-      {label}{direction ? ` ${direction}` : ''}
-    </th>
-  )
 }
 
 function exchangeStatusLabel(t: Record<string, string>, value: unknown): string {
@@ -398,23 +290,6 @@ function parseBool(value: unknown): boolean {
   return false
 }
 
-function statusBadgeVariant(value: unknown): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
-  const key = typeof value === 'string' ? value : ''
-  if (key === 'success' || key === 'completed' || key === 'sended') {
-    return 'success'
-  }
-  if (key === 'failed' || key === 'blocked' || key === 'timeout') {
-    return 'danger'
-  }
-  if (key === 'sending' || key === 'running' || key === 'pending') {
-    return 'warning'
-  }
-  if (key === 'canceling' || key === 'deleting') {
-    return 'info'
-  }
-  return 'muted'
-}
-
 function datePickerLocale(t: Record<string, string>) {
   return {
     selectDateLabel: tr(t, 'date_picker_select_date', 'Select date'),
@@ -432,65 +307,6 @@ function datePickerLocale(t: Record<string, string>) {
       tr(t, 'date_picker_weekday_sun', 'Sun')
     ]
   }
-}
-
-function DataGrid({
-  rows,
-  columns,
-  t,
-  sortBy,
-  sortOrder,
-  onSortChange
-}: {
-  rows: Record<string, unknown>[]
-  columns: ColumnDef[]
-  t: Record<string, string>
-  sortBy?: string
-  sortOrder?: SortOrder
-  onSortChange?: (sortKey: string) => void
-}) {
-  return (
-    <div className="table-wrap">
-      <table className="grid-table">
-        <thead>
-          <tr>
-            {columns.map((col) => {
-              if (onSortChange && sortBy && sortOrder && col.sortKey) {
-                return (
-                  <SortableHeaderCell
-                    key={col.key}
-                    label={col.label}
-                    sortKey={col.sortKey}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
-                    onToggle={onSortChange}
-                    className={col.headerClassName}
-                  />
-                )
-              }
-              return <th key={col.key} className={col.headerClassName}>{col.label}</th>
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={columns.length} className="text-center text-muted">{tr(t, 'label_no_data', 'No data')}</td>
-            </tr>
-          )}
-          {rows.map((row, rowIndex) => (
-            <tr key={`${rowIndex}-${toText(row.id, t)}`}>
-              {columns.map((col) => (
-                <td key={`${rowIndex}-${col.key}`} className={col.cellClassName}>
-                  {col.render ? col.render(row) : toText(row[col.key], t)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
 }
 
 function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> }) {
@@ -528,7 +344,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
   const {
     state: accountListState,
     setFilter: setAccountFilter,
-    setSort: setAccountSort,
+    cycleSort: cycleAccountSort,
     setPage: setAccountPage,
     setPageSize: setAccountPageSize
   } = useManagementListState(accountListSpec)
@@ -542,14 +358,6 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     lang,
     params: accountQueryParams
   })
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    if (accountListState.sortBy === nextSortBy) {
-      setAccountSort(nextSortBy, accountListState.sortOrder === 'asc' ? 'desc' : 'asc')
-      return
-    }
-    setAccountSort(nextSortBy, 'asc')
-  }, [accountListState.sortBy, accountListState.sortOrder, setAccountSort])
-
   const saveAccountMutation = useMutation({
     mutationFn: (payload: { accountId: number; nickname: string; remark: string }) =>
       requestJson<{ ok: boolean; message: string }>(`/api/react/management/accounts/${payload.accountId}`, {
@@ -689,8 +497,6 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
           state={accountListState}
           searchableLocale={selectLocale}
           onFilterChange={setAccountFilter}
-          onSortByChange={(value) => setAccountSort(value)}
-          onSortOrderChange={(value) => setAccountSort(accountListState.sortBy, value)}
           onPageSizeChange={setAccountPageSize}
           t={t}
         />
@@ -711,7 +517,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                       sortKey="id"
                       sortBy={accountListState.sortBy}
                       sortOrder={accountListState.sortOrder}
-                      onToggle={handleHeaderSort}
+                      onToggle={cycleAccountSort}
                     />
                     <th>{tr(t, 'col_plans', 'Plans')}</th>
                     <th>{tr(t, 'col_target_pack', 'Target Pack')}</th>
@@ -960,7 +766,7 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const {
     state: planListState,
     setFilter: setPlanFilter,
-    setSort: setPlanSort,
+    cycleSort: cyclePlanSort,
     setPage: setPlanPage,
     setPageSize: setPlanPageSize
   } = useManagementListState(planListSpec)
@@ -974,14 +780,6 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     lang,
     params: planQueryParams
   })
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    if (planListState.sortBy === nextSortBy) {
-      setPlanSort(nextSortBy, planListState.sortOrder === 'asc' ? 'desc' : 'asc')
-      return
-    }
-    setPlanSort(nextSortBy, 'asc')
-  }, [planListState.sortBy, planListState.sortOrder, setPlanSort])
-
   const reorderTaskByDrag = useCallback((sourceTask: string, targetTask: string) => {
     setTaskOrder((prev) => {
       const sourceOrder = prev.length > 0 ? [...prev] : [...taskOptions]
@@ -1092,8 +890,6 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
           state={planListState}
           searchableLocale={searchableSelectLocale(t)}
           onFilterChange={setPlanFilter}
-          onSortByChange={(value) => setPlanSort(value)}
-          onSortOrderChange={(value) => setPlanSort(planListState.sortBy, value)}
           onPageSizeChange={setPlanPageSize}
           t={t}
           actions={{
@@ -1136,14 +932,14 @@ function PlansSection({ lang, t }: { lang: string; t: Record<string, string> }) 
                   sortKey="id"
                   sortBy={planListState.sortBy}
                   sortOrder={planListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cyclePlanSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_name', 'Name')}
                   sortKey="name"
                   sortBy={planListState.sortBy}
                   sortOrder={planListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cyclePlanSort}
                 />
                 <th>{tr(t, 'col_description', 'Description')}</th>
                 <th>{tr(t, 'col_task', 'Task')}</th>
@@ -1453,6 +1249,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
     state: resourceListState,
     setFilter: setResourceFilter,
     setSort: setResourceSort,
+    cycleSort: cycleResourceSort,
     setPage: setResourcePage,
     setPageSize: setResourcePageSize
   } = useManagementListState(resourceListSpec, {
@@ -1468,31 +1265,11 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
     lang,
     params: resourceQueryParams
   })
-  const handleHeaderSort = useCallback((nextSortBy: string) => {
-    if (resourceListState.sortBy === nextSortBy) {
-      setResourceSort(nextSortBy, resourceListState.sortOrder === 'asc' ? 'desc' : 'asc')
-      return
-    }
-    setResourceSort(nextSortBy, 'asc')
-  }, [resourceListState.sortBy, resourceListState.sortOrder, setResourceSort])
-
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
   useEffect(() => {
     setSeriesList((((query.data?.series_list as unknown[]) ?? []) as string[]))
   }, [query.data?.series_list])
   const view = resourceListState.filters.view || 'stats'
-  const visibleResourceSortOptions = useMemo(
-    () => resourceSortOptions.filter((option) => {
-      if (view === 'pack-points') {
-        return option.value === 'id'
-          || option.value === 'nickname'
-          || option.value === 'friend_id'
-          || option.value.startsWith('series:')
-      }
-      return !option.value.startsWith('series:')
-    }),
-    [resourceSortOptions, view]
-  )
   useEffect(() => {
     const statsSortFields = new Set(['id', 'nickname', 'friend_id', 'exchange_points', 'pack_hourglass_count', 'updated_at'])
     const packPointSortFields = new Set(['id', 'nickname', 'friend_id'])
@@ -1513,15 +1290,8 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
       <ManagementListToolbar
         spec={resourceListSpec}
         state={resourceListState}
-        sortOptions={visibleResourceSortOptions.map((option) =>
-          option.value.startsWith('series:')
-            ? { ...option, fallback: `${tr(t, 'label_series_points', 'Series Points')} (${option.value.split(':')[1]})` }
-            : option
-        )}
         searchableLocale={searchableSelectLocale(t)}
         onFilterChange={setResourceFilter}
-        onSortByChange={(value) => setResourceSort(value)}
-        onSortOrderChange={(value) => setResourceSort(resourceListState.sortBy, value)}
         onPageSizeChange={setResourcePageSize}
         t={t}
       />
@@ -1536,28 +1306,28 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                   sortKey="id"
                   sortBy={resourceListState.sortBy}
                   sortOrder={resourceListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cycleResourceSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_exchange_points', 'Exchange Points')}
                   sortKey="exchange_points"
                   sortBy={resourceListState.sortBy}
                   sortOrder={resourceListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cycleResourceSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_pack_hourglass', 'Pack Hourglass')}
                   sortKey="pack_hourglass_count"
                   sortBy={resourceListState.sortBy}
                   sortOrder={resourceListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cycleResourceSort}
                 />
                 <SortableHeaderCell
                   label={tr(t, 'col_updated_at', 'Updated At')}
                   sortKey="updated_at"
                   sortBy={resourceListState.sortBy}
                   sortOrder={resourceListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cycleResourceSort}
                 />
               </tr>
             </thead>
@@ -1605,7 +1375,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                   sortKey="id"
                   sortBy={resourceListState.sortBy}
                   sortOrder={resourceListState.sortOrder}
-                  onToggle={handleHeaderSort}
+                  onToggle={cycleResourceSort}
                 />
                 {seriesList.map((series) => (
                   <SortableHeaderCell
@@ -1614,7 +1384,7 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
                     sortKey={`series:${series}`}
                     sortBy={resourceListState.sortBy}
                     sortOrder={resourceListState.sortOrder}
-                    onToggle={handleHeaderSort}
+                    onToggle={cycleResourceSort}
                     className="mono"
                   />
                 ))}
@@ -1718,7 +1488,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   const {
     state: taskListState,
     setFilter: setTaskFilter,
-    setSort: setTaskSort,
+    cycleSort: cycleTaskSort,
     setPage: setTaskPage,
     setPageSize: setTaskPageSize
   } = useManagementListState(taskListSpec)
@@ -1753,16 +1523,6 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
     endpoint: 'tasks',
     lang,
     params: taskQueryParams
-  })
-
-  const handleHeaderSort = useHeaderSort({
-    sortBy: taskListState.sortBy,
-    setPage: (value) => setTaskPage(typeof value === 'function' ? value(taskListState.page) : value),
-    setSortBy: (value) => setTaskSort(typeof value === 'function' ? value(taskListState.sortBy) : value),
-    setSortOrder: (value) => {
-      const nextValue = typeof value === 'function' ? value(taskListState.sortOrder) : value
-      setTaskSort(taskListState.sortBy, nextValue)
-    }
   })
 
   const resetMutation = useMutation({
@@ -1810,8 +1570,6 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
         dynamicOptions={taskToolbarOptions}
         searchableLocale={searchableSelectLocale(t)}
         onFilterChange={setTaskFilter}
-        onSortByChange={(value) => setTaskSort(value)}
-        onSortOrderChange={(value) => setTaskSort(taskListState.sortBy, value)}
         onPageSizeChange={setTaskPageSize}
         t={t}
         actions={{
@@ -1855,114 +1613,13 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
       <InlineNotice notice={notice} />
       <QueryTotalSummary t={t} total={totalRecords} />
 
-      <DataGrid
+      <ManagementDataGrid
         rows={rows}
-        columns={[
-          { key: 'id', label: tr(t, 'col_id', 'ID'), headerClassName: 'table-col-id', cellClassName: 'table-col-id' },
-          {
-            key: 'account_id',
-            label: tr(t, 'col_account', 'Account'),
-            headerClassName: 'table-col-account',
-            cellClassName: 'table-col-account',
-            render: (row) => (
-              <AccountIdentityCell
-                t={t}
-                accountId={row.account_id}
-                name={row.account_name}
-                friendId={row.account_friend_id}
-                gameId={row.account_game_id}
-              />
-            )
-          },
-          {
-            key: 'task_type',
-            label: tr(t, 'col_task', 'Task'),
-            headerClassName: 'table-col-task',
-            cellClassName: 'table-col-task',
-            render: (row) => taskTypeLabel(t, row.task_type)
-          },
-          {
-            key: 'status',
-            label: tr(t, 'col_status', 'Status'),
-            headerClassName: 'table-col-status',
-            cellClassName: 'table-col-status',
-            render: (row) => renderStatusBadgeWithReason(
-              statusLabel(t, row.status),
-              statusBadgeVariant(row.status),
-              row.error_message
-            )
-          },
-          {
-            key: 'dispatch_rank',
-            label: tr(t, 'col_dispatch_priority', 'Dispatch Priority'),
-            headerClassName: 'table-col-priority',
-            cellClassName: 'table-col-priority',
-            render: (row) => {
-              const rank = Number(row.dispatch_rank ?? 0)
-              const total = Number(row.dispatch_rank_total ?? 0)
-              if (rank <= 0 || total <= 0) {
-                return '-'
-              }
-              return `${rank}/${total}`
-            }
-          },
-          {
-            key: 'last_completed_at_iso',
-            label: tr(t, 'col_last_completed', 'Last Completed'),
-            sortKey: 'last_completed_at',
-            headerClassName: 'table-col-time',
-            cellClassName: 'table-col-time',
-            render: (row) => renderRelativeTime(row.last_completed_at_iso, lang, t)
-          },
-          {
-            key: 'last_duration_seconds',
-            label: tr(t, 'col_last_duration', 'Last Duration'),
-            sortKey: 'last_duration_seconds',
-            headerClassName: 'table-col-duration',
-            cellClassName: 'table-col-duration',
-            render: (row) => renderDurationWithTooltip(row.last_duration_seconds)
-          },
-          {
-            key: 'reset_type',
-            label: tr(t, 'col_reset_type', 'Reset Type'),
-            headerClassName: 'table-col-rule',
-            cellClassName: 'table-col-rule',
-            render: (row) => {
-              const resetType = toText(row.reset_type, t)
-              if (resetType === '-') {
-                return '-'
-              }
-              return tr(t, `reset_type_${resetType}`, tr(t, 'label_unknown', 'Unknown'))
-            }
-          },
-          {
-            key: 'next_run_at_iso',
-            label: tr(t, 'col_next_run', 'Next Run'),
-            sortKey: 'next_run_at',
-            headerClassName: 'table-col-time',
-            cellClassName: 'table-col-time',
-            render: (row) => renderRelativeTime(row.next_run_at_iso, lang, t)
-          },
-          { key: 'plan_name', label: tr(t, 'col_plan', 'Plan'), headerClassName: 'table-col-plan', cellClassName: 'table-col-plan' },
-          { key: 'plan_priority', label: tr(t, 'label_priority', 'Priority'), headerClassName: 'table-col-priority', cellClassName: 'table-col-priority' },
-          {
-            key: 'target_pack_label',
-            label: tr(t, 'col_target_pack', 'Target Pack'),
-            headerClassName: 'table-col-pack',
-            cellClassName: 'table-col-pack',
-            render: (row) => {
-              const value = toText(row.target_pack_label, t)
-              if (value === '-') {
-                return value
-              }
-              return Boolean(row.target_pack_auto) ? `${value} (${tr(t, 'label_auto', 'Auto')})` : value
-            }
-          }
-        ]}
+        columns={buildTaskTableColumns({ lang, t })}
         t={t}
         sortBy={taskListState.sortBy}
         sortOrder={taskListState.sortOrder}
-        onSortChange={handleHeaderSort}
+        onSortChange={cycleTaskSort}
       />
 
       <Pager
@@ -2486,7 +2143,7 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   }), [])
   const {
     state: dailyGiftRecordState,
-    setSort: setDailyGiftRecordSort,
+    cycleSort: cycleDailyGiftRecordSort,
     setPage: setDailyGiftRecordPage,
     setPageSize: setDailyGiftRecordPageSize
   } = useManagementListState(dailyGiftRecordSpec)
@@ -2628,8 +2285,6 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         state={dailyGiftRecordState}
         searchableLocale={selectLocale}
         onFilterChange={() => {}}
-        onSortByChange={(value) => setDailyGiftRecordSort(value)}
-        onSortOrderChange={(value) => setDailyGiftRecordSort(dailyGiftRecordState.sortBy, value)}
         onPageSizeChange={setDailyGiftRecordPageSize}
         t={t}
       />
@@ -2641,12 +2296,30 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
           <thead>
             <tr>
               <th>{tr(t, 'col_id', 'ID')}</th>
-              <th>{tr(t, 'col_account', 'Account')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_account', 'Account')}
+                sortKey="account_id"
+                sortBy={dailyGiftRecordState.sortBy}
+                sortOrder={dailyGiftRecordState.sortOrder}
+                onToggle={cycleDailyGiftRecordSort}
+              />
               <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
               <th>{tr(t, 'col_card', 'Card')}</th>
-              <th>{tr(t, 'col_status', 'Status')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_status', 'Status')}
+                sortKey="status"
+                sortBy={dailyGiftRecordState.sortBy}
+                sortOrder={dailyGiftRecordState.sortOrder}
+                onToggle={cycleDailyGiftRecordSort}
+              />
               <th>{tr(t, 'col_count_change', 'Count Change')}</th>
-              <th>{tr(t, 'time_label', 'Time')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'time_label', 'Time')}
+                sortKey="updated_at"
+                sortBy={dailyGiftRecordState.sortBy}
+                sortOrder={dailyGiftRecordState.sortOrder}
+                onToggle={cycleDailyGiftRecordSort}
+              />
             </tr>
           </thead>
           <tbody>
@@ -2713,8 +2386,6 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
         state={dailyGiftPairState}
         searchableLocale={selectLocale}
         onFilterChange={() => {}}
-        onSortByChange={() => {}}
-        onSortOrderChange={() => {}}
         onPageSizeChange={setDailyGiftPairPageSize}
         t={t}
       />
@@ -2785,7 +2456,6 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
       defaultOrder: 'desc',
       options: [
         { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
-        { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
         { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' },
         { value: 'to_friend_id', labelKey: 'col_friend_id', fallback: 'Friend ID' },
         { value: 'status', labelKey: 'col_status', fallback: 'Status' }
@@ -2814,13 +2484,13 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
   }), [t])
   const {
     state: requestListState,
-    setSort: setRequestSort,
+    cycleSort: cycleRequestSort,
     setPage: setRequestPage,
     setPageSize: setRequestPageSize
   } = useManagementListState(requestListSpec)
   const {
     state: friendshipListState,
-    setSort: setFriendshipSort,
+    cycleSort: cycleFriendshipSort,
     setPage: setFriendshipPage,
     setPageSize: setFriendshipPageSize
   } = useManagementListState(friendshipListSpec)
@@ -2984,8 +2654,6 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         dynamicOptions={{}}
         searchableLocale={selectLocale}
         onFilterChange={() => {}}
-        onSortByChange={(value) => setRequestSort(value)}
-        onSortOrderChange={(value) => setRequestSort(requestListState.sortBy, value)}
         onPageSizeChange={setRequestPageSize}
         t={t}
       />
@@ -2994,11 +2662,35 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           <thead>
             <tr>
               <th>{tr(t, 'col_id', 'ID')}</th>
-              <th>{tr(t, 'label_from_account', 'From Account')}</th>
-              <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'label_from_account', 'From Account')}
+                sortKey="from_account_id"
+                sortBy={requestListState.sortBy}
+                sortOrder={requestListState.sortOrder}
+                onToggle={cycleRequestSort}
+              />
+              <SortableHeaderCell
+                label={tr(t, 'col_friend_id', 'Friend ID')}
+                sortKey="to_friend_id"
+                sortBy={requestListState.sortBy}
+                sortOrder={requestListState.sortOrder}
+                onToggle={cycleRequestSort}
+              />
               <th>{tr(t, 'col_type', 'Type')}</th>
-              <th>{tr(t, 'col_status', 'Status')}</th>
-              <th>{tr(t, 'label_created_time', 'Created')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_status', 'Status')}
+                sortKey="status"
+                sortBy={requestListState.sortBy}
+                sortOrder={requestListState.sortOrder}
+                onToggle={cycleRequestSort}
+              />
+              <SortableHeaderCell
+                label={tr(t, 'label_created_time', 'Created')}
+                sortKey="created_at"
+                sortBy={requestListState.sortBy}
+                sortOrder={requestListState.sortOrder}
+                onToggle={cycleRequestSort}
+              />
               <th>{tr(t, 'col_actions', 'Actions')}</th>
             </tr>
           </thead>
@@ -3030,7 +2722,7 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
                   </td>
                   <td>{requestTypeLabel(t, row.request_type)}</td>
                   <td>{renderBadge(requestStatusLabel(t, row.status), statusBadgeVariant(row.status))}</td>
-                  <td className="mono">{renderRelativeTime(row.updated_at, lang, t)}</td>
+                  <td className="mono">{renderRelativeTime(row.created_at, lang, t)}</td>
                   <td>
                     {canCancel ? (
                       <Button type="button" size="sm" variant="outline" onClick={() => cancelMutation.mutate(Number(row.id))}>
@@ -3066,8 +2758,6 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
         dynamicOptions={{}}
         searchableLocale={selectLocale}
         onFilterChange={() => {}}
-        onSortByChange={(value) => setFriendshipSort(value)}
-        onSortOrderChange={(value) => setFriendshipSort(friendshipListState.sortBy, value)}
         onPageSizeChange={setFriendshipPageSize}
         t={t}
       />
@@ -3076,9 +2766,27 @@ function FriendshipsSection({ lang, t }: { lang: string; t: Record<string, strin
           <thead>
             <tr>
               <th>{tr(t, 'col_id', 'ID')}</th>
-              <th>{tr(t, 'col_account_id', 'Account ID')}</th>
-              <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
-              <th>{tr(t, 'label_created_time', 'Created')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_account_id', 'Account ID')}
+                sortKey="account_id"
+                sortBy={friendshipListState.sortBy}
+                sortOrder={friendshipListState.sortOrder}
+                onToggle={cycleFriendshipSort}
+              />
+              <SortableHeaderCell
+                label={tr(t, 'col_friend_id', 'Friend ID')}
+                sortKey="friend_id"
+                sortBy={friendshipListState.sortBy}
+                sortOrder={friendshipListState.sortOrder}
+                onToggle={cycleFriendshipSort}
+              />
+              <SortableHeaderCell
+                label={tr(t, 'label_created_time', 'Created')}
+                sortKey="created_at"
+                sortBy={friendshipListState.sortBy}
+                sortOrder={friendshipListState.sortOrder}
+                onToggle={cycleFriendshipSort}
+              />
               <th>{tr(t, 'col_actions', 'Actions')}</th>
             </tr>
           </thead>
@@ -3179,7 +2887,6 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
       defaultOrder: 'desc',
       options: [
         { value: 'created_at', labelKey: 'label_created_time', fallback: 'Created At' },
-        { value: 'updated_at', labelKey: 'col_updated_at', fallback: 'Updated At' },
         { value: 'target_card_id', labelKey: 'col_card', fallback: 'Card' },
         { value: 'from_account_id', labelKey: 'label_from_account', fallback: 'From Account' }
       ]
@@ -3188,7 +2895,7 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   const {
     state: exchangeListState,
     setFilter: setExchangeFilter,
-    setSort: setExchangeSort,
+    cycleSort: cycleExchangeSort,
     setPage: setExchangePage,
     setPageSize: setExchangePageSize
   } = useManagementListState(exchangeListSpec)
@@ -3254,8 +2961,6 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
         dynamicOptions={exchangeToolbarOptions}
         searchableLocale={selectLocale}
         onFilterChange={setExchangeFilter}
-        onSortByChange={(value) => setExchangeSort(value)}
-        onSortOrderChange={(value) => setExchangeSort(exchangeListState.sortBy, value)}
         onPageSizeChange={setExchangePageSize}
         t={t}
       />
@@ -3266,11 +2971,29 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
           <thead>
             <tr>
               <th>{tr(t, 'col_id', 'ID')}</th>
-              <th>{tr(t, 'label_from_account', 'From Account')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'label_from_account', 'From Account')}
+                sortKey="from_account_id"
+                sortBy={exchangeListState.sortBy}
+                sortOrder={exchangeListState.sortOrder}
+                onToggle={cycleExchangeSort}
+              />
               <th>{tr(t, 'col_friend_id', 'Friend ID')}</th>
-              <th>{tr(t, 'col_card', 'Card')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_card', 'Card')}
+                sortKey="target_card_id"
+                sortBy={exchangeListState.sortBy}
+                sortOrder={exchangeListState.sortOrder}
+                onToggle={cycleExchangeSort}
+              />
               <th>{tr(t, 'col_status', 'Status')}</th>
-              <th>{tr(t, 'col_time', 'Time')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_time', 'Time')}
+                sortKey="created_at"
+                sortBy={exchangeListState.sortBy}
+                sortOrder={exchangeListState.sortOrder}
+                onToggle={cycleExchangeSort}
+              />
               <th>{tr(t, 'col_actions', 'Actions')}</th>
             </tr>
           </thead>
@@ -3334,7 +3057,7 @@ function JsonSection({ endpoint, title, lang, t }: { endpoint: string; title: st
   })
 
   const rows = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
-  const columns = useMemo<ColumnDef[]>(() => {
+  const columns = useMemo<ManagementColumnDef[]>(() => {
     if (rows.length === 0) {
       return []
     }
@@ -3350,7 +3073,7 @@ function JsonSection({ endpoint, title, lang, t }: { endpoint: string; title: st
       <div className="section-title">{title}</div>
       {query.isLoading && <div className="text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
       {query.isError && <div className="text-sm text-danger">{(query.error as Error).message}</div>}
-      {columns.length > 0 && <DataGrid rows={rows} columns={columns} t={t} />}
+      {columns.length > 0 && <ManagementDataGrid rows={rows} columns={columns} t={t} />}
       <Pager
         page={Number(query.data?.page ?? 0)}
         hasPrev={Boolean(query.data?.has_prev)}

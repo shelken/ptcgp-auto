@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '@/components/ui/select'
-import { Tooltip } from '@/components/ui/tooltip'
-import { tr } from '@/lib/i18n'
+import { Badge } from '../../components/ui/badge'
+import { Button } from '../../components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, decodeSelectValue, encodeSelectValue } from '../../components/ui/select'
+import { Tooltip } from '../../components/ui/tooltip'
+import { tr } from '../../lib/i18n'
+import {
+  formatAbsoluteDateTime,
+  formatDurationExact,
+  formatDurationShort,
+  formatRelativeDateTime
+} from '../../lib/time-display'
 
 export interface InlineNoticeState {
   level: 'success' | 'error'
@@ -22,6 +28,15 @@ export interface SortOption {
   value: string
   labelKey: string
   fallback: string
+}
+
+export interface ManagementColumnDef {
+  key: string
+  label: string
+  render?: (row: Record<string, unknown>) => ReactNode
+  sortKey?: string
+  headerClassName?: string
+  cellClassName?: string
 }
 
 const MANAGEMENT_STATE_STORAGE_PREFIX = 'ptcgp_management_state:'
@@ -95,6 +110,66 @@ export function sceneBadgeVariant(value: string): 'success' | 'warning' | 'dange
 
 export function renderBadge(text: string, variant: 'success' | 'warning' | 'danger' | 'info' | 'muted') {
   return <Badge variant={variant}>{text}</Badge>
+}
+
+export function renderRelativeTime(value: unknown, lang: string, t: Record<string, string>) {
+  const absolute = formatAbsoluteDateTime(value)
+  const relative = formatRelativeDateTime(value, lang, t)
+  if (absolute === '-' || relative === '-') {
+    return relative
+  }
+  return (
+    <Tooltip content={absolute}>
+      <span>{relative}</span>
+    </Tooltip>
+  )
+}
+
+export function renderDurationWithTooltip(value: unknown) {
+  const shortText = formatDurationShort(value)
+  if (shortText === '-') {
+    return shortText
+  }
+  const exactText = formatDurationExact(value)
+  return (
+    <Tooltip content={exactText}>
+      <span>{shortText}</span>
+    </Tooltip>
+  )
+}
+
+export function renderStatusBadgeWithReason(
+  text: string,
+  variant: 'success' | 'warning' | 'danger' | 'info' | 'muted',
+  reason: unknown
+) {
+  const reasonText = typeof reason === 'string' ? reason.trim() : ''
+  const badge = renderBadge(text, variant)
+  if (!reasonText) {
+    return badge
+  }
+  return (
+    <Tooltip content={reasonText}>
+      <span>{badge}</span>
+    </Tooltip>
+  )
+}
+
+export function statusBadgeVariant(value: unknown): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
+  const key = typeof value === 'string' ? value : ''
+  if (key === 'success' || key === 'completed' || key === 'sended') {
+    return 'success'
+  }
+  if (key === 'failed' || key === 'blocked' || key === 'timeout') {
+    return 'danger'
+  }
+  if (key === 'sending' || key === 'running' || key === 'pending') {
+    return 'warning'
+  }
+  if (key === 'canceling' || key === 'deleting') {
+    return 'info'
+  }
+  return 'muted'
 }
 
 export function InlineNotice({ notice }: { notice: InlineNoticeState | null }) {
@@ -359,73 +434,117 @@ export function Pager({
   )
 }
 
-export function ListQueryControls({
+export function SortableHeaderCell({
+  label,
+  sortKey,
   sortBy,
   sortOrder,
-  pageSize,
-  sortOptions,
-  pageSizeOptions,
-  onSortByChange,
-  onSortOrderChange,
-  onPageSizeChange,
-  t,
-  disableSortOrder = false,
-  showSortControls = true
+  onToggle,
+  className
 }: {
+  label: string
+  sortKey: string
   sortBy: string
   sortOrder: 'asc' | 'desc'
+  onToggle: (sortKey: string) => void
+  className?: string
+}) {
+  const isActive = sortBy === sortKey
+  const direction = isActive ? (sortOrder === 'asc' ? '↑' : '↓') : ''
+  return (
+    <th
+      role="button"
+      tabIndex={0}
+      aria-sort={isActive ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className={className}
+      style={{ cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => onToggle(sortKey)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onToggle(sortKey)
+        }
+      }}
+    >
+      {label}{direction ? ` ${direction}` : ''}
+    </th>
+  )
+}
+
+export function ManagementDataGrid({
+  rows,
+  columns,
+  t,
+  sortBy,
+  sortOrder,
+  onSortChange
+}: {
+  rows: Record<string, unknown>[]
+  columns: ManagementColumnDef[]
+  t: Record<string, string>
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  onSortChange?: (sortKey: string) => void
+}) {
+  return (
+    <div className="table-wrap">
+      <table className="grid-table">
+        <thead>
+          <tr>
+            {columns.map((column) => {
+              if (onSortChange && sortBy && sortOrder && column.sortKey) {
+                return (
+                  <SortableHeaderCell
+                    key={column.key}
+                    label={column.label}
+                    sortKey={column.sortKey}
+                    sortBy={sortBy}
+                    sortOrder={sortOrder}
+                    onToggle={onSortChange}
+                    className={column.headerClassName}
+                  />
+                )
+              }
+              return <th key={column.key} className={column.headerClassName}>{column.label}</th>
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={columns.length} className="text-center text-muted">{tr(t, 'label_no_data', 'No data')}</td>
+            </tr>
+          )}
+          {rows.map((row, rowIndex) => (
+            <tr key={`${rowIndex}-${toText(row.id, t)}`}>
+              {columns.map((column) => (
+                <td key={`${rowIndex}-${column.key}`} className={column.cellClassName}>
+                  {column.render ? column.render(row) : toText(row[column.key], t)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function ListQueryControls({
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
+  t
+}: {
   pageSize: number
-  sortOptions: SortOption[]
   pageSizeOptions?: number[]
-  onSortByChange: (value: string) => void
-  onSortOrderChange: (value: 'asc' | 'desc') => void
   onPageSizeChange: (value: number) => void
   t: Record<string, string>
-  disableSortOrder?: boolean
-  showSortControls?: boolean
 }) {
   const options = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 20, 50, 100]
   return (
     <div className="table-toolbar-layout table-toolbar--dense management-query-controls">
-      <div className="table-toolbar-zone table-toolbar-zone--left">
-        {showSortControls && (
-          <>
-            <div className="table-filter-item">
-              <label className="section-subtitle">{tr(t, 'label_sort_by', 'Sort By')}</label>
-              <Select value={encodeSelectValue(sortBy)} onValueChange={(value) => onSortByChange(decodeSelectValue(value))}>
-                <SelectTrigger className="field-select table-control">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {sortOptions.map((option) => (
-                    <SelectItem key={option.value} value={encodeSelectValue(option.value)}>
-                      {tr(t, option.labelKey, option.fallback)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="table-filter-item">
-              <label className="section-subtitle">{tr(t, 'label_sort_order', 'Order')}</label>
-              <Select
-                value={encodeSelectValue(sortOrder)}
-                disabled={disableSortOrder}
-                onValueChange={(value) => onSortOrderChange(decodeSelectValue(value) as 'asc' | 'desc')}
-              >
-                <SelectTrigger className="field-select table-control">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asc">{tr(t, 'sort_order_asc', 'Ascending')}</SelectItem>
-                  <SelectItem value="desc">{tr(t, 'sort_order_desc', 'Descending')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </>
-        )}
-      </div>
-
+      <div className="table-toolbar-zone table-toolbar-zone--left" />
       <div className="table-toolbar-zone table-toolbar-zone--right">
         <div className="table-filter-item">
           <label className="section-subtitle">{tr(t, 'label_page_size', 'Page Size')}</label>

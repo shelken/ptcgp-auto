@@ -9,6 +9,7 @@ import type {
   ManagementListState
 } from './list-spec'
 import {
+  applyManagementListSortClick,
   type PersistedManagementListState,
   normalizeManagementListRuntimeState,
   normalizeManagementListState
@@ -107,6 +108,11 @@ export function useManagementListState(
     commitState(nextState)
   }, [commitState, normalizeState, state])
 
+  const cycleSort = useCallback((sortBy: string) => {
+    const nextState = normalizeState(applyManagementListSortClick(spec, state, sortBy))
+    commitState(nextState)
+  }, [commitState, normalizeState, spec, state])
+
   const setPage = useCallback((page: number) => {
     const nextState = normalizeState({
       ...state,
@@ -139,6 +145,7 @@ export function useManagementListState(
     setFilter,
     setFilters,
     setSort,
+    cycleSort,
     setPage,
     setPageSize,
     resetPage

@@ -20,6 +20,7 @@ import { ManagementListToolbar } from './list-toolbar'
 import {
   AccountIdentityCell,
   InlineNotice,
+  SortableHeaderCell,
   type InlineNoticeState,
   Pager,
   QueryTotalSummary,
@@ -199,14 +200,13 @@ export function NotificationsSection({
   const {
     state: notificationListState,
     setFilter: setNotificationFilter,
-    setSort: setNotificationSort,
+    cycleSort: cycleNotificationSort,
     setPage: setNotificationPage,
     setPageSize: setNotificationPageSize
   } = useManagementListState(notificationListSpec)
   const {
     state: cardPickerListState,
     setFilter: setCardPickerFilter,
-    setSort: setCardPickerSort,
     setPage: setCardPickerPage,
     setPageSize: setCardPickerPageSize
   } = useManagementListState(notificationCardPickerSpec)
@@ -635,8 +635,6 @@ export function NotificationsSection({
         dynamicOptions={notificationToolbarOptions}
         searchableLocale={selectLocale}
         onFilterChange={setNotificationFilter}
-        onSortByChange={(value) => setNotificationSort(value)}
-        onSortOrderChange={(value) => setNotificationSort(notificationListState.sortBy, value)}
         onPageSizeChange={setNotificationPageSize}
         t={t}
         actions={{
@@ -864,8 +862,6 @@ export function NotificationsSection({
                 dynamicOptions={cardPickerToolbarOptions}
                 searchableLocale={selectLocale}
                 onFilterChange={setCardPickerFilter}
-                onSortByChange={(value) => setCardPickerSort(value)}
-                onSortOrderChange={(value) => setCardPickerSort(cardPickerListState.sortBy, value)}
                 onPageSizeChange={setCardPickerPageSize}
                 t={t}
               />
@@ -970,12 +966,32 @@ export function NotificationsSection({
           <thead>
             <tr>
               <th className="table-col-id">{tr(t, 'col_id', 'ID')}</th>
-              <th className="table-col-status">{tr(t, 'col_scene', 'Scene')}</th>
-              <th>{tr(t, 'col_title', 'Title')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_scene', 'Scene')}
+                sortKey="scene"
+                sortBy={notificationListState.sortBy}
+                sortOrder={notificationListState.sortOrder}
+                onToggle={cycleNotificationSort}
+                className="table-col-status"
+              />
+              <SortableHeaderCell
+                label={tr(t, 'col_title', 'Title')}
+                sortKey="title"
+                sortBy={notificationListState.sortBy}
+                sortOrder={notificationListState.sortOrder}
+                onToggle={cycleNotificationSort}
+              />
               <th className="table-col-image-text">{tr(t, 'col_description', 'Content')}</th>
               <th className="table-col-account">{tr(t, 'col_account', 'Account')}</th>
               <th className="table-col-status">{tr(t, 'label_read', 'Read')}</th>
-              <th className="table-col-time">{tr(t, 'col_time', 'Time')}</th>
+              <SortableHeaderCell
+                label={tr(t, 'col_time', 'Time')}
+                sortKey="created_at"
+                sortBy={notificationListState.sortBy}
+                sortOrder={notificationListState.sortOrder}
+                onToggle={cycleNotificationSort}
+                className="table-col-time"
+              />
               <th className="table-col-actions">{tr(t, 'col_actions', 'Actions')}</th>
             </tr>
           </thead>
