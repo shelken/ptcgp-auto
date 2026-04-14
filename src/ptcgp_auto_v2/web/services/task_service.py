@@ -303,6 +303,10 @@ def build_task_list_render_context(
 
     context["status_options"] = [status_item.value for status_item in TaskStatus]
     context["task_types"] = TaskRegistry.all_types()
+    context["filter_options"] = {
+        "status": context["status_options"],
+        "task_type": context["task_types"],
+    }
     context["accounts"] = list_task_filter_accounts(
         session=session, q=account_q, limit=20
     )

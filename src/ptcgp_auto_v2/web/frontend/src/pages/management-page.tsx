@@ -22,6 +22,7 @@ import {
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
+import { getManagementFilterOptions } from './management/filter-options'
 import {
   buildMetadataExecutePayload,
   buildMetadataPreviewPayload,
@@ -1782,8 +1783,8 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   })
 
   const rows = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
-  const statusOptions = ((query.data?.status_options as unknown[]) ?? []) as string[]
-  const taskTypeOptions = ((query.data?.task_types as unknown[]) ?? []) as string[]
+  const statusOptions = getManagementFilterOptions<string>(query.data, 'status', ['status_options'])
+  const taskTypeOptions = getManagementFilterOptions<string>(query.data, 'task_type', ['task_types'])
   const accountOptions = ((accountOptionsQuery.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[]
   const totalRecords = toTotalCount(query.data?.total, rows.length)
   const taskToolbarOptions = useMemo<Record<string, string[] | ManagementListOption[]>>(
@@ -3215,8 +3216,8 @@ function ExchangeCardsSection({ lang, t }: { lang: string; t: Record<string, str
   const totalRecords = toTotalCount(query.data?.total_items, rows.length)
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const statusOptions = useMemo(
-    () => (((query.data?.status_options as unknown[]) ?? []) as string[]),
-    [query.data?.status_options]
+    () => getManagementFilterOptions<string>(query.data, 'status', ['status_options']),
+    [query.data]
   )
   const accountOptions = useMemo(
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),

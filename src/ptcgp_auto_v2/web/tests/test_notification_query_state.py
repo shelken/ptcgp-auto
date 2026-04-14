@@ -118,6 +118,10 @@ def test_build_notifications_context_returns_normalized_query_state(
     assert context["page"] == 0
     assert context["page_size"] == 100
     assert context["total"] == 1
+    assert context["filter_options"]["scene"] == context["scene_options"]
+    assert context["filter_options"]["task_type"] == context["task_type_options"]
+    assert context["filter_options"]["task_status"] == context["task_status_options"]
+    assert context["filter_options"]["rarity_code"] == context["rarity_codes"]
 
 
 def test_build_notification_card_selector_context_returns_normalized_query_state(
@@ -143,3 +147,6 @@ def test_build_notification_card_selector_context_returns_normalized_query_state
     assert context["card_selector_page"] == 0
     assert context["card_selector_page_size"] == 60
     assert context["card_selector_total"] == 1
+    assert context["filter_options"]["rarity"] == context["rarity_codes"]
+    assert context["filter_options"]["set_code"] == context["set_codes"]
+    assert context["filter_options"]["pack_name"] == context["pack_names"]

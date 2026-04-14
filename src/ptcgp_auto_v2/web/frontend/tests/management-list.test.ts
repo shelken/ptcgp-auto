@@ -474,4 +474,43 @@ describe('管理页统一列表状态', () => {
       snapshot_id: 'snap-2'
     })
   })
+
+  test('管理页应优先读取统一 filter_options 并兼容旧 options 字段', async () => {
+    const { getManagementFilterOptions } = await import('../src/pages/management/filter-options')
+
+    expect(
+      getManagementFilterOptions(
+        {
+          filter_options: {
+            status: ['pending', 'completed']
+          },
+          status_options: ['legacy']
+        },
+        'status',
+        ['status_options']
+      )
+    ).toEqual(['pending', 'completed'])
+
+    expect(
+      getManagementFilterOptions(
+        {
+          status_options: ['sending', 'completed']
+        },
+        'status',
+        ['status_options']
+      )
+    ).toEqual(['sending', 'completed'])
+
+    expect(
+      getManagementFilterOptions(
+        {
+          filter_options: {
+            scene: [{ value: 'task_status', label: 'Task Status' }]
+          }
+        },
+        'scene',
+        ['scene_options']
+      )
+    ).toEqual([{ value: 'task_status', label: 'Task Status' }])
+  })
 })

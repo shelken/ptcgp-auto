@@ -12,6 +12,7 @@ import { tr } from '@/lib/i18n'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 
 import { buildManagementListActionPayload } from './list-actions'
+import { getManagementFilterOptions } from './filter-options'
 import { buildManagementListQueryParams } from './list-query'
 import type { ManagementListOption, ManagementListSpec } from './list-spec'
 import { useManagementListState } from './list-state'
@@ -327,21 +328,20 @@ export function NotificationsSection({
     [query.data?.configs]
   )
   const sceneOptions = useMemo(
-    () =>
-      (((query.data?.scene_options as unknown[]) ?? []) as Array<{ value: string; label: string }>),
-    [query.data?.scene_options]
+    () => getManagementFilterOptions<{ value: string; label: string }>(query.data, 'scene', ['scene_options']),
+    [query.data]
   )
   const taskTypeOptions = useMemo(
-    () => (((query.data?.task_type_options as unknown[]) ?? []) as string[]),
-    [query.data?.task_type_options]
+    () => getManagementFilterOptions<string>(query.data, 'task_type', ['task_type_options']),
+    [query.data]
   )
   const taskStatusOptions = useMemo(
-    () => (((query.data?.task_status_options as unknown[]) ?? []) as string[]),
-    [query.data?.task_status_options]
+    () => getManagementFilterOptions<string>(query.data, 'task_status', ['task_status_options']),
+    [query.data]
   )
   const rarityCodes = useMemo(
-    () => (((query.data?.rarity_codes as unknown[]) ?? []) as string[]),
-    [query.data?.rarity_codes]
+    () => getManagementFilterOptions<string>(query.data, 'rarity_code', ['rarity_codes']),
+    [query.data]
   )
   const accountNameMap = useMemo(
     () => ((query.data?.account_name_map as Record<string, string> | undefined) ?? {}),
@@ -381,24 +381,16 @@ export function NotificationsSection({
   }, [accounts, t])
   const cardPickerCards = cardPickerCardsAccum
   const cardPickerRarityCodes = useMemo(
-    () => (((cardPickerQuery.data?.rarity_codes as unknown[]) ?? []) as string[]),
-    [cardPickerQuery.data?.rarity_codes]
+    () => getManagementFilterOptions<string>(cardPickerQuery.data, 'rarity', ['rarity_codes']),
+    [cardPickerQuery.data]
   )
   const cardPickerSetOptions = useMemo(
-    () =>
-      (((cardPickerQuery.data?.set_codes as unknown[]) ?? []) as Array<{
-        value: string
-        display_name: string
-      }>),
-    [cardPickerQuery.data?.set_codes]
+    () => getManagementFilterOptions<{ value: string; display_name: string }>(cardPickerQuery.data, 'set_code', ['set_codes']),
+    [cardPickerQuery.data]
   )
   const cardPickerPackOptions = useMemo(
-    () =>
-      (((cardPickerQuery.data?.pack_names as unknown[]) ?? []) as Array<{
-        value: string
-        display_name: string
-      }>),
-    [cardPickerQuery.data?.pack_names]
+    () => getManagementFilterOptions<{ value: string; display_name: string }>(cardPickerQuery.data, 'pack_name', ['pack_names']),
+    [cardPickerQuery.data]
   )
   const cardPickerSetSelectOptions = useMemo<SearchableOption[]>(
     () => [

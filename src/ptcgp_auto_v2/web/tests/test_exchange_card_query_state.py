@@ -82,3 +82,4 @@ def test_build_exchange_card_context_returns_normalized_query_state(
     assert context["sort_order"] == "desc"
     assert context["page"] == 0
     assert context["page_size"] == 100
+    assert context["filter_options"]["status"] == context["status_options"]

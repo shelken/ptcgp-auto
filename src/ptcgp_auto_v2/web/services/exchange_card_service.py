@@ -118,6 +118,9 @@ def build_exchange_card_context(
         "sort_order": normalized_sort_order,
         "accounts": accounts,
         "account_name_map": account_name_map,
+        "filter_options": {
+            "status": status_options,
+        },
         "status_options": status_options,
         "selected_account_id": account_id,
         "selected_status": status or "",
