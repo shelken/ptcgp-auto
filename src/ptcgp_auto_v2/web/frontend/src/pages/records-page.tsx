@@ -13,9 +13,16 @@ import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
 import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
-import { parseSearchList, toggleListItem } from '@/lib/list-utils'
+import { toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 import type { BootstrapOptions } from '@/types/api'
+
+import {
+  buildRecordsApiQueryParams,
+  buildRecordsSearchParams,
+  parseRecordsSearchState,
+  type RecordsViewMode
+} from './records-query'
 
 interface RecordsPageProps {
   lang: string
@@ -85,6 +92,11 @@ interface PreviewState {
 
 const RECORDS_PAGE_SIZE = 10
 const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
+
+function resolveStoredViewMode(): RecordsViewMode {
+  const stored = window.localStorage.getItem(RECORDS_VIEW_MODE_KEY)
+  return stored === 'list' ? 'list' : 'grid'
+}
 
 function resolveLayoutByCount(cardCount: number): string {
   if (cardCount === 6) {
@@ -216,12 +228,15 @@ function BatchOverviewTile({
 
 export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   const [searchParams, setSearchParams] = usePersistedSearchParams()
-  const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'records_rarity'))
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseSearchList(searchParams, 'records_type'))
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
-    const stored = window.localStorage.getItem(RECORDS_VIEW_MODE_KEY)
-    return stored === 'list' ? 'list' : 'grid'
-  })
+  const [selectedRarity, setSelectedRarity] = useState<string[]>(
+    () => parseRecordsSearchState(searchParams).selectedRarity
+  )
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(
+    () => parseRecordsSearchState(searchParams).selectedTypes
+  )
+  const [viewMode, setViewMode] = useState<RecordsViewMode>(
+    () => parseRecordsSearchState(searchParams, { fallbackView: resolveStoredViewMode() }).viewMode
+  )
   const [previewCard, setPreviewCard] = useState<PreviewState | null>(null)
   const [previewOriginRect, setPreviewOriginRect] = useState<PreviewRectLike | null>(null)
   const [activeBatchPack, setActiveBatchPack] = useState<Record<string, number | null>>({})
@@ -246,13 +261,14 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   }, [resetPreviewTransform, stopPreviewDrag])
 
   useEffect(() => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('records_rarity')
-    next.delete('records_type')
-    next.delete('records_view')
-    selectedRarity.forEach((item) => next.append('records_rarity', item))
-    selectedTypes.forEach((item) => next.append('records_type', item))
-    next.set('records_view', viewMode)
+    const next = buildRecordsSearchParams(
+      {
+        selectedRarity,
+        selectedTypes,
+        viewMode
+      },
+      searchParams
+    )
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true, preventScrollReset: true })
     }
@@ -368,23 +384,30 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   }, [closePreview, previewCard])
 
   const recordsQueryBaseParams = useMemo(
-    () => ({
-      page_size: RECORDS_PAGE_SIZE,
-      lang,
-      rarity: selectedRarity,
-      card_type: selectedTypes
-    }),
+    () => buildQuery(
+      buildRecordsApiQueryParams({
+        lang,
+        page: 0,
+        pageSize: RECORDS_PAGE_SIZE,
+        selectedRarity,
+        selectedTypes
+      })
+    ),
     [lang, selectedRarity, selectedTypes]
   )
-  const queryBaseString = useMemo(() => buildQuery(recordsQueryBaseParams), [recordsQueryBaseParams])
 
   const query = useInfiniteQuery({
-    queryKey: ['records', queryBaseString],
+    queryKey: ['records', recordsQueryBaseParams],
     queryFn: ({ pageParam }) =>
       fetchJson<RecordsResponse>(
         `/api/react/records?${buildQuery({
-          ...recordsQueryBaseParams,
-          page: pageParam
+          ...buildRecordsApiQueryParams({
+            lang,
+            page: Number(pageParam),
+            pageSize: RECORDS_PAGE_SIZE,
+            selectedRarity,
+            selectedTypes
+          })
         })}`
       ),
     initialPageParam: 0,

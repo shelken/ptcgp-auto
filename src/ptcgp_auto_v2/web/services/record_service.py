@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 from sqlmodel import Session, select, col
@@ -16,6 +17,40 @@ from ptcgp_auto_v2.web.utils.i18n import (
     resolve_card_name_from_data,
 )
 from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
+
+
+@dataclass(frozen=True)
+class RecordsListQueryState:
+    """统一开包记录查询状态，减少路由与服务层重复解析。"""
+
+    page: int
+    page_size: int
+    rarity: list[str]
+    card_type: list[str]
+
+
+def _normalize_records_filter_values(values: list[str] | None) -> list[str]:
+    """归一化多选筛选项，统一去空白与空字符串。"""
+    if not values:
+        return []
+    return [item.strip() for item in values if item and item.strip()]
+
+
+def build_records_list_query_state(
+    *,
+    page: int = 0,
+    page_size: int = 10,
+    rarity: list[str] | None = None,
+    card_type: list[str] | None = None,
+    max_page_size: int = 100,
+) -> RecordsListQueryState:
+    """构建 records 列表统一查询状态。"""
+    return RecordsListQueryState(
+        page=normalize_page(page),
+        page_size=normalize_page_size(page_size, max_size=max_page_size),
+        rarity=_normalize_records_filter_values(rarity),
+        card_type=_normalize_records_filter_values(card_type),
+    )
 
 
 def _resolve_record_card_name(pack_card: Any) -> str:
@@ -301,17 +336,19 @@ def build_records_list_context(
     card_type: list[str] | None = None,
 ) -> dict[str, Any]:
     """构建开包记录列表视图上下文（统一列表协议）。"""
-    normalized_page = normalize_page(page)
-    normalized_page_size = normalize_page_size(page_size)
-    rarity = rarity or []
-    card_type = card_type or []
+    list_state = build_records_list_query_state(
+        page=page,
+        page_size=page_size,
+        rarity=rarity,
+        card_type=card_type,
+    )
 
     results, has_next = fetch_display_entity_records(
         session,
-        normalized_page,
-        normalized_page_size,
-        rarity,
-        card_type,
+        list_state.page,
+        list_state.page_size,
+        list_state.rarity,
+        list_state.card_type,
     )
 
     card_repo = CardRepository(session)
@@ -333,11 +370,11 @@ def build_records_list_context(
 
     return {
         "items": items,
-        "page": normalized_page,
-        "page_size": normalized_page_size,
-        "has_prev": normalized_page > 0,
+        "page": list_state.page,
+        "page_size": list_state.page_size,
+        "has_prev": list_state.page > 0,
         "has_next": has_next,
-        "total": (normalized_page * normalized_page_size)
+        "total": (list_state.page * list_state.page_size)
         + len(items)
-        + (normalized_page_size if has_next else 0),
+        + (list_state.page_size if has_next else 0),
     }
