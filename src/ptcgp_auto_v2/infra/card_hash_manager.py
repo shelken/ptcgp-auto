@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 from ptcgp_auto_v2.config.constants import (
+    CARD_IMAGE_DOWNLOAD_MAX_WORKERS,
     HASH_SIMILARITY_TIE_THRESHOLD,
     TOPK_CANDIDATES,
 )
@@ -104,12 +105,13 @@ class CardHashManager:
                 # 3. 下载缺失卡牌的图片
                 card_numbers = [number for _, number in missing_cards]
                 logger.debug(
-                    "[HashManager] 开始下载缺失卡图: set_code=%s missing_cards=%s",
+                    "[HashManager] 开始下载缺失卡图: set_code=%s missing_cards=%s max_workers=%s",
                     set_code,
                     len(card_numbers),
+                    CARD_IMAGE_DOWNLOAD_MAX_WORKERS,
                 )
                 downloaded = self._downloader.download_cards_batch(  # type: ignore
-                    set_code, card_numbers
+                    set_code, card_numbers, max_workers=CARD_IMAGE_DOWNLOAD_MAX_WORKERS
                 )
                 logger.debug(
                     "[HashManager] 下载缺失卡图完成: set_code=%s downloaded=%s",

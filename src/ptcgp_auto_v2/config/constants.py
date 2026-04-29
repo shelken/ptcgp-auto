@@ -55,6 +55,7 @@ GAME_UTC_OFFSET_HOURS = 8
 # 调度配置
 DEFAULT_POLL_INTERVAL = 5.0  # 默认轮询间隔 (秒)
 DEFAULT_MAX_WORKERS = 4  # 默认最大工作线程数
+CARD_IMAGE_DOWNLOAD_MAX_WORKERS = 16  # 卡图下载并发数（Hash 补齐会批量拉取整系列图片）
 DEFAULT_TASK_GENERATION_INTERVAL = 60.0  # 默认任务生成间隔 (秒)
 
 # 执行配置
