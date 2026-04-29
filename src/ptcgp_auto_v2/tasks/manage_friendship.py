@@ -74,6 +74,13 @@ def _build_manage_friendship_pages() -> list[dict]:
             "match_all": True,
             "priority": 90,
         },
+        # 新版新增朋友页：先显示自己的 ID/条码，需要再点朋友ID搜尋进入输入页。
+        {
+            "name": "friend_add_modal",
+            "identifiers": get_text_patterns("friend_add_modal"),
+            "match_all": True,
+            "priority": 89,
+        },
         # 搜索图标
         {
             "name": "friend_search_modal",
@@ -499,6 +506,16 @@ class ManageFriendshipTask(StatefulTask):
             wait=0.9,
         )
 
+    def _handle_add_modal(self, page_info: dict) -> ActionResult:
+        """新增朋友页：进入朋友ID搜索输入页。"""
+        result = tap_text_exact(
+            self.adb,
+            page_info.get("ocr_results", []),
+            get_text_patterns("friend_id_search"),
+            wait=0.8,
+        )
+        return result or ActionResult.wait(0.5)
+
     def _handle_search_modal(self, page_info: dict) -> ActionResult:
         """搜索页：每个请求强制执行 清空->输入->搜索。"""
         req = self._pick_current_request()
@@ -594,12 +611,14 @@ class ManageFriendshipTask(StatefulTask):
         _handle_home_with_community_icon,
         _handle_game_home_main,
         _handle_community_page,
+        _handle_friend_add_modal,
         _handle_friend_search_modal,
         _handle_friend_search_result_modal,
     ) = (
         _handle_home,
         _handle_home,
         _handle_community,
+        _handle_add_modal,
         _handle_search_modal,
         _handle_search_result,
     )
