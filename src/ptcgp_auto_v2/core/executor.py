@@ -841,6 +841,8 @@ class AccountExecutor(BaseExecutor):
 
     def _execute_single_task(self, task_instance: TaskInstanceSnapshot):
         """执行单个任务，并将结果收口到统一状态更新入口。"""
+        from ptcgp_auto_v2.infra.adb import AdbController
+
         self._set_active_task(task_instance)
         logger.info(f"执行任务: {task_instance.task_type}")
         try:
@@ -850,6 +852,8 @@ class AccountExecutor(BaseExecutor):
             )
             self._apply_task_result(task_instance, self.account, result)
         except Exception as e:
+            if AdbController.is_offline_error(e):
+                raise
             logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
             self._apply_task_failure(task_instance, self.account, str(e))
 
@@ -886,6 +890,9 @@ class AccountExecutor(BaseExecutor):
                 self._run_pending_tasks()
                 logger.info(f"账号任务执行完成 (账号: {self.account.display_name})")
             except Exception as e:
+                from ptcgp_auto_v2.infra.adb import AdbController
+
+                AdbController.register_offline_failure(self.device.address, e)
                 logger.exception(f"账号执行器异常: {e}")
                 self._fail_tasks(str(e), only_running=True)
             finally:

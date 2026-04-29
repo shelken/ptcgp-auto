@@ -10,6 +10,7 @@ import threading
 
 import uiautomator2 as u2
 
+from ptcgp_auto_v2.config.constants import ADB_CONNECT_FAIL_RESTART_THRESHOLD
 from ptcgp_auto_v2.infra.adb import AdbController
 
 
@@ -93,3 +94,44 @@ def test_connect_device_retries_when_uiautomator_server_quits_during_start(
 
     assert device is not None
     assert calls == ["127.0.0.1:5555", "127.0.0.1:5555"]
+
+
+def test_offline_error_reaches_threshold_then_force_restarts_emulator(monkeypatch):
+    """同设备连续离线错误达到阈值后必须直接强制重启模拟器。"""
+    address = "127.0.0.1:5675"
+    restarts: list[str] = []
+    AdbController._offline_failures.clear()
+
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.infra.adb.restart_bluestacks_instance_for_device",
+        lambda device_address: restarts.append(device_address) or True,
+    )
+
+    for attempt in range(ADB_CONNECT_FAIL_RESTART_THRESHOLD - 1):
+        should_retry = AdbController.register_offline_failure(
+            address,
+            RuntimeError(f"device {address} not online"),
+        )
+        assert should_retry is False
+        assert restarts == []
+        assert AdbController._offline_failures[address] == attempt + 1
+
+    should_retry = AdbController.register_offline_failure(
+        address,
+        RuntimeError(f"device {address} not online"),
+    )
+
+    assert should_retry is True
+    assert restarts == [address]
+    assert AdbController._offline_failures[address] == 0
+
+
+def test_successful_connection_resets_offline_failure_count():
+    """设备恢复连接后必须清理离线错误计数。"""
+    address = "127.0.0.1:5675"
+    AdbController._offline_failures[address] = 2
+
+    controller = AdbController(address)
+    controller._reset_connect_failures()
+
+    assert AdbController._offline_failures[address] == 0

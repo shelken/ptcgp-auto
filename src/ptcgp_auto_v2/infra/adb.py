@@ -36,6 +36,7 @@ class AdbController:
     """
 
     _connect_failures: dict[str, int] = {}
+    _offline_failures: dict[str, int] = {}
 
     def __init__(self, address: str):
         """
@@ -130,6 +131,39 @@ class AdbController:
             "not found",
         )
         return any(marker in message for marker in refresh_markers)
+
+    @staticmethod
+    def is_offline_error(exc: Exception) -> bool:
+        """识别设备级离线错误，避免把模拟器卡死误当成普通任务失败。"""
+        message = str(exc).lower()
+        offline_markers = (
+            "not online",
+            "device offline",
+        )
+        return any(marker in message for marker in offline_markers)
+
+    @classmethod
+    def register_offline_failure(cls, address: str, exc: Exception) -> bool:
+        """记录同设备离线错误，达到阈值后直接强制重启对应模拟器。"""
+        if not cls.is_offline_error(exc):
+            return False
+
+        failures = cls._offline_failures.get(address, 0) + 1
+        cls._offline_failures[address] = failures
+        logger.warning(
+            "ADB 离线错误连续次数: %s/%s (%s) err=%s",
+            failures,
+            ADB_CONNECT_FAIL_RESTART_THRESHOLD,
+            address,
+            exc,
+        )
+        if failures < ADB_CONNECT_FAIL_RESTART_THRESHOLD:
+            return False
+
+        logger.warning("离线错误达到阈值，强制重启模拟器: %s", address)
+        restart_bluestacks_instance_for_device(address)
+        cls._offline_failures[address] = 0
+        return True
 
     def _refresh_adb_transport(self, operation: str):
         """之前连接重试不会修复旧 transport。现在会先断开再重连当前地址。这样 `adbutils.errors.AdbError: closed` 这类断链能在下一次 u2.connect 前收敛。"""
@@ -239,6 +273,8 @@ class AdbController:
 
         except (RuntimeError, ConnectionError, OSError, AdbError) as e:
             logger.error(f"u2 连接失败: {e}")
+            if self.register_offline_failure(self.address, e):
+                return self._retry_connect_after_restart()
             if self._register_connect_failure():
                 return self._retry_connect_after_restart()
             return False
@@ -310,6 +346,8 @@ class AdbController:
         """重置连接失败计数。"""
         if self.address in self._connect_failures:
             self._connect_failures[self.address] = 0
+        if self.address in self._offline_failures:
+            self._offline_failures[self.address] = 0
 
     def _update_screen_size(self):
         """获取并更新屏幕分辨率"""
