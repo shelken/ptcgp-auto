@@ -16,7 +16,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
-from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.locales import get_locale_module, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.color import is_button_clickable
 from ptcgp_auto_v2.utils.gesture import (
@@ -46,27 +46,33 @@ HOME_CHECK_INTERVAL = 2.0
 # ============================================================
 
 
-def _build_rewards_page_tabs_patterns() -> list[str]:
-    """动态构建 rewards_page 的 Tab 栏识别文本
+PERMANENT_REWARDS_TAB_KEYS = {
+    "rewards_tab_daily",
+    "rewards_tab_collection",
+    "rewards_tab_deck",
+    "rewards_tab_drop",
+    "rewards_tab_account_link",
+    "rewards_tab_premium",
+    "rewards_tab_elite_deck",
+    "rewards_tab_convenient_cards",
+    "rewards_tab_medal",
+}
 
-    包含所有任务页面的 Tab 文本模式。
-    """
-    # 所有可能的 Tab 类型
-    tabs = [
-        "daily",
-        "collection",
-        "deck",
-        "drop",
-        "account_link",
-        "elite_deck",
-        "convenient_cards",
-        "reward_week",
-        "medal",
-        "premium",
-    ]
+
+def _get_rewards_tab_keys() -> list[str]:
+    """获取所有奖励页 Tab 文本 key"""
+    patterns_dict = getattr(get_locale_module(), "TEXT_PATTERNS", {})
+    return [key for key in patterns_dict if key.startswith("rewards_tab_")]
+
+
+def _build_rewards_page_tabs_patterns(exact_match: bool | None = None) -> list[str]:
+    """动态构建 rewards_page 的 Tab 栏识别文本"""
     patterns = []
-    for tab in tabs:
-        patterns.extend(get_text_patterns(f"rewards_tab_{tab}"))
+    for key in _get_rewards_tab_keys():
+        is_exact_key = key in PERMANENT_REWARDS_TAB_KEYS
+        if exact_match is not None and exact_match != is_exact_key:
+            continue
+        patterns.extend(get_text_patterns(key))
     return patterns
 
 
@@ -80,12 +86,19 @@ def _build_claim_rewards_pages() -> list[dict]:
             "identifiers": get_text_patterns("game_home_main"),
             "priority": 10,
         },
-        # 每日 / 圖鑑 / 牌組 / 掉落 / 帳號連結 / 特級 / 精英牌組 / 便利卡牌 / 獎勵週 / 勳章
+        # 常驻 Tab 精确匹配，避免误伤其他页面
         {
             "name": "rewards_page",
-            "identifiers": _build_rewards_page_tabs_patterns(),
+            "identifiers": _build_rewards_page_tabs_patterns(exact_match=True),
             "exact_match": True,
             "priority": 15,
+            "exclude_identifiers": get_text_patterns("rewards_page_exclude"),
+        },
+        # 限时任务 Tab 模糊匹配，兼容活动名带图标或额外文案
+        {
+            "name": "rewards_page",
+            "identifiers": _build_rewards_page_tabs_patterns(exact_match=False),
+            "priority": 14,
             "exclude_identifiers": get_text_patterns("rewards_page_exclude"),
         },
         # 報酬 / 達成！

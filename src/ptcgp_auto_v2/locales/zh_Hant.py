@@ -158,6 +158,7 @@ TEXT_PATTERNS = {
     "rewards_tab_elite_deck": ["精英牌組"],
     "rewards_tab_convenient_cards": ["便利卡牌"],
     "rewards_tab_community_week": ["社群週"],
+    "rewards_tab_30_day_gift": ["30天禮物"],
     "rewards_tab_reward_week": ["獎勵週"],
     "rewards_tab_medal": ["勳章"],
     "rewards_page_exclude": ["收藏板"],
