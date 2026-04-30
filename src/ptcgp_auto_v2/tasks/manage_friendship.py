@@ -28,11 +28,11 @@ from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
+    find_text_matches,
     input_text,
     is_text_visible,
     tap_community_icon,
     tap_ok,
-    tap_template,
     tap_template_or_fallback,
     tap_template_with_scale,
     tap_text_exact,
@@ -81,11 +81,12 @@ def _build_manage_friendship_pages() -> list[dict]:
             "match_all": True,
             "priority": 89,
         },
-        # 搜索图标
+        # 朋友ID搜尋输入弹窗：改版后需要先点输入框，再输入 ID。
         {
             "name": "friend_search_modal",
-            "templates": ["icon_search"],
-            "priority": 90,
+            "identifiers": get_text_patterns("friend_search_input_modal"),
+            "match_all": True,
+            "priority": 88,
         },
         # 搜尋結果
         {
@@ -538,40 +539,42 @@ class ManageFriendshipTask(StatefulTask):
             self._accept_wait_rounds = 0
             self._delete_wait_rounds = 0
 
-        focus_box = self.page_detector.find_template("icon_search", threshold=0.8)
-        if focus_box is None:
-            match = self.page_detector.find_template_with_scale(
-                "icon_search", scale=1.0, threshold=0.8
-            )
-            if match is None:
-                return ActionResult.wait(0.5)
-            focus_box = match.box
-        focus_point = self.adb.center_x(), (focus_box[1] + focus_box[3]) // 2
+        input_matches = find_text_matches(
+            page_info.get("ocr_results", []),
+            get_text_patterns("friend_id_input_placeholder"),
+            exact=True,
+        )
+        if input_matches:
+            input_box = input_matches[0]["box"]
+            focus_point = self.adb.center_x(), (input_box[1] + input_box[3]) // 2
 
-        if not self.is_action_done("search_cleared"):
-            logger.debug("请求 %s: 强制清空输入框", request_id)
-            clear_text(self.adb, focus_point[0], focus_point[1], max_chars=24, wait=0.2)
-            self.mark_action_done("search_cleared")
-            return ActionResult.wait(0.4)
+            if not self.is_action_done("search_cleared"):
+                logger.debug("请求 %s: 点击并清空朋友ID输入框", request_id)
+                clear_text(
+                    self.adb, focus_point[0], focus_point[1], max_chars=24, wait=0.2
+                )
+                self.mark_action_done("search_cleared")
+                return ActionResult.wait(0.4)
 
-        if not self.is_action_done("search_input_done"):
-            logger.debug(
-                "请求 %s: 强制输入目标friend_id=%s", request_id, target_friend_id
-            )
-            input_text(self.adb, target_friend_id, wait=0.3)
-            self.mark_action_done("search_input_done")
+            if not self.is_action_done("search_input_done"):
+                logger.debug(
+                    "请求 %s: 输入目标friend_id=%s", request_id, target_friend_id
+                )
+                input_text(self.adb, target_friend_id, wait=0.3)
+                self.mark_action_done("search_input_done")
+                return ActionResult.wait(0.6)
+
+            if not self.is_action_done("search_submitted"):
+                result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.9)
+                if result:
+                    self.mark_action_done("search_submitted")
+                    self._submitted_request_id = request_id
+                    return result
+                return ActionResult.wait(0.8)
+
             return ActionResult.wait(0.6)
 
-        if not self.is_action_done("search_submitted"):
-            logger.info("请求 %s: 点击icon_search执行查询", request_id)
-            result = tap_template(self.adb, self.page_detector, "icon_search", wait=0.9)
-            if result:
-                self.mark_action_done("search_submitted")
-                self._submitted_request_id = request_id
-                return result
-            return ActionResult.wait(0.8)
-
-        return ActionResult.wait(0.6)
+        return ActionResult.wait(0.5)
 
     def _handle_search_result(self, page_info: dict) -> ActionResult:
         """搜索结果页统一处理三类请求。"""
