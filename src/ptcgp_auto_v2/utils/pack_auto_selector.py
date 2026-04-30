@@ -62,11 +62,12 @@ def select_pack_for_account(
         threading.get_ident(),
     )
     candidate_count = 0
-    if strategy in ("hrw_progress_balance", "hash_balance"):
+    if strategy in ("hrw_progress_balance", "hrw_missing_target_balance"):
         pack, candidate_count = _select_by_weighted_hrw(
             account_key,
             card_repo,
             exclude_set_codes,
+            missing_target_only=strategy == "hrw_missing_target_balance",
         )
     else:
         candidates = _build_candidates(card_repo, exclude_set_codes)
@@ -201,14 +202,16 @@ def _select_by_weighted_hrw(
     account_key: str,
     card_repo: "CardRepository",
     exclude_set_codes: list[str],
+    missing_target_only: bool = False,
 ) -> tuple[Optional["PackData"], int]:
     """按全局进度权重使用 HRW 选择卡包。"""
-    cache_key = _build_weekly_cache_key(exclude_set_codes)
+    cache_key = _build_weekly_cache_key(exclude_set_codes, missing_target_only)
     snapshot = _get_or_build_weekly_snapshot(
         cache_key=cache_key,
         card_repo=card_repo,
         exclude_set_codes=exclude_set_codes,
         current_account_key=account_key,
+        missing_target_only=missing_target_only,
     )
     if not snapshot:
         return None, 0
@@ -220,6 +223,7 @@ def _select_by_weighted_hrw(
             card_repo=card_repo,
             exclude_set_codes=exclude_set_codes,
             current_account_key=account_key,
+            missing_target_only=missing_target_only,
             force_rebuild=True,
         )
         if not snapshot:
@@ -235,19 +239,23 @@ def get_hrw_distribution_snapshot(
     card_repo: "CardRepository",
     exclude_set_codes: list[str],
     force_rebuild: bool = False,
+    missing_target_only: bool = False,
 ) -> Optional[dict]:
     """获取 HRW 分配快照，供调试脚本复用正式策略逻辑。"""
-    cache_key = _build_weekly_cache_key(exclude_set_codes)
+    cache_key = _build_weekly_cache_key(exclude_set_codes, missing_target_only)
     return _get_or_build_weekly_snapshot(
         cache_key=cache_key,
         card_repo=card_repo,
         exclude_set_codes=exclude_set_codes,
         current_account_key="",
+        missing_target_only=missing_target_only,
         force_rebuild=force_rebuild,
     )
 
 
-def _build_weekly_cache_key(exclude_set_codes: list[str]) -> str:
+def _build_weekly_cache_key(
+    exclude_set_codes: list[str], missing_target_only: bool
+) -> str:
     """构建日级快照缓存键（seed 仍按周）。"""
     biz_date = get_game_biz_date_str()
     week_key = _build_week_seed_suffix(biz_date)
@@ -256,9 +264,9 @@ def _build_weekly_cache_key(exclude_set_codes: list[str]) -> str:
         _build_hrw_effective_params()
     )
     return (
-        f"{biz_date}|{week_key}|{excludes}|{PACK_AUTO_HRW_AGGRESSIVENESS}|"
-        f"{effective_scale}|{effective_weight_max}|{effective_epsilon}|"
-        f"{PACK_AUTO_HRW_SEED_SCAN_COUNT}|{PACK_AUTO_HRW_SEED}"
+        f"{biz_date}|{week_key}|{excludes}|missing={missing_target_only}|"
+        f"{PACK_AUTO_HRW_AGGRESSIVENESS}|{effective_scale}|{effective_weight_max}|"
+        f"{effective_epsilon}|{PACK_AUTO_HRW_SEED_SCAN_COUNT}|{PACK_AUTO_HRW_SEED}"
     )
 
 
@@ -267,6 +275,7 @@ def _get_or_build_weekly_snapshot(
     card_repo: "CardRepository",
     exclude_set_codes: list[str],
     current_account_key: str,
+    missing_target_only: bool = False,
     force_rebuild: bool = False,
 ) -> Optional[dict]:
     """获取或构建周级分配快照。"""
@@ -279,6 +288,7 @@ def _get_or_build_weekly_snapshot(
         card_repo=card_repo,
         exclude_set_codes=exclude_set_codes,
         current_account_key=current_account_key,
+        missing_target_only=missing_target_only,
     )
     if not snapshot:
         return None
@@ -300,6 +310,7 @@ def _build_weekly_snapshot(
     card_repo: "CardRepository",
     exclude_set_codes: list[str],
     current_account_key: str,
+    missing_target_only: bool = False,
 ) -> Optional[dict]:
     """构建周级分配快照。"""
     candidates = _build_candidates(card_repo, exclude_set_codes)
@@ -316,6 +327,28 @@ def _build_weekly_snapshot(
     )
     if not pack_weights:
         return None
+
+    if missing_target_only:
+        candidates = _filter_missing_target_candidates(candidates, progress_stats)
+        pack_keys = {f"{pack.set_code}/{pack.name}" for pack in candidates}
+        pack_weights = {
+            pack_key: weight
+            for pack_key, weight in pack_weights.items()
+            if pack_key in pack_keys
+        }
+        progress_map = {
+            pack_key: progress
+            for pack_key, progress in progress_map.items()
+            if pack_key in pack_keys
+        }
+        pack_names = {pack.name for pack in candidates}
+        progress_stats = {
+            pack_name: stat
+            for pack_name, stat in progress_stats.items()
+            if pack_name in pack_names
+        }
+        if not candidates:
+            return None
 
     pack_map = {f"{pack.set_code}/{pack.name}": pack for pack in candidates}
     pack_keys = list(pack_map.keys())
@@ -345,6 +378,20 @@ def _build_weekly_snapshot(
         "effective_weight_max": effective_weight_max,
         "effective_epsilon": effective_epsilon,
     }
+
+
+def _filter_missing_target_candidates(
+    candidates: list["PackData"], progress_stats: dict[str, dict[str, int]]
+) -> list["PackData"]:
+    """过滤目标稀有度仍缺卡的子包。"""
+    missing_candidates: list["PackData"] = []
+    for pack in candidates:
+        stat = progress_stats.get(pack.name, {"total_target": 0, "owned_target": 0})
+        total_target = int(stat.get("total_target", 0) or 0)
+        owned_target = int(stat.get("owned_target", 0) or 0)
+        if total_target > 0 and owned_target < total_target:
+            missing_candidates.append(pack)
+    return missing_candidates
 
 
 def _build_pack_weights(

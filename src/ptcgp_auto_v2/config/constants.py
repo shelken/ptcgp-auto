@@ -12,7 +12,7 @@ PACK_SERIES_CODES = ["A", "B"]  # 扩充包系列代号（仅用于切换次数�
 PACK_AUTO_STRATEGIES = [
     "latest",
     "hrw_progress_balance",
-    "hash_balance",  # 兼容旧配置
+    "hrw_missing_target_balance",
     "least_used",
 ]  # 自动选包策略
 PACK_AUTO_EXCLUDE_SET_CODES = ["A4b"]  # 排除的限时系列

@@ -27,6 +27,7 @@ from ptcgp_auto_v2.config.constants import (
     DEFAULT_WAIT_AFTER_CLICK,
     DEFAULT_WEB_HOST,
     DEFAULT_WEB_PORT,
+    PACK_AUTO_STRATEGIES,
     PACK_TEMPLATE_THRESHOLD,
     SCALE_BATTLE_HOURGLASS,
     SCALE_BATTLE_SERIES_SELECT,
@@ -152,10 +153,11 @@ class Settings:
     locale: str = DEFAULT_LOCALE  # 默认界面语言 (对应 locales/ 下的文件名)
 
     # 未配置开包目标时的自动选包策略
-    # 可选值: latest / hrw_progress_balance / hash_balance(兼容旧值) / least_used
+    # 可选值: latest / hrw_progress_balance / hrw_missing_target_balance / least_used
     # latest 自动选最新包
     # hrw_progress_balance 基于全局进度权重的 HRW 选择
-    pack_auto_strategy: str = "hrw_progress_balance"
+    # hrw_missing_target_balance 仅分配目标稀有度仍缺卡的包后执行 HRW 选择
+    pack_auto_strategy: str = "hrw_missing_target_balance"
     enable_open_10_pack: bool = False
 
     # 调度配置
@@ -248,6 +250,12 @@ class Settings:
         web_port_env = os.getenv("PTCGP_WEB_PORT")
         if web_port_env:
             settings.web_port = int(web_port_env)
+
+        pack_auto_strategy_env = os.getenv("PTCGP_PACK_AUTO_STRATEGY")
+        if pack_auto_strategy_env:
+            if pack_auto_strategy_env not in PACK_AUTO_STRATEGIES:
+                raise ValueError(f"PTCGP_PACK_AUTO_STRATEGY 无效: {pack_auto_strategy_env}")
+            settings.pack_auto_strategy = pack_auto_strategy_env
 
         enable_open_10_pack_env = os.getenv("PTCGP_ENABLE_OPEN_10_PACK")
         if enable_open_10_pack_env:

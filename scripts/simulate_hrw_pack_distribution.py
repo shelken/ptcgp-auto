@@ -12,6 +12,7 @@ from ptcgp_auto_v2.config.constants import (
     PACK_AUTO_HRW_TARGET_RARITIES,
     PACK_SERIES_CODES,
 )
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.utils.pack_auto_selector import (
@@ -21,11 +22,17 @@ from ptcgp_auto_v2.utils.pack_auto_selector import (
 
 def run_simulation() -> None:
     """运行并输出当前正式 HRW 分配快照。"""
+    settings = get_settings()
+    strategy = settings.pack_auto_strategy
+    if strategy not in ("hrw_progress_balance", "hrw_missing_target_balance"):
+        raise RuntimeError(f"当前策略 {strategy} 不是 HRW 分配策略，无法模拟分配快照")
+
     with session_scope() as session:
         snapshot = get_hrw_distribution_snapshot(
             card_repo=CardRepository(session),
             exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
             force_rebuild=True,
+            missing_target_only=strategy == "hrw_missing_target_balance",
         )
     if not snapshot:
         raise RuntimeError("未构建出 HRW 分配快照，请检查候选包与数据库数据")
@@ -74,6 +81,7 @@ def run_simulation() -> None:
     print("HRW 加权分配模拟（复用正式策略逻辑）")
     print("=" * 100)
     print(
+        f"策略: {strategy}\n"
         f"候选系列前缀: {PACK_SERIES_CODES}\n"
         f"排除系列: {PACK_AUTO_EXCLUDE_SET_CODES}\n"
         f"目标稀有度: {PACK_AUTO_HRW_TARGET_RARITIES}\n"
