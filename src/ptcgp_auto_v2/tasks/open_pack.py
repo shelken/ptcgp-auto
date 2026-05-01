@@ -10,7 +10,7 @@
 
 import logging
 import threading
-from typing import TYPE_CHECKING, Optional, cast
+from typing import Optional, cast
 
 from ptcgp_auto_v2.config.constants import (
     PACK_AUTO_EXCLUDE_SET_CODES,
@@ -45,9 +45,6 @@ from ptcgp_auto_v2.utils.gesture import (
     tap_text_exact,
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -229,13 +226,10 @@ class OpenPackTask(PackOpeningTaskBase):
                     self.skip("无法找到可用的开包目标")
                     return
 
-                self.state_set(
-                    "target_pack",
-                    {
-                        "set_code": selected["set_code"],
-                        "booster_name": selected["booster_name"],
-                    },
-                )
+                target_pack = {
+                    "set_code": selected["set_code"],
+                    "booster_name": selected["booster_name"],
+                }
                 logger.info(
                     "自动选择卡包: %s/%s (策略=%s, 候选=%s)",
                     selected["set_code"],
@@ -253,18 +247,19 @@ class OpenPackTask(PackOpeningTaskBase):
                     threading.get_ident(),
                 )
             else:
-                self.state_set(
-                    "target_pack",
-                    {"set_code": config.set_code, "booster_name": config.booster_name},
-                )
+                target_pack = {
+                    "set_code": config.set_code,
+                    "booster_name": config.booster_name,
+                }
                 logger.info(f"目标卡包: {config.set_code}/{config.booster_name}")
 
+            self.state_set("target_pack", target_pack)
+
         # 准备图片资源
-        if self.should_prepare_pack_resources():
-            if not self._prepare_image_resources():
-                logger.error("准备卡包图片资源失败")
-                self.fail("准备卡包图片资源失败")
-                return
+        if self.should_prepare_pack_resources() and not self._prepare_image_resources():
+            logger.error("准备卡包图片资源失败")
+            self.fail("准备卡包图片资源失败")
+            return
 
         # 预加载目标系列 Hash
         self._preload_target_series_hash()
@@ -659,24 +654,21 @@ class OpenPackTask(PackOpeningTaskBase):
         # 不需要开10包，点击关闭弹窗
         logger.debug("  -> 不需要开10包，关闭弹窗")
         close_patterns = get_text_patterns("close_button")
-        result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
-        if result:
-            return result
-
-        return ActionResult.ok(wait=1.0)
+        return click_close(
+            self.adb, self.page_detector, ocr_results, close_patterns
+        ) or ActionResult.ok(wait=1.0)
 
     def _handle_pack_opening_result(self, page_info: dict) -> ActionResult:
         """处理开包结果页，并在十包完整结束后标记任务可退出。"""
         is_ten_pack_result = self._pack_result_mode == PACK_RESULT_MODE_TEN
         result = super()._handle_pack_opening_result(page_info)
 
-        if is_ten_pack_result and self._result_recognized:
+        if is_ten_pack_result:
             self._set_state_flag("ten_pack", "completed")
-        elif is_ten_pack_result:
-            # 十包结果识别失败时，仍然按“十包流程结束”处理，允许各页面
-            # 通过既有退出链路逐层返回，而不是在结果页直接结束任务。
-            self._set_state_flag("ten_pack", "completed")
-            self._set_state_flag("pack_flow", "exit_after_paid")
+            if not self._result_recognized:
+                # 十包结果识别失败时，仍然按“十包流程结束”处理，允许各页面
+                # 通过既有退出链路逐层返回，而不是在结果页直接结束任务。
+                self._set_state_flag("pack_flow", "exit_after_paid")
 
         return result
 
