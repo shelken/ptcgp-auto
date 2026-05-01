@@ -25,6 +25,7 @@ from ptcgp_auto_v2.db.repositories import (
     FriendshipRepository,
 )
 from ptcgp_auto_v2.hooks import ExchangeDelayPostHook
+from ptcgp_auto_v2.infra.adb import ScreenshotMode
 from ptcgp_auto_v2.hooks.friend_hooks import FriendPreHook
 from ptcgp_auto_v2.infra.card_hash_manager import get_card_hash_manager
 from ptcgp_auto_v2.infra.icon_group_detector import IconGroupDetector
@@ -206,7 +207,7 @@ class ExchangeCardsTask(StatefulTask):
     pages = _build_exchange_pages()
     max_same_page_rounds = 20
     max_iterations = 100
-    screenshot_lossless = True
+    screenshot_ocr_mode = ScreenshotMode.DISPLAY_RAW
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)

@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, Callable, Optional
 
-from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.infra.adb import AdbController, ScreenshotMode
 from ptcgp_auto_v2.infra.ocr import OcrEngine
 from ptcgp_auto_v2.infra.page_detector import PageDetector
 from ptcgp_auto_v2.infra.template import TemplateMatcher
@@ -104,8 +104,9 @@ class Task(ABC):
     # 连续停留在同一页面的上限
     max_same_page_rounds: int = MAX_SAME_PAGE_ROUNDS
 
-    # 页面检测默认截图模式：False=默认链路，True=无损截图
-    # 当 部分页面文本识别不够好且无法调整 或 需要高精度文本时 设为 True
+    # 页面检测截图来源。旧 screenshot_lossless 仅保留兼容历史任务配置。
+    screenshot_ocr_mode: ScreenshotMode = ScreenshotMode.RPC_JPEG
+    screenshot_template_mode: ScreenshotMode = ScreenshotMode.RPC_JPEG
     screenshot_lossless: bool = False
 
     def __init__(
@@ -396,8 +397,14 @@ class Task(ABC):
                 break
 
             # 识别当前页面
+            ocr_mode = self.screenshot_ocr_mode
+            template_mode = self.screenshot_template_mode
+            if self.screenshot_lossless:
+                ocr_mode = ScreenshotMode.DISPLAY_RAW
+                template_mode = ScreenshotMode.DISPLAY_RAW
             page_name, page_info = self.page_detector.detect(
-                lossless=self.screenshot_lossless
+                ocr_mode=ocr_mode,
+                template_mode=template_mode,
             )
 
             if page_name == last_page_name:

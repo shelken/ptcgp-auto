@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
-from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.infra.adb import AdbController, ScreenshotMode
 from ptcgp_auto_v2.infra.ocr import OcrEngine
 from ptcgp_auto_v2.infra.template import TemplateMatcher
 from ptcgp_auto_v2.tools.context import get_adb, set_current_address
@@ -61,7 +61,10 @@ def parse_address(address: str | None) -> Tuple[Optional[str], Optional[int]]:
     return None, int(address)
 
 
-def take_screenshot(adb: AdbController) -> Optional[Image.Image]:
+def take_screenshot(
+    adb: AdbController,
+    mode: ScreenshotMode | str = ScreenshotMode.RPC_JPEG,
+) -> Optional[Image.Image]:
     """
     截图并返回图像对象
 
@@ -71,7 +74,7 @@ def take_screenshot(adb: AdbController) -> Optional[Image.Image]:
     Returns:
         PIL Image 对象，失败返回 None
     """
-    img = adb.screenshot()
+    img = adb.screenshot(mode=mode)
     if img is None:
         print("ERROR: 截图失败")
     return img
@@ -139,9 +142,9 @@ def crop_image(
 # =============================================================================
 
 
-def handle_screenshot(adb: AdbController) -> None:
+def handle_screenshot(adb: AdbController, screenshot_mode: str) -> None:
     """处理 --screenshot 命令"""
-    img = take_screenshot(adb)
+    img = take_screenshot(adb, screenshot_mode)
     if img is None:
         return
 
@@ -149,16 +152,28 @@ def handle_screenshot(adb: AdbController) -> None:
     print(f"SCREENSHOT: {filepath}")
 
 
-def handle_ocr(adb: AdbController) -> None:
+def handle_ocr(
+    adb: AdbController,
+    screenshot_mode: str,
+    ocr_min_text_height: float,
+    ocr_auto_detect_language: bool,
+    ocr_use_language_correction: bool,
+    ocr_revision: int,
+) -> None:
     """处理 --ocr 命令"""
-    img = take_screenshot(adb)
+    img = take_screenshot(adb, screenshot_mode)
     if img is None:
         return
 
     # 输出当前分辨率
     print(f"SCREEN: {img.width}x{img.height}")
 
-    ocr = OcrEngine()
+    ocr = OcrEngine(
+        minimum_text_height_ratio=ocr_min_text_height,
+        automatically_detects_language=ocr_auto_detect_language,
+        uses_language_correction=ocr_use_language_correction,
+        revision=ocr_revision,
+    )
     results = ocr.recognize(img)
 
     items = []
@@ -179,9 +194,10 @@ def handle_template(
     threshold: float | None,
     all_matches: bool,
     roi_str: str | None,
+    screenshot_mode: str,
 ) -> None:
     """处理 --template 命令"""
-    img = take_screenshot(adb)
+    img = take_screenshot(adb, screenshot_mode)
     if img is None:
         return
 
@@ -365,11 +381,11 @@ def _suggest_best_scale(
         )
 
 
-def handle_crop(adb: AdbController) -> None:
+def handle_crop(adb: AdbController, screenshot_mode: str) -> None:
     """处理 --crop 命令"""
     from ptcgp_auto_v2.tools.region_selector import select_and_save_template
 
-    img = take_screenshot(adb)
+    img = take_screenshot(adb, screenshot_mode)
     if img is None:
         return
 
@@ -484,11 +500,41 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="ADDR",
         help="ADB 连接地址，格式: host:port 或 port (默认: 127.0.0.1:5555)",
     )
+    general.add_argument(
+        "--screenshot-mode",
+        choices=[mode.value for mode in ScreenshotMode],
+        default=ScreenshotMode.RPC_JPEG.value,
+        help="截图来源: rpc_jpeg=默认 JPEG 链路，display_raw=原始显示链路",
+    )
 
     # 基础功能（互斥）
     basic = parser.add_argument_group("基础功能（互斥）")
     basic.add_argument("--screenshot", action="store_true", help="截图并保存到调试目录")
     basic.add_argument("--ocr", action="store_true", help="截图并输出 OCR 识别结果")
+    basic.add_argument(
+        "--ocr-min-text-height",
+        type=float,
+        default=1.0 / 32.0,
+        metavar="RATIO",
+        help="【--ocr专用】Vision minimumTextHeight（默认 1/32）",
+    )
+    basic.add_argument(
+        "--ocr-auto-detect-language",
+        action="store_true",
+        help="【--ocr专用】启用 Vision 自动语言检测",
+    )
+    basic.add_argument(
+        "--ocr-use-language-correction",
+        action="store_true",
+        help="【--ocr专用】启用 Vision 语言纠错",
+    )
+    basic.add_argument(
+        "--ocr-revision",
+        type=int,
+        default=3,
+        metavar="N",
+        help="【--ocr专用】Vision request revision（默认 3）",
+    )
     basic.add_argument(
         "--crop", action="store_true", help="截图并打开区域选择器，框选区域保存为模板"
     )
@@ -580,9 +626,16 @@ def main() -> None:
 
     # 分发到对应处理函数
     if args.screenshot:
-        handle_screenshot(adb)
+        handle_screenshot(adb, args.screenshot_mode)
     elif args.ocr:
-        handle_ocr(adb)
+        handle_ocr(
+            adb,
+            args.screenshot_mode,
+            args.ocr_min_text_height,
+            args.ocr_auto_detect_language,
+            args.ocr_use_language_correction,
+            args.ocr_revision,
+        )
     elif args.template:
         handle_template(
             adb,
@@ -591,9 +644,10 @@ def main() -> None:
             threshold=args.threshold,
             all_matches=args.all_matches,
             roi_str=args.roi,
+            screenshot_mode=args.screenshot_mode,
         )
     elif args.crop:
-        handle_crop(adb)
+        handle_crop(adb, args.screenshot_mode)
     else:
         parser.print_help()
 

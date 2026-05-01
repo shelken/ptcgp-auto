@@ -16,6 +16,7 @@ from ptcgp_auto_v2.core.task_base import (
     TaskRegistry,
     TaskResult,
 )
+from ptcgp_auto_v2.infra.adb import ScreenshotMode
 from ptcgp_auto_v2.locales import get_locale_module, get_text_patterns
 from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.color import is_button_clickable
@@ -142,7 +143,7 @@ class ClaimRewardsTask(StatefulTask):
     task_type = "claim_rewards"
     reset_type = ResetType.DAILY
     max_iterations = 150
-    screenshot_lossless = True
+    screenshot_ocr_mode = ScreenshotMode.DISPLAY_RAW
     max_same_page_rounds = 25
     pages = _build_claim_rewards_pages()
 

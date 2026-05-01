@@ -19,6 +19,9 @@ from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
 logger = logging.getLogger(__name__)
 
 OCR_CALL_TIMEOUT_SECONDS = 20.0
+# Apple 文档写默认 1/32；PyObjC 实测初始值是 0.0。显式设置可减少小噪点干扰，稳定按钮文字分割。
+OCR_MIN_TEXT_HEIGHT_RATIO = 1.0 / 32.0
+OCR_VISION_REVISION = 3
 
 
 @dataclass
@@ -50,6 +53,10 @@ class OcrEngine:
         self,
         recognition_level: str = DEFAULT_OCR_LEVEL,
         languages: Optional[List[str]] = None,
+        minimum_text_height_ratio: float = OCR_MIN_TEXT_HEIGHT_RATIO,
+        automatically_detects_language: bool = False,
+        uses_language_correction: bool = False,
+        revision: int = OCR_VISION_REVISION,
     ):
         """
         初始化 OCR 引擎
@@ -60,6 +67,10 @@ class OcrEngine:
         """
         self.recognition_level = recognition_level
         self.languages = languages or DEFAULT_OCR_LANGUAGES
+        self.minimum_text_height_ratio = minimum_text_height_ratio
+        self.automatically_detects_language = automatically_detects_language
+        self.uses_language_correction = uses_language_correction
+        self.revision = revision
 
         # 验证平台
         self._validate_platform()
@@ -146,6 +157,7 @@ class OcrEngine:
                 raise RuntimeError("无法创建 CGImage")
 
             request = Vision.VNRecognizeTextRequest.alloc().init()
+            request.setRevision_(self.revision)
             if self.recognition_level == "fast":
                 request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
             else:
@@ -154,7 +166,9 @@ class OcrEngine:
                 )
 
             request.setRecognitionLanguages_(self.languages)
-            request.setAutomaticallyDetectsLanguage_(True)
+            request.setAutomaticallyDetectsLanguage_(self.automatically_detects_language)
+            request.setUsesLanguageCorrection_(self.uses_language_correction)
+            request.setMinimumTextHeight_(self.minimum_text_height_ratio)
 
             handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
                 cg_image, None

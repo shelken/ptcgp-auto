@@ -7,6 +7,7 @@ ADB 控制器模块
 
 import logging
 import time
+from enum import StrEnum
 from typing import Optional, Tuple
 
 import uiautomator2 as u2
@@ -27,6 +28,14 @@ from ptcgp_auto_v2.utils.bluestacks_manager import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ScreenshotMode(StrEnum):
+    """截图来源模式。"""
+
+    RPC_JPEG = "rpc_jpeg"
+    DISPLAY_RAW = "display_raw"
+
 
 class AdbController:
     """
@@ -401,30 +410,47 @@ class AdbController:
         except (RuntimeError, OSError, AdbError):
             return False
 
-    def screenshot(self, lossless: bool = False) -> Optional[Image.Image]:
+    def screenshot(
+        self,
+        mode: ScreenshotMode | str | None = None,
+        lossless: bool | None = None,
+    ) -> Optional[Image.Image]:
         """
         截取屏幕截图
 
         Args:
-            lossless: 是否使用无损截图（display_id=0）
+            mode: 截图来源模式。RPC_JPEG 走 uiautomator2 默认 JPEG 链路；DISPLAY_RAW 走 display_id=0 原始显示链路。
+            lossless: 旧参数，仅用于兼容历史调用。
 
         Returns:
             PIL Image 对象，失败返回 None
         """
-        if lossless:
+        screenshot_mode = self._resolve_screenshot_mode(mode, lossless)
+        if screenshot_mode == ScreenshotMode.DISPLAY_RAW:
             result = self._call_device(
-                "screenshot.lossless",
+                "screenshot.display_raw",
                 lambda: self._require_device().screenshot(display_id=0),
             )
         else:
             result = self._call_device(
-                "screenshot",
+                "screenshot.rpc_jpeg",
                 lambda: self._require_device().screenshot(),
             )
         if not isinstance(result, Image.Image):
             logger.error("截图返回类型异常: type=%s", type(result).__name__)
             raise RuntimeError(f"截图返回类型异常: {type(result).__name__}")
         return result
+
+    @staticmethod
+    def _resolve_screenshot_mode(
+        mode: ScreenshotMode | str | None,
+        lossless: bool | None,
+    ) -> ScreenshotMode:
+        if mode is not None:
+            return ScreenshotMode(mode)
+        if lossless is True:
+            return ScreenshotMode.DISPLAY_RAW
+        return ScreenshotMode.RPC_JPEG
 
     def tap(self, x: int, y: int):
         """

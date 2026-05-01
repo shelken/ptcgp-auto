@@ -19,6 +19,7 @@ from ptcgp_auto_v2.core.task_base import (
 )
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
+from ptcgp_auto_v2.infra.adb import ScreenshotMode
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.tasks.utils.friend_id_utils import extract_friend_id_from_text
 from ptcgp_auto_v2.utils.gesture import (
@@ -113,7 +114,7 @@ class FetchAccountInfoTask(StatefulTask):
 
     task_type = "fetch_account_info"
     reset_type = ResetType.DAILY
-    screenshot_lossless = True
+    screenshot_ocr_mode = ScreenshotMode.DISPLAY_RAW
     pages = _build_fetch_pages()
 
     @staticmethod
