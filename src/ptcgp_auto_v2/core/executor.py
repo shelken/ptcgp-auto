@@ -411,7 +411,7 @@ class BaseExecutor(ABC):
 
         # 发送任务状态通知
         if status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
-            self._notify_task_status(task_instance, status.value, error_message or "")
+            self._notify_task_status(task_instance, account, status.value, error_message or "")
 
     def _apply_task_failure(
         self,
@@ -526,6 +526,7 @@ class BaseExecutor(ABC):
     def _notify_task_status(
         self,
         task_instance: TaskInstanceSnapshot,
+        account: AccountSnapshot,
         status: str,
         message: str,
     ):
@@ -534,7 +535,7 @@ class BaseExecutor(ABC):
             from ptcgp_auto_v2.infra.notifier import get_notifier
 
             notifier = get_notifier()
-            notifier.notify_task_status(task_instance, status, message)
+            notifier.notify_task_status(task_instance, status, message, account=account)
         except Exception as e:
             logger.warning(f"发送任务状态通知失败: {e}")
 

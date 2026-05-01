@@ -9,7 +9,7 @@
 import logging
 import os
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Protocol, Optional
 
 import requests
 
@@ -34,6 +34,14 @@ from ptcgp_auto_v2.db.repositories import (
     NotificationConfigRepository,
     NotificationRepository,
 )
+
+class TaskStatusAccount(Protocol):
+    """任务状态通知所需账号字段。"""
+
+    id: int | None
+    nickname: str | None
+    display_name: str
+
 
 if TYPE_CHECKING:
     from ptcgp_auto_v2.db.models import Account, TaskInstance
@@ -230,6 +238,7 @@ class Notifier:
         task_instance: "TaskInstance",
         status: str,
         message: str,
+        account: TaskStatusAccount,
     ) -> bool:
         """
         任务状态通知
@@ -238,6 +247,7 @@ class Notifier:
             task_instance: 任务实例
             status: 状态（failed/blocked/timeout/success）
             message: 状态消息
+            account: 账号快照；通知内容只依赖显式传入的账号上下文
 
         Returns:
             是否发送通知
@@ -260,7 +270,6 @@ class Notifier:
             logger.debug(f"状态 {status} 不在通知条件中")
             return False
 
-        account = task_instance.account
         account_name = self._resolve_account_name(account)
 
         status_text = TASK_STATUS_TEXT_MAP.get(status, status)
@@ -279,7 +288,7 @@ class Notifier:
             scene=SCENE_TASK_STATUS,
             title=title,
             content=content,
-            account_id=account.id if account else None,
+            account_id=account.id,
             task_instance_id=task_instance.id,
         )
 
