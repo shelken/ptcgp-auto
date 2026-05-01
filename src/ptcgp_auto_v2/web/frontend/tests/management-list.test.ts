@@ -114,6 +114,8 @@ describe('管理页统一列表状态', () => {
         {
           key: 'view',
           kind: 'select',
+          defaultValue: 'stats',
+          includeEmpty: false,
           options: [
             { value: 'stats', label: 'Stats' },
             { value: 'pack-points', label: 'Pack Points' }
@@ -227,6 +229,45 @@ describe('管理页统一列表状态', () => {
         account_id: '1',
         status: 'completed'
       }
+    })
+  })
+
+  test('动态排序字段点击后应生效', async () => {
+    const { applyManagementListSortClick } = await import('../src/pages/management/list-state-utils')
+
+    const spec = {
+      storageKey: 'resources',
+      defaultPageSize: 20,
+      pageSizeOptions: [20],
+      sort: {
+        defaultBy: 'id',
+        defaultOrder: 'asc',
+        options: [
+          { value: 'id' },
+          { value: 'nickname' }
+        ]
+      }
+    } as const
+
+    expect(
+      applyManagementListSortClick(
+        spec,
+        {
+          page: 3,
+          pageSize: 20,
+          sortBy: 'id',
+          sortOrder: 'asc',
+          filters: {}
+        },
+        'exchange_points',
+        [{ value: 'id' }, { value: 'nickname' }, { value: 'exchange_points' }]
+      )
+    ).toEqual({
+      page: 0,
+      pageSize: 20,
+      sortBy: 'exchange_points',
+      sortOrder: 'asc',
+      filters: {}
     })
   })
 
@@ -525,6 +566,20 @@ describe('管理页统一列表状态', () => {
     ).toEqual([
       { value: '', label: '全部场景', searchText: '全部场景' },
       { value: 'task_status', label: '任务状态', searchText: 'task_status 任务状态' }
+    ])
+  })
+
+  test('每日礼包快捷日期应固定为当前业务日最近七天', async () => {
+    const { buildRecentBizDates } = await import('../src/pages/management/daily-gift-utils')
+
+    expect(buildRecentBizDates('2026-04-30')).toEqual([
+      '2026-04-30',
+      '2026-04-29',
+      '2026-04-28',
+      '2026-04-27',
+      '2026-04-26',
+      '2026-04-25',
+      '2026-04-24'
     ])
   })
 })

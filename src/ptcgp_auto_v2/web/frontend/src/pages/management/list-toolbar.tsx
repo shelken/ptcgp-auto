@@ -20,9 +20,10 @@ import { ListQueryControls, type SearchableOption } from './shared'
 
 function normalizeSelectOptions(
   options: readonly string[] | readonly ManagementListOption[] | undefined,
-  emptyLabel: string
+  emptyLabel: string,
+  includeEmpty = true
 ): ManagementListOption[] {
-  const items: ManagementListOption[] = [{ value: '', label: emptyLabel }]
+  const items: ManagementListOption[] = includeEmpty ? [{ value: '', label: emptyLabel }] : []
   for (const option of options ?? []) {
     if (typeof option === 'string') {
       items.push({ value: option, label: option })
@@ -130,7 +131,7 @@ export function ManagementListToolbar({
 
             if (filter.kind === 'select') {
               const options = filter.options
-                ? normalizeSelectOptions(filter.options, filter.emptyLabel ?? 'All')
+                ? normalizeSelectOptions(filter.options, filter.emptyLabel ?? 'All', filter.includeEmpty ?? true)
                 : readSelectOptions(filter.optionsKey ?? filter.key, dynamicOptions, filter.emptyLabel ?? 'All')
               return (
                 <div key={filter.key} className="table-filter-item">

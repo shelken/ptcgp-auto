@@ -235,8 +235,8 @@ def build_task_instance_order_by(sort_by: str, sort_order: str) -> list:
     if normalized_sort_by == TASK_SORT_BY_NEXT_RUN:
         once_priority = case((TaskInstance.reset_type == RESET_TYPE_ONCE, 1), else_=0)
         if normalized_sort_order == "asc":
-            return [once_priority.asc(), next_run_col.asc().nulls_first()]
-        return [once_priority.asc(), next_run_col.desc().nulls_first()]
+            return [once_priority.asc(), next_run_col.asc().nulls_last(), task_id_col.asc()]
+        return [once_priority.asc(), next_run_col.desc().nulls_last(), task_id_col.asc()]
 
     if normalized_sort_by == TASK_SORT_BY_LAST_DURATION:
         once_priority = case((TaskInstance.reset_type == RESET_TYPE_ONCE, 1), else_=0)

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy.pool import StaticPool
@@ -87,6 +87,31 @@ def test_fetch_task_instances_applies_account_query(session: Session) -> None:
     assert [item.id for item in rows] == [1, 2]
     assert has_next is False
     assert total == 2
+
+
+def test_fetch_task_instances_sorts_next_run_with_empty_values_last(session: Session) -> None:
+    _seed_accounts_and_tasks(session)
+    base_time = datetime(2026, 4, 30, 8, 0, 0)
+    tasks = list(session.exec(select(TaskInstance).order_by(TaskInstance.id)))
+    tasks[0].next_run_at = None
+    tasks[1].next_run_at = base_time + timedelta(hours=2)
+    tasks[2].next_run_at = base_time + timedelta(hours=1)
+    session.add_all(tasks)
+    session.commit()
+
+    rows, _, _ = fetch_task_instances(
+        session=session,
+        page=0,
+        page_size=10,
+        status=["completed"],
+        task_type=[],
+        account_id=None,
+        account_q="",
+        sort_by="next_run_at",
+        sort_order="asc",
+    )
+
+    assert [item.id for item in rows] == [3, 2, 1]
 
 
 def test_reset_completed_task_instances_applies_account_query(session: Session) -> None:

@@ -14,6 +14,7 @@ interface ManagementListBaseFilterSpec {
   label: string
   queryKey?: string
   placeholder?: string
+  defaultValue?: string
 }
 
 export interface ManagementListTextFilterSpec extends ManagementListBaseFilterSpec {
@@ -26,6 +27,7 @@ export interface ManagementListSelectFilterSpec extends ManagementListBaseFilter
   options?: readonly string[] | readonly ManagementListOption[]
   optionsKey?: string
   emptyLabel?: string
+  includeEmpty?: boolean
 }
 
 export interface ManagementListAccountSelectFilterSpec extends ManagementListBaseFilterSpec {

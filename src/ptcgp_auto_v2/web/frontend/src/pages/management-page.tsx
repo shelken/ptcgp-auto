@@ -19,6 +19,7 @@ import {
 } from '@/lib/time-display'
 
 import { NotificationsSection } from './management/notifications-section'
+import { buildRecentBizDates } from './management/daily-gift-utils'
 import { getManagementFilterOptions } from './management/filter-options'
 import {
   buildMetadataExecutePayload,
@@ -1207,6 +1208,8 @@ function ResourcesSection({ lang, t }: { lang: string; t: Record<string, string>
         key: 'view',
         kind: 'select',
         label: tr(t, 'label_view', 'View'),
+        defaultValue: 'stats',
+        includeEmpty: false,
         options: [
           { value: 'stats', label: tr(t, 'tab_resource_stats', 'Stats') },
           { value: 'pack-points', label: tr(t, 'tab_resource_pack_points', 'Pack Points') }
@@ -2180,11 +2183,11 @@ function DailyGiftSection({ lang, t }: { lang: string; t: Record<string, string>
   const pairs = ((query.data?.pair_send_status_rows as unknown[]) ?? []) as Record<string, unknown>[]
   const stats = (query.data?.stats as Record<string, unknown> | undefined) ?? {}
   const totalRecords = toTotalCount(query.data?.records_total, records.length)
-  const recentBizDates = (((query.data?.recent_biz_dates as unknown[]) ?? []) as string[])
   const accounts = (((query.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[])
   const accountNameMap = (query.data?.account_name_map as Record<string, string> | undefined) ?? {}
   const selectedAccountId = toText(query.data?.selected_account_id, t) === '-' ? '' : toText(query.data?.selected_account_id, t)
   const currentBizDateLocal = toText(query.data?.current_biz_date_local, t) === '-' ? '' : toText(query.data?.current_biz_date_local, t)
+  const recentBizDates = buildRecentBizDates(currentBizDateLocal || currentGameBizDate())
   const accountOptions = useMemo(
     () => buildAccountSelectOptions(accounts, t, tr(t, 'label_all_accounts', 'All Accounts')),
     [accounts, t]

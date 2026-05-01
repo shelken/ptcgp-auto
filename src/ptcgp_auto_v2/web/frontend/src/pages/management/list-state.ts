@@ -109,9 +109,9 @@ export function useManagementListState(
   }, [commitState, normalizeState, state])
 
   const cycleSort = useCallback((sortBy: string) => {
-    const nextState = normalizeState(applyManagementListSortClick(spec, state, sortBy))
+    const nextState = normalizeState(applyManagementListSortClick(spec, state, sortBy, runtime?.sortOptions))
     commitState(nextState)
-  }, [commitState, normalizeState, spec, state])
+  }, [commitState, normalizeState, runtime?.sortOptions, spec, state])
 
   const setPage = useCallback((page: number) => {
     const nextState = normalizeState({

@@ -29,9 +29,10 @@ function normalizeOptionValues(
 }
 
 function normalizeFilterValue(filter: ManagementListFilterSpec, value: unknown): string {
-  const normalized = typeof value === 'string' ? value.trim() : ''
+  const defaultValue = filter.defaultValue ?? ''
+  const normalized = typeof value === 'string' ? value.trim() : defaultValue
   if (!normalized) {
-    return ''
+    return defaultValue
   }
   if (filter.kind !== 'select' || !filter.options || filter.options.length === 0) {
     return normalized
@@ -40,7 +41,7 @@ function normalizeFilterValue(filter: ManagementListFilterSpec, value: unknown):
   const allowedValues = new Set(
     filter.options.map((item) => (typeof item === 'string' ? item : item.value))
   )
-  return allowedValues.has(normalized) ? normalized : ''
+  return allowedValues.has(normalized) ? normalized : defaultValue
 }
 
 function normalizeSortOrder(
@@ -132,13 +133,17 @@ export function normalizeManagementListState(
 export function applyManagementListSortClick(
   spec: ManagementListSpec,
   state: ManagementListState,
-  clickedSortBy: string
+  clickedSortBy: string,
+  runtimeSortOptions?: readonly { value: string }[]
 ): ManagementListState {
   if (!spec.sort) {
     return state
   }
 
-  const allowedSortValues = new Set(spec.sort.options.map((item) => item.value))
+  const allowedSortValues = new Set(
+    (runtimeSortOptions && runtimeSortOptions.length > 0 ? runtimeSortOptions : spec.sort.options)
+      .map((item) => item.value)
+  )
   if (!allowedSortValues.has(clickedSortBy)) {
     return state
   }
