@@ -74,24 +74,24 @@ def _build_manage_friendship_pages() -> list[dict]:
             "match_all": True,
             "priority": 90,
         },
-        # 新版新增朋友页：先显示自己的 ID/条码，需要再点朋友ID搜尋进入输入页。
+        # 新增朋友 modal：先显示自己的 ID/条码，需要再点朋友ID搜尋进入输入弹窗。
         {
             "name": "friend_add_modal",
             "identifiers": get_text_patterns("friend_add_modal"),
             "match_all": True,
             "priority": 89,
         },
-        # 朋友ID搜尋输入弹窗：改版后需要先点输入框，再输入 ID。
+        # 朋友ID搜尋 / OK
         {
-            "name": "friend_search_modal",
-            "identifiers": get_text_patterns("friend_search_input_modal"),
+            "name": "friend_search_popup",
+            "identifiers": get_text_patterns("friend_search_popup"),
             "match_all": True,
             "priority": 88,
         },
         # 搜尋結果
         {
-            "name": "friend_search_result_modal",
-            "identifiers": get_text_patterns("friend_page_search_result"),
+            "name": "friend_search_result_popup",
+            "identifiers": get_text_patterns("friend_search_result_popup"),
             "priority": 91,
         },
         # 要移除朋友嗎？
@@ -130,6 +130,7 @@ class ManageFriendshipTask(StatefulTask):
         self.requests_to_process: list[FriendRequestSnapshot] = []
         self._active_request_id: Optional[int] = None
         self._submitted_request_id: Optional[int] = None
+        self._returning_to_friend_list = False
         self._wake_account_ids: set[int] = set()
 
         self._add_apply_wait_rounds = 0
@@ -144,6 +145,7 @@ class ManageFriendshipTask(StatefulTask):
         self.state_set("page.current", None)
         self._active_request_id = None
         self._submitted_request_id = None
+        self._returning_to_friend_list = False
         self._add_apply_wait_rounds = 0
         self._cancel_wait_rounds = 0
         self._accept_wait_rounds = 0
@@ -475,22 +477,6 @@ class ManageFriendshipTask(StatefulTask):
             wait=wait,
         )
 
-    def _handle_home(self, page_info: dict) -> ActionResult:
-        """主页点击社群。"""
-        if self.is_completed():
-            return ActionResult.ok(wait=0.5)
-        return tap_community_icon(self.adb, self.page_detector)
-
-    def _handle_community(self, page_info: dict) -> ActionResult:
-        """社群页点击朋友入口。"""
-        result = tap_text_exact(
-            self.adb,
-            page_info.get("ocr_results", []),
-            get_text_patterns("friend_tab_friends"),
-            wait=1.0,
-        )
-        return result or ActionResult.wait(0.8)
-
     def _handle_friend_list(self, page_info: dict) -> ActionResult:
         """好友列表页统一进入搜索入口。"""
         if self.is_completed():
@@ -507,8 +493,35 @@ class ManageFriendshipTask(StatefulTask):
             wait=0.9,
         )
 
-    def _handle_add_modal(self, page_info: dict) -> ActionResult:
-        """新增朋友页：进入朋友ID搜索输入页。"""
+    def _handle_home_with_community_icon(self, page_info: dict) -> ActionResult:
+        """主页社群图标：进入社群。"""
+        if self.is_completed():
+            return ActionResult.ok(wait=0.5)
+        return tap_community_icon(self.adb, self.page_detector)
+
+    def _handle_game_home_main(self, page_info: dict) -> ActionResult:
+        """主页文本：进入社群。"""
+        if self.is_completed():
+            return ActionResult.ok(wait=0.5)
+        return tap_community_icon(self.adb, self.page_detector)
+
+    def _handle_community_page(self, page_info: dict) -> ActionResult:
+        """社群页：进入朋友页。"""
+        result = tap_text_exact(
+            self.adb,
+            page_info.get("ocr_results", []),
+            get_text_patterns("friend_tab_friends"),
+            wait=1.0,
+        )
+        return result or ActionResult.wait(0.8)
+
+    def _handle_friend_add_modal(self, page_info: dict) -> ActionResult:
+        """新增朋友 modal：进入朋友ID搜索输入弹窗。"""
+        if self._returning_to_friend_list:
+            logger.debug("关闭新增朋友 modal，回到好友列表")
+            self._returning_to_friend_list = False
+            return self._close_modal(wait=0.8)
+
         result = tap_text_exact(
             self.adb,
             page_info.get("ocr_results", []),
@@ -517,8 +530,8 @@ class ManageFriendshipTask(StatefulTask):
         )
         return result or ActionResult.wait(0.5)
 
-    def _handle_search_modal(self, page_info: dict) -> ActionResult:
-        """搜索页：每个请求强制执行 清空->输入->搜索。"""
+    def _handle_friend_search_popup(self, page_info: dict) -> ActionResult:
+        """朋友ID搜索弹窗：每个请求强制执行 清空->输入->搜索。"""
         req = self._pick_current_request()
         if req is None:
             return ActionResult.wait(0.5)
@@ -564,20 +577,31 @@ class ManageFriendshipTask(StatefulTask):
                 self.mark_action_done("search_input_done")
                 return ActionResult.wait(0.6)
 
-            if not self.is_action_done("search_submitted"):
-                result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.9)
-                if result:
-                    self.mark_action_done("search_submitted")
-                    self._submitted_request_id = request_id
-                    return result
-                return ActionResult.wait(0.8)
-
             return ActionResult.wait(0.6)
 
-        return ActionResult.wait(0.5)
+        if not self.is_action_done("search_input_done"):
+            logger.debug("输入框已填但不是当前流程输入，关闭输入弹窗回到列表")
+            self._returning_to_friend_list = True
+            result = tap_text_exact(
+                self.adb,
+                page_info.get("ocr_results", []),
+                get_text_patterns("text_cancel"),
+                wait=0.8,
+            )
+            return result or self._close_modal(wait=0.8)
 
-    def _handle_search_result(self, page_info: dict) -> ActionResult:
-        """搜索结果页统一处理三类请求。"""
+        if not self.is_action_done("search_submitted"):
+            result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.9)
+            if result:
+                self.mark_action_done("search_submitted")
+                self._submitted_request_id = request_id
+                return result
+            return ActionResult.wait(0.8)
+
+        return ActionResult.wait(0.6)
+
+    def _handle_friend_search_result_popup(self, page_info: dict) -> ActionResult:
+        """搜索结果弹窗统一处理三类请求。"""
         req = self._pick_current_request()
         if req is None:
             return ActionResult.wait(0.5)
@@ -597,7 +621,11 @@ class ManageFriendshipTask(StatefulTask):
         # 严格约束：只有当前请求主动点过搜索按钮后，才能消费搜索结果。
         # 否则该结果视为“上一请求残留结果”，必须先关闭回到搜索页。
         if self._submitted_request_id != req.id:
-            logger.debug("检测到残留搜索结果，先关闭后再按当前请求重新搜索")
+            logger.debug("检测到残留搜索结果，关闭搜索结果和输入弹窗后回到列表")
+            self._active_request_id = None
+            self._submitted_request_id = None
+            self._returning_to_friend_list = True
+            self.reset_action_cache()
             return self._close_modal(wait=0.8)
 
         if req.request_type == "add" and req.status == "sending":
@@ -609,22 +637,6 @@ class ManageFriendshipTask(StatefulTask):
         if req.request_type == "delete" and req.status == "deleting":
             return self._handle_delete_result(req, page_info)
         return ActionResult.wait(0.6)
-
-    (
-        _handle_home_with_community_icon,
-        _handle_game_home_main,
-        _handle_community_page,
-        _handle_friend_add_modal,
-        _handle_friend_search_modal,
-        _handle_friend_search_result_modal,
-    ) = (
-        _handle_home,
-        _handle_home,
-        _handle_community,
-        _handle_add_modal,
-        _handle_search_modal,
-        _handle_search_result,
-    )
 
     def _handle_add_sending_result(self, req, page_info: dict) -> ActionResult:
         """处理发送好友请求结果。"""
