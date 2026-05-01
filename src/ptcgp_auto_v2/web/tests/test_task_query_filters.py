@@ -114,6 +114,41 @@ def test_fetch_task_instances_sorts_next_run_with_empty_values_last(session: Ses
     assert [item.id for item in rows] == [3, 2, 1]
 
 
+def test_fetch_task_instances_sorts_next_run_empty_values_by_direction(session: Session) -> None:
+    _seed_accounts_and_tasks(session)
+    tasks = list(session.exec(select(TaskInstance).order_by(TaskInstance.id)))
+    for task in tasks:
+        task.next_run_at = None
+    session.add_all(tasks)
+    session.commit()
+
+    asc_rows, _, _ = fetch_task_instances(
+        session=session,
+        page=0,
+        page_size=10,
+        status=["completed"],
+        task_type=[],
+        account_id=None,
+        account_q="",
+        sort_by="next_run_at",
+        sort_order="asc",
+    )
+    desc_rows, _, _ = fetch_task_instances(
+        session=session,
+        page=0,
+        page_size=10,
+        status=["completed"],
+        task_type=[],
+        account_id=None,
+        account_q="",
+        sort_by="next_run_at",
+        sort_order="desc",
+    )
+
+    assert [item.id for item in asc_rows] == [1, 2, 3]
+    assert [item.id for item in desc_rows] == [3, 2, 1]
+
+
 def test_reset_completed_task_instances_applies_account_query(session: Session) -> None:
     _seed_accounts_and_tasks(session)
 
