@@ -141,7 +141,7 @@ class ClaimRewardsTask(StatefulTask):
 
     task_type = "claim_rewards"
     reset_type = ResetType.DAILY
-    max_iterations = 100
+    max_iterations = 150
     screenshot_lossless = True
     max_same_page_rounds = 25
     pages = _build_claim_rewards_pages()
