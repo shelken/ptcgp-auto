@@ -1,3 +1,23 @@
+interface SearchableManagementOption {
+  value: string
+  label: string
+  searchText: string
+}
+
+export function buildSearchableManagementOptions(
+  options: readonly { value: string; label: string }[],
+  emptyLabel: string
+): SearchableManagementOption[] {
+  return [
+    { value: '', label: emptyLabel, searchText: emptyLabel },
+    ...options.map((item) => ({
+      value: item.value,
+      label: item.label,
+      searchText: `${item.value} ${item.label}`
+    }))
+  ]
+}
+
 export function getManagementFilterOptions<T>(
   data: Record<string, unknown> | undefined,
   key: string,

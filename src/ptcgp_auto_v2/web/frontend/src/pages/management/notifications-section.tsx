@@ -12,7 +12,7 @@ import { tr } from '@/lib/i18n'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 
 import { buildManagementListActionPayload } from './list-actions'
-import { getManagementFilterOptions } from './filter-options'
+import { buildSearchableManagementOptions, getManagementFilterOptions } from './filter-options'
 import { buildManagementListQueryParams } from './list-query'
 import type { ManagementListOption, ManagementListSpec } from './list-spec'
 import { useManagementListState } from './list-state'
@@ -348,14 +348,7 @@ export function NotificationsSection({
     [query.data?.account_name_map]
   )
   const sceneSelectOptions = useMemo<SearchableOption[]>(
-    () => [
-      { value: '', label: tr(t, 'label_all_scenes', 'All Scenes') },
-      ...sceneOptions.map((item) => ({
-        value: item.value,
-        label: item.label,
-        searchText: `${item.value} ${item.label}`
-      }))
-    ],
+    () => buildSearchableManagementOptions(sceneOptions, tr(t, 'label_all_scenes', 'All Scenes')),
     [sceneOptions, t]
   )
   const accountSelectOptions = useMemo(

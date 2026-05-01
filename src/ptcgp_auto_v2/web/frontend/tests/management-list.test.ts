@@ -513,4 +513,18 @@ describe('管理页统一列表状态', () => {
       )
     ).toEqual([{ value: 'task_status', label: 'Task Status' }])
   })
+
+  test('通知场景搜索下拉的空选项也应携带搜索文本', async () => {
+    const { buildSearchableManagementOptions } = await import('../src/pages/management/filter-options')
+
+    expect(
+      buildSearchableManagementOptions(
+        [{ value: 'task_status', label: '任务状态' }],
+        '全部场景'
+      )
+    ).toEqual([
+      { value: '', label: '全部场景', searchText: '全部场景' },
+      { value: 'task_status', label: '任务状态', searchText: 'task_status 任务状态' }
+    ])
+  })
 })
