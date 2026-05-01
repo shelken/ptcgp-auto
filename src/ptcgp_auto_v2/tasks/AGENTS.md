@@ -30,6 +30,7 @@
 
 ### 页面分发原则（禁止反模式）
 
+- **handler 禁止无效转发**：禁止写方法体只有 `return self._handle_xxx(...)` 的 wrapper；页面 handler 必须直接承载该页面逻辑，保证可搜索、可调试
 - **handle_page 纯分发**：只按页面名平级分发，所有 handler 平级，禁止用业务状态拦截
   ```python
   # ❌ 错误：用 status 拦截
