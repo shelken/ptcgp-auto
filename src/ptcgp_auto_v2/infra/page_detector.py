@@ -12,7 +12,11 @@ from PIL import Image
 
 from ptcgp_auto_v2.config.constants import DEFAULT_TEMPLATE_THRESHOLD
 from ptcgp_auto_v2.infra.adb import AdbController, ScreenshotMode
-from ptcgp_auto_v2.infra.ocr import OcrEngine
+from ptcgp_auto_v2.infra.ocr import (
+    OCR_STABLE_MIN_TEXT_HEIGHT_RATIO,
+    OCR_VISION_REVISION,
+    OcrEngine,
+)
 from ptcgp_auto_v2.infra.template import TemplateMatcher, TemplateMatch
 
 logger = logging.getLogger(__name__)
@@ -108,7 +112,7 @@ class PageDetector:
         self._last_template_screenshot = template_screenshot
 
         # OCR 识别
-        ocr_results = self.ocr_engine.recognize_as_dict(screenshot)
+        ocr_results = self._recognize_page_text(screenshot, ocr_mode, lossless)
         self._last_ocr_results = ocr_results
         self._log_ocr_results(ocr_results)
         ocr_texts = [item["text"].strip().lower() for item in ocr_results]
@@ -193,6 +197,24 @@ class PageDetector:
         # 没有匹配到任何界面
         logger.debug("[未匹配] 无法识别当前界面")
         return "unknown", {"ocr_results": ocr_results}
+
+    def _recognize_page_text(
+        self,
+        screenshot: Image.Image,
+        ocr_mode: ScreenshotMode | str | None,
+        lossless: bool | None,
+    ) -> List[dict]:
+        """按截图来源选择 OCR 参数。"""
+        mode = self.adb._resolve_screenshot_mode(ocr_mode, lossless)
+        if mode != ScreenshotMode.DISPLAY_RAW:
+            return self.ocr_engine.recognize_as_dict(screenshot)
+        return self.ocr_engine.recognize_as_dict(
+            screenshot,
+            minimum_text_height_ratio=OCR_STABLE_MIN_TEXT_HEIGHT_RATIO,
+            automatically_detects_language=False,
+            uses_language_correction=False,
+            revision=OCR_VISION_REVISION,
+        )
 
     def _check_text_identifiers(
         self,

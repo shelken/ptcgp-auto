@@ -155,10 +155,10 @@ def handle_screenshot(adb: AdbController, screenshot_mode: str) -> None:
 def handle_ocr(
     adb: AdbController,
     screenshot_mode: str,
-    ocr_min_text_height: float,
+    ocr_min_text_height: float | None,
     ocr_auto_detect_language: bool,
-    ocr_use_language_correction: bool,
-    ocr_revision: int,
+    ocr_use_language_correction: bool | None,
+    ocr_revision: int | None,
 ) -> None:
     """处理 --ocr 命令"""
     img = take_screenshot(adb, screenshot_mode)
@@ -514,26 +514,40 @@ def create_parser() -> argparse.ArgumentParser:
     basic.add_argument(
         "--ocr-min-text-height",
         type=float,
-        default=1.0 / 32.0,
+        default=None,
         metavar="RATIO",
-        help="【--ocr专用】Vision minimumTextHeight（默认 1/32）",
+        help="【--ocr专用】Vision minimumTextHeight（默认沿用运行时默认）",
     )
     basic.add_argument(
         "--ocr-auto-detect-language",
         action="store_true",
-        help="【--ocr专用】启用 Vision 自动语言检测",
+        default=True,
+        help="【--ocr专用】启用 Vision 自动语言检测（默认启用）",
+    )
+    basic.add_argument(
+        "--ocr-disable-auto-detect-language",
+        action="store_false",
+        dest="ocr_auto_detect_language",
+        help="【--ocr专用】关闭 Vision 自动语言检测",
     )
     basic.add_argument(
         "--ocr-use-language-correction",
         action="store_true",
+        default=None,
         help="【--ocr专用】启用 Vision 语言纠错",
+    )
+    basic.add_argument(
+        "--ocr-disable-language-correction",
+        action="store_false",
+        dest="ocr_use_language_correction",
+        help="【--ocr专用】关闭 Vision 语言纠错",
     )
     basic.add_argument(
         "--ocr-revision",
         type=int,
-        default=3,
+        default=None,
         metavar="N",
-        help="【--ocr专用】Vision request revision（默认 3）",
+        help="【--ocr专用】Vision request revision（默认沿用运行时默认）",
     )
     basic.add_argument(
         "--crop", action="store_true", help="截图并打开区域选择器，框选区域保存为模板"

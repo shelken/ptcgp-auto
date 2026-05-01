@@ -19,8 +19,8 @@ from ptcgp_auto_v2.utils.dependency_guard import run_failfast_call
 logger = logging.getLogger(__name__)
 
 OCR_CALL_TIMEOUT_SECONDS = 20.0
-# Apple 文档写默认 1/32；PyObjC 实测初始值是 0.0。显式设置可减少小噪点干扰，稳定按钮文字分割。
-OCR_MIN_TEXT_HEIGHT_RATIO = 1.0 / 32.0
+# raw 截图会保留更多细碎候选，按 Apple 文档默认值过滤小噪点可稳定按钮文字分割。
+OCR_STABLE_MIN_TEXT_HEIGHT_RATIO = 1.0 / 32.0
 OCR_VISION_REVISION = 3
 
 
@@ -53,10 +53,10 @@ class OcrEngine:
         self,
         recognition_level: str = DEFAULT_OCR_LEVEL,
         languages: Optional[List[str]] = None,
-        minimum_text_height_ratio: float = OCR_MIN_TEXT_HEIGHT_RATIO,
-        automatically_detects_language: bool = False,
-        uses_language_correction: bool = False,
-        revision: int = OCR_VISION_REVISION,
+        minimum_text_height_ratio: float | None = None,
+        automatically_detects_language: bool = True,
+        uses_language_correction: bool | None = None,
+        revision: int | None = None,
     ):
         """
         初始化 OCR 引擎
@@ -82,7 +82,14 @@ class OcrEngine:
         if platform.system() != "Darwin":
             raise RuntimeError("OCR 引擎仅支持 macOS 平台")
 
-    def recognize(self, image: Image.Image) -> List[OcrResult]:
+    def recognize(
+        self,
+        image: Image.Image,
+        minimum_text_height_ratio: float | None = None,
+        automatically_detects_language: bool | None = None,
+        uses_language_correction: bool | None = None,
+        revision: int | None = None,
+    ) -> List[OcrResult]:
         """
         识别图片中的文字
 
@@ -121,7 +128,15 @@ class OcrEngine:
             logger,
             "ocr.recognize",
             OCR_CALL_TIMEOUT_SECONDS,
-            lambda: self._recognize_png(png_data, width, height),
+            lambda: self._recognize_png(
+                png_data,
+                width,
+                height,
+                minimum_text_height_ratio,
+                automatically_detects_language,
+                uses_language_correction,
+                revision,
+            ),
         )
 
     def _recognize_png(
@@ -129,6 +144,10 @@ class OcrEngine:
         png_data: bytes,
         width: int,
         height: int,
+        minimum_text_height_ratio: float | None,
+        automatically_detects_language: bool | None,
+        uses_language_correction: bool | None,
+        revision: int | None,
     ) -> List[OcrResult]:
         import objc
         import Quartz
@@ -157,7 +176,9 @@ class OcrEngine:
                 raise RuntimeError("无法创建 CGImage")
 
             request = Vision.VNRecognizeTextRequest.alloc().init()
-            request.setRevision_(self.revision)
+            effective_revision = revision if revision is not None else self.revision
+            if effective_revision is not None:
+                request.setRevision_(effective_revision)
             if self.recognition_level == "fast":
                 request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast)
             else:
@@ -166,9 +187,26 @@ class OcrEngine:
                 )
 
             request.setRecognitionLanguages_(self.languages)
-            request.setAutomaticallyDetectsLanguage_(self.automatically_detects_language)
-            request.setUsesLanguageCorrection_(self.uses_language_correction)
-            request.setMinimumTextHeight_(self.minimum_text_height_ratio)
+            effective_auto_detect = (
+                automatically_detects_language
+                if automatically_detects_language is not None
+                else self.automatically_detects_language
+            )
+            effective_correction = (
+                uses_language_correction
+                if uses_language_correction is not None
+                else self.uses_language_correction
+            )
+            effective_min_height = (
+                minimum_text_height_ratio
+                if minimum_text_height_ratio is not None
+                else self.minimum_text_height_ratio
+            )
+            request.setAutomaticallyDetectsLanguage_(effective_auto_detect)
+            if effective_correction is not None:
+                request.setUsesLanguageCorrection_(effective_correction)
+            if effective_min_height is not None:
+                request.setMinimumTextHeight_(effective_min_height)
 
             handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
                 cg_image, None
@@ -210,7 +248,14 @@ class OcrEngine:
 
         return results
 
-    def recognize_as_dict(self, image: Image.Image) -> List[dict]:
+    def recognize_as_dict(
+        self,
+        image: Image.Image,
+        minimum_text_height_ratio: float | None = None,
+        automatically_detects_language: bool | None = None,
+        uses_language_correction: bool | None = None,
+        revision: int | None = None,
+    ) -> List[dict]:
         """
         识别图片中的文字，返回字典格式（兼容 v1）
 
@@ -220,7 +265,13 @@ class OcrEngine:
         Returns:
             字典列表，每项包含 text, box, confidence
         """
-        results = self.recognize(image)
+        results = self.recognize(
+            image,
+            minimum_text_height_ratio=minimum_text_height_ratio,
+            automatically_detects_language=automatically_detects_language,
+            uses_language_correction=uses_language_correction,
+            revision=revision,
+        )
         return [r.to_dict() for r in results]
 
     def _normalize_text(self, text: str) -> tuple[str, str]:
@@ -250,6 +301,10 @@ class OcrEngine:
         image: Image.Image,
         target: str,
         exact_match: bool = False,
+        minimum_text_height_ratio: float | None = None,
+        automatically_detects_language: bool | None = None,
+        uses_language_correction: bool | None = None,
+        revision: int | None = None,
     ) -> Optional[OcrResult]:
         """
         在图片中查找指定文字
@@ -262,7 +317,13 @@ class OcrEngine:
         Returns:
             找到的 OcrResult，未找到返回 None
         """
-        results = self.recognize(image)
+        results = self.recognize(
+            image,
+            minimum_text_height_ratio=minimum_text_height_ratio,
+            automatically_detects_language=automatically_detects_language,
+            uses_language_correction=uses_language_correction,
+            revision=revision,
+        )
         target_lower, target_normalized = self._normalize_text(target)
 
         for result in results:

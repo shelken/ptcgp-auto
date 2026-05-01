@@ -6,10 +6,11 @@
 - Python 导入规则：根目录必须有 `[build-system]`；进入环境先 `uv sync` 或 `direnv reload`；禁止`PYTHONPATH=src`
 - 缺调试数据时，在当前 worktree 非 main 可执行`cp -r ~/Code/active/ptcgp-auto/data ./`；web 没启动时先跑`./scripts/web_dev.sh`；然后用`playwright-cli`自测 web 变更
 - 新函数/新文件/新变量 先问：是否必须；是否已有相似实现；是否适合复用或基于旧实现调整；然后选最简路径
+- worker/leader 编写(edit)代码前,必须先看`test-driven-development`skill,使用tdd
 
 ## 子代理使用原则
 
-- 给足需求、上下文、相关代码、风险点、踩过哪些坑、做过哪些尝试
+- 给足需求/目的/目标、上下文、相关代码、风险点、踩过哪些坑、做过哪些尝试
 
 ## 重构原则
 
