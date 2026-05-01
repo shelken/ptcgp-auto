@@ -132,11 +132,7 @@ class ManageFriendshipTask(StatefulTask):
         self._submitted_request_id: Optional[int] = None
         self._returning_to_friend_list = False
         self._wake_account_ids: set[int] = set()
-
-        self._add_apply_wait_rounds = 0
-        self._cancel_wait_rounds = 0
-        self._accept_wait_rounds = 0
-        self._delete_wait_rounds = 0
+        self._reset_wait_rounds()
 
     def on_start(self):
         """任务开始前加载请求。"""
@@ -146,10 +142,7 @@ class ManageFriendshipTask(StatefulTask):
         self._active_request_id = None
         self._submitted_request_id = None
         self._returning_to_friend_list = False
-        self._add_apply_wait_rounds = 0
-        self._cancel_wait_rounds = 0
-        self._accept_wait_rounds = 0
-        self._delete_wait_rounds = 0
+        self._reset_wait_rounds()
         self._wake_account_ids = set()
 
         self.requests_to_process = self._get_pending_requests()
@@ -181,6 +174,13 @@ class ManageFriendshipTask(StatefulTask):
             self.mark_completed_without_timestamp("没有待处理的好友请求")
             self.complete()
             logger.info("没有待处理的好友请求，任务完成")
+
+    def _reset_wait_rounds(self):
+        """重置所有跨页等待计数。"""
+        self._add_apply_wait_rounds = 0
+        self._cancel_wait_rounds = 0
+        self._accept_wait_rounds = 0
+        self._delete_wait_rounds = 0
 
     def _expire_stale_add_requests(self) -> bool:
         """启动时清理已过期的 add 请求，避免长期卡住。"""
@@ -285,10 +285,7 @@ class ManageFriendshipTask(StatefulTask):
         self._active_request_id = None
         self._submitted_request_id = None
         self.reset_action_cache()
-        self._add_apply_wait_rounds = 0
-        self._cancel_wait_rounds = 0
-        self._accept_wait_rounds = 0
-        self._delete_wait_rounds = 0
+        self._reset_wait_rounds()
         self._log_pending_request_order(stage)
         if not self.requests_to_process:
             self.complete()
@@ -532,6 +529,7 @@ class ManageFriendshipTask(StatefulTask):
 
     def _handle_friend_search_popup(self, page_info: dict) -> ActionResult:
         """朋友ID搜索弹窗：每个请求强制执行 清空->输入->搜索。"""
+        ocr_results = page_info.get("ocr_results", [])
         req = self._pick_current_request()
         if req is None:
             return ActionResult.wait(0.5)
@@ -547,13 +545,10 @@ class ManageFriendshipTask(StatefulTask):
             self._active_request_id = request_id
             self._submitted_request_id = None
             self.reset_action_cache()
-            self._add_apply_wait_rounds = 0
-            self._cancel_wait_rounds = 0
-            self._accept_wait_rounds = 0
-            self._delete_wait_rounds = 0
+            self._reset_wait_rounds()
 
         input_matches = find_text_matches(
-            page_info.get("ocr_results", []),
+            ocr_results,
             get_text_patterns("friend_id_input_placeholder"),
             exact=True,
         )
@@ -584,14 +579,14 @@ class ManageFriendshipTask(StatefulTask):
             self._returning_to_friend_list = True
             result = tap_text_exact(
                 self.adb,
-                page_info.get("ocr_results", []),
+                ocr_results,
                 get_text_patterns("text_cancel"),
                 wait=0.8,
             )
             return result or self._close_modal(wait=0.8)
 
         if not self.is_action_done("search_submitted"):
-            result = tap_ok(self.adb, page_info.get("ocr_results", []), wait=0.9)
+            result = tap_ok(self.adb, ocr_results, wait=0.9)
             if result:
                 self.mark_action_done("search_submitted")
                 self._submitted_request_id = request_id
@@ -611,10 +606,7 @@ class ManageFriendshipTask(StatefulTask):
             self._active_request_id = req.id
             self._submitted_request_id = None
             self.reset_action_cache()
-            self._add_apply_wait_rounds = 0
-            self._cancel_wait_rounds = 0
-            self._accept_wait_rounds = 0
-            self._delete_wait_rounds = 0
+            self._reset_wait_rounds()
             logger.debug("请求已切换，关闭当前搜索结果，回到搜索页重查目标friend_id")
             return self._close_modal(wait=0.8)
 
