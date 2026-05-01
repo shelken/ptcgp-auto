@@ -55,6 +55,27 @@ def _build_task_instance_filters(
     return statement
 
 
+def build_task_instances_statement(
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+    account_q: str,
+) -> Any:
+    """构建任务实例基础查询。"""
+    statement = select(TaskInstance).options(
+        selectinload(cast(Any, TaskInstance.account))  # type: ignore[arg-type]
+        .selectinload(cast(Any, Account.task_plan_associations))  # type: ignore[arg-type]
+        .selectinload(cast(Any, AccountTaskPlan.task_plan))  # type: ignore[arg-type]
+    )
+    return _build_task_instance_filters(
+        statement,
+        status=status,
+        task_type=task_type,
+        account_id=account_id,
+        account_q=account_q,
+    )
+
+
 def fetch_task_instances(
     session: Session,
     page: int,
@@ -72,14 +93,7 @@ def fetch_task_instances(
         page_size=page_size,
         max_size=100,
     )
-    statement = select(TaskInstance).options(
-        selectinload(cast(Any, TaskInstance.account))  # type: ignore[arg-type]
-        .selectinload(cast(Any, Account.task_plan_associations))  # type: ignore[arg-type]
-        .selectinload(cast(Any, AccountTaskPlan.task_plan))  # type: ignore[arg-type]
-    )
-
-    statement = _build_task_instance_filters(
-        statement,
+    statement = build_task_instances_statement(
         status=status,
         task_type=task_type,
         account_id=account_id,
@@ -103,6 +117,23 @@ def fetch_task_instances(
         page_size=normalized_page_size,
     )
     return instances, has_next, total
+
+
+def fetch_task_instances_for_computed_sort(
+    session: Session,
+    status: list[str],
+    task_type: list[str],
+    account_id: int | None,
+    account_q: str,
+) -> list[TaskInstance]:
+    """获取过滤后的任务实例，供派生字段排序使用。"""
+    statement = build_task_instances_statement(
+        status=status,
+        task_type=task_type,
+        account_id=account_id,
+        account_q=account_q,
+    ).order_by(TaskInstance.id)
+    return list(session.exec(statement).all())
 
 
 def reset_completed_task_instances(

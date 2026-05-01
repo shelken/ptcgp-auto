@@ -8,6 +8,7 @@ from sqlmodel import Session, col, or_, select
 from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
 from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.scheduling_service import (
+    TASK_SORT_BY_NEXT_RUN,
     build_account_plan_cache,
     build_account_scheduling_context,
     build_task_scheduling_summary,
@@ -23,6 +24,7 @@ from ptcgp_auto_v2.db.repositories import (
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
+    fetch_task_instances_for_computed_sort,
     reset_completed_task_instances,
 )
 from ptcgp_auto_v2.web.utils.filter_utils import (
@@ -96,6 +98,39 @@ def _build_tasks_page_url(
     return f"/api/tasks?{urlencode(params)}"
 
 
+def _sort_task_rows_by_next_run_at(
+    rows: list[dict[str, Any]],
+    sort_order: str,
+) -> list[dict[str, Any]]:
+    """按接口展示的下次开始时间排序。"""
+    reverse = sort_order == "desc"
+    rows_with_time = [row for row in rows if row["next_run_at"] is not None]
+    rows_without_time = [row for row in rows if row["next_run_at"] is None]
+    rows_with_time.sort(
+        key=lambda row: (row["next_run_at"], int(row["id"] or 0)),
+        reverse=reverse,
+    )
+    rows_without_time.sort(
+        key=lambda row: int(row["id"] or 0),
+        reverse=reverse,
+    )
+    return rows_with_time + rows_without_time
+
+
+def _slice_task_rows(
+    rows: list[dict[str, Any]],
+    page: int,
+    page_size: int,
+) -> tuple[list[dict[str, Any]], bool]:
+    """对已排序任务行应用分页窗口。"""
+    offset = page * page_size
+    page_rows = rows[offset:offset + page_size + 1]
+    has_next = len(page_rows) > page_size
+    if has_next:
+        page_rows = page_rows[:page_size]
+    return page_rows, has_next
+
+
 def build_tasks_list_context(
     *,
     session: Session,
@@ -114,17 +149,29 @@ def build_tasks_list_context(
 
     normalized_status = status or []
     normalized_task_type = task_type or []
-    instances, has_next, total = fetch_task_instances(
-        session=session,
-        page=normalized_page,
-        page_size=normalized_page_size,
-        status=normalized_status,
-        task_type=normalized_task_type,
-        account_id=account_id,
-        account_q=account_q,
-        sort_by=sort_by,
-        sort_order=sort_order,
-    )
+    uses_computed_next_run_sort = sort_by == TASK_SORT_BY_NEXT_RUN
+    if uses_computed_next_run_sort:
+        instances = fetch_task_instances_for_computed_sort(
+            session=session,
+            status=normalized_status,
+            task_type=normalized_task_type,
+            account_id=account_id,
+            account_q=account_q,
+        )
+        total = len(instances)
+        has_next = False
+    else:
+        instances, has_next, total = fetch_task_instances(
+            session=session,
+            page=normalized_page,
+            page_size=normalized_page_size,
+            status=normalized_status,
+            task_type=normalized_task_type,
+            account_id=account_id,
+            account_q=account_q,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
 
     account_cache: dict[int, dict[str, Any]] = {}
     account_dispatch_plans: dict[int, Any | None] = {}
@@ -215,6 +262,10 @@ def build_tasks_list_context(
         row_data["target_pack_auto"] = target_pack_auto
 
         rows.append(row_data)
+
+    if uses_computed_next_run_sort:
+        rows = _sort_task_rows_by_next_run_at(rows, sort_order)
+        rows, has_next = _slice_task_rows(rows, normalized_page, normalized_page_size)
 
     return {
         "items": rows,

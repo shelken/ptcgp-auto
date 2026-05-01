@@ -16,6 +16,7 @@ from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
     reset_completed_task_instances,
 )
+from ptcgp_auto_v2.web.services.task_service import build_tasks_list_context
 
 
 @pytest.fixture
@@ -147,6 +148,43 @@ def test_fetch_task_instances_sorts_next_run_empty_values_by_direction(session: 
 
     assert [item.id for item in asc_rows] == [1, 2, 3]
     assert [item.id for item in desc_rows] == [3, 2, 1]
+
+
+def test_tasks_context_sorts_by_displayed_next_run_at(session: Session) -> None:
+    _seed_accounts_and_tasks(session)
+    base_time = datetime(2026, 4, 30, 8, 0, 0)
+    tasks = list(session.exec(select(TaskInstance).order_by(TaskInstance.id)))
+    tasks[0].status = "failed"
+    tasks[0].next_run_at = None
+    tasks[0].last_completed_at = base_time + timedelta(days=2)
+    tasks[1].status = "failed"
+    tasks[1].next_run_at = None
+    tasks[1].last_completed_at = base_time
+    tasks[2].status = "failed"
+    tasks[2].next_run_at = None
+    tasks[2].last_completed_at = base_time + timedelta(days=1)
+    session.add_all(tasks)
+    session.commit()
+
+    asc_context = build_tasks_list_context(
+        session=session,
+        page=0,
+        page_size=10,
+        status=["failed"],
+        sort_by="next_run_at",
+        sort_order="asc",
+    )
+    desc_context = build_tasks_list_context(
+        session=session,
+        page=0,
+        page_size=10,
+        status=["failed"],
+        sort_by="next_run_at",
+        sort_order="desc",
+    )
+
+    assert [item["id"] for item in asc_context["items"]] == [2, 3, 1]
+    assert [item["id"] for item in desc_context["items"]] == [1, 3, 2]
 
 
 def test_reset_completed_task_instances_applies_account_query(session: Session) -> None:
