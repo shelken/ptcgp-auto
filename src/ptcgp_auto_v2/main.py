@@ -623,6 +623,13 @@ def main():
     settings.max_accounts = args.max_accounts
     set_settings(settings)
     settings.configure_logging()
+
+    from ptcgp_auto_v2.infra.task_failure_logs import cleanup_old_task_failure_logs
+
+    removed_logs = cleanup_old_task_failure_logs(log_dir=settings.db_path.parent / "logs")
+    if removed_logs:
+        logger.info(f"已清理过期失败任务日志: {removed_logs} 个")
+
     if discovered_devices and device_addresses:
         logger.info(f"自动发现设备: {', '.join(device_addresses)}")
 

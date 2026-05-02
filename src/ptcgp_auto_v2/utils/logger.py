@@ -183,6 +183,16 @@ def clear_context():
     ctx.task = ""
 
 
+def get_context_snapshot() -> dict[str, str]:
+    """读取当前线程日志上下文。"""
+    ctx = _get_context()
+    return {
+        "device": ctx.device,
+        "nickname": ctx.nickname,
+        "task": ctx.task,
+    }
+
+
 def get_logger(name: str) -> "logger":
     """
     获取日志器

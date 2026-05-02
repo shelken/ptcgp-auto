@@ -8,8 +8,9 @@
 import logging
 import threading
 import time
+from pathlib import Path
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
@@ -27,6 +28,7 @@ from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.infra.account_syncer import AccountSnapshot
 from ptcgp_auto_v2.infra.page_detector import DEFAULT_TEMPLATE_THRESHOLD
+from ptcgp_auto_v2.infra.task_failure_logs import TaskFailureLogContext
 from ptcgp_auto_v2.utils.common_handlers import build_common_handlers
 from ptcgp_auto_v2.utils.log_source import resolve_log_device
 
@@ -845,18 +847,45 @@ class AccountExecutor(BaseExecutor):
         from ptcgp_auto_v2.infra.adb import AdbController
 
         self._set_active_task(task_instance)
-        logger.info(f"执行任务: {task_instance.task_type}")
-        try:
-            result = self._execute_task_with_prerequisites(
-                task_instance=task_instance,
-                account=self.account,
-            )
-            self._apply_task_result(task_instance, self.account, result)
-        except Exception as e:
-            if AdbController.is_offline_error(e):
-                raise
-            logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
-            self._apply_task_failure(task_instance, self.account, str(e))
+        with self._open_task_failure_logs(task_instance) as failure_logs:
+            logger.info(f"执行任务: {task_instance.task_type}")
+            try:
+                result = self._execute_task_with_prerequisites(
+                    task_instance=task_instance,
+                    account=self.account,
+                )
+                self._apply_task_result(task_instance, self.account, result)
+                if not result.success:
+                    failure_logs.persist_failure(result.error or "任务失败")
+            except Exception as e:
+                if AdbController.is_offline_error(e):
+                    logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
+                    failure_logs.persist_failure(str(e))
+                    raise
+                logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")
+                self._apply_task_failure(task_instance, self.account, str(e))
+                failure_logs.persist_failure(str(e))
+
+    def _open_task_failure_logs(
+        self,
+        task_instance: TaskInstanceSnapshot,
+    ) -> TaskFailureLogContext:
+        """打开单个任务失败日志捕获。"""
+        return TaskFailureLogContext(
+            log_dir=self._task_failure_log_dir(),
+            started_at=datetime.now(),
+            account_id=self.account.id,
+            account_name=self._resolve_log_nickname(self.account),
+            task_type=task_instance.task_type,
+            task_instance_id=task_instance.id,
+        )
+
+    @staticmethod
+    def _task_failure_log_dir() -> Path:
+        """失败任务日志目录。"""
+        from ptcgp_auto_v2.config.settings import get_project_root
+
+        return get_project_root() / "data" / "logs"
 
     def _run_pending_tasks(self):
         """顺序执行任务列表。"""
@@ -884,10 +913,34 @@ class AccountExecutor(BaseExecutor):
         task_types = [t.task_type for t in self.task_instances]
         initial_task = task_types[0] if task_types else ""
         with self._bind_log_context(self.account, initial_task=initial_task):
-            logger.info(f"开始执行 {len(self.task_instances)} 个任务: {task_types}")
+            prepare_failure_logs: list[
+                tuple[TaskInstanceSnapshot, TaskFailureLogContext]
+            ] = []
             try:
-                if not self._prepare_run():
-                    return
+                with ExitStack() as prepare_log_stack:
+                    prepare_failure_logs = [
+                        (
+                            task_instance,
+                            prepare_log_stack.enter_context(
+                                self._open_task_failure_logs(task_instance)
+                            ),
+                        )
+                        for task_instance in self.task_instances
+                    ]
+                    logger.info(f"开始执行 {len(self.task_instances)} 个任务: {task_types}")
+                    try:
+                        if not self._prepare_run():
+                            self._persist_prepare_failures(prepare_failure_logs)
+                            return
+                    except Exception as e:
+                        from ptcgp_auto_v2.infra.adb import AdbController
+
+                        AdbController.register_offline_failure(self.device.address, e)
+                        logger.exception(f"账号执行器异常: {e}")
+                        self._fail_tasks(str(e), only_running=True)
+                        self._persist_prepare_failures(prepare_failure_logs, str(e))
+                        return
+                prepare_failure_logs = []
                 self._run_pending_tasks()
                 logger.info(f"账号任务执行完成 (账号: {self.account.display_name})")
             except Exception as e:
@@ -896,5 +949,19 @@ class AccountExecutor(BaseExecutor):
                 AdbController.register_offline_failure(self.device.address, e)
                 logger.exception(f"账号执行器异常: {e}")
                 self._fail_tasks(str(e), only_running=True)
+                self._persist_prepare_failures(prepare_failure_logs, str(e))
             finally:
                 self._cleanup()
+
+    @staticmethod
+    def _persist_prepare_failures(
+        prepare_failure_logs: list[tuple[TaskInstanceSnapshot, TaskFailureLogContext]],
+        fallback_reason: str | None = None,
+    ) -> None:
+        """账号准备阶段失败时，为被标记失败的任务落盘同一段准备日志。"""
+        for task_instance, failure_logs in prepare_failure_logs:
+            if task_instance.status != TaskStatus.FAILED.value:
+                continue
+            failure_logs.persist_failure(
+                task_instance.error_message or fallback_reason or "任务准备失败"
+            )
