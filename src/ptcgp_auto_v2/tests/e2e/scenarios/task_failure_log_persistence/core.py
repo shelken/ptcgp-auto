@@ -104,19 +104,16 @@ def run(ctx):
     created = sorted(after - before)
     assert len(created) == 1
     log_path = created[0]
-    try:
-        rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
-        assert rows[0]["event"] == "task_failure_summary"
-        assert rows[0]["account_id"] == account_id
-        assert rows[0]["task_type"] == ctx.config.task_type
-        assert rows[0]["task_instance_id"] == task_id
-        assert rows[0]["failure_reason"] == ctx.config.params["failure_reason"]
-        messages = [row.get("message") for row in rows]
-        assert "e2e failure task running" in messages
-        trace_row = next(row for row in rows if row.get("message") == "e2e trace 细节")
-        assert trace_row["level"] == "TRACE"
-    finally:
-        log_path.unlink(missing_ok=True)
+    rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["event"] == "task_failure_summary"
+    assert rows[0]["account_id"] == account_id
+    assert rows[0]["task_type"] == ctx.config.task_type
+    assert rows[0]["task_instance_id"] == task_id
+    assert rows[0]["failure_reason"] == ctx.config.params["failure_reason"]
+    messages = [row.get("message") for row in rows]
+    assert "e2e failure task running" in messages
+    trace_row = next(row for row in rows if row.get("message") == "e2e trace 细节")
+    assert trace_row["level"] == "TRACE"
 
     account_id, task_id = create_seed_account_with_task(ctx.config.task_type)
     harness.mute_other_accounts(account_id)
@@ -146,13 +143,10 @@ def run(ctx):
     created = sorted(after - before)
     assert len(created) == 1
     log_path = created[0]
-    try:
-        rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
-        assert rows[0]["event"] == "task_failure_summary"
-        assert rows[0]["account_id"] == account_id
-        assert rows[0]["task_instance_id"] == task_id
-        assert rows[0]["failure_reason"] == "device 127.0.0.1:29999 not online"
-        messages = [row.get("message") for row in rows]
-        assert any("账号执行器异常" in str(message) for message in messages)
-    finally:
-        log_path.unlink(missing_ok=True)
+    rows = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert rows[0]["event"] == "task_failure_summary"
+    assert rows[0]["account_id"] == account_id
+    assert rows[0]["task_instance_id"] == task_id
+    assert rows[0]["failure_reason"] == "device 127.0.0.1:29999 not online"
+    messages = [row.get("message") for row in rows]
+    assert any("账号执行器异常" in str(message) for message in messages)
