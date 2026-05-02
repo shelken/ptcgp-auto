@@ -22,6 +22,7 @@ from ptcgp_auto_v2.tasks.utils.pack_opening_flow import swipe_card_register
 from ptcgp_auto_v2.utils.color import is_button_clickable
 from ptcgp_auto_v2.utils.gesture import (
     click_close,
+    find_text_matches,
     navigate_back,
     quick_tap,
     tap_box,
@@ -155,6 +156,8 @@ class ClaimRewardsTask(StatefulTask):
         logger.info("任务奖励领取任务开始")
         self.state.reset()
         self.state_set("home_check_count", 0)
+        self.state_set("returned_from_theme_collection", False)
+        self.state_set("claimed_current_rewards_tab", False)
 
     def handle_unmapped_page(self, page_name: str, page_info: dict) -> ActionResult:
         logger.debug(f"处理页面: {page_name}")
@@ -206,6 +209,8 @@ class ClaimRewardsTask(StatefulTask):
             if reward_icon:
                 logger.debug("  -> 检测到奖励图标，进入任务页面")
                 self.state_set("home_check_count", 0)
+                self.state_set("returned_from_theme_collection", False)
+                self.state_set("claimed_current_rewards_tab", False)
                 return tap_box(self.adb, reward_icon.box, wait=3.0)
 
             logger.debug(f"  -> 未检测到奖励图标 ({i + 1}/{rounds})")
@@ -224,104 +229,123 @@ class ClaimRewardsTask(StatefulTask):
         return ActionResult.ok(wait=1.0)
 
     def _handle_rewards_page(self, page_info: dict) -> ActionResult:
-        """处理任务奖励页面：领取当前 Tab 所有奖励，然后处理主题收藏，最后返回主页
-
-        优化逻辑：如果 Tab 页面领取过奖励，跳过主题收藏直接返回主页
-        """
+        """奖励页只做三件事：收尾返回、领取、按需进主题收藏。"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
-        # 1. 尝试点击领取按钮
-        result = self._try_claim_buttons(ocr_results, screenshot)
-        if result:
-            # 成功领取，标记 Tab 页面已领取过奖励
-            self.mark_action_done("tab_claimed")
-            return result
+        if bool(self.state_get("returned_from_theme_collection", False)):
+            logger.debug("  -> 已从主题收藏返回，关闭任务页")
+            return self._leave_rewards_page(ocr_results)
 
-        # 2. 当前 Tab 无可领取，判断是否进入主题收藏
-        # 如果 Tab 页面领取过奖励，直接返回主页（跳过主题收藏）
-        if self.is_action_done("tab_claimed"):
-            logger.debug("  -> Tab 页面已领取过奖励，跳过主题收藏，直接返回主页")
-            close_patterns = get_text_patterns("close_button")
-            result = click_close(
-                self.adb, self.page_detector, ocr_results, close_patterns
+        if bool(self.state_get("claimed_current_rewards_tab", False)):
+            logger.debug("  -> 当前 Tab 已领取过，关闭任务页")
+            return self._leave_rewards_page(ocr_results)
+
+        if self._needs_theme_collection(ocr_results, screenshot):
+            result = tap_text(
+                self.adb,
+                ocr_results,
+                get_text_patterns("theme_collection"),
+                wait=2.0,
+                exact=True,
             )
             if result:
+                logger.debug("  -> 进入主题收藏")
                 return result
-            return navigate_back(self.adb, self.page_detector, ocr_results)
+            logger.debug("  -> 未找到主题收藏入口，关闭任务页")
+            return self._leave_rewards_page(ocr_results)
 
-        # 3. Tab 页面没有领取过奖励，需要检查主题收藏
-        if not self.is_action_done("theme_checked"):
-            theme_patterns = get_text_patterns("theme_collection")
-            result = tap_text(self.adb, ocr_results, theme_patterns, wait=2.0)
-            if result:
-                logger.debug("  -> Tab 页面无奖励，进入主题收藏检查")
-                self.mark_action_done("theme_checked")
-                return result
-            else:
-                logger.debug("  -> 未找到主题收藏入口，跳过")
-                self.mark_action_done("theme_checked")
+        if self._click_claim_buttons(ocr_results, screenshot):
+            self.state_set("claimed_current_rewards_tab", True)
+            logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
+            return ActionResult.ok(wait=1.8)
 
-        # 4. 已检查主题收藏（或没有入口），返回主页
-        logger.debug("  -> 当前 Tab 和主题收藏都已处理，返回主页")
-        close_patterns = get_text_patterns("close_button")
-        result = click_close(self.adb, self.page_detector, ocr_results, close_patterns)
-        if result:
-            return result
-        return navigate_back(self.adb, self.page_detector, ocr_results)
-
-    def _try_claim_buttons(
-        self, ocr_results: list[dict], screenshot
-    ) -> ActionResult | None:
-        """尝试点击可领取的按钮（全部領取/領取/達成）
-
-        注意：只有"全部領取"按钮需要颜色检查（避免点击置灰按钮），
-        其他按钮（領取/達成）直接点击，不需要颜色检查。
-        """
-        claim_patterns = get_text_patterns("reward_claim_buttons")
-        # 需要颜色检查的模式（全部領取的多语言版本）
-        color_check_patterns = get_text_patterns("reward_claim_all")
-
-        wait = 1.8
-        for pattern in claim_patterns:
-            for item in ocr_results:
-                text = "".join(item["text"].lower().split())
-                if "".join(pattern.lower().split()) == text:
-                    box = item["box"]
-
-                    # 检查是否是"全部領取"，需要进行颜色检查
-                    normalized_pattern = "".join(pattern.lower().split())
-                    is_claim_all = any(
-                        normalized_pattern == "".join(cp.lower().split())
-                        for cp in color_check_patterns
-                    )
-
-                    if is_claim_all:
-                        # 全部領取需要颜色检查
-                        if screenshot and is_button_clickable(
-                            screenshot, box, threshold=0.3
-                        ):
-                            logger.info(f"  -> 点击全部领取按钮: {pattern}")
-                            return tap_box(self.adb, box, wait=wait)
-                        else:
-                            logger.debug(f"  -> 全部领取按钮 {pattern} 已置灰，跳过")
-                    else:
-                        # 其他按钮（領取/達成）直接点击，不需要颜色检查
-                        logger.info(f"  -> 点击领取按钮: {pattern}")
-                        return tap_box(self.adb, box, wait=wait)
-
-        return None
+        logger.debug("  -> 当前 Tab 已处理，关闭任务页")
+        return self._leave_rewards_page(ocr_results)
 
     def _handle_theme_collection_page(self, page_info: dict) -> ActionResult:
-        """处理主题收藏页面：领取所有奖励后返回 Tab 页面"""
+        """主题收藏页领取后返回任务页，由任务页统一关闭。"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
-        result = self._try_claim_buttons(ocr_results, screenshot)
+        if self._click_claim_buttons(ocr_results, screenshot):
+            return ActionResult.ok(wait=1.8)
+
+        logger.debug("  -> 主题收藏已处理，返回任务页")
+        self.state_set("returned_from_theme_collection", True)
+        return navigate_back(self.adb, self.page_detector, ocr_results)
+
+    def _click_claim_buttons(self, ocr_results: list[dict], screenshot) -> bool:
+        """先点全部领取，再点单个领取；返回本轮是否点过领取按钮。"""
+        clicked = False
+        claim_all_patterns = get_text_patterns("reward_claim_all")
+        claim_all_matches = find_text_matches(ocr_results, claim_all_patterns, exact=True)
+        if claim_all_matches and self._is_claim_all_clickable(
+            claim_all_matches[0]["box"], screenshot
+        ):
+            logger.info("  -> 点击全部领取按钮")
+            clicked = bool(
+                tap_text(
+                    self.adb,
+                    ocr_results,
+                    claim_all_patterns,
+                    wait=0.0,
+                    exact=True,
+                )
+            )
+        elif claim_all_matches:
+            logger.debug("  -> 全部领取按钮低于绿色阈值，跳过")
+
+        single_result = tap_text(
+            self.adb,
+            ocr_results,
+            self._single_claim_patterns(),
+            wait=0.0,
+            exact=True,
+        )
+        return bool(single_result) or clicked
+
+    def _needs_theme_collection(self, ocr_results: list[dict], screenshot) -> bool:
+        """全部领取置灰，或没有任何领取入口时，才检查主题收藏。"""
+        claim_all_matches = find_text_matches(
+            ocr_results,
+            get_text_patterns("reward_claim_all"),
+            exact=True,
+        )
+        if claim_all_matches:
+            return not self._is_claim_all_clickable(claim_all_matches[0]["box"], screenshot)
+
+        single_matches = find_text_matches(
+            ocr_results,
+            self._single_claim_patterns(),
+            exact=True,
+        )
+        return not bool(single_matches)
+
+    def _leave_rewards_page(self, ocr_results: list[dict]) -> ActionResult:
+        """关闭任务页，模板失败时走返回。"""
+        result = click_close(
+            self.adb,
+            self.page_detector,
+            ocr_results,
+            get_text_patterns("close_button"),
+        )
         if result:
             return result
-
-        # 无可领取，返回 Tab 页面
-        logger.debug("  -> 主题收藏领取完成，返回 Tab 页面")
         return navigate_back(self.adb, self.page_detector, ocr_results)
+
+    @staticmethod
+    def _single_claim_patterns() -> list[str]:
+        """除全部领取之外的奖励领取按钮。"""
+        claim_all_patterns = set(get_text_patterns("reward_claim_all"))
+        return [
+            pattern
+            for pattern in get_text_patterns("reward_claim_buttons")
+            if pattern not in claim_all_patterns
+        ]
+
+    @staticmethod
+    def _is_claim_all_clickable(box: tuple[int, int, int, int], screenshot) -> bool:
+        """全部领取是否为绿色可点击状态。"""
+        return bool(screenshot and is_button_clickable(screenshot, box, threshold=0.3))
 
     def _handle_pack_card_register(self, page_info: dict) -> ActionResult:
         """向上滑动卡牌登录图鉴（精英牌组奖励）"""
@@ -331,9 +355,8 @@ class ClaimRewardsTask(StatefulTask):
         """处理奖励详情页面：点击達成按钮"""
         screenshot, ocr_results = self.page_detector.get_last_page_context()
 
-        result = self._try_claim_buttons(ocr_results, screenshot)
-        if result:
-            return result
+        if self._click_claim_buttons(ocr_results, screenshot):
+            return ActionResult.ok(wait=1.8)
 
         logger.debug("  -> 奖励详情页面，等待...")
         return ActionResult.ok(wait=1.0)
