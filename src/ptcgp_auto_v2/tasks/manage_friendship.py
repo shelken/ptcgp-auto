@@ -274,7 +274,7 @@ class ManageFriendshipTask(StatefulTask):
         self._active_request_id = None
         self._submitted_request_id = None
         if not self.requests_to_process:
-            self.complete()
+            self._returning_to_friend_list = True
 
     def _defer_current_request(self, req: FriendRequestSnapshot, stage: str):
         """本轮暂缓当前请求，避免同一轮重复查询同一请求。"""
@@ -288,7 +288,7 @@ class ManageFriendshipTask(StatefulTask):
         self._reset_wait_rounds()
         self._log_pending_request_order(stage)
         if not self.requests_to_process:
-            self.complete()
+            self._returning_to_friend_list = True
 
     def _log_pending_request_order(self, stage: str):
         """输出当前待处理请求顺序，便于排查是否按创建时间执行。"""
@@ -478,6 +478,10 @@ class ManageFriendshipTask(StatefulTask):
         """好友列表页统一进入搜索入口。"""
         if self.is_completed():
             return ActionResult.ok(wait=0.5)
+        if self._returning_to_friend_list:
+            self._returning_to_friend_list = False
+            self.complete()
+            return ActionResult.ok(wait=0.5)
         req = self._pick_current_request()
         if req is None:
             self.complete()
@@ -516,7 +520,6 @@ class ManageFriendshipTask(StatefulTask):
         """新增朋友 modal：进入朋友ID搜索输入弹窗。"""
         if self._returning_to_friend_list:
             logger.debug("关闭新增朋友 modal，回到好友列表")
-            self._returning_to_friend_list = False
             return self._close_modal(wait=0.8)
 
         result = tap_text_exact(
@@ -530,8 +533,19 @@ class ManageFriendshipTask(StatefulTask):
     def _handle_friend_search_popup(self, page_info: dict) -> ActionResult:
         """朋友ID搜索弹窗：每个请求强制执行 清空->输入->搜索。"""
         ocr_results = page_info.get("ocr_results", [])
+        if self._returning_to_friend_list:
+            logger.debug("关闭朋友ID搜索弹窗，回到好友列表")
+            result = tap_text_exact(
+                self.adb,
+                ocr_results,
+                get_text_patterns("text_cancel"),
+                wait=0.8,
+            )
+            return result or self._close_modal(wait=0.8)
+
         req = self._pick_current_request()
         if req is None:
+            self._returning_to_friend_list = True
             return ActionResult.wait(0.5)
 
         target_friend_id = self._resolve_request_friend_id(req)
@@ -597,9 +611,14 @@ class ManageFriendshipTask(StatefulTask):
 
     def _handle_friend_search_result_popup(self, page_info: dict) -> ActionResult:
         """搜索结果弹窗统一处理三类请求。"""
+        if self._returning_to_friend_list:
+            logger.debug("关闭搜索结果弹窗，回到好友列表")
+            return self._close_modal(wait=0.8)
+
         req = self._pick_current_request()
         if req is None:
-            return ActionResult.wait(0.5)
+            self._returning_to_friend_list = True
+            return self._close_modal(wait=0.8)
 
         # 关键约束：切换请求后，不复用旧搜索结果，先关闭结果页回到搜索输入页重搜
         if req.id != self._active_request_id:
