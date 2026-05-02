@@ -5,3 +5,4 @@
 # Postmortems
 
 - [001 · adb transport closed during u2 connect](./001-adb-transport-closed-during-u2-connect.md)
+- [002 · claim rewards e2e debugging](./002-claim-rewards-e2e-debugging.md)
