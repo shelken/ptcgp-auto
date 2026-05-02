@@ -15,6 +15,7 @@
 - 同一轮定位里，没有证据证明实例已经失活时，不准反复重启
 - 一次重启后要先验证恢复结果，再决定后续动作
 - 不能把重启当成默认排障动作，避免浪费系统资源和时间
+- task成功情况下可能是当前账号遇到任务跳过或者账号不满足任务流程的情况,必须根据当前要测试内容来检查日志,确保不把任务跳过当成任务成功
 
 ## 先理解目录职责
 
@@ -206,6 +207,23 @@ uv run pytest src/ptcgp_auto_v2/tests/e2e -q \
   --e2e-case <case_id> \
   --e2e-override PARAMS__LEASE_TIMEOUT_SECONDS=4
 ```
+
+## 路径规则（写死）
+
+E2E 里只允许一个路径来源：`pytestconfig.rootpath`。
+
+固定规则：
+- 项目根目录：只准用 `pytestconfig.rootpath`
+- 测试数据库：只准用 `pytestconfig.rootpath / "data" / "ptcgp_v2.db"`
+- E2E 日志根目录：只准用 `pytestconfig.rootpath / ".e2e-logs"`
+- E2E 日志路径：只准用 `<日志根>/<case_id>/<profile>/app.log` 和 `<日志根>/<case_id>/<profile>/trace.jsonl`
+
+禁止：
+- `Path.cwd()`
+- `Path(__file__).resolve().parents[n]`
+- 硬编码 `/tmp`
+- 多套 fallback 路径
+- 用环境变量或 CLI 再定义另一套路日志根目录
 
 ## 日志怎么用
 

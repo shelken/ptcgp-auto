@@ -115,31 +115,25 @@ def _build_runtime_env(config: pytest.Config) -> dict[str, str]:
     return env
 
 
-def _ensure_not_in_project(path: Path):
-    """禁止把 E2E 日志写到项目目录。"""
-    repo_root = Path(__file__).resolve().parents[4]
-    resolved = path.resolve()
-    if repo_root == resolved or repo_root in resolved.parents:
-        raise pytest.UsageError(f"e2e log file must not be in repo: {resolved}")
-
-
 def _setup_temp_log_env(
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     runtime_env: dict[str, str],
+    profile: str,
+    rootpath: Path,
 ):
-    """把日志文件统一绑定到临时目录，并记录路径。"""
-    log_dir = tmp_path / "e2e_logs"
+    """把日志文件统一绑定到确定性目录，并记录路径。"""
+    case_id = runtime_env.get(E2E_CASE_ENV, "").strip() or "all"
+    log_dir = rootpath / ".e2e-logs" / case_id / profile
     log_dir.mkdir(parents=True, exist_ok=True)
     raw_log = runtime_env.get(E2E_RAW_LOG_FILE_ENV, "").strip()
     trace_log = runtime_env.get(E2E_TRACE_FILE_ENV, "").strip()
 
     raw_log_path = Path(raw_log) if raw_log else (log_dir / "app.log")
     trace_log_path = Path(trace_log) if trace_log else (log_dir / "trace.jsonl")
-    _ensure_not_in_project(raw_log_path)
-    _ensure_not_in_project(trace_log_path)
     raw_log_path.parent.mkdir(parents=True, exist_ok=True)
     trace_log_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_log_path.write_text("", encoding="utf-8")
+    trace_log_path.write_text("", encoding="utf-8")
 
     app_log_level = runtime_env.get(E2E_APP_LOG_LEVEL_ENV, "").strip() or "TRACE"
     console_log_level = runtime_env.get(E2E_CONSOLE_LOG_LEVEL_ENV, "").strip() or "ERROR"
@@ -149,17 +143,7 @@ def _setup_temp_log_env(
     monkeypatch.setenv(E2E_RAW_LOG_FILE_ENV, str(raw_log_path))
     monkeypatch.setenv(E2E_TRACE_FILE_ENV, str(trace_log_path))
     monkeypatch.setenv(E2E_TRACE_SNAPSHOT_MODE_ENV, snapshot_mode)
-    _RECORDED_E2E_LOG_ROOTS.add(str(_resolve_pytest_log_root(raw_log_path)))
-    _RECORDED_E2E_LOG_ROOTS.add(str(_resolve_pytest_log_root(trace_log_path)))
-
-
-def _resolve_pytest_log_root(path: Path) -> Path:
-    """把日志文件路径归并到 pytest 运行临时目录。"""
-    resolved = path.resolve()
-    for candidate in [resolved, *resolved.parents]:
-        if candidate.name.startswith("pytest-"):
-            return candidate
-    return resolved.parent
+    _RECORDED_E2E_LOG_ROOTS.add(str(log_dir))
 
 
 def pytest_terminal_summary(
@@ -221,6 +205,7 @@ def e2e_runtime_env(pytestconfig: pytest.Config) -> dict[str, str]:
 def core_harness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    pytestconfig: pytest.Config,
     e2e_runtime_env: dict[str, str],
 ) -> SchedulerHarness:
     """确定性 core profile 的测试框架。"""
@@ -228,7 +213,12 @@ def core_harness(
     db_path = tmp_path / "core" / "ptcgp_v2.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    _setup_temp_log_env(tmp_path, monkeypatch, e2e_runtime_env)
+    _setup_temp_log_env(
+        monkeypatch,
+        e2e_runtime_env,
+        "core",
+        pytestconfig.rootpath,
+    )
     monkeypatch.setenv(E2E_DB_PATH_ENV, str(db_path))
     monkeypatch.setenv(E2E_DEVICE_ENV, device_address)
     monkeypatch.setenv(E2E_DEVICE_WORKER_MODE_ENV, "probe")
@@ -246,6 +236,7 @@ def core_harness(
 def device_harness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    pytestconfig: pytest.Config,
     e2e_runtime_env: dict[str, str],
 ) -> tuple[SchedulerHarness, DeviceRuntimeConfig]:
     """实机 device profile 的测试框架。"""
@@ -261,8 +252,7 @@ def device_harness(
     if worker_mode not in {"real", "probe"}:
         raise RuntimeError(f"invalid PTCGP_E2E_DEVICE_WORKER_MODE: {worker_mode}")
 
-    repo_root = Path(__file__).resolve().parents[4]
-    source_db = repo_root / "data" / "ptcgp_v2.db"
+    source_db = pytestconfig.rootpath / "data" / "ptcgp_v2.db"
     if not source_db.exists():
         pytest.skip(f"source db not found: {source_db}")
 
@@ -270,7 +260,12 @@ def device_harness(
     db_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_db, db_path)
 
-    _setup_temp_log_env(tmp_path, monkeypatch, e2e_runtime_env)
+    _setup_temp_log_env(
+        monkeypatch,
+        e2e_runtime_env,
+        "device",
+        pytestconfig.rootpath,
+    )
     monkeypatch.setenv(E2E_DB_PATH_ENV, str(db_path))
     monkeypatch.setenv(E2E_DEVICE_ENV, device_address)
     rebind_test_runtime(db_path, [device_address])

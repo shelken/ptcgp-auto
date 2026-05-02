@@ -27,5 +27,6 @@ src/ptcgp_auto_v2/web/frontend/vite.config.js
 src/ptcgp_auto_v2/web/frontend/vite.config.d.ts
 src/ptcgp_auto_v2/web/static/css/tailwind.generated.css
 .playwright-cli/
+.e2e-logs/
 gstack*
 .pre-commit-config.yaml
