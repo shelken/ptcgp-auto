@@ -109,13 +109,38 @@ def test_rewards_page_attempts_claim_before_theme_collection(monkeypatch):
     assert call_order == ["claim", "theme-check", "theme-tap"]
 
 
-def test_rewards_page_enters_theme_collection_after_claiming_current_tab(monkeypatch):
-    """当前 Tab 点过领取后，下轮先处理主题收藏，不直接关闭。"""
+def test_rewards_page_closes_after_claiming_current_tab_before_home_recheck(monkeypatch):
+    """当前 Tab 点过领取后，先关闭回主页确认，不立即点主题收藏。"""
     task = _task(
         claim_all_clickable=False,
         ocr_results=[_ocr("全部領取"), _ocr("主題收藏")],
     )
     task.state_set("claimed_current_rewards_tab", True)
+    expected = ActionResult.ok(wait=0.5)
+    call_order: list[str] = []
+
+    def fake_tap_text(adb, ocr_results, patterns, wait=0.0, exact=True):
+        call_order.append("theme-tap")
+        return ActionResult.ok(wait=wait)
+
+    task._leave_rewards_page = lambda ocr_results: expected
+    monkeypatch.setattr(claim_rewards_module, "tap_text", fake_tap_text)
+
+    result = task._handle_rewards_page({})
+
+    assert result is expected
+    assert task.state_get("should_try_theme_collection") is True
+    assert call_order == []
+
+
+def test_rewards_page_enters_theme_collection_after_home_reward_persists(monkeypatch):
+    """回主页后奖励图标仍在，下一次进入任务页才处理主题收藏。"""
+    task = _task(
+        claim_all_clickable=False,
+        ocr_results=[_ocr("全部領取"), _ocr("主題收藏")],
+    )
+    task.state_set("claimed_current_rewards_tab", True)
+    task.state_set("should_try_theme_collection", True)
     call_order: list[str] = []
 
     def fake_needs_theme_collection(ocr_results, screenshot):
@@ -127,7 +152,7 @@ def test_rewards_page_enters_theme_collection_after_claiming_current_tab(monkeyp
         return ActionResult.ok(wait=wait)
 
     def fail_if_leave_rewards_page(ocr_results):
-        raise AssertionError("不应在主题收藏前关闭任务页")
+        raise AssertionError("确认仍有奖励前不应关闭主题收藏入口")
 
     task._needs_theme_collection = fake_needs_theme_collection
     task._leave_rewards_page = fail_if_leave_rewards_page
@@ -137,6 +162,56 @@ def test_rewards_page_enters_theme_collection_after_claiming_current_tab(monkeyp
 
     assert result.should_wait == 2.0
     assert call_order == ["theme-check", "theme-tap"]
+
+
+def test_rewards_page_skips_theme_collection_after_already_attempted(monkeypatch):
+    """主题收藏整轮任务只尝试一次，避免后续 Tab 每次都点。"""
+    task = _task(
+        claim_all_clickable=False,
+        ocr_results=[_ocr("全部領取"), _ocr("主題收藏")],
+    )
+    task.state_set("claimed_current_rewards_tab", True)
+    task.state_set("should_try_theme_collection", True)
+    task.state_set("theme_collection_attempted", True)
+    expected = ActionResult.ok(wait=0.5)
+    call_order: list[str] = []
+
+    def fake_tap_text(adb, ocr_results, patterns, wait=0.0, exact=True):
+        call_order.append("theme-tap")
+        return ActionResult.ok(wait=wait)
+
+    task._leave_rewards_page = lambda ocr_results: expected
+    monkeypatch.setattr(claim_rewards_module, "tap_text", fake_tap_text)
+
+    result = task._handle_rewards_page({})
+
+    assert result is expected
+    assert task.state_get("should_try_theme_collection") is False
+    assert task.state_get("claimed_current_rewards_tab") is False
+    assert call_order == []
+
+
+def test_theme_collection_page_returns_directly_after_already_attempted(monkeypatch):
+    """主题收藏已尝试过时，不再领取，直接返回。"""
+    task = _task(
+        claim_all_clickable=False,
+        ocr_results=[_ocr("主題收藏"), _ocr("領取")],
+    )
+    task.state_set("theme_collection_attempted", True)
+    expected = ActionResult.ok(wait=0.5)
+    call_order: list[str] = []
+
+    def fail_if_click_claim_buttons(ocr_results, screenshot):
+        raise AssertionError("主题收藏已尝试过，不应继续点击领取")
+
+    task._click_claim_buttons = fail_if_click_claim_buttons
+    monkeypatch.setattr(claim_rewards_module, "navigate_back", lambda *args: expected)
+
+    result = task._handle_theme_collection_page({})
+
+    assert result is expected
+    assert task.state_get("returned_from_theme_collection") is True
+    assert call_order == []
 
 
 def test_rewards_page_closes_after_returning_from_theme_collection(monkeypatch):
