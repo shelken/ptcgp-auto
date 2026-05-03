@@ -217,9 +217,9 @@ class ClaimRewardsTask(StatefulTask):
                 theme_already_attempted = bool(
                     self.state_get("theme_collection_attempted", False)
                 )
+                self.state_set("claimed_current_rewards_tab", False)
                 if not should_try_theme or theme_already_attempted:
                     self.state_set("returned_from_theme_collection", False)
-                    self.state_set("claimed_current_rewards_tab", False)
                     self.state_set("should_try_theme_collection", False)
                 return tap_box(self.adb, reward_icon.box, wait=3.0)
 
@@ -249,6 +249,12 @@ class ClaimRewardsTask(StatefulTask):
             self.state_set("should_try_theme_collection", False)
             return self._leave_rewards_page(ocr_results)
 
+        if not bool(self.state_get("claimed_current_rewards_tab", False)):
+            if self._click_claim_buttons(ocr_results, screenshot):
+                self.state_set("claimed_current_rewards_tab", True)
+                logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
+                return ActionResult.ok(wait=1.8)
+
         if bool(self.state_get("should_try_theme_collection", False)):
             if bool(self.state_get("theme_collection_attempted", False)):
                 logger.debug("  -> 主题收藏已尝试过，关闭任务页")
@@ -273,30 +279,25 @@ class ClaimRewardsTask(StatefulTask):
             self.state_set("should_try_theme_collection", False)
             return self._leave_rewards_page(ocr_results)
 
-        if not bool(self.state_get("claimed_current_rewards_tab", False)):
-            if self._click_claim_buttons(ocr_results, screenshot):
-                self.state_set("claimed_current_rewards_tab", True)
-                logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
-                return ActionResult.ok(wait=1.8)
-
         if bool(self.state_get("claimed_current_rewards_tab", False)):
             logger.debug("  -> 当前 Tab 已处理，回主页确认是否还有奖励")
             self.state_set("should_try_theme_collection", True)
             return self._leave_rewards_page(ocr_results)
 
-        if self._needs_theme_collection(ocr_results, screenshot):
-            result = tap_text(
-                self.adb,
-                ocr_results,
-                get_text_patterns("theme_collection"),
-                wait=2.0,
-                exact=True,
-            )
-            if result:
-                logger.debug("  -> 进入主题收藏")
-                return result
-            logger.debug("  -> 未找到主题收藏入口，关闭任务页")
-            return self._leave_rewards_page(ocr_results)
+        if not bool(self.state_get("theme_collection_attempted", False)):
+            if self._needs_theme_collection(ocr_results, screenshot):
+                result = tap_text(
+                    self.adb,
+                    ocr_results,
+                    get_text_patterns("theme_collection"),
+                    wait=2.0,
+                    exact=True,
+                )
+                if result:
+                    logger.debug("  -> 进入主题收藏")
+                    return result
+                logger.debug("  -> 未找到主题收藏入口，关闭任务页")
+                return self._leave_rewards_page(ocr_results)
 
         logger.debug("  -> 当前 Tab 已处理，关闭任务页")
         return self._leave_rewards_page(ocr_results)

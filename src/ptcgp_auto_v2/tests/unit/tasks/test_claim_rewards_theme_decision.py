@@ -133,15 +133,44 @@ def test_rewards_page_closes_after_claiming_current_tab_before_home_recheck(monk
     assert call_order == []
 
 
-def test_rewards_page_enters_theme_collection_after_home_reward_persists(monkeypatch):
-    """回主页后奖励图标仍在，下一次进入任务页才处理主题收藏。"""
+def test_rewards_page_claims_visible_button_before_theme_after_home_reward_persists(monkeypatch):
+    """回主页后奖励图标仍在，若任务页还有领取入口，必须先领取。"""
     task = _task(
         claim_all_clickable=False,
         ocr_results=[_ocr("全部領取"), _ocr("主題收藏")],
     )
-    task.state_set("claimed_current_rewards_tab", True)
     task.state_set("should_try_theme_collection", True)
     call_order: list[str] = []
+
+    def fake_click_claim_buttons(ocr_results, screenshot):
+        call_order.append("claim")
+        return True
+
+    def fail_if_needs_theme_collection(ocr_results, screenshot):
+        raise AssertionError("看到领取入口时不应先判断主题收藏")
+
+    task._click_claim_buttons = fake_click_claim_buttons
+    task._needs_theme_collection = fail_if_needs_theme_collection
+
+    result = task._handle_rewards_page({})
+
+    assert result.should_wait == 1.8
+    assert task.state_get("claimed_current_rewards_tab") is True
+    assert call_order == ["claim"]
+
+
+def test_rewards_page_enters_theme_collection_after_home_reward_persists_without_claim(monkeypatch):
+    """回主页后奖励图标仍在，且无领取入口时，才处理主题收藏。"""
+    task = _task(
+        claim_all_clickable=False,
+        ocr_results=[_ocr("主題收藏")],
+    )
+    task.state_set("should_try_theme_collection", True)
+    call_order: list[str] = []
+
+    def fake_click_claim_buttons(ocr_results, screenshot):
+        call_order.append("claim")
+        return False
 
     def fake_needs_theme_collection(ocr_results, screenshot):
         call_order.append("theme-check")
@@ -154,6 +183,7 @@ def test_rewards_page_enters_theme_collection_after_home_reward_persists(monkeyp
     def fail_if_leave_rewards_page(ocr_results):
         raise AssertionError("确认仍有奖励前不应关闭主题收藏入口")
 
+    task._click_claim_buttons = fake_click_claim_buttons
     task._needs_theme_collection = fake_needs_theme_collection
     task._leave_rewards_page = fail_if_leave_rewards_page
     monkeypatch.setattr(claim_rewards_module, "tap_text", fake_tap_text)
@@ -161,7 +191,7 @@ def test_rewards_page_enters_theme_collection_after_home_reward_persists(monkeyp
     result = task._handle_rewards_page({})
 
     assert result.should_wait == 2.0
-    assert call_order == ["theme-check", "theme-tap"]
+    assert call_order == ["claim", "theme-check", "theme-tap"]
 
 
 def test_rewards_page_skips_theme_collection_after_already_attempted(monkeypatch):
@@ -189,6 +219,33 @@ def test_rewards_page_skips_theme_collection_after_already_attempted(monkeypatch
     assert task.state_get("should_try_theme_collection") is False
     assert task.state_get("claimed_current_rewards_tab") is False
     assert call_order == []
+
+
+def test_rewards_page_fallback_skips_theme_after_already_attempted(monkeypatch):
+    """非回主页确认分支也必须遵守主题收藏只尝试一次。"""
+    task = _task(
+        claim_all_clickable=False,
+        ocr_results=[_ocr("主題收藏")],
+    )
+    task.state_set("theme_collection_attempted", True)
+    expected = ActionResult.ok(wait=0.5)
+    call_order: list[str] = []
+
+    def fake_click_claim_buttons(ocr_results, screenshot):
+        call_order.append("claim")
+        return False
+
+    def fail_if_tap_theme(adb, ocr_results, patterns, wait=0.0, exact=True):
+        raise AssertionError("主题收藏已尝试过，不应再次点击入口")
+
+    task._click_claim_buttons = fake_click_claim_buttons
+    task._leave_rewards_page = lambda ocr_results: expected
+    monkeypatch.setattr(claim_rewards_module, "tap_text", fail_if_tap_theme)
+
+    result = task._handle_rewards_page({})
+
+    assert result is expected
+    assert call_order == ["claim"]
 
 
 def test_theme_collection_page_returns_directly_after_already_attempted(monkeypatch):
