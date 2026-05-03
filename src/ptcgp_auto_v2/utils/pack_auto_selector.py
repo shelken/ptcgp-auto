@@ -329,26 +329,26 @@ def _build_weekly_snapshot(
         return None
 
     if missing_target_only:
-        candidates = _filter_missing_target_candidates(candidates, progress_stats)
-        pack_keys = {f"{pack.set_code}/{pack.name}" for pack in candidates}
-        pack_weights = {
-            pack_key: weight
-            for pack_key, weight in pack_weights.items()
-            if pack_key in pack_keys
-        }
-        progress_map = {
-            pack_key: progress
-            for pack_key, progress in progress_map.items()
-            if pack_key in pack_keys
-        }
-        pack_names = {pack.name for pack in candidates}
-        progress_stats = {
-            pack_name: stat
-            for pack_name, stat in progress_stats.items()
-            if pack_name in pack_names
-        }
-        if not candidates:
-            return None
+        missing_candidates = _filter_missing_target_candidates(candidates, progress_stats)
+        if missing_candidates:
+            candidates = missing_candidates
+            pack_keys = {f"{pack.set_code}/{pack.name}" for pack in candidates}
+            pack_weights = {
+                pack_key: weight
+                for pack_key, weight in pack_weights.items()
+                if pack_key in pack_keys
+            }
+            progress_map = {
+                pack_key: progress
+                for pack_key, progress in progress_map.items()
+                if pack_key in pack_keys
+            }
+            pack_names = {pack.name for pack in candidates}
+            progress_stats = {
+                pack_name: stat
+                for pack_name, stat in progress_stats.items()
+                if pack_name in pack_names
+            }
 
     pack_map = {f"{pack.set_code}/{pack.name}": pack for pack in candidates}
     pack_keys = list(pack_map.keys())
