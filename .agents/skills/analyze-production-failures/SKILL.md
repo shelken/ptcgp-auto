@@ -8,11 +8,9 @@ description: Analyzes production failures by syncing data from yuuko, querying n
 </objective>
 
 <quick_start>
-先备份本地 `data`，再同步 yuuko 生产数据：
+直接同步 yuuko 生产数据：
 
 ```bash
-backup="data.backup.$(date +%Y%m%d-%H%M%S)"
-[ -d data ] && cp -a data "$backup"
 rsync -avhP yuuko.local:~/Code/MyRepo/ptcgp-auto/data ./
 ```
 
@@ -39,14 +37,13 @@ rsync -avhP yuuko.local:~/Code/MyRepo/ptcgp-auto/data ./
 <process>
 按这个顺序做，不要跳：
 
-1. 同步前备份本地 `data`
-2. 从 yuuko 拉取最新 `data`
-3. 用 SQLite 先分组失败任务，不先读代码
-4. 选代表账号、代表任务实例、代表时间段
-5. 读 `data/logs/*.jsonl` 看失败 summary 和关键 TRACE/ERROR
-6. 再去 `tasks/core/infra` 找对应源码
-7. 写根因判断、修改建议、验证计划
-8. 没有证据时明确写“证据不足”，不要猜
+1. 从 yuuko 拉取最新 `data`
+2. 用 SQLite 先分组失败任务，不先读代码
+3. 选代表账号、代表任务实例、代表时间段
+4. 读 `data/logs/*.jsonl` 看失败 summary 和关键 TRACE/ERROR
+5. 再去 `tasks/core/infra` 找对应源码
+6. 写根因判断、修改建议、验证计划
+7. 没有证据时明确写“证据不足”，不要猜
 </process>
 
 <sqlite_analysis>
@@ -283,7 +280,6 @@ jq -c 'select(.event=="log" and .level=="TRACE") | {time, task, message}' data/l
 <success_criteria>
 完成标准：
 
-- 已先备份本地 `data`
 - 已同步 yuuko 最新生产数据
 - 已给出失败分组而不是零散样本
 - 已把至少一个代表日志和一处源码对应起来
