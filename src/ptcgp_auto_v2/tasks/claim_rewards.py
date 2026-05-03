@@ -236,14 +236,11 @@ class ClaimRewardsTask(StatefulTask):
             logger.debug("  -> 已从主题收藏返回，关闭任务页")
             return self._leave_rewards_page(ocr_results)
 
-        if bool(self.state_get("claimed_current_rewards_tab", False)):
-            logger.debug("  -> 当前 Tab 已领取过，关闭任务页")
-            return self._leave_rewards_page(ocr_results)
-
-        if self._click_claim_buttons(ocr_results, screenshot):
-            self.state_set("claimed_current_rewards_tab", True)
-            logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
-            return ActionResult.ok(wait=1.8)
+        if not bool(self.state_get("claimed_current_rewards_tab", False)):
+            if self._click_claim_buttons(ocr_results, screenshot):
+                self.state_set("claimed_current_rewards_tab", True)
+                logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
+                return ActionResult.ok(wait=1.8)
 
         if self._needs_theme_collection(ocr_results, screenshot):
             result = tap_text(

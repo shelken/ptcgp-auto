@@ -8,6 +8,10 @@
 - 新函数/新文件/新变量 先问：是否必须；是否已有相似实现；是否适合复用或基于旧实现调整；然后选最简路径
 - worker/leader 编写(edit)代码前,必须先看`test-driven-development`skill,使用tdd
 - 每次修复完tasks目录中的bug, 必须e2e device实机验证对应task
+- E2E device 验证前先做 `adb shell` 和 `uiautomator2 connect` 健康检查，再决定是否重启模拟器
+- 同一轮定位里，没有证据证明实例已经失活时，不准反复重启；一次重启后必须先验证恢复结果
+- 不能把重启当默认排障动作，避免浪费系统资源和时间
+- task 成功不等于流程验证成功；必须检查日志，确认当前测试目标确实被执行，不能把跳过/不满足流程当成功
 - `rsync -avhP yuuko.local:~/Code/MyRepo/ptcgp-auto/data ./` 当需要最新生产数据进行分析与排查时,把数据拿过来
 
 ## 子代理使用原则

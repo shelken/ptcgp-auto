@@ -109,13 +109,52 @@ def test_rewards_page_attempts_claim_before_theme_collection(monkeypatch):
     assert call_order == ["claim", "theme-check", "theme-tap"]
 
 
-def test_rewards_page_closes_after_returning_from_theme_collection():
-    """从主题收藏返回后，奖励页直接关闭。"""
+def test_rewards_page_enters_theme_collection_after_claiming_current_tab(monkeypatch):
+    """当前 Tab 点过领取后，下轮先处理主题收藏，不直接关闭。"""
+    task = _task(
+        claim_all_clickable=False,
+        ocr_results=[_ocr("全部領取"), _ocr("主題收藏")],
+    )
+    task.state_set("claimed_current_rewards_tab", True)
+    call_order: list[str] = []
+
+    def fake_needs_theme_collection(ocr_results, screenshot):
+        call_order.append("theme-check")
+        return True
+
+    def fake_tap_text(adb, ocr_results, patterns, wait=0.0, exact=True):
+        call_order.append("theme-tap")
+        return ActionResult.ok(wait=wait)
+
+    def fail_if_leave_rewards_page(ocr_results):
+        raise AssertionError("不应在主题收藏前关闭任务页")
+
+    task._needs_theme_collection = fake_needs_theme_collection
+    task._leave_rewards_page = fail_if_leave_rewards_page
+    monkeypatch.setattr(claim_rewards_module, "tap_text", fake_tap_text)
+
+    result = task._handle_rewards_page({})
+
+    assert result.should_wait == 2.0
+    assert call_order == ["theme-check", "theme-tap"]
+
+
+def test_rewards_page_closes_after_returning_from_theme_collection(monkeypatch):
+    """从主题收藏返回后，奖励页直接关闭，不再点击主题收藏。"""
     task = _task(claim_all_clickable=False, ocr_results=[_ocr("主題收藏")])
+    task.state_set("claimed_current_rewards_tab", True)
     task.state_set("returned_from_theme_collection", True)
     expected = ActionResult.ok(wait=0.5)
+    call_order: list[str] = []
+
+    def fake_tap_text(adb, ocr_results, patterns, wait=0.0, exact=True):
+        call_order.append("theme-tap")
+        return ActionResult.ok(wait=wait)
+
     task._leave_rewards_page = lambda ocr_results: expected
+    monkeypatch.setattr(claim_rewards_module, "tap_text", fake_tap_text)
 
     result = task._handle_rewards_page({})
 
     assert result is expected
+    assert call_order == []
