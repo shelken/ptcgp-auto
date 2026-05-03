@@ -240,6 +240,11 @@ class ClaimRewardsTask(StatefulTask):
             logger.debug("  -> 当前 Tab 已领取过，关闭任务页")
             return self._leave_rewards_page(ocr_results)
 
+        if self._click_claim_buttons(ocr_results, screenshot):
+            self.state_set("claimed_current_rewards_tab", True)
+            logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
+            return ActionResult.ok(wait=1.8)
+
         if self._needs_theme_collection(ocr_results, screenshot):
             result = tap_text(
                 self.adb,
@@ -253,11 +258,6 @@ class ClaimRewardsTask(StatefulTask):
                 return result
             logger.debug("  -> 未找到主题收藏入口，关闭任务页")
             return self._leave_rewards_page(ocr_results)
-
-        if self._click_claim_buttons(ocr_results, screenshot):
-            self.state_set("claimed_current_rewards_tab", True)
-            logger.debug("  -> 当前 Tab 已点击领取，等待奖励弹窗收敛")
-            return ActionResult.ok(wait=1.8)
 
         logger.debug("  -> 当前 Tab 已处理，关闭任务页")
         return self._leave_rewards_page(ocr_results)
@@ -277,10 +277,12 @@ class ClaimRewardsTask(StatefulTask):
         """先点全部领取，再点单个领取；返回本轮是否点过领取按钮。"""
         clicked = False
         claim_all_patterns = get_text_patterns("reward_claim_all")
-        claim_all_matches = find_text_matches(ocr_results, claim_all_patterns, exact=True)
-        if claim_all_matches and self._is_claim_all_clickable(
-            claim_all_matches[0]["box"], screenshot
-        ):
+        claim_all_matches = find_text_matches(
+            ocr_results,
+            claim_all_patterns,
+            exact=True,
+        )
+        if claim_all_matches:
             logger.info("  -> 点击全部领取按钮")
             clicked = bool(
                 tap_text(
@@ -291,8 +293,6 @@ class ClaimRewardsTask(StatefulTask):
                     exact=True,
                 )
             )
-        elif claim_all_matches:
-            logger.debug("  -> 全部领取按钮低于绿色阈值，跳过")
 
         single_result = tap_text(
             self.adb,
@@ -311,7 +311,10 @@ class ClaimRewardsTask(StatefulTask):
             exact=True,
         )
         if claim_all_matches:
-            return not self._is_claim_all_clickable(claim_all_matches[0]["box"], screenshot)
+            return not self._is_claim_all_clickable(
+                claim_all_matches[0]["box"],
+                screenshot,
+            )
 
         single_matches = find_text_matches(
             ocr_results,
