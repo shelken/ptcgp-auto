@@ -1,6 +1,6 @@
 ---
 name: analyze-production-failures
-description: Analyzes production failures by syncing data from yuuko, querying notifications and task tables, reading data/logs JSONL slices, correlating evidence with src/ptcgp_auto_v2/tasks, src/ptcgp_auto_v2/core, and src/ptcgp_auto_v2/infra, then producing a modification recommendation report. Use when the user mentions yuuko, production data, 通知表, 失败任务, data/logs, or 错误任务分析.
+description: Analyzes production failures by syncing data from yuuko, Use when the user mentions yuuko, production data, 通知表, 失败任务, data/logs, or 错误任务分析.
 ---
 
 <objective>

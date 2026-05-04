@@ -30,3 +30,7 @@ src/ptcgp_auto_v2/web/static/css/tailwind.generated.css
 .e2e-logs/
 gstack*
 .pre-commit-config.yaml
+
+# skills in skills-lock.json
+*/skills/playwright-cli
+*/skills/vercel-react-best-practices

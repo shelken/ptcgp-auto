@@ -240,6 +240,18 @@ uv run python main.py
 
 请参考 [AGENTS.md](AGENTS.md) 获取详细的开发和代码规范指引。
 
+### 安装skill
+
+首次开发时,安装项目已经定义的skill
+
+手动执行命令 `npx skills experimental_install`
+
+如果需要添加新的skill
+
+```
+npx skills add {repo-name} -p -y -a claude-code codex --skill {skill-name}
+```
+
 ## License
 
 MIT
