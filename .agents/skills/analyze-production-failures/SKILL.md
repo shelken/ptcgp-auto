@@ -8,6 +8,9 @@ description: Analyzes production failures by syncing data from yuuko, Use when t
 </objective>
 
 <quick_start>
+> **时间范围**：若用户没指定时间范围，默认分析最近 **6 小时** 内的失败。
+> 可以通过 `sqlite3` 的 `datetime(created_at) > datetime('now', '-6 hours')` 限定。
+
 直接同步 yuuko 生产数据：
 
 ```bash
@@ -181,6 +184,12 @@ jq -c 'select(.task_instance_id==1234 or .event=="log")' data/logs/*instance-123
 
 ```bash
 jq -c 'select(.event=="log" and .level=="TRACE") | {time, task, message}' data/logs/*.jsonl | tail -100
+```
+
+### unknown 溯源
+
+```bash
+jq -r 'select(.event=="log") | select((.level=="DEBUG" and (.message | startswith("OCR("))) or (.level=="ERROR" and (.message | test("任务失败")))) | "\(.time[11:19]) [\(.task)] \(.message)"' data/logs/xxxx_failed.jsonl
 ```
 </jsonl_analysis>
 
