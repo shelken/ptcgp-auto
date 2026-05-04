@@ -32,5 +32,7 @@ gstack*
 .pre-commit-config.yaml
 
 # skills in skills-lock.json
-*/skills/playwright-cli
-*/skills/vercel-react-best-practices
+*/skills/*
+!*/skills/add-task
+!*/skills/analyze-production-failures
+!*/skills/test-tasks
