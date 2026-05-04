@@ -119,6 +119,12 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
 
         return handler
 
+    def action_back(page_conf: dict) -> Handler:
+        def handler(page_info: dict) -> ActionResult:
+            return press_back(adb, wait=DEFAULT_COMMON_WAIT)
+
+        return handler
+
     def action_restart_game(page_conf: dict) -> Handler:
         def handler(page_info: dict) -> ActionResult:
             settings = get_settings()
@@ -147,6 +153,7 @@ def build_common_handlers(adb, page_detector) -> Dict[str, Handler]:
         "tap_center": action_tap_center,
         "tap_matched": action_tap_matched,
         "wait": action_wait,
+        "back": action_back,
         "restart_game": action_restart_game,
         "restart_emulator": action_restart_emulator,
     }

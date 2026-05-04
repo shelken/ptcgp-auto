@@ -138,6 +138,7 @@ TEXT_PATTERNS = {
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
     "_to_home": ["首页", "重新加载"],
+    "_ad_page": ["Must Play", "Store"],
     "text_home": ["首页"],
     # 通用按钮
     "continue": ["繼續", "继续", "Continue"],

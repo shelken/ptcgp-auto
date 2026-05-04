@@ -161,4 +161,11 @@ COMMON_PAGES = [
         "priority": 900,
         "action": "tap_matched",
     },
+    {
+        "name": "_ad_page",
+        "identifiers": get_text_patterns("_ad_page"),
+        "match_all": True,
+        "priority": 900,
+        "action": "back",
+    },
 ]
