@@ -1,23 +1,15 @@
 ## 运行
 
+- 当前默认`主工作区`在`~/Code/active/ptcgp-auto`
 - 语法检查用`uv run ruff check`
 - 用 uv/bun；Python 命令统一用 uv
 - 工作目录出错后用`direnv exec . [cmd]`；目录不能执行时先`direnv allow`；不需要每条命令都执行`direnv exec`
-- Python 导入规则：根目录必须有 `[build-system]`；进入环境先 `uv sync` 或 `direnv reload`；禁止`PYTHONPATH=src`
-- 缺调试数据时，在当前 worktree 非 main 可执行`cp -r ~/Code/active/ptcgp-auto/data ./`；web 没启动时先跑`./scripts/web_dev.sh`；然后用`playwright-cli`自测 web 变更
-- 新函数/新文件/新变量 先问：是否必须；是否已有相似实现；是否适合复用或基于旧实现调整；然后选最简路径
+- 禁止python命令使用在前面`PYTHONPATH=src`
 - worker/leader 编写(edit)代码前,必须先看`test-driven-development`skill,使用tdd
-- 每次修复完tasks目录中的bug, 必须e2e device实机验证对应task
-- E2E device 验证前先做 `adb shell` 和 `uiautomator2 connect` 健康检查，再决定是否重启模拟器
-- 同一轮定位里，没有证据证明实例已经失活时，不准反复重启；一次重启后必须先验证恢复结果
-- 不能把重启当默认排障动作，避免浪费系统资源和时间
-- task 成功不等于流程验证成功；必须检查日志，确认当前测试目标确实被执行，不能把跳过/不满足流程当成功
-- `rsync -avhP yuuko.local:~/Code/MyRepo/ptcgp-auto/data ./` 当需要最新生产数据进行分析与排查时,把数据拿过来
 
 ## 子代理使用原则
 
-- 给足需求/目的/目标、上下文、相关代码、风险点、踩过哪些坑、做过哪些尝试
-- 任何 e2e/单元/集成 测试都必须让worker负责代码编写, leader 负责验证(如果需要实机验证)
+- prompt给足需求/目的/目标、上下文、相关代码、风险点、踩过哪些坑、做过哪些尝试
 
 ## 重构原则
 
@@ -25,7 +17,6 @@
 - 避免补丁式和膨胀式修改
 - 功能保持一致
 - 重构时，目标文件若有未提交代码，先问是否先提交
-- 代码增减都看质量；优雅合理优先
 
 ## 审查代码原则
 
@@ -38,13 +29,13 @@
 
 ## 语言与文档规范
 
-- 文档、注释、日志输出统一 **中文**
-- 保留原有 **中文** 注释
+- 文档、注释、日志输出统一 **中文**, 保留原有 **中文** 注释
+- 语言配置单一来源：`src/ptcgp_auto_v2/config/lang.py`
 
 ## Git 工作流
 
 - 提交前检查所有函数/常量/变量，清理未使用代码；Python 用 vulture/ruff(uv)，TS/JS 用 knip/ESLint(bun)；必须`pre-commit run`
-- 提交格式看`git-commit`,注意多行message换行问题
+- `Conventional Commits`; 执行commit命令时**必须**使用`Heredoc`语法
 
 ## **代码质量原则**
 
@@ -53,30 +44,20 @@
 - 简洁优先；默认走简洁单一
 - 遵守FAILFAST；少写兼容、防御、补丁式代码
 - 新增方法前优先找旧方法，复用或重写；先复用已有逻辑，避免重复造轮子
+- 新函数/新文件/新变量 先问：是否必须；是否已有相似实现；是否适合复用或基于旧实现调整；然后选最简路径
 - 复杂功能做模块化设计，控制设计规模
-
-## 技术实现重要细节
-
-- 像素相关代码用基准像素值（基于 1080x1920）+ `adb.scaled_x/scaled_y` 缩放；基准像素常量提前到文件开头，并写明来源和作用
-- 出现 `No module named 'xxx'` 时，直接按项目导入规则处理
-- 语言配置单一来源：`src/ptcgp_auto_v2/config/lang.py`
-
-## 数据库规范
-
-- **数据库时间字段统一使用本地时间（localtime）**：
-- **v2 数据访问统一规则**：
-  - 高层业务动作统一使用 `session_scope()` 作为事务边界
-  - 所有 Repository 构造显式传入 `Session`
-  - 同一动作需要多个 Repository 时，统一使用 `RepositoryFactory(session)`
-  - Repository 内部禁止自建 `Session`、禁止自行 `commit`
-  - 模型层禁止 `save()/update()/delete()` 写库入口
-  - 事务外只传标量、`dataclass` 纯数据或视图 `dict`
-  - 日志、通知、Webhook 等次要副作用放到主数据提交之后单独执行
 
 ## 调试与运维
 
 - 必要时直接通过 `uv run python debug_tool.py -a [ADB_PORT] --template [template_name]` 查看当前页面 OCR 和模板命中
 - 长时间任务优先请求人工接管；支持后台运行的命令除外
+- 缺调试数据时，在当前 worktree 非 主工作区 可执行`cp -r {主工作区}/data ./`；
+- web 没启动时先跑`./scripts/web_dev.sh`；然后用`playwright-cli`自测 web 变更
+- `rsync -avhP yuuko.local:~/Code/MyRepo/ptcgp-auto/data ./` 当需要最新生产数据进行分析与排查时,把数据拿过来
+- E2E device 验证前先做 `adb shell` 和 `uiautomator2 connect` 健康检查，再决定是否重启模拟器
+- 同一轮定位里，没有证据证明实例已经失活时，不准反复重启；一次重启后必须先验证恢复结果
+- task 成功不等于流程验证成功；必须检查日志，确认当前测试目标确实被执行，不能把跳过/不满足流程当成功
+- 每次修复完tasks目录中的bug, 必须e2e device实机验证对应task
 
 ## 项目概述
 
@@ -98,7 +79,7 @@ uv run python main_v2.py --daemon --debug
 uv run python debug_tool.py
 
 # 手动执行单次任务
-uv run python main_v2.py --task open_pack --account 1 --debug
+uv run python main_v2.py --task open_pack --account 300 --debug
 ```
 
 ## 调试与开发
@@ -111,5 +92,10 @@ uv run python main_v2.py --task open_pack --account 1 --debug
 
 - **平台限制**: 仅支持 macOS（依赖 Apple Vision Framework）
 - **数据库**: 使用 SQLite (`data/ptcgp_v2.db`)
-  - **重要**: 所有物理外键 (Foreign Key) 约束已移除；表关系由 SQLAlchemy/SQLModel 逻辑外键 (`Relationship` with `primaryjoin`) 维护
-  - 修改模型后无需迁移；当前自动初始化；复杂变更手动处理
+
+## 专题文档
+
+- [数据库规范](src/ptcgp_auto_v2/db/AGENTS.md)
+- [核心任务编写规范](src/ptcgp_auto_v2/tasks/AGENTS.md)
+- [前端页面规范](src/ptcgp_auto_v2/web/AGENTS.md)
+- [E2E测试规范](src/ptcgp_auto_v2/tests/e2e/AGENTS.md)

@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 # 开包滑动坐标（从左到右）
 BASE_SWIPE_PACK_START_X = 54  # 1080 * 0.05
 BASE_SWIPE_PACK_END_X = 1126  # 1080 * 0.95
-BASE_SWIPE_PACK_END_Y = 1190  # 1920 * 0.62
+BASE_SWIPE_PACK_END_Y = 1190  # 1920 * 0.62 # 1 包
+# BASE_SWIPE_PACK_END_Y = 1065  # 1920 * 0.55 # 2 包
 
 # 卡牌上滑坐标（从下到上）
 BASE_SWIPE_CARD_START_Y = 1152  # 1920 * 0.6
@@ -597,6 +598,7 @@ def pinch_out(
     """双指放大（通用手势封装）"""
     adb.pinch_out(center=center, scale=scale, steps=steps)
     return ActionResult.ok(wait=wait)
+
 
 def swipe_pack_coords(adb) -> Tuple[Tuple[int, int], Tuple[int, int]]:
     """获取开包滑动坐标（从左到右）"""
