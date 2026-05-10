@@ -612,7 +612,7 @@ class SendCardDailyTask(StatefulTask):
                 )
                 input_text(
                     self.adb,
-                    get_text_patterns("gift_search_keyword_marowak")[0],
+                    get_text_patterns("gift_search_keyword_marowak")[1],  # 改用 ex 名称
                     wait=0.3,
                 )
                 self.mark_action_done("filter_keyword_input")
