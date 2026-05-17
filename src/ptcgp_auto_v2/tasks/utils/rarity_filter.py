@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-BASE_FILTER_SCROLL_DISTANCE_Y = 192
+BASE_FILTER_RARITY_ALIGN_SCROLL_DISTANCE_Y = 96
 BASE_FILTER_OK_SCROLL_DISTANCE_Y = 154
 FILTER_SCROLL_WAIT = 1.2
 
@@ -104,8 +104,14 @@ class FilterPanelHandler:
             return ActionResult.ok(wait=0.5)
 
         if not self._is_done("filter_scrolled"):
+            if self._is_rarity_title_above_center(ocr_results):
+                self._mark_done("filter_scrolled")
+                return ActionResult.ok(wait=0.3)
+
             start, end = scroll_points(
-                self.adb, base_distance_y=BASE_FILTER_SCROLL_DISTANCE_Y, direction="up"
+                self.adb,
+                base_distance_y=BASE_FILTER_RARITY_ALIGN_SCROLL_DISTANCE_Y,
+                direction="up",
             )
             swipe(
                 self.adb,
@@ -114,7 +120,6 @@ class FilterPanelHandler:
                 steps=SWIPE_STEPS_SCROLL,
                 wait=FILTER_SCROLL_WAIT,
             )
-            self._mark_done("filter_scrolled")
             return ActionResult.ok(wait=FILTER_SCROLL_WAIT)
 
         if not self._is_done("filter_selected"):
@@ -147,6 +152,16 @@ class FilterPanelHandler:
         if result:
             self._mark_done("filter_applied")
         return result or ActionResult.ok(wait=0.5)
+
+    def _is_rarity_title_above_center(self, ocr_results: list[dict]) -> bool:
+        """确认稀有度区域已进入可稳定点选的位置。"""
+        title_box = self._find_text_box(
+            ocr_results, get_text_patterns("card_filter_title"), exact=True
+        )
+        if title_box is None:
+            return False
+        title_cy = (title_box[1] + title_box[3]) / 2
+        return title_cy < self.adb.center_y()
 
     def _select_rarities(self, rarity_codes: list[str]) -> Optional[ActionResult]:
         """按稀有度列表选择筛选项。"""
