@@ -1,7 +1,7 @@
 from typing import Iterable
 
 from sqlmodel import Session, select, desc, col
-from sqlalchemy import func, literal, union_all, String, cast, Integer
+from sqlalchemy import Integer, String, cast, func, literal, or_, union_all
 from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
@@ -18,14 +18,32 @@ DISPLAY_ENTITY_TYPE_TEN_PACK = "ten_pack"
 DISPLAY_ENTITY_TYPE_SINGLE = "single"
 
 
-def _apply_pack_record_filters(query, rarity: list[str], card_type: list[str]):
-    """按稀有度与类型追加筛选条件。"""
-    if rarity or card_type:
+def _apply_pack_record_filters(
+    query,
+    rarity: list[str],
+    card_type: list[str],
+    set_code: list[str],
+    card_name_query: str,
+):
+    """按开包记录筛选条件追加查询条件。"""
+    if set_code:
+        query = query.where(col(PackRecord.pack_code).in_(set_code))
+
+    if rarity or card_type or card_name_query:
         query = query.join(PackRecord.cards).join(PackCard.card)
         if rarity:
             query = query.where(col(Card.rarity).in_(rarity))
         if card_type:
             query = query.where(col(Card.type).in_(card_type))
+        if card_name_query:
+            like_value = f"%{card_name_query}%"
+            query = query.where(
+                or_(
+                    col(PackCard.card_name).ilike(like_value),
+                    col(Card.name).ilike(like_value),
+                    cast(col(Card.data), String).ilike(like_value),
+                )
+            )
     return query
 
 def fetch_display_entity_records(
@@ -34,6 +52,8 @@ def fetch_display_entity_records(
     page_size: int,
     rarity: list[str],
     card_type: list[str],
+    set_code: list[str],
+    card_name_query: str,
 ) -> tuple[list[PackRecord], bool]:
     """按展示实体分页查询开包记录（十连包按批次聚合）。"""
     normalized_page, normalized_page_size = normalize_pagination(
@@ -52,7 +72,9 @@ def fetch_display_entity_records(
         .where(col(PackRecord.pack_type) == PackRecordType.TEN_PACK)
         .where(col(PackRecord.batch_id).is_not(None))
     )
-    ten_pack_stmt = _apply_pack_record_filters(ten_pack_stmt, rarity, card_type)
+    ten_pack_stmt = _apply_pack_record_filters(
+        ten_pack_stmt, rarity, card_type, set_code, card_name_query
+    )
     ten_pack_stmt = ten_pack_stmt.group_by(col(PackRecord.batch_id))
 
     single_stmt = select(
@@ -61,7 +83,9 @@ def fetch_display_entity_records(
         col(PackRecord.opened_at).label("sort_time"),
         col(PackRecord.id).label("sort_id"),
     ).where(col(PackRecord.pack_type) != PackRecordType.TEN_PACK)
-    single_stmt = _apply_pack_record_filters(single_stmt, rarity, card_type)
+    single_stmt = _apply_pack_record_filters(
+        single_stmt, rarity, card_type, set_code, card_name_query
+    )
     single_stmt = single_stmt.group_by(col(PackRecord.id), col(PackRecord.opened_at))
 
     entity_stmt = union_all(ten_pack_stmt, single_stmt).subquery()
@@ -108,7 +132,7 @@ def fetch_display_entity_records(
             .where(col(PackRecord.batch_id).in_(ten_batch_ids))
         )
         ten_records_stmt = _apply_pack_record_filters(
-            ten_records_stmt, rarity, card_type
+            ten_records_stmt, rarity, card_type, set_code, card_name_query
         )
         ten_records_subquery = ten_records_stmt.subquery()
         ten_ids_stmt = select(ten_records_subquery.c.record_id).where(

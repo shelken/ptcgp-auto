@@ -36,12 +36,16 @@ def _build_records_query_params(raw: Mapping[str, object]) -> dict[str, object]:
         page_size=page_size if page_size is not None else 10,
         rarity=_normalize_string_list(raw.get("rarity")),
         card_type=_normalize_string_list(raw.get("card_type")),
+        set_code=_normalize_string_list(raw.get("set_code")),
+        card_name_query=str(raw.get("q") or ""),
     )
     return {
         "page": list_state.page,
         "page_size": list_state.page_size,
         "rarity": list_state.rarity,
         "card_type": list_state.card_type,
+        "set_code": list_state.set_code,
+        "card_name_query": list_state.card_name_query,
     }
 
 
@@ -51,6 +55,8 @@ async def get_records(
     page_size: int = Query(default=10),
     rarity: list[str] = Query(default=[]),
     card_type: list[str] = Query(default=[]),
+    set_code: list[str] = Query(default=[]),
+    q: str = Query(default=""),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取开包记录数据。"""
@@ -60,6 +66,8 @@ async def get_records(
             "page_size": page_size,
             "rarity": rarity,
             "card_type": card_type,
+            "set_code": set_code,
+            "q": q,
         }
     )
     context = build_records_list_context(

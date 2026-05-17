@@ -16,7 +16,11 @@ from ptcgp_auto_v2.web.utils.i18n import (
     resolve_label,
     resolve_card_name_from_data,
 )
-from ptcgp_auto_v2.web.utils.filter_utils import normalize_page, normalize_page_size
+from ptcgp_auto_v2.web.utils.filter_utils import (
+    normalize_page,
+    normalize_page_size,
+    normalize_query_text,
+)
 
 
 @dataclass(frozen=True)
@@ -27,6 +31,8 @@ class RecordsListQueryState:
     page_size: int
     rarity: list[str]
     card_type: list[str]
+    set_code: list[str]
+    card_name_query: str
 
 
 def _normalize_records_filter_values(values: list[str] | None) -> list[str]:
@@ -42,6 +48,8 @@ def build_records_list_query_state(
     page_size: int = 10,
     rarity: list[str] | None = None,
     card_type: list[str] | None = None,
+    set_code: list[str] | None = None,
+    card_name_query: str = "",
     max_page_size: int = 100,
 ) -> RecordsListQueryState:
     """构建 records 列表统一查询状态。"""
@@ -50,6 +58,8 @@ def build_records_list_query_state(
         page_size=normalize_page_size(page_size, max_size=max_page_size),
         rarity=_normalize_records_filter_values(rarity),
         card_type=_normalize_records_filter_values(card_type),
+        set_code=_normalize_records_filter_values(set_code),
+        card_name_query=normalize_query_text(card_name_query),
     )
 
 
@@ -334,6 +344,8 @@ def build_records_list_context(
     page_size: int = 10,
     rarity: list[str] | None = None,
     card_type: list[str] | None = None,
+    set_code: list[str] | None = None,
+    card_name_query: str = "",
 ) -> dict[str, Any]:
     """构建开包记录列表视图上下文（统一列表协议）。"""
     list_state = build_records_list_query_state(
@@ -341,6 +353,8 @@ def build_records_list_context(
         page_size=page_size,
         rarity=rarity,
         card_type=card_type,
+        set_code=set_code,
+        card_name_query=card_name_query,
     )
 
     results, has_next = fetch_display_entity_records(
@@ -349,6 +363,8 @@ def build_records_list_context(
         list_state.page_size,
         list_state.rarity,
         list_state.card_type,
+        list_state.set_code,
+        list_state.card_name_query,
     )
 
     card_repo = CardRepository(session)

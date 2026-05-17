@@ -21,6 +21,7 @@ def test_build_owned_cards_list_query_params_normalizes_main_list_state() -> Non
             "set_code": ["A1"],
             "pack_name": [" Mewtwo "],
             "element": [" fire "],
+            "q": "  皮卡丘  ",
             "sort_by": "count",
             "ownership_scope": "invalid",
         }
@@ -35,6 +36,7 @@ def test_build_owned_cards_list_query_params_normalizes_main_list_state() -> Non
         "set_code": ["A1"],
         "pack_name": ["Mewtwo"],
         "element": ["fire"],
+        "card_name_query": "皮卡丘",
         "sort_by": "count",
         "ownership_scope": "owned",
     }
@@ -49,6 +51,7 @@ def test_build_owned_cards_stats_query_params_reuses_main_filter_state() -> None
             "set_code": ["A1"],
             "pack_name": [" Mewtwo "],
             "element": [" fire "],
+            "q": "  皮卡丘  ",
             "ownership_scope": "missing",
         }
     )
@@ -60,6 +63,7 @@ def test_build_owned_cards_stats_query_params_reuses_main_filter_state() -> None
         "set_code": ["A1"],
         "pack_name": ["Mewtwo"],
         "element": ["fire"],
+        "card_name_query": "皮卡丘",
         "ownership_scope": "missing",
     }
 

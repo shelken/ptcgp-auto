@@ -6,6 +6,7 @@ export interface OwnedCardsMainQueryState {
   setCode: string[]
   packName: string[]
   element: string[]
+  cardNameQuery: string
   sortBy: string
   page: number
   pageSize: number
@@ -45,6 +46,7 @@ export function buildOwnedCardsListQueryParams(
     set_code: normalizeOwnedQueryList(state.setCode),
     pack_name: normalizeOwnedQueryList(state.packName),
     element: normalizeOwnedQueryList(state.element),
+    q: normalizeOwnedQueryText(state.cardNameQuery),
     sort_by: state.sortBy,
     page: state.page,
     page_size: state.pageSize
@@ -61,7 +63,8 @@ export function buildOwnedCardsStatsQueryParams(
     card_type: normalizeOwnedQueryList(state.cardType),
     set_code: normalizeOwnedQueryList(state.setCode),
     pack_name: normalizeOwnedQueryList(state.packName),
-    element: normalizeOwnedQueryList(state.element)
+    element: normalizeOwnedQueryList(state.element),
+    q: normalizeOwnedQueryText(state.cardNameQuery)
   }
 }
 

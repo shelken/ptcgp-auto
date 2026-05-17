@@ -11,6 +11,8 @@ def test_build_records_query_params_normalizes_filters_and_pagination() -> None:
             "page_size": "999",
             "rarity": [" SR ", "", None, "AR"],
             "card_type": [" fire ", " ", "water"],
+            "set_code": [" A1 ", " ", "A2"],
+            "q": "  皮卡丘  ",
         }
     )
 
@@ -19,6 +21,8 @@ def test_build_records_query_params_normalizes_filters_and_pagination() -> None:
         "page_size": 100,
         "rarity": ["SR", "AR"],
         "card_type": ["fire", "water"],
+        "set_code": ["A1", "A2"],
+        "card_name_query": "皮卡丘",
     }
 
 
@@ -30,4 +34,6 @@ def test_build_records_query_params_uses_defaults() -> None:
         "page_size": 10,
         "rarity": [],
         "card_type": [],
+        "set_code": [],
+        "card_name_query": "",
     }

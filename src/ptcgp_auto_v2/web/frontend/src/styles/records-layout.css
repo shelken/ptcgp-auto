@@ -54,6 +54,10 @@
   gap: 0.4rem;
 }
 
+.records-filter-search {
+  max-width: 22rem;
+}
+
 .records-list {
   display: flex;
   flex-direction: column;

@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
@@ -264,6 +264,8 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [searchParams, setSearchParams] = usePersistedSearchParams()
 
   const [accountQuery, setAccountQuery] = useState(() => searchParams.get('owned_account') ?? '')
+  const [cardNameQuery, setCardNameQuery] = useState(() => searchParams.get('owned_q') ?? '')
+  const deferredCardNameQuery = useDeferredValue(cardNameQuery)
   const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'owned_rarity'))
   const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseSearchList(searchParams, 'owned_type'))
   const [selectedElements, setSelectedElements] = useState<string[]>(() => parseSearchList(searchParams, 'owned_element'))
@@ -345,6 +347,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     next.delete('owned_set')
     next.delete('owned_pack')
     next.delete('owned_account')
+    next.delete('owned_q')
     next.delete('owned_sort')
     next.delete('owned_scope')
     next.delete('owned_view')
@@ -356,6 +359,9 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     selectedSetCodes.forEach((item) => next.append('owned_set', item))
     selectedPackNames.forEach((item) => next.append('owned_pack', item))
     next.set('owned_account', accountQuery)
+    if (cardNameQuery.trim()) {
+      next.set('owned_q', cardNameQuery.trim())
+    }
     next.set('owned_sort', sortBy)
     next.set('owned_scope', ownershipScope)
     next.set('owned_view', viewMode)
@@ -368,6 +374,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     }
   }, [
     accountQuery,
+    cardNameQuery,
     ownershipScope,
     viewMode,
     showCounts,
@@ -386,6 +393,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     () => ({
       accountId: accountQuery,
       ownershipScope,
+      cardNameQuery: deferredCardNameQuery,
       rarity: selectedRarity,
       cardType: selectedTypes,
       setCode: selectedSetCodes,
@@ -397,6 +405,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     }),
     [
       accountQuery,
+      deferredCardNameQuery,
       ownershipScope,
       selectedRarity,
       selectedTypes,
@@ -749,16 +758,19 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const cards = viewMode === 'grid' ? gridCards : (listQuery.data?.items ?? [])
   const totalCards = viewMode === 'grid' ? (gridQuery.data?.pages[0]?.total ?? 0) : (listQuery.data?.total ?? 0)
   const gridHasNextPage = Boolean(gridQuery.data?.pages[gridQuery.data.pages.length - 1]?.has_next)
+  const isFetchingNextGridPage = gridQuery.isFetchingNextPage
+  const hasQueryNextGridPage = gridQuery.hasNextPage
+  const fetchNextGridPage = gridQuery.fetchNextPage
   const gridLoadMore = useCallback(() => {
     if (viewMode !== 'grid') {
       return
     }
-    if (!gridQuery.isFetchingNextPage && gridQuery.hasNextPage) {
-      void gridQuery.fetchNextPage()
+    if (!isFetchingNextGridPage && hasQueryNextGridPage) {
+      void fetchNextGridPage()
     }
-  }, [gridQuery, viewMode])
+  }, [fetchNextGridPage, hasQueryNextGridPage, isFetchingNextGridPage, viewMode])
   const gridSentinelRef = useInfiniteTrigger({
-    enabled: viewMode === 'grid' && gridHasNextPage && !gridQuery.isFetchingNextPage,
+    enabled: viewMode === 'grid' && gridHasNextPage && !isFetchingNextGridPage,
     onLoadMore: gridLoadMore
   })
   const isListLoading = viewMode === 'list' ? listQuery.isLoading : gridQuery.isLoading
@@ -782,6 +794,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const clearFilters = () => {
     setListPage(0)
     setAccountQuery('')
+    setCardNameQuery('')
     setSelectedRarity([])
     setSelectedTypes([])
     setSelectedElements([])
@@ -816,6 +829,20 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
                   setAccountQuery(event.target.value)
                 }}
                 placeholder={tr(t, 'filter_account_id_placeholder', 'Account ID')}
+              />
+            </div>
+
+            <div className="filter-row">
+              <input
+                id="owned-card-name-query"
+                name="owned-card-name-query"
+                className="field-input"
+                value={cardNameQuery}
+                onChange={(event) => {
+                  setListPage(0)
+                  setCardNameQuery(event.target.value)
+                }}
+                placeholder={tr(t, 'filter_card_name_placeholder', 'Search card name')}
               />
             </div>
 

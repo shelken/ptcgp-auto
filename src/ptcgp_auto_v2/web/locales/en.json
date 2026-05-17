@@ -151,6 +151,8 @@
   "filter_account_id": "Account Search",
   "filter_account_id_placeholder": "Search by account ID / Friend ID / Nickname / Game ID",
   "filter_account_search_placeholder": "Search account or ID",
+  "filter_card_name": "Card Name",
+  "filter_card_name_placeholder": "Search card name",
   "filter_element": "Element:",
   "filter_pack": "Pack:",
   "filter_rarity": "Rarity:",

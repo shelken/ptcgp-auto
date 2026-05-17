@@ -50,6 +50,7 @@ class AccountCardRepository(BaseRepository):
         set_codes: List[str],
         pack_names: List[str],
         elements: List[str],
+        card_name_query: str,
     ) -> Select:
         """统一追加卡牌元数据筛选条件。"""
         if rarities:
@@ -63,6 +64,15 @@ class AccountCardRepository(BaseRepository):
 
         if elements:
             statement = statement.where(func.lower(col(Card.element)).in_(elements))
+
+        if card_name_query:
+            like_value = f"%{card_name_query}%"
+            statement = statement.where(
+                or_(
+                    col(Card.name).ilike(like_value),
+                    cast(col(Card.data), String).ilike(like_value),
+                )
+            )
 
         if pack_names:
             pack_subquery = (
@@ -170,6 +180,7 @@ class AccountCardRepository(BaseRepository):
         set_codes: Optional[List[str]] = None,
         pack_names: Optional[List[str]] = None,
         elements: Optional[List[str]] = None,
+        card_name_query: str = "",
         sort_by: str = "rarity",
         ownership_scope: str = "owned",
     ) -> List[Dict[str, Any]]:
@@ -178,6 +189,7 @@ class AccountCardRepository(BaseRepository):
         set_codes = set_codes or []
         pack_names = pack_names or []
         elements = [str(e).lower() for e in (elements or []) if e]
+        normalized_card_name_query = (card_name_query or "").strip()
         normalized_account_query = (account_query or "").strip()
         normalized_scope = ownership_scope if ownership_scope in {
             "owned",
@@ -214,6 +226,7 @@ class AccountCardRepository(BaseRepository):
             set_codes=set_codes,
             pack_names=pack_names,
             elements=elements,
+            card_name_query=normalized_card_name_query,
         )
         statement = self._apply_ownership_scope(
             statement,
@@ -267,6 +280,7 @@ class AccountCardRepository(BaseRepository):
         set_codes: Optional[List[str]] = None,
         pack_names: Optional[List[str]] = None,
         elements: Optional[List[str]] = None,
+        card_name_query: str = "",
         ownership_scope: str = "owned",
     ) -> int:
         """统计当前列表条件下的卡牌数量。"""
@@ -275,6 +289,7 @@ class AccountCardRepository(BaseRepository):
         set_codes = set_codes or []
         pack_names = pack_names or []
         elements = [str(e).lower() for e in (elements or []) if e]
+        normalized_card_name_query = (card_name_query or "").strip()
         normalized_account_query = (account_query or "").strip()
         normalized_scope = ownership_scope if ownership_scope in {
             "owned",
@@ -297,6 +312,7 @@ class AccountCardRepository(BaseRepository):
             set_codes=set_codes,
             pack_names=pack_names,
             elements=elements,
+            card_name_query=normalized_card_name_query,
         )
         statement = self._apply_ownership_scope(
             statement,

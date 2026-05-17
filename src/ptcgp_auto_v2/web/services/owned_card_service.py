@@ -43,6 +43,7 @@ def _build_owned_card_filters(
     set_code: list[str] | None,
     pack_name: list[str] | None,
     element: list[str] | None,
+    card_name_query: str,
     ownership_scope: str,
 ) -> dict[str, Any]:
     """构建仓储查询参数。"""
@@ -63,6 +64,7 @@ def _build_owned_card_filters(
         "set_codes": _normalize_values(set_code),
         "pack_names": _normalize_values(pack_name),
         "elements": _normalize_values(element),
+        "card_name_query": normalize_query_text(card_name_query),
         "ownership_scope": ownership_scope,
     }
 
@@ -132,6 +134,8 @@ def build_owned_cards_list_context(
     set_code: list[str] | None = None,
     pack_name: list[str] | None = None,
     element: list[str] | None = None,
+    q: str = "",
+    card_name_query: str | None = None,
     sort_by: str = "acquired",
     ownership_scope: str = "owned",
 ) -> dict[str, Any]:
@@ -160,6 +164,7 @@ def build_owned_cards_list_context(
         set_code=set_code,
         pack_name=pack_name,
         element=element,
+        card_name_query=q if card_name_query is None else card_name_query,
         ownership_scope=normalized_scope,
     )
 
@@ -194,6 +199,8 @@ def build_owned_cards_progress_context(
     set_code: list[str] | None = None,
     pack_name: list[str] | None = None,
     element: list[str] | None = None,
+    q: str = "",
+    card_name_query: str | None = None,
     ownership_scope: str = "owned",
 ) -> dict[str, Any]:
     """构建拥有卡牌页顶部统计上下文。"""
@@ -205,6 +212,7 @@ def build_owned_cards_progress_context(
         set_code=set_code,
         pack_name=pack_name,
         element=element,
+        card_name_query=q if card_name_query is None else card_name_query,
         ownership_scope=normalized_scope,
     )
     with session_scope() as session:

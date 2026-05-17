@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
@@ -234,6 +234,13 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   const [selectedTypes, setSelectedTypes] = useState<string[]>(
     () => parseRecordsSearchState(searchParams).selectedTypes
   )
+  const [selectedSetCodes, setSelectedSetCodes] = useState<string[]>(
+    () => parseRecordsSearchState(searchParams).selectedSetCodes
+  )
+  const [cardNameQuery, setCardNameQuery] = useState(
+    () => parseRecordsSearchState(searchParams).cardNameQuery
+  )
+  const deferredCardNameQuery = useDeferredValue(cardNameQuery)
   const [viewMode, setViewMode] = useState<RecordsViewMode>(
     () => parseRecordsSearchState(searchParams, { fallbackView: resolveStoredViewMode() }).viewMode
   )
@@ -265,6 +272,8 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
       {
         selectedRarity,
         selectedTypes,
+        selectedSetCodes,
+        cardNameQuery,
         viewMode
       },
       searchParams
@@ -272,7 +281,7 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true, preventScrollReset: true })
     }
-  }, [searchParams, selectedRarity, selectedTypes, setSearchParams, viewMode])
+  }, [cardNameQuery, searchParams, selectedRarity, selectedSetCodes, selectedTypes, setSearchParams, viewMode])
 
   useEffect(() => {
     window.localStorage.setItem(RECORDS_VIEW_MODE_KEY, viewMode)
@@ -390,10 +399,12 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
         page: 0,
         pageSize: RECORDS_PAGE_SIZE,
         selectedRarity,
-        selectedTypes
+        selectedTypes,
+        selectedSetCodes,
+        cardNameQuery: deferredCardNameQuery
       })
     ),
-    [lang, selectedRarity, selectedTypes]
+    [deferredCardNameQuery, lang, selectedRarity, selectedSetCodes, selectedTypes]
   )
 
   const query = useInfiniteQuery({
@@ -406,7 +417,9 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
             page: Number(pageParam),
             pageSize: RECORDS_PAGE_SIZE,
             selectedRarity,
-            selectedTypes
+            selectedTypes,
+            selectedSetCodes,
+            cardNameQuery: deferredCardNameQuery
           })
         })}`
       ),
@@ -435,19 +448,24 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   const records = pages.flatMap((page) => page.items)
   const total = pages[0]?.total ?? 0
   const hasNextPage = Boolean(pages[pages.length - 1]?.has_next)
+  const isFetchingNextRecordsPage = query.isFetchingNextPage
+  const hasQueryNextRecordsPage = query.hasNextPage
+  const fetchNextRecordsPage = query.fetchNextPage
 
   const sentinelRef = useInfiniteTrigger({
-    enabled: hasNextPage && !query.isFetchingNextPage,
+    enabled: hasNextPage && !isFetchingNextRecordsPage,
     onLoadMore: useCallback(() => {
-      if (!query.isFetchingNextPage && query.hasNextPage) {
-        void query.fetchNextPage()
+      if (!isFetchingNextRecordsPage && hasQueryNextRecordsPage) {
+        void fetchNextRecordsPage()
       }
-    }, [query])
+    }, [fetchNextRecordsPage, hasQueryNextRecordsPage, isFetchingNextRecordsPage])
   })
 
   const clearFilters = () => {
     setSelectedRarity([])
     setSelectedTypes([])
+    setSelectedSetCodes([])
+    setCardNameQuery('')
   }
 
   return (
@@ -494,6 +512,35 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
               <Button type="button" size="sm" variant="outline" onClick={clearFilters}>
                 {tr(t, 'clear_filters', 'Clear')}
               </Button>
+            </div>
+          </div>
+
+          <div className="records-filter-group">
+            <div className="records-filter-group-title">{tr(t, 'filter_card_name', 'Card Name')}</div>
+            <input
+              id="records-card-name-query"
+              name="records-card-name-query"
+              className="field-input records-filter-search"
+              value={cardNameQuery}
+              onChange={(event) => setCardNameQuery(event.target.value)}
+              placeholder={tr(t, 'filter_card_name_placeholder', 'Search card name')}
+            />
+          </div>
+
+          <div className="records-filter-group">
+            <div className="records-filter-group-title">{tr(t, 'filter_set', 'Set')}</div>
+            <div className="records-filter-chip-row">
+              {options.card_sets.map((item) => (
+                <Button
+                  key={item.code}
+                  type="button"
+                  size="sm"
+                  variant={selectedSetCodes.includes(item.code) ? 'default' : 'outline'}
+                  onClick={() => setSelectedSetCodes((prev) => toggleListItem(prev, item.code))}
+                >
+                  {item.display_name}
+                </Button>
+              ))}
             </div>
           </div>
 

@@ -5,6 +5,8 @@ export type RecordsViewMode = 'grid' | 'list'
 interface RecordsSearchState {
   selectedRarity: string[]
   selectedTypes: string[]
+  selectedSetCodes: string[]
+  cardNameQuery: string
   viewMode: RecordsViewMode
 }
 
@@ -13,6 +15,8 @@ interface RecordsApiBaseQueryParamsInput {
   pageSize: number
   selectedRarity: string[]
   selectedTypes: string[]
+  selectedSetCodes: string[]
+  cardNameQuery: string
 }
 
 interface RecordsApiQueryParamsInput extends RecordsApiBaseQueryParamsInput {
@@ -22,6 +26,8 @@ interface RecordsApiQueryParamsInput extends RecordsApiBaseQueryParamsInput {
 const RECORDS_QUERY_KEYS = {
   rarity: 'records_rarity',
   type: 'records_type',
+  set: 'records_set',
+  q: 'records_q',
   view: 'records_view'
 } as const
 
@@ -42,6 +48,8 @@ export function parseRecordsSearchState(
   return {
     selectedRarity: parseSearchList(searchParams, RECORDS_QUERY_KEYS.rarity),
     selectedTypes: parseSearchList(searchParams, RECORDS_QUERY_KEYS.type),
+    selectedSetCodes: parseSearchList(searchParams, RECORDS_QUERY_KEYS.set),
+    cardNameQuery: searchParams.get(RECORDS_QUERY_KEYS.q) ?? '',
     viewMode: normalizeRecordsViewMode(
       searchParams.get(RECORDS_QUERY_KEYS.view),
       fallbackView
@@ -56,9 +64,15 @@ export function buildRecordsSearchParams(
   const next = new URLSearchParams(baseParams)
   next.delete(RECORDS_QUERY_KEYS.rarity)
   next.delete(RECORDS_QUERY_KEYS.type)
+  next.delete(RECORDS_QUERY_KEYS.set)
+  next.delete(RECORDS_QUERY_KEYS.q)
   next.delete(RECORDS_QUERY_KEYS.view)
   state.selectedRarity.forEach((item) => next.append(RECORDS_QUERY_KEYS.rarity, item))
   state.selectedTypes.forEach((item) => next.append(RECORDS_QUERY_KEYS.type, item))
+  state.selectedSetCodes.forEach((item) => next.append(RECORDS_QUERY_KEYS.set, item))
+  if (state.cardNameQuery.trim()) {
+    next.set(RECORDS_QUERY_KEYS.q, state.cardNameQuery.trim())
+  }
   next.set(RECORDS_QUERY_KEYS.view, state.viewMode)
   return next
 }
@@ -70,7 +84,9 @@ function buildRecordsApiBaseQueryParams(
     lang: input.lang,
     page_size: input.pageSize,
     rarity: input.selectedRarity,
-    card_type: input.selectedTypes
+    card_type: input.selectedTypes,
+    set_code: input.selectedSetCodes,
+    q: input.cardNameQuery.trim()
   }
 }
 

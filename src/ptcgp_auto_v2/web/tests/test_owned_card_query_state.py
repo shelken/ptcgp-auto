@@ -99,6 +99,7 @@ def test_build_owned_cards_list_context_returns_normalized_query_state(
         set_code=[" A1 "],
         pack_name=[],
         element=[" fire "],
+        card_name_query=" alp ",
         sort_by="invalid_field",
         ownership_scope="invalid_scope",
     )
@@ -108,6 +109,21 @@ def test_build_owned_cards_list_context_returns_normalized_query_state(
     assert context["page"] == 0
     assert context["page_size"] == 100
     assert context["ownership_scope"] == "owned"
+    assert context["total"] == 1
+
+
+def test_build_owned_cards_list_context_filters_by_card_name_query(
+    session: Session,
+) -> None:
+    _seed_owned_cards_rows(session)
+
+    context = build_owned_cards_list_context(
+        session=session,
+        q="bet",
+        ownership_scope="all",
+    )
+
+    assert [row["card"].id for row in context["items"]] == [102]
     assert context["total"] == 1
 
 

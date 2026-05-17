@@ -65,6 +65,7 @@ def _build_owned_cards_common_filter_query_params(
         "set_code": _normalize_query_list(raw.get("set_code")),
         "pack_name": _normalize_query_list(raw.get("pack_name")),
         "element": _normalize_query_list(raw.get("element")),
+        "card_name_query": normalize_query_text(str(raw.get("q") or "")),
         "ownership_scope": normalize_choice(
             str(raw.get("ownership_scope") or ""),
             allowed=OWNERSHIP_SCOPES,
@@ -153,6 +154,7 @@ async def get_owned_cards(
     set_code: list[str] = Query(default=[]),
     pack_name: list[str] = Query(default=[]),
     element: list[str] = Query(default=[]),
+    q: str = Query(default=""),
     sort_by: str = Query(default="acquired"),
     ownership_scope: str = Query(default="owned"),
     session: Session = Depends(get_fastapi_session),
@@ -168,6 +170,7 @@ async def get_owned_cards(
             "set_code": set_code,
             "pack_name": pack_name,
             "element": element,
+            "q": q,
             "sort_by": sort_by,
             "ownership_scope": ownership_scope,
         }
@@ -187,6 +190,7 @@ async def get_owned_cards_stats(
     set_code: list[str] = Query(default=[]),
     pack_name: list[str] = Query(default=[]),
     element: list[str] = Query(default=[]),
+    q: str = Query(default=""),
     ownership_scope: str = Query(default="owned"),
 ):
     """获取拥有卡牌统计。"""
@@ -198,6 +202,7 @@ async def get_owned_cards_stats(
             "set_code": set_code,
             "pack_name": pack_name,
             "element": element,
+            "q": q,
             "ownership_scope": ownership_scope,
         }
     )

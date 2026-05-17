@@ -151,6 +151,8 @@
   "filter_account_id": "账号搜索",
   "filter_account_id_placeholder": "输入账号 ID / 朋友ID / 昵称 / 游戏ID",
   "filter_account_search_placeholder": "搜索账号或ID",
+  "filter_card_name": "卡牌名称",
+  "filter_card_name_placeholder": "搜索卡牌名称",
   "filter_element": "属性:",
   "filter_pack": "子包:",
   "filter_rarity": "稀有度:",
