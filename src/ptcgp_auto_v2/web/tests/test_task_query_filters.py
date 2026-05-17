@@ -154,14 +154,12 @@ def test_tasks_context_sorts_by_displayed_next_run_at(session: Session) -> None:
     _seed_accounts_and_tasks(session)
     base_time = datetime(2026, 4, 30, 8, 0, 0)
     tasks = list(session.exec(select(TaskInstance).order_by(TaskInstance.id)))
-    tasks[0].status = "failed"
-    tasks[0].next_run_at = None
+    for index, task in enumerate(tasks, start=1):
+        task.task_type = f"test_daily_task_{index}"
+        task.status = "failed"
+        task.next_run_at = None
     tasks[0].last_completed_at = base_time + timedelta(days=2)
-    tasks[1].status = "failed"
-    tasks[1].next_run_at = None
     tasks[1].last_completed_at = base_time
-    tasks[2].status = "failed"
-    tasks[2].next_run_at = None
     tasks[2].last_completed_at = base_time + timedelta(days=1)
     session.add_all(tasks)
     session.commit()
