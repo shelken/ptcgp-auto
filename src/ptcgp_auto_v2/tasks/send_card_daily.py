@@ -11,6 +11,7 @@
 import logging
 from typing import Optional, cast
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.stateful_task import StatefulTask
 from ptcgp_auto_v2.core.task_base import ActionResult, ResetType, TaskRegistry
 from ptcgp_auto_v2.db.engine import session_scope
@@ -61,6 +62,8 @@ logger = logging.getLogger(__name__)
 FIXED_CARD_SET_CODE = "A1"
 FIXED_CARD_NUMBER = 153
 MAX_FILTER_MODAL_STAY_ROUNDS = 2
+STUCK_RESTART_WAIT_SECONDS = 8.0
+STUCK_RESTART_PAGES = {"gift_select_card", "gift_target_page"}
 
 
 def _build_send_card_pages() -> list[dict]:
@@ -168,11 +171,34 @@ class SendCardDailyTask(StatefulTask):
 
     def __init__(self, adb, recognizer, page_detector):
         super().__init__(adb, recognizer, page_detector)
+        self._stuck_restart_used = False
         self.card_recognizer = YoloCardRecognizer(
             adb=adb,
             model_manager=get_model_manager(),
             hash_manager=get_card_hash_manager(),
         )
+
+    def handle_same_page_stuck(
+        self,
+        page_name: str,
+        page_info: dict,
+        same_page_count: int,
+    ) -> ActionResult | None:
+        """已知送卡卡死页面重启一次 App，继续本轮任务。"""
+        if page_name not in STUCK_RESTART_PAGES:
+            return None
+        if getattr(self, "_stuck_restart_used", False):
+            return None
+
+        self._stuck_restart_used = True
+        logger.warning(
+            "send_card_daily 检测到已知卡死页面，重启 App 后继续本轮: page=%s rounds=%s",
+            page_name,
+            same_page_count,
+        )
+        self.adb.restart_app(get_settings().app_package)
+        self.on_start()
+        return ActionResult.ok(wait=STUCK_RESTART_WAIT_SECONDS)
 
     def _reset_filter_input_state(self):
         """重置筛选弹窗输入动作状态。"""

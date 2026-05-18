@@ -9,6 +9,14 @@ from ptcgp_auto_v2.locales import get_text_patterns
 # 新增 action 字段用于声明式生成 Handler
 # action 类型参考 common_handlers.py 中的工厂方法
 COMMON_PAGES = [
+    # Android 应用无响应系统弹窗，必须优先于所有游戏内页面
+    {
+        "name": "android_app_not_responding",
+        "identifiers": get_text_patterns("android_app_not_responding"),
+        "match_all": True,
+        "priority": 5,
+        "action": "restart_game",
+    },
     # TODO `清除快取 重新下載`
     {
         # 匹配各种手指图标并点击（模板匹配）

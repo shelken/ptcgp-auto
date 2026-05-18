@@ -75,6 +75,7 @@ TEXT_PATTERNS = {
     "popup_clean_and_download": ["清除快取", "重新下載"],
     "error_code_103_011_05400": ["103-011-05400"],
     "_scene_restart_game": ["Sign in"],
+    "android_app_not_responding": ["没有响应", "关闭应用"],
     "main_page": ["Pokémon Trad"],
     "close_app_popup": ["关闭应用", "应用信息"],
     "_to_home": ["首页", "重新加载"],

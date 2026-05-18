@@ -323,6 +323,15 @@ class Task(ABC):
         """
         return ActionResult.wait(1.0)
 
+    def handle_same_page_stuck(
+        self,
+        page_name: str,
+        page_info: dict,
+        same_page_count: int,
+    ) -> ActionResult | None:
+        """同页停滞达到阈值时的恢复钩子，返回 None 表示按失败收敛。"""
+        return None
+
     def execute(self, skip_pre_hooks: bool = False) -> TaskResult:
         """
         执行任务的主循环
@@ -414,6 +423,23 @@ class Task(ABC):
                 last_page_name = page_name
 
             if same_page_count >= self.max_same_page_rounds:
+                recovery_result = self.handle_same_page_stuck(
+                    page_name,
+                    page_info,
+                    same_page_count,
+                )
+                if recovery_result is not None:
+                    if not recovery_result.success:
+                        result = TaskResult.fail(
+                            recovery_result.error or "同页停滞恢复失败",
+                            iterations=iteration,
+                        )
+                        break
+                    same_page_count = 0
+                    last_page_name = None
+                    time.sleep(recovery_result.should_wait)
+                    continue
+
                 result = TaskResult.fail(
                     f"连续 {self.max_same_page_rounds} 次停留在同一页面: {page_name}",
                     iterations=iteration,
