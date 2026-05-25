@@ -174,19 +174,30 @@ def compute_next_run_at(
     last_completed: datetime | None,
     reset_type: str,
     config: dict[str, Any] | None = None,
+    now: datetime | None = None,
 ) -> datetime | None:
-    """按重置规则计算下一次运行时间。"""
+    """按重置规则计算下一次运行时间。
+
+    算出的时间若已过，返回 None（表示立即可执行）。
+    """
     if last_completed is None:
         return None
 
     if reset_type == RESET_TYPE_DAILY:
-        return _next_daily_reset(last_completed)
-    if reset_type == RESET_TYPE_WEEKLY:
-        return _next_weekly_reset(last_completed)
-    if reset_type == RESET_TYPE_INTERVAL:
+        next_run = _next_daily_reset(last_completed)
+    elif reset_type == RESET_TYPE_WEEKLY:
+        next_run = _next_weekly_reset(last_completed)
+    elif reset_type == RESET_TYPE_INTERVAL:
         interval = get_interval_seconds(config)
-        return last_completed + timedelta(seconds=interval)
-    return None
+        next_run = last_completed + timedelta(seconds=interval)
+    else:
+        return None
+
+    if now is None:
+        now = datetime.now()
+    if next_run <= now:
+        return None
+    return next_run
 
 
 def normalize_task_sort(sort_by: str | None, sort_order: str | None) -> tuple[str, str]:
