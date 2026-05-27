@@ -50,8 +50,8 @@ export function useManagementListState(
     {}
   )
   const baseState = useMemo(
-    () => normalizeManagementListState(spec, persistedState),
-    [persistedState, spec]
+    () => normalizeManagementListState(spec, persistedState, runtime?.sortOptions),
+    [persistedState, runtime?.sortOptions, spec]
   )
   const state = useMemo(
     () => normalizeManagementListRuntimeState(spec, baseState, runtime),
@@ -66,7 +66,7 @@ export function useManagementListState(
   }, [baseState, setPersistedState, state])
 
   const normalizeState = useCallback((rawState: ManagementListState) => {
-    const normalizedState = normalizeManagementListState(spec, rawState)
+    const normalizedState = normalizeManagementListState(spec, rawState, runtime?.sortOptions)
     return normalizeManagementListRuntimeState(spec, normalizedState, runtime)
   }, [runtime, spec])
 

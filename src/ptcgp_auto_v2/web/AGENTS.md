@@ -32,11 +32,22 @@ src/ptcgp_auto_v2/web/
 - 页面路由统一走 React Router（HashRouter）。
 - Web 启动与构建统一使用 Bun，不再使用 web 根目录 npm/tailwind 旧流程。
 
+## 前端工具链
+
+- **测试**: vitest（`src/ptcgp_auto_v2/web/frontend/vitest.config.ts`），`node` 环境
+- **类型检查**: tsc（`bun run typecheck`，含于 build）
+
 ## 常用命令
 
 ```bash
 # 构建前端
 bun run --cwd src/ptcgp_auto_v2/web/frontend build
+
+# 单次运行测试
+bun run --cwd src/ptcgp_auto_v2/web/frontend vitest run
+
+# 监听模式
+bun run --cwd src/ptcgp_auto_v2/web/frontend vitest
 
 # 启动 Web（开发）
 ./scripts/web_dev.sh

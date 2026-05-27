@@ -53,7 +53,8 @@ function normalizeSortOrder(
 
 function normalizeSortState(
   spec: ManagementListSpec,
-  rawState: PersistedManagementListState | null | undefined
+  rawState: PersistedManagementListState | null | undefined,
+  runtimeSortValues?: readonly string[]
 ): Pick<ManagementListState, 'sortBy' | 'sortOrder'> {
   if (!spec.sort) {
     return {
@@ -62,7 +63,11 @@ function normalizeSortState(
     }
   }
 
-  const sortOptions = new Set(spec.sort.options.map((item) => item.value))
+  const specSortValues = spec.sort.options.map((item) => item.value)
+  const allSortValues = runtimeSortValues && runtimeSortValues.length > 0
+    ? runtimeSortValues
+    : specSortValues
+  const sortOptions = new Set(allSortValues)
   const defaultSortBy = sortOptions.has(spec.sort.defaultBy)
     ? spec.sort.defaultBy
     : spec.sort.options[0]?.value ?? ''
@@ -105,9 +110,11 @@ function reverseSortOrder(sortOrder: ManagementListSortOrder): ManagementListSor
 
 export function normalizeManagementListState(
   spec: ManagementListSpec,
-  rawState: PersistedManagementListState | null | undefined
+  rawState: PersistedManagementListState | null | undefined,
+  runtimeSortOptions?: readonly { value: string }[]
 ): ManagementListState {
-  const { sortBy, sortOrder } = normalizeSortState(spec, rawState)
+  const runtimeSortValues = runtimeSortOptions?.map((o) => o.value)
+  const { sortBy, sortOrder } = normalizeSortState(spec, rawState, runtimeSortValues)
 
   const filters: Record<string, string> = {}
   for (const filter of spec.filters ?? []) {
