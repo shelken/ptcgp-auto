@@ -13,10 +13,14 @@ from ptcgp_auto_v2.web.routers.react_api_common import (
     json_response,
     normalize_pagination_params,
 )
+from sqlmodel import select
+
+from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
 from ptcgp_auto_v2.web.services.account_service import (
     build_account_edit_context,
     build_account_plans_context,
     build_accounts_list_context,
+    build_accounts_packs_context,
     update_account_details,
     update_account_plans,
 )
@@ -90,6 +94,20 @@ async def get_management_accounts(
             **query_params,
         )
     )
+
+
+@router.get("/management/accounts/packs")
+def get_management_accounts_packs(
+    session: Session = Depends(get_fastapi_session),
+):
+    """获取所有账号的自动选包映射（异步加载，不和账号列表同请求）。"""
+    config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
+    all_configs = session.exec(config_stm).all()
+    pack_configs_map = {item.account_id: item.to_dict() for item in all_configs}
+    packs = build_accounts_packs_context(
+        session=session, pack_configs_map=pack_configs_map,
+    )
+    return json_response({"packs": packs, "pack_configs": pack_configs_map})
 
 
 @router.get("/management/accounts/{account_id}")

@@ -394,13 +394,22 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
       setNotice({ level: result.ok ? 'success' : 'error', text: result.message })
       setEditingPackConfig(null)
       queryClient.invalidateQueries({ queryKey: ['management-accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['management-account-packs'] })
     }
+  })
+
+  const packsQuery = useQuery<{ packs: Record<string, Record<string, unknown>>; pack_configs: Record<string, Record<string, unknown>> }>({
+    queryKey: ['management-account-packs', lang],
+    queryFn: () => fetchJson(`/api/react/management/accounts/packs?lang=${lang}`),
+    staleTime: 60_000,
+    refetchInterval: (q) => (q.state.data && Object.keys(q.state.data.packs ?? {}).length > 0 ? false : 3_000),
+    retry: 10,
   })
 
   const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
   const totalRecords = toTotalCount(query.data?.total, items.length)
-  const packConfigs = (query.data?.pack_configs as Record<string, Record<string, unknown>>) ?? {}
-  const autoPackMap = (query.data?.auto_pack_map as Record<string, Record<string, unknown>>) ?? {}
+  const packConfigs = packsQuery.data?.pack_configs ?? {}
+  const autoPackMap = packsQuery.data?.packs ?? {}
 
   async function openPlansEditor(accountId: number) {
     const data = await fetchJson<Record<string, unknown>>(
@@ -521,7 +530,7 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                       onToggle={cycleAccountSort}
                     />
                     <th>{tr(t, 'col_plans', 'Plans')}</th>
-                    <th>{tr(t, 'col_target_pack', 'Target Pack')}</th>
+                    <th>{tr(t, 'col_target_pack', 'Target Pack')}{' '}{packsQuery.isFetching && <span className="text-muted text-xs">({tr(t, 'label_loading', '...')})</span>}</th>
                     <th>{tr(t, 'col_actions', 'Actions')}</th>
                   </tr>
                 </thead>
@@ -544,7 +553,9 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
                         ? `${toText(config.set_code, t)}/${toText(config.booster_name, t)}`
                         : autoPack
                           ? `${toText(autoPack.set_code, t)}/${toText(autoPack.booster_name, t)} (${tr(t, 'label_auto', 'Auto')})`
-                          : '-'
+                          : packsQuery.isFetching || (!config && !autoPack && (packsQuery.data?.packs == null || Object.keys(packsQuery.data.packs).length === 0))
+                            ? tr(t, 'label_loading', '计算中...')
+                            : '-'
 
                     return (
                       <tr key={accountId}>

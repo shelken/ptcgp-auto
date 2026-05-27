@@ -1,15 +1,16 @@
-from sqlmodel import Session, select
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy.orm import selectinload
+from sqlmodel import Session, select
+from typing import cast
 
+from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.scheduling_service import recompute_and_sync_account_scheduling
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models.account import Account
-from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
-from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
-from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
+from ptcgp_auto_v2.db.models.account_task_plan import AccountTaskPlan
 from ptcgp_auto_v2.db.repositories import (
     AccountRepository,
     CardRepository,
@@ -18,10 +19,7 @@ from ptcgp_auto_v2.db.repositories import (
 )
 from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
 from ptcgp_auto_v2.web.services._list_query_state import build_sorted_list_query_state
-from ptcgp_auto_v2.web.utils.serialization import (
-    serialize_account,
-    serialize_task_plan,
-)
+from ptcgp_auto_v2.web.utils.serialization import serialize_account, serialize_task_plan
 
 
 def _match_account(item: Account, query: str) -> bool:
@@ -144,16 +142,12 @@ def build_accounts_list_context(
     return {
         "items": accounts_page,
         "pack_configs": pack_configs_map,
-        "auto_pack_map": _resolve_auto_pack_map(
-            session=session,
-            accounts=page_accounts,
-            pack_configs_map=pack_configs_map,
-        ),
         "q": q,
         "sort_by": list_state.sort_by,
         "sort_order": list_state.sort_order,
         **list_state.page_meta(total=total),
     }
+
 
 def build_account_edit_context(account_id: int) -> dict | None:
     """构建账号编辑弹窗数据。"""
@@ -163,6 +157,19 @@ def build_account_edit_context(account_id: int) -> dict | None:
         if not account:
             return None
         return {"account": _serialize_account(account)}
+
+
+def build_accounts_packs_context(
+    *, session: Session, pack_configs_map: dict[int, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """构建所有账号的自动选包映射。"""
+    repo = AccountRepository(session)
+    accounts = repo.get_all()
+    return _resolve_auto_pack_map(
+        session=session,
+        accounts=accounts,
+        pack_configs_map=pack_configs_map,
+    )
 
 
 def update_account_details(account_id: int, nickname: str, remark: str) -> None:
