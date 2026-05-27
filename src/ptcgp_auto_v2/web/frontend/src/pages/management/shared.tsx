@@ -222,12 +222,34 @@ export function buildAccountSelectOptions(
 }
 
 async function safeClipboardWrite(text: string): Promise<boolean> {
-  if (!text || typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+  if (!text || typeof navigator === 'undefined') {
+    return false
+  }
+  // 优先 Clipboard API（需安全上下文）
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // fall through to legacy method
+    }
+  }
+  // 回退：document.execCommand('copy')
+  if (typeof document === 'undefined' || !document.body) {
     return false
   }
   try {
-    await navigator.clipboard.writeText(text)
-    return true
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    textarea.style.pointerEvents = 'none'
+    document.body.appendChild(textarea)
+    textarea.select()
+    textarea.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    return ok
   } catch {
     return false
   }
@@ -277,7 +299,7 @@ export function CopyableFriendId({
         className="friend-id-copy-btn mono"
         aria-label={tr(t, 'label_copy', '复制')}
         onClick={async () => {
-          const copied = await safeClipboardWrite(normalized)
+          const copied = await safeClipboardWrite(normalized.replace(/\D+/g, ''))
           setToast({
             id: Date.now(),
             level: copied ? 'success' : 'error',
