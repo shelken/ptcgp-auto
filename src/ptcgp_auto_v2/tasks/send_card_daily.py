@@ -331,8 +331,8 @@ class SendCardDailyTask(StatefulTask):
                 nickname=nickname,
             )
 
-    def _on_scroll_exhausted(self, reason: str) -> ActionResult:
-        """滑动耗尽回调：删除好友关系后跳过。"""
+    def _delete_target_friendship(self):
+        """删除当前目标好友关系。"""
         target_friend_id = cast(Optional[str], self.state_get("target_friend_id"))
         if self.account.id and target_friend_id:
             with session_scope() as session:
@@ -342,6 +342,10 @@ class SendCardDailyTask(StatefulTask):
                 self.account.id,
                 target_friend_id,
             )
+
+    def _on_scroll_exhausted(self, reason: str) -> ActionResult:
+        """滑动耗尽回调：删除好友关系后跳过。"""
+        self._delete_target_friendship()
         return self._skip_without_send(
             skip_reason=reason,
             record_status="completed_no_target",
@@ -494,6 +498,7 @@ class SendCardDailyTask(StatefulTask):
             get_text_patterns("gift_choose_friend_empty"),
             exact=False,
         ):
+            self._delete_target_friendship()
             return self._skip_without_send(
                 skip_reason="好友列表为空，无法分送卡牌",
                 record_status="completed_no_target",
