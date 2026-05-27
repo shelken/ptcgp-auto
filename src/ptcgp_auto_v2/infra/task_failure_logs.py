@@ -13,7 +13,7 @@ from typing import Any
 
 from loguru import logger
 
-_RETENTION_DAYS = 7
+_RETENTION_DAYS = 3
 _SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
@@ -60,6 +60,7 @@ class TaskFailureLogContext:
 
     def persist_failure(self, reason: str) -> Path:
         """把当前捕获日志写入失败切片 JSONL 文件。"""
+        cleanup_old_task_failure_logs(log_dir=self.log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         path = self.log_dir / self._build_filename()
         summary = {

@@ -855,8 +855,8 @@ class AccountExecutor(BaseExecutor):
                     account=self.account,
                 )
                 self._apply_task_result(task_instance, self.account, result)
-                if not result.success:
-                    failure_logs.persist_failure(result.error or "任务失败")
+                if not result.success or result.skipped:
+                    failure_logs.persist_failure(result.error or result.skip_reason or "任务跳过")
             except Exception as e:
                 if AdbController.is_offline_error(e):
                     logger.exception(f"任务执行异常: {task_instance.task_type} - {e}")

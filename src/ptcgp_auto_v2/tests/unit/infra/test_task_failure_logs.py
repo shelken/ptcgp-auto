@@ -88,8 +88,8 @@ def test_successful_task_capture_does_not_create_file(tmp_path: Path):
     assert not list((tmp_path / "logs").glob("*.jsonl"))
 
 
-def test_cleanup_old_task_failure_logs_keeps_recent_week(tmp_path: Path):
-    """启动清理只删除一周前的失败日志。"""
+def test_cleanup_old_task_failure_logs_keeps_recent_3_days(tmp_path: Path):
+    """清理只删除 3 天前的失败日志。"""
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     old_file = log_dir / "old.jsonl"
@@ -98,8 +98,8 @@ def test_cleanup_old_task_failure_logs_keeps_recent_week(tmp_path: Path):
     recent_file.write_text("recent", encoding="utf-8")
 
     now = datetime(2026, 5, 2, 12, 0, 0)
-    old_ts = (now - timedelta(days=8)).timestamp()
-    recent_ts = (now - timedelta(days=6)).timestamp()
+    old_ts = (now - timedelta(days=4)).timestamp()
+    recent_ts = (now - timedelta(days=2)).timestamp()
     os.utime(old_file, (old_ts, old_ts))
     os.utime(recent_file, (recent_ts, recent_ts))
 
