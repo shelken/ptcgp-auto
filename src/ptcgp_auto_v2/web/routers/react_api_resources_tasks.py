@@ -122,7 +122,6 @@ async def get_management_tasks(
         build_task_list_render_context(
             session=session,
             **query_params,
-            table_only=False,
         )
     )
 

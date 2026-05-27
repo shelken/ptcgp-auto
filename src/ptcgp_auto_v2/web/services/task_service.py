@@ -5,8 +5,6 @@ from urllib.parse import urlencode
 from sqlalchemy import String, cast as sa_cast
 from sqlmodel import Session, col, or_, select
 
-from ptcgp_auto_v2.config.constants import PACK_AUTO_EXCLUDE_SET_CODES
-from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.scheduling_service import (
     TASK_SORT_BY_NEXT_RUN,
     build_account_plan_cache,
@@ -16,12 +14,7 @@ from ptcgp_auto_v2.core.scheduling_service import (
 )
 from ptcgp_auto_v2.db.models.account import Account
 from ptcgp_auto_v2.db.models.account_pack_config import AccountPackConfig
-from ptcgp_auto_v2.db.repositories import (
-    CardRepository,
-    PackRecordRepository,
-    TaskInstanceRepository,
-)
-from ptcgp_auto_v2.utils.pack_auto_selector import select_pack_for_account
+from ptcgp_auto_v2.db.repositories import TaskInstanceRepository
 from ptcgp_auto_v2.web.queries.task_queries import (
     fetch_task_instances,
     fetch_task_instances_for_computed_sort,
@@ -38,31 +31,17 @@ from ptcgp_auto_v2.web.utils.view_helpers import format_datetime_iso
 
 def _resolve_open_pack_target(
     *,
-    session: Session,
     account: Account,
     pack_configs_map: dict[int, AccountPackConfig],
 ) -> tuple[str | None, bool]:
-    """返回开包任务目标包展示文案。"""
+    """返回开包任务目标包展示文案，无配置时仅标记为自动，触发前端独立加载计算。"""
     if account.id is None:
         return None, False
 
     config = pack_configs_map.get(account.id)
     if config:
         return f"{config.set_code}/{config.booster_name}", False
-
-    settings = get_settings()
-    card_repo = CardRepository(session)
-    record_repo = PackRecordRepository(session)
-    auto_pack = select_pack_for_account(
-        account=account,
-        strategy=settings.pack_auto_strategy,
-        card_repo=card_repo,
-        record_repo=record_repo,
-        exclude_set_codes=PACK_AUTO_EXCLUDE_SET_CODES,
-    )
-    if not auto_pack:
-        return None, False
-    return f"{auto_pack['set_code']}/{auto_pack['booster_name']}", True
+    return None, True
 
 
 def _build_tasks_page_url(
@@ -254,7 +233,6 @@ def build_tasks_list_context(
             continue
 
         target_pack_label, target_pack_auto = _resolve_open_pack_target(
-            session=session,
             account=account,
             pack_configs_map=pack_configs_map,
         )
@@ -334,9 +312,8 @@ def build_task_list_render_context(
     account_q: str,
     sort_by: str,
     sort_order: str,
-    table_only: bool,
 ) -> dict[str, Any]:
-    """构建任务列表模板渲染上下文。"""
+    """构建任务列表 API 响应。"""
     from ptcgp_auto_v2.core.task_base import TaskRegistry
     from ptcgp_auto_v2.core.task_status import TaskStatus
 
@@ -352,22 +329,12 @@ def build_task_list_render_context(
         sort_order=sort_order,
     )
 
-    context["status_options"] = [status_item.value for status_item in TaskStatus]
-    context["task_types"] = TaskRegistry.all_types()
+    status_options = [status_item.value for status_item in TaskStatus]
+    task_types = TaskRegistry.all_types()
     context["filter_options"] = {
-        "status": context["status_options"],
-        "task_type": context["task_types"],
+        "status": status_options,
+        "task_type": task_types,
     }
-    context["accounts"] = list_task_filter_accounts(
-        session=session, q=account_q, limit=20
-    )
-    context["selected_status"] = status
-    context["selected_task_type"] = task_type
-    context["selected_account_id"] = account_id
-    context["selected_account_query"] = account_q
-    context["selected_sort_by"] = sort_by
-    context["selected_sort_order"] = sort_order
-    context["table_only"] = table_only
     return context
 
 

@@ -160,11 +160,15 @@ def build_account_edit_context(account_id: int) -> dict | None:
 
 
 def build_accounts_packs_context(
-    *, session: Session, pack_configs_map: dict[int, dict[str, Any]],
+    *, session: Session, pack_configs_map: dict[int, dict[str, Any]], account_ids: list[int] | None = None,
 ) -> dict[int, dict[str, Any]]:
-    """构建所有账号的自动选包映射。"""
+    """构建自动选包映射，指定 account_ids 时只计算这些账号。"""
     repo = AccountRepository(session)
-    accounts = repo.get_all()
+    if account_ids:
+        accounts_map = repo.get_by_ids(account_ids)
+        accounts = list(accounts_map.values())
+    else:
+        accounts = repo.get_all()
     return _resolve_auto_pack_map(
         session=session,
         accounts=accounts,

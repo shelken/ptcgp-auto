@@ -14,10 +14,12 @@ import {
 
 export function buildTaskTableColumns({
   lang,
-  t
+  t,
+  packs = {}
 }: {
   lang: string
   t: Record<string, string>
+  packs?: Record<string, unknown>
 }): ManagementColumnDef[] {
   return [
     { key: 'id', label: tr(t, 'col_id', 'ID'), headerClassName: 'table-col-id', cellClassName: 'table-col-id' },
@@ -115,10 +117,18 @@ export function buildTaskTableColumns({
       cellClassName: 'table-col-pack',
       render: (row) => {
         const value = toText(row.target_pack_label, t)
-        if (value === '-') {
+        if (value !== '-') {
           return value
         }
-        return Boolean(row.target_pack_auto) ? `${value} (${tr(t, 'label_auto', 'Auto')})` : value
+        if (Boolean(row.target_pack_auto)) {
+          const accountId = String(row.account_id ?? '')
+          const autoPack = accountId ? packs[accountId] : undefined
+          if (autoPack) {
+            return `${toText((autoPack as Record<string, unknown>).set_code, t)}/${toText((autoPack as Record<string, unknown>).booster_name, t)} (${tr(t, 'label_auto', 'Auto')})`
+          }
+          return tr(t, 'label_auto', 'Auto')
+        }
+        return '-'
       }
     }
   ]

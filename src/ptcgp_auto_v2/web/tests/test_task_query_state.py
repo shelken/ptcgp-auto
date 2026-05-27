@@ -40,10 +40,10 @@ def test_build_task_list_render_context_exposes_filter_options(
         account_q="",
         sort_by="id",
         sort_order="asc",
-        table_only=False,
     )
 
     assert context["page"] == 0
     assert context["page_size"] == 100
-    assert context["filter_options"]["status"] == context["status_options"]
-    assert context["filter_options"]["task_type"] == context["task_types"]
+    assert "filter_options" in context
+    assert "status" in context["filter_options"]
+    assert "task_type" in context["filter_options"]

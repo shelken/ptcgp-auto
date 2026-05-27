@@ -98,14 +98,16 @@ async def get_management_accounts(
 
 @router.get("/management/accounts/packs")
 def get_management_accounts_packs(
+    account_ids: str = Query(default=""),
     session: Session = Depends(get_fastapi_session),
 ):
-    """获取所有账号的自动选包映射（异步加载，不和账号列表同请求）。"""
+    """获取自动选包映射，可选指定 account_ids（逗号分隔）限制只计算这些账号。"""
     config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
     all_configs = session.exec(config_stm).all()
     pack_configs_map = {item.account_id: item.to_dict() for item in all_configs}
+    parsed_ids = [int(x) for x in account_ids.split(",") if x.strip().isdigit()] if account_ids else None
     packs = build_accounts_packs_context(
-        session=session, pack_configs_map=pack_configs_map,
+        session=session, pack_configs_map=pack_configs_map, account_ids=parsed_ids,
     )
     return json_response({"packs": packs, "pack_configs": pack_configs_map})
 

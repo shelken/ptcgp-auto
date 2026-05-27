@@ -398,16 +398,18 @@ function AccountsSection({ lang, t }: { lang: string; t: Record<string, string> 
     }
   })
 
+  const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
+  const accountIdsStr = useMemo(() => items.map((i) => String(i.id ?? '')).filter(Boolean).join(','), [items])
+  const totalRecords = toTotalCount(query.data?.total, items.length)
+
   const packsQuery = useQuery<{ packs: Record<string, Record<string, unknown>>; pack_configs: Record<string, Record<string, unknown>> }>({
-    queryKey: ['management-account-packs', lang],
-    queryFn: () => fetchJson(`/api/react/management/accounts/packs?lang=${lang}`),
+    queryKey: ['management-account-packs', lang, accountIdsStr],
+    queryFn: () => fetchJson(`/api/react/management/accounts/packs?lang=${lang}&account_ids=${accountIdsStr}`),
+    enabled: accountIdsStr.length > 0,
     staleTime: 60_000,
     refetchInterval: (q) => (q.state.data && Object.keys(q.state.data.packs ?? {}).length > 0 ? false : 3_000),
     retry: 10,
   })
-
-  const items = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
-  const totalRecords = toTotalCount(query.data?.total, items.length)
   const packConfigs = packsQuery.data?.pack_configs ?? {}
   const autoPackMap = packsQuery.data?.packs ?? {}
 
@@ -1557,6 +1559,26 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
   })
 
   const rows = ((query.data?.items as unknown[]) ?? []) as Record<string, unknown>[]
+  const accountIdsForPacks = useMemo(() => {
+    const ids = new Set<string>()
+    for (const row of rows) {
+      if (row.task_type === 'open_pack' && Boolean(row.target_pack_auto) && !row.target_pack_label) {
+        const id = String(row.account_id ?? '')
+        if (id) ids.add(id)
+      }
+    }
+    return [...ids].join(',')
+  }, [rows])
+
+  const packsQuery = useQuery({
+    queryKey: ['management-task-packs', accountIdsForPacks],
+    queryFn: () =>
+      fetchJson<{ packs: Record<string, unknown> }>(
+        `/api/react/management/accounts/packs?account_ids=${accountIdsForPacks}`
+      ),
+    enabled: accountIdsForPacks.length > 0
+  })
+
   const statusOptions = getManagementFilterOptions<string>(query.data, 'status', ['status_options'])
   const taskTypeOptions = getManagementFilterOptions<string>(query.data, 'task_type', ['task_types'])
   const accountOptions = ((accountOptionsQuery.data?.accounts as unknown[]) ?? []) as Record<string, unknown>[]
@@ -1629,7 +1651,7 @@ function TasksSection({ lang, t }: { lang: string; t: Record<string, string> }) 
 
       <ManagementDataGrid
         rows={rows}
-        columns={buildTaskTableColumns({ lang, t })}
+        columns={buildTaskTableColumns({ lang, t, packs: packsQuery.data?.packs ?? {} })}
         t={t}
         sortBy={taskListState.sortBy}
         sortOrder={taskListState.sortOrder}
