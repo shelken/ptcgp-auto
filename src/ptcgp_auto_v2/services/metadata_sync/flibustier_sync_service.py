@@ -16,7 +16,8 @@ from ptcgp_auto_v2.services.metadata_sync.cache_store import TTLCacheStore
 BASE_URL = (
     "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist"
 )
-SETS_URL = f"{BASE_URL}/sets.json"
+# 变更原因: sets 切换到 ptcgp-assets，避免继续依赖 flibustier 补齐系列元数据。
+SETS_URL = "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/metadata/sets/en-US/sets.json"
 CARDS_URL = f"{BASE_URL}/cards.json"
 # 变更原因: 切换到 ptcgp-assets 数据源，基于游戏 MemoryDatabase，数据更准确（health/weakness/retreatCost/packs）
 CARDS_EXTRA_URL = (
@@ -290,7 +291,19 @@ class FlibustierSyncService:
 
         if isinstance(incoming_name, dict):
             label_dict.update(incoming_name)
-            set_name = str(incoming_name.get("en") or incoming_name.get("zh") or code)
+            # 变更原因: ptcgp-assets 按运行语言输出 name，缺 en/zh 时应使用真实非空名称而不是退回 code。
+            set_name = str(
+                incoming_name.get("en")
+                or incoming_name.get("zh")
+                or next(
+                    (
+                        value
+                        for value in incoming_name.values()
+                        if isinstance(value, str) and value.strip()
+                    ),
+                    code,
+                )
+            )
         else:
             set_name = str(incoming_name)
             label_dict.setdefault("en", set_name)
