@@ -18,7 +18,11 @@ BASE_URL = (
 )
 SETS_URL = f"{BASE_URL}/sets.json"
 CARDS_URL = f"{BASE_URL}/cards.json"
-CARDS_EXTRA_URL = f"{BASE_URL}/cards.extra.json"
+# 变更原因: 切换到 ptcgp-assets 数据源，基于游戏 MemoryDatabase，数据更准确（health/weakness/retreatCost/packs）
+CARDS_EXTRA_URL = (
+    "https://raw.githubusercontent.com/shelken/ptcgp-assets"
+    "/main/metadata/cards/en-US/cards.extra.json"
+)
 
 
 class FlibustierSyncService:
