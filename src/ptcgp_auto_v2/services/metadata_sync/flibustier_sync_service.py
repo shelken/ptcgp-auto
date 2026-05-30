@@ -13,17 +13,11 @@ from ptcgp_auto_v2.db.models import Card, CardSet, Pack
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.services.metadata_sync.cache_store import TTLCacheStore
 
-BASE_URL = (
-    "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist"
-)
+ASSETS_METADATA_BASE_URL = "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/metadata"
 # 变更原因: sets 切换到 ptcgp-assets，避免继续依赖 flibustier 补齐系列元数据。
-SETS_URL = "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/metadata/sets/en-US/sets.json"
-CARDS_URL = f"{BASE_URL}/cards.json"
-# 变更原因: 切换到 ptcgp-assets 数据源，基于游戏 MemoryDatabase，数据更准确（health/weakness/retreatCost/packs）
-CARDS_EXTRA_URL = (
-    "https://raw.githubusercontent.com/shelken/ptcgp-assets"
-    "/main/metadata/cards/en-US/cards.extra.json"
-)
+SETS_URL = f"{ASSETS_METADATA_BASE_URL}/sets/en-US/sets.json"
+# 变更原因: cards.extra 已覆盖同步所需全部卡牌字段，继续拉 flibustier cards.json 会丢失游戏已有卡。
+CARDS_EXTRA_URL = f"{ASSETS_METADATA_BASE_URL}/cards/en-US/cards.extra.json"
 
 
 class FlibustierSyncService:
@@ -113,8 +107,8 @@ class FlibustierSyncService:
         list[dict[str, Any]],
         dict[tuple[str, int], dict[str, Any]],
     ]:
-        """抓取 flibustier 远端元数据。"""
-        cache_key = "flibustier:remote_metadata"
+        """抓取远端元数据。"""
+        cache_key = "ptcgp-assets:remote_metadata:v2"
         if self._cache and not force_refresh:
             cached = self._cache.get(cache_key)
             if cached is not None:
@@ -130,18 +124,14 @@ class FlibustierSyncService:
             sets_response.raise_for_status()
             sets_data = sets_response.json()
 
-            cards_response = requests.get(CARDS_URL, timeout=60)
-            cards_response.raise_for_status()
-            cards_data = cards_response.json()
-
             extra_response = requests.get(CARDS_EXTRA_URL, timeout=60)
             extra_response.raise_for_status()
-            extra_data = extra_response.json()
+            cards_data = extra_response.json()
         except Exception as exc:  # pragma: no cover - 网络异常分支
-            raise RuntimeError(f"拉取 flibustier 元数据失败: {exc}") from exc
+            raise RuntimeError(f"拉取 ptcgp-assets 元数据失败: {exc}") from exc
 
         extra_map: dict[tuple[str, int], dict[str, Any]] = {}
-        for item in extra_data:
+        for item in cards_data:
             set_code = item.get("set")
             number = self._normalize_number(item.get("number"))
             if set_code and number is not None:
@@ -359,7 +349,7 @@ class FlibustierSyncService:
         if mode == "supplement" and existing_card is not None:
             needs_upsert = False
 
-        # data 字段与历史 sync_metadata.py 逻辑保持一致：写入原始 cards.json 条目
+        # 变更原因: cards.extra 已替代 cards.json，data 保存当前游戏 MemoryDatabase 转换后的完整卡牌条目。
         incoming_card = {
             "set_code": set_code,
             "number": number,
