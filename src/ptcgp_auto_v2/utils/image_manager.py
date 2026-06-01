@@ -8,7 +8,10 @@
 
 import concurrent.futures
 import logging
+import os
 from pathlib import Path
+import threading
+import time
 from typing import Dict, List, Optional
 
 import requests
@@ -26,6 +29,9 @@ logger = logging.getLogger(__name__)
 ASSETS_BASE_URL = build_card_image_bases(
     TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
 )["cdn_base_url"]
+CARD_DOWNLOAD_LOCK_TIMEOUT_SECONDS = 120.0
+CARD_DOWNLOAD_LOCK_POLL_SECONDS = 0.1
+CARD_DOWNLOAD_STALE_LOCK_SECONDS = 300.0
 
 
 class ImageResourceManager:
@@ -91,40 +97,126 @@ class ImageResourceManager:
         Returns:
             下载成功返回图片路径，失败返回None
         """
-        # 确保目录存在
         save_dir = self.cards_dir / set_code
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        # 按优先级尝试不同格式：png优先，webp备用
+        existing_path = self._find_existing_card_path(save_dir, card_number)
+        if existing_path:
+            return existing_path
+
+        lock_path = save_dir / f"{card_number}.download.lock"
+        lock_fd = self._try_acquire_download_lock(lock_path)
+        if lock_fd is None:
+            return self._wait_for_card_download(set_code, card_number, save_dir, lock_path)
+
+        try:
+            # 变更原因：多 worker/多进程可能同时判定缺图，锁内二次检查避免重复下载同一卡图。
+            existing_path = self._find_existing_card_path(save_dir, card_number)
+            if existing_path:
+                return existing_path
+            return self._download_card_locked(set_code, card_number, save_dir)
+        finally:
+            os.close(lock_fd)
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
+
+    def _download_card_locked(
+        self, set_code: str, card_number: int, save_dir: Path
+    ) -> Optional[Path]:
+        """持有卡牌下载锁时执行实际下载。"""
         formats = [
             ("png", f"{card_number}.png"),
             ("webp", f"{card_number}.webp"),
         ]
 
-        for ext, filename in formats:
+        for _ext, filename in formats:
             url = f"{ASSETS_BASE_URL}/{set_code}/{filename}"
             save_path = save_dir / filename
-
-            # 如果已存在，直接返回
-            if save_path.exists():
-                return save_path
 
             try:
                 resp = self.session.get(url, timeout=30)
                 if resp.status_code == 200:
-                    save_path.write_bytes(resp.content)
+                    self._write_card_image_atomic(save_path, resp.content)
                     logger.debug(f"下载成功: {set_code}/{filename}")
                     return save_path
-                elif resp.status_code == 404:
+                if resp.status_code == 404:
                     logger.debug(f"图片不存在(404): {url}")
-                    continue  # 尝试下一个格式
-                else:
-                    logger.warning(f"下载失败({resp.status_code}): {url}")
+                    continue
+                logger.warning(f"下载失败({resp.status_code}): {url}")
             except Exception as e:
                 logger.warning(f"下载卡牌图片异常: {url} - {e}")
 
         logger.warning(f"所有格式尝试失败: {set_code}/{card_number}")
         return None
+
+    def _find_existing_card_path(self, save_dir: Path, card_number: int) -> Optional[Path]:
+        """查找已存在的卡图文件。"""
+        for filename in (f"{card_number}.png", f"{card_number}.webp"):
+            path = save_dir / filename
+            if path.exists():
+                return path
+        return None
+
+    def _try_acquire_download_lock(self, lock_path: Path) -> Optional[int]:
+        """尝试获取跨进程下载锁。"""
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        try:
+            fd = os.open(lock_path, flags)
+            os.write(
+                fd,
+                f"pid={os.getpid()} thread={threading.get_ident()}\n".encode("utf-8"),
+            )
+            return fd
+        except FileExistsError:
+            if self._is_stale_lock(lock_path):
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    fd = os.open(lock_path, flags)
+                    os.write(
+                        fd,
+                        f"pid={os.getpid()} thread={threading.get_ident()} stale_recovered=1\n".encode("utf-8"),
+                    )
+                    return fd
+                except FileExistsError:
+                    return None
+            return None
+
+    def _is_stale_lock(self, lock_path: Path) -> bool:
+        """判断下载锁是否疑似遗留。"""
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        return age > CARD_DOWNLOAD_STALE_LOCK_SECONDS
+
+    def _wait_for_card_download(
+        self, set_code: str, card_number: int, save_dir: Path, lock_path: Path
+    ) -> Optional[Path]:
+        """等待其他 worker 下载完成。"""
+        deadline = time.monotonic() + CARD_DOWNLOAD_LOCK_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            existing_path = self._find_existing_card_path(save_dir, card_number)
+            if existing_path:
+                return existing_path
+            if not lock_path.exists():
+                return self.download_card(set_code, card_number)
+            time.sleep(CARD_DOWNLOAD_LOCK_POLL_SECONDS)
+
+        logger.warning("等待卡牌图片下载超时: %s/%03d", set_code, card_number)
+        return None
+
+    def _write_card_image_atomic(self, save_path: Path, content: bytes) -> None:
+        """原子写入卡图，避免其他进程读到半文件。"""
+        temp_path = save_path.with_name(
+            f".{save_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        temp_path.write_bytes(content)
+        temp_path.replace(save_path)
 
     def download_cards_batch(
         self, set_code: str, card_numbers: List[int], max_workers: int = 5
@@ -141,11 +233,12 @@ class ImageResourceManager:
             {card_number: path} 下载成功的卡牌字典
         """
         results = {}
+        unique_card_numbers = list(dict.fromkeys(card_numbers))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_card = {
                 executor.submit(self.download_card, set_code, num): num
-                for num in card_numbers
+                for num in unique_card_numbers
             }
 
             for future in concurrent.futures.as_completed(future_to_card):
