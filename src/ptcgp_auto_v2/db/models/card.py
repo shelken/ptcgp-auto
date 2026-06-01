@@ -53,6 +53,7 @@ class Pack(SQLModel, TimestampMixin, table=True):
     # 多语言显示名 (JSON)
     label_data: str = Field(default="{}", description="多语言名称 JSON")
 
+    sku_id: Optional[str] = Field(default=None, index=True, description="游戏资源包 SKU")
     image_url: Optional[str] = Field(default=None)
 
     # 关系

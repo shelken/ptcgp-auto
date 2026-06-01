@@ -2,8 +2,7 @@
 """
 卡包图片资源管理器
 
-负责从公共资源自动下载、处理和管理卡包封面图片。
-来源: https://github.com/flibustier/pokemon-tcg-exchange
+负责从 ptcgp-assets 下载、处理和管理卡包封面图片。
 """
 
 import logging
@@ -11,22 +10,17 @@ import time
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 import requests
 from PIL import Image
 
+from ptcgp_auto_v2.db.engine import session_scope
+from ptcgp_auto_v2.db.repositories.card_repository import CardRepository, PackData
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 logger = logging.getLogger(__name__)
 
 # 配置参数（基于测试可调整）
-# 公共图片基础 URL（优先 jsDelivr，失败回退 GitHub Raw）
-PACK_IMAGE_BASE_URLS = [
-    "https://cdn.jsdelivr.net/gh/flibustier/pokemon-tcg-exchange@main/public/images/packs",
-    "https://raw.githubusercontent.com/flibustier/pokemon-tcg-exchange/main/public/images/packs",
-]
-
 # 下载重试与超时
 PACK_IMAGE_DOWNLOAD_RETRIES = 3
 PACK_IMAGE_DOWNLOAD_TIMEOUT = 15
@@ -54,7 +48,7 @@ class PackImageManager:
     该类覆盖卡包图片下载、裁剪保存与模板路径映射，依赖 requests 和 PIL。
     """
 
-    def __init__(self, base_dir: str = "templates/packs_auto"):
+    def __init__(self, base_dir: str = "templates/packs_auto_assets"):
         """
         初始化管理器
 
@@ -97,12 +91,23 @@ class PackImageManager:
 
         logger.info(f"准备卡包图片资源: {booster_name}")
 
-        image_data = self.download_pack_image(booster_name)
+        pack_data = self.get_pack_metadata(booster_name)
+        if pack_data is None or not pack_data.image_url:
+            sku_id = pack_data.sku_id if pack_data else None
+            logger.error("准备卡包图片失败，缺少 sku/image_url: booster=%s sku_id=%s", booster_name, sku_id)
+            return False
+
+        image_data = self.download_pack_image(pack_data.image_url, booster_name, pack_data.sku_id)
         if image_data is None:
-            logger.error("准备卡包图片失败，下载未成功: %s", booster_name)
+            logger.error("准备卡包图片失败，下载未成功: booster=%s sku_id=%s", booster_name, pack_data.sku_id)
             return False
 
         return self.process_and_save(booster_name, image_data)
+
+    def get_pack_metadata(self, booster_name: str) -> PackData | None:
+        """从数据库读取卡包图片元数据。"""
+        with session_scope() as session:
+            return CardRepository(session).get_pack_by_name(booster_name)
 
     def is_pack_ready(self, booster_name: str) -> bool:
         """
@@ -124,47 +129,55 @@ class PackImageManager:
 
         return True
 
-    def download_pack_image(self, booster_name: str) -> Optional[bytes]:
+    def download_pack_image(self, image_url: str, booster_name: str | None = None, sku_id: str | None = None) -> Optional[bytes]:
         """
-        从 GitHub 下载卡包图片
+        从数据库记录的 URL 下载卡包图片。
 
         Args:
-            booster_name: 子包名称
+            image_url: ptcgp-assets 包图 URL
+            booster_name: 子包名称，用于日志
+            sku_id: 游戏资源 SKU，用于日志
 
         Returns:
             图片二进制数据，失败返回 None
         """
-        # 构造 URL（保留空格转义）
-        encoded_name = quote(booster_name, safe="")
+        for attempt in range(1, PACK_IMAGE_DOWNLOAD_RETRIES + 1):
+            try:
+                logger.debug(
+                    "下载卡包图片: %s (booster=%s sku_id=%s 尝试 %s/%s)",
+                    image_url,
+                    booster_name,
+                    sku_id,
+                    attempt,
+                    PACK_IMAGE_DOWNLOAD_RETRIES,
+                )
+                resp = self.session.get(image_url, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
+                if resp.status_code == 200 and resp.content:
+                    return resp.content
+                if resp.status_code == 404:
+                    logger.warning("卡包图片不存在: %s booster=%s sku_id=%s", image_url, booster_name, sku_id)
+                    break
+                logger.warning(
+                    "下载失败: %s (HTTP %s, booster=%s sku_id=%s, 尝试 %s/%s)",
+                    image_url,
+                    resp.status_code,
+                    booster_name,
+                    sku_id,
+                    attempt,
+                    PACK_IMAGE_DOWNLOAD_RETRIES,
+                )
+            except Exception:
+                logger.exception(
+                    "下载卡包图片异常: %s booster=%s sku_id=%s (尝试 %s/%s)",
+                    image_url,
+                    booster_name,
+                    sku_id,
+                    attempt,
+                    PACK_IMAGE_DOWNLOAD_RETRIES,
+                )
+            time.sleep(0.5 * attempt)
 
-        for base_url in PACK_IMAGE_BASE_URLS:
-            url = f"{base_url}/{encoded_name}.webp"
-            for attempt in range(1, PACK_IMAGE_DOWNLOAD_RETRIES + 1):
-                try:
-                    logger.debug(
-                        f"下载卡包图片: {url} (尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
-                    )
-                    resp = self.session.get(url, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
-                    if resp.status_code == 200 and resp.content:
-                        return resp.content
-                    if resp.status_code == 404:
-                        logger.warning(
-                            f"卡包图片不存在: {url} (尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
-                        )
-                        break
-                    logger.warning(
-                        f"下载失败: {url} (HTTP {resp.status_code}, 尝试 {attempt}/{PACK_IMAGE_DOWNLOAD_RETRIES})"
-                    )
-                except Exception:
-                    logger.exception(
-                        "下载卡包图片异常: %s (尝试 %s/%s)",
-                        url,
-                        attempt,
-                        PACK_IMAGE_DOWNLOAD_RETRIES,
-                    )
-                time.sleep(0.5 * attempt)
-
-        logger.error("下载卡包图片失败: %s", booster_name)
+        logger.error("下载卡包图片失败: booster=%s sku_id=%s", booster_name, sku_id)
         return None
 
     def process_and_save(self, booster_name: str, image_data: bytes) -> bool:
@@ -282,10 +295,10 @@ class PackImageManager:
             booster_name: 子包名称
 
         Returns:
-            模板名称，如 "packs_auto/Charizard"
+            模板名称，如 "packs_auto_assets/Charizard"
         """
         safe_name = normalize_name_str(booster_name)
-        return f"packs_auto/{safe_name}"
+        return f"{self.base_dir.name}/{safe_name}"
 
     def list_available_packs(self) -> list[str]:
         """

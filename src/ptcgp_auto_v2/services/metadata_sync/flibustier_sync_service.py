@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import copy
 import json
+from dataclasses import dataclass
 from typing import Any
 
 import requests
 
+from ptcgp_auto_v2.config.assets import build_pack_image_url
 from ptcgp_auto_v2.db.models import Card, CardSet, Pack
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.services.metadata_sync.cache_store import TTLCacheStore
@@ -18,6 +20,14 @@ ASSETS_METADATA_BASE_URL = "https://raw.githubusercontent.com/shelken/ptcgp-asse
 SETS_URL = f"{ASSETS_METADATA_BASE_URL}/sets/en-US/sets.json"
 # 变更原因: cards.extra 已覆盖同步所需全部卡牌字段，继续拉 flibustier cards.json 会丢失游戏已有卡。
 CARDS_EXTRA_URL = f"{ASSETS_METADATA_BASE_URL}/cards/en-US/cards.extra.json"
+
+
+@dataclass(frozen=True, slots=True)
+class PackMetadata:
+    name: str
+    set_code: str
+    sku_id: str | None
+    image_url: str | None
 
 
 class FlibustierSyncService:
@@ -70,8 +80,8 @@ class FlibustierSyncService:
                     operations["sets"].append(op)
 
         planned_pack_names: set[str] = set()
-        for pack_name, set_code in filtered_pack_universe.items():
-            pack_op = self._build_pack_operation(pack_name, set_code, mode)
+        for pack_name, pack_metadata in filtered_pack_universe.items():
+            pack_op = self._build_pack_operation(pack_metadata, mode)
             planned_pack_names.add(pack_name)
             if pack_op is not None:
                 operations["packs"].append(pack_op)
@@ -92,11 +102,7 @@ class FlibustierSyncService:
                 if pack_name in planned_pack_names:
                     continue
                 # 变更原因：scoped sync 保留跨 set link 时，也必须计划对应 pack row，避免执行后产生悬空 card_packs。
-                pack_op = self._build_pack_operation(
-                    pack_name,
-                    pack_universe[pack_name],
-                    mode,
-                )
+                pack_op = self._build_pack_operation(pack_universe[pack_name], mode)
                 planned_pack_names.add(pack_name)
                 if pack_op is not None:
                     operations["packs"].append(pack_op)
@@ -235,7 +241,7 @@ class FlibustierSyncService:
         scope_value: str | None,
         all_sets: list[dict[str, Any]],
         all_cards: list[dict[str, Any]],
-        pack_universe: dict[str, str],
+        pack_universe: dict[str, PackMetadata],
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """按范围过滤集合与卡牌。"""
         if scope_level == "all" or not scope_value:
@@ -253,7 +259,7 @@ class FlibustierSyncService:
             if pack_name not in pack_universe:
                 return [], []
             # 变更原因：pack 所属 set 只能由 sets.json.packs 决定，不能由含该 pack 的卡牌所属系列反推。
-            set_code = pack_universe[pack_name]
+            set_code = pack_universe[pack_name].set_code
             cards = [
                 item
                 for item in all_cards
@@ -273,27 +279,39 @@ class FlibustierSyncService:
         sets = [item for item in all_sets if str(item.get("code")) == set_code]
         return sets, cards
 
-    def _build_pack_universe(self, sets: list[dict[str, Any]]) -> dict[str, str]:
+    def _build_pack_universe(self, sets: list[dict[str, Any]]) -> dict[str, PackMetadata]:
         """从 sets.json.packs 建立 pack 到 set 的唯一归属。"""
-        pack_universe: dict[str, str] = {}
+        pack_universe: dict[str, PackMetadata] = {}
         for set_item in sets:
             set_code = str(set_item.get("code") or "").strip()
             if not set_code:
                 continue
-            for pack_name in set_item.get("packs") or []:
-                clean_pack_name = str(pack_name).strip()
-                if not clean_pack_name:
-                    continue
-                if (
-                    clean_pack_name in pack_universe
-                    and pack_universe[clean_pack_name] != set_code
-                ):
+            for raw_pack_entry in set_item.get("packs") or []:
+                pack_entry = self._parse_pack_entry(raw_pack_entry, set_code)
+                if pack_entry.name in pack_universe and pack_universe[pack_entry.name].set_code != set_code:
                     raise ValueError(
-                        f"pack name belongs to multiple sets: {clean_pack_name} "
-                        f"({pack_universe[clean_pack_name]} vs {set_code})"
+                        f"pack name belongs to multiple sets: {pack_entry.name} "
+                        f"({pack_universe[pack_entry.name].set_code} vs {set_code})"
                     )
-                pack_universe[clean_pack_name] = set_code
+                pack_universe[pack_entry.name] = pack_entry
         return pack_universe
+
+    def _parse_pack_entry(self, raw_pack_entry: Any, set_code: str) -> PackMetadata:
+        """兼容 sets.json.packs 旧 string 与新 object entry。"""
+        if isinstance(raw_pack_entry, str):
+            clean_pack_name = raw_pack_entry.strip()
+            if not clean_pack_name:
+                raise ValueError(f"sets.json pack 名称为空: {set_code}")
+            return PackMetadata(clean_pack_name, set_code, None, None)
+
+        if not isinstance(raw_pack_entry, dict):
+            raise ValueError(f"sets.json pack entry 格式错误: {raw_pack_entry}")
+        clean_pack_name = str(raw_pack_entry.get("name") or "").strip()
+        if not clean_pack_name:
+            raise ValueError(f"sets.json pack object 缺少 name: {raw_pack_entry}")
+        sku_id = self._str_or_none(raw_pack_entry.get("skuId"))
+        image_url = build_pack_image_url(sku_id) if sku_id else None
+        return PackMetadata(clean_pack_name, set_code, sku_id, image_url)
 
     def _parse_card_scope(self, scope_value: str) -> tuple[str, int]:
         """解析 card 范围参数。"""
@@ -510,17 +528,26 @@ class FlibustierSyncService:
         }
 
     def _build_pack_operation(
-        self, pack_name: str, set_code: str, mode: str
+        self, pack_metadata: PackMetadata, mode: str
     ) -> dict[str, Any] | None:
         """构建卡包写入动作。"""
+        pack_name = pack_metadata.name
         existing_pack = self._repo.get_pack_by_name(pack_name)
         print(f"[flibustier] pack name={pack_name}, existing={existing_pack is not None}", flush=True)
-        if mode == "supplement" and existing_pack is not None:
+        missing_asset_fields = (
+            existing_pack is not None
+            and (
+                (pack_metadata.sku_id and not getattr(existing_pack, "sku_id", None))
+                or (pack_metadata.image_url and not getattr(existing_pack, "image_url", None))
+            )
+        )
+        if mode == "supplement" and existing_pack is not None and not missing_asset_fields:
             print("[flibustier] supplement mode, pack exists, skip", flush=True)
             return None
         if (
             existing_pack is not None
-            and existing_pack.set_code == set_code
+            and existing_pack.set_code == pack_metadata.set_code
+            and not missing_asset_fields
             and mode != "force"
         ):
             return None
@@ -530,16 +557,26 @@ class FlibustierSyncService:
         if existing_pack is None:
             # 新增
             changed_values.append({"field": "name", "from": "", "to": pack_name})
-            changed_values.append({"field": "set_code", "from": "", "to": set_code})
+            changed_values.append({"field": "set_code", "from": "", "to": pack_metadata.set_code})
+            if pack_metadata.sku_id:
+                changed_values.append({"field": "sku_id", "from": "", "to": pack_metadata.sku_id})
+            if pack_metadata.image_url:
+                changed_values.append({"field": "image_url", "from": "", "to": pack_metadata.image_url})
         else:
             # 更新
-            if existing_pack.set_code != set_code:
-                changed_values.append({"field": "set_code", "from": existing_pack.set_code or "", "to": set_code})
+            if existing_pack.set_code != pack_metadata.set_code:
+                changed_values.append({"field": "set_code", "from": existing_pack.set_code or "", "to": pack_metadata.set_code})
+            if pack_metadata.sku_id and getattr(existing_pack, "sku_id", None) != pack_metadata.sku_id:
+                changed_values.append({"field": "sku_id", "from": getattr(existing_pack, "sku_id", None) or "", "to": pack_metadata.sku_id})
+            if pack_metadata.image_url and getattr(existing_pack, "image_url", None) != pack_metadata.image_url:
+                changed_values.append({"field": "image_url", "from": getattr(existing_pack, "image_url", None) or "", "to": pack_metadata.image_url})
 
         return {
             "name": pack_name,
-            "set_code": set_code,
+            "set_code": pack_metadata.set_code,
             "label_data": json.dumps({"en": pack_name}, ensure_ascii=False),
+            "sku_id": pack_metadata.sku_id,
+            "image_url": pack_metadata.image_url,
             "op_type": "create" if existing_pack is None else "update",
             "changed_values": changed_values,
         }

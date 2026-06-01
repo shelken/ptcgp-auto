@@ -153,6 +153,17 @@ class Database:
         from sqlmodel import inspect, text
 
         inspector = inspect(engine)
+
+        with engine.connect() as conn:
+            if inspector.has_table("packs"):
+                # 变更原因：新增 sku_id 后旧库 create_all 不会自动补索引，运行时按 SKU 排查需要普通索引。
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_packs_sku_id ON packs (sku_id)"
+                    )
+                )
+                conn.commit()
+
         if not inspector.has_table("account_gift_pairs"):
             return
 

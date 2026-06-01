@@ -19,6 +19,13 @@ def resolve_card_image_locale(lang: str) -> str:
     return mapping.get(lang, mapping["zh_CN"])
 
 
+def build_pack_image_url(sku_id: str, language: str = "en-US") -> str:
+    """构造 ptcgp-assets 包封面 Raw URL。"""
+    if not sku_id:
+        raise ValueError("sku_id 不能为空")
+    return f"{CARD_IMAGE_REPO_BASE_URL}/{language}/packs/{sku_id}.webp"
+
+
 def build_card_image_bases(lang: str) -> dict[str, str]:
     """构造指定语言下的卡牌图片基础路径。"""
     image_locale = resolve_card_image_locale(lang)

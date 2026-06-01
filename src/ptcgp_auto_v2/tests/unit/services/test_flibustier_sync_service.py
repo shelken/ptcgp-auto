@@ -35,6 +35,17 @@ class FakeRepo:
         return None
 
 
+class ExistingPackMissingAssetsRepo(FakeRepo):
+    def get_pack_by_name(self, name: str):
+        return SimpleNamespace(
+            name=name,
+            set_code="B1",
+            label_data='{"en":"Mega Altaria"}',
+            sku_id=None,
+            image_url=None,
+        )
+
+
 class ExistingSetRepo(FakeRepo):
     def get_set_by_code(self, code: str):
         return SimpleNamespace(
@@ -109,6 +120,90 @@ def test_build_plan_preserves_existing_release_date_when_remote_release_date_is_
     [set_op] = plan["operations"]["sets"]
     assert set_op["release_date"] == "2025-10-30"
     assert "release_date" not in {item["field"] for item in set_op["changed_values"]}
+
+
+def test_object_pack_entry_generates_sku_id_and_image_url():
+    sets_data = {
+        "B": [
+            {
+                "code": "B1",
+                "name": {"en": "Mega Rising"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": [{"name": "Mega Altaria", "skuId": "B1_3"}],
+            }
+        ]
+    }
+
+    plan = FlibustierSyncService(FakeRepo()).build_plan(  # type: ignore[arg-type]
+        mode="supplement",
+        scope_level="all",
+        scope_value=None,
+        sets_data=sets_data,
+        cards_data=[],
+        extra_map={},
+    )
+
+    [pack_op] = plan["operations"]["packs"]
+    assert pack_op["name"] == "Mega Altaria"
+    assert pack_op["set_code"] == "B1"
+    assert pack_op["sku_id"] == "B1_3"
+    assert pack_op["image_url"] == "https://raw.githubusercontent.com/shelken/ptcgp-assets/main/images/en-US/packs/B1_3.webp"
+
+
+def test_string_pack_entry_stays_compatible_without_asset_fields():
+    sets_data = {
+        "A": [
+            {
+                "code": "A1a",
+                "name": {"en": "Mythical Island"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Mythical Island"],
+            }
+        ]
+    }
+
+    plan = FlibustierSyncService(FakeRepo()).build_plan(  # type: ignore[arg-type]
+        mode="supplement",
+        scope_level="all",
+        scope_value=None,
+        sets_data=sets_data,
+        cards_data=[],
+        extra_map={},
+    )
+
+    [pack_op] = plan["operations"]["packs"]
+    assert pack_op["name"] == "Mythical Island"
+    assert pack_op["sku_id"] is None
+    assert pack_op["image_url"] is None
+
+
+def test_supplement_existing_pack_fills_missing_asset_fields():
+    sets_data = {
+        "B": [
+            {
+                "code": "B1",
+                "name": {"en": "Mega Rising"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": [{"name": "Mega Altaria", "skuId": "B1_3"}],
+            }
+        ]
+    }
+
+    plan = FlibustierSyncService(ExistingPackMissingAssetsRepo()).build_plan(  # type: ignore[arg-type]
+        mode="supplement",
+        scope_level="all",
+        scope_value=None,
+        sets_data=sets_data,
+        cards_data=[],
+        extra_map={},
+    )
+
+    [pack_op] = plan["operations"]["packs"]
+    assert pack_op["op_type"] == "update"
+    assert {item["field"] for item in pack_op["changed_values"]} == {"sku_id", "image_url"}
 
 
 def test_build_plan_uses_sets_packs_for_pack_operations():
@@ -392,6 +487,8 @@ def test_build_plan_pack_scope_uses_set_from_pack_universe():
             "name": "Deluxe Pack ex",
             "set_code": "A4b",
             "label_data": '{"en": "Deluxe Pack ex"}',
+            "sku_id": None,
+            "image_url": None,
             "op_type": "create",
             "changed_values": [
                 {"field": "name", "from": "", "to": "Deluxe Pack ex"},

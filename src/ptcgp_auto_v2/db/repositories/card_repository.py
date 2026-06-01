@@ -33,6 +33,7 @@ class PackData:
     name: str
     set_code: str
     label_data: str | None
+    sku_id: str | None
     image_url: str | None
     created_at: datetime
     updated_at: datetime
@@ -102,6 +103,11 @@ class CardRepository(BaseRepository):
         existing = self.session.get(Pack, pack.name)
         if existing:
             existing.set_code = pack.set_code
+            # 变更原因：补充同步需要填充新资产映射，但不能覆盖人工 label_data。
+            if pack.sku_id:
+                existing.sku_id = pack.sku_id
+            if pack.image_url:
+                existing.image_url = pack.image_url
             existing.updated_at = datetime.now()
             self.session.add(existing)
             self._finish_write(existing)
