@@ -16,6 +16,7 @@ data/**
 templates/cards/
 templates/packs/
 templates/packs_auto/
+templates/packs_auto_assets/
 .alma-snapshots
 runs/**
 output

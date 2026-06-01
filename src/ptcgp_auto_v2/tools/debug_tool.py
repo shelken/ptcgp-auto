@@ -236,15 +236,20 @@ def handle_template(
         template_name = template_key
     else:
         # 系统模板 - 尝试加载
-        # 对于 packs_auto/ 前缀的模板，先确保资源已下载
-        if template_name.startswith("packs_auto/"):
-            booster_name = template_name[11:]  # 去掉 "packs_auto/" 前缀
+        # 对于卡包自动模板前缀，先确保资源已下载，再使用 PackImageManager 返回的标准模板名。
+        pack_template_prefixes = ("packs_auto/", "packs_auto_assets/")
+        if template_name.startswith(pack_template_prefixes):
+            booster_name = template_name.split("/", 1)[1]
             from ptcgp_auto_v2.utils.pack_image_manager import PackImageManager
 
             manager = PackImageManager()
             if not manager.ensure_pack_ready(booster_name):
                 print(f"ERROR: 下载卡包资源失败: {booster_name}")
+                manager.close()
                 return
+            # 变更原因：包图缓存目录已切到 ptcgp-assets 命名空间，debug_tool 必须跟随单一模板名来源。
+            template_name = manager.get_template_name(booster_name)
+            manager.close()
             # 资源就绪后，用标准方式加载（会进行预缩放）
             matcher.load_template(f"{template_name}.png", is_pack_template=True)
         elif "/" in template_name:
