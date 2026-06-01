@@ -69,8 +69,10 @@ class FlibustierSyncService:
                 if op is not None:
                     operations["sets"].append(op)
 
+        planned_pack_names: set[str] = set()
         for pack_name, set_code in filtered_pack_universe.items():
             pack_op = self._build_pack_operation(pack_name, set_code, mode)
+            planned_pack_names.add(pack_name)
             if pack_op is not None:
                 operations["packs"].append(pack_op)
 
@@ -86,6 +88,18 @@ class FlibustierSyncService:
             ]
             if not card_op["needs_upsert"] and not card_op["add_pack_names"]:
                 continue
+            for pack_name in card_op["add_pack_names"]:
+                if pack_name in planned_pack_names:
+                    continue
+                # 变更原因：scoped sync 保留跨 set link 时，也必须计划对应 pack row，避免执行后产生悬空 card_packs。
+                pack_op = self._build_pack_operation(
+                    pack_name,
+                    pack_universe[pack_name],
+                    mode,
+                )
+                planned_pack_names.add(pack_name)
+                if pack_op is not None:
+                    operations["packs"].append(pack_op)
             operations["cards"].append(card_op)
 
         summary = {

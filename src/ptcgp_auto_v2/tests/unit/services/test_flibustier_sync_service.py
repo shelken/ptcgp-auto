@@ -5,6 +5,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from ptcgp_auto_v2.db.models import CardPack, Pack
+from ptcgp_auto_v2.db.repositories.card_repository import CardRepository
 from ptcgp_auto_v2.services.metadata_sync import flibustier_sync_service as service_module
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import FlibustierSyncService
 
@@ -195,22 +199,66 @@ def test_build_plan_set_scope_keeps_cross_set_card_pack_link_from_full_pack_univ
         extra_map={("A1", 1): cards_data[0]},
     )
 
-    assert plan["operations"]["packs"] == [
-        {
-            "name": "Mewtwo",
-            "set_code": "A1",
-            "label_data": '{"en": "Mewtwo"}',
-            "op_type": "create",
-            "changed_values": [
-                {"field": "name", "from": "", "to": "Mewtwo"},
-                {"field": "set_code", "from": "", "to": "A1"},
-            ],
-        }
+    assert [(item["name"], item["set_code"]) for item in plan["operations"]["packs"]] == [
+        ("Mewtwo", "A1"),
+        ("Deluxe Pack ex", "A4b"),
     ]
     assert plan["operations"]["cards"][0]["add_pack_names"] == [
         "Deluxe Pack ex",
         "Mewtwo",
     ]
+
+
+def test_execute_set_scope_creates_packs_for_cross_set_card_pack_links(tmp_path):
+    sets_data = {
+        "A": [
+            {
+                "code": "A1",
+                "name": {"en": "Genetic Apex"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Mewtwo"],
+            },
+            {
+                "code": "A4b",
+                "name": {"en": "Deluxe Pack ex"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Deluxe Pack ex"],
+            },
+        ]
+    }
+    cards_data = [
+        {
+            "set": "A1",
+            "number": 1,
+            "name": "Bulbasaur",
+            "rarity": "C",
+            "image": "A1_001.webp",
+            "packs": ["Mewtwo", "Deluxe Pack ex"],
+        }
+    ]
+    engine = create_engine(f"sqlite:///{tmp_path / 'metadata.db'}")
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        repo = CardRepository(session)
+        service = FlibustierSyncService(repo)
+        plan = service.build_plan(
+            mode="supplement",
+            scope_level="set",
+            scope_value="A1",
+            sets_data=sets_data,
+            cards_data=cards_data,
+            extra_map={("A1", 1): cards_data[0]},
+        )
+        service.execute_plan(plan["operations"])
+
+        pack_names = set(session.exec(select(Pack.name)).all())
+        linked_pack_names = set(session.exec(select(CardPack.pack_name)).all())
+
+    assert linked_pack_names == {"Deluxe Pack ex", "Mewtwo"}
+    assert linked_pack_names <= pack_names
 
 
 def test_build_plan_card_scope_keeps_cross_set_card_pack_link_from_full_pack_universe():
@@ -252,17 +300,9 @@ def test_build_plan_card_scope_keeps_cross_set_card_pack_link_from_full_pack_uni
         extra_map={("A1", 1): cards_data[0]},
     )
 
-    assert plan["operations"]["packs"] == [
-        {
-            "name": "Mewtwo",
-            "set_code": "A1",
-            "label_data": '{"en": "Mewtwo"}',
-            "op_type": "create",
-            "changed_values": [
-                {"field": "name", "from": "", "to": "Mewtwo"},
-                {"field": "set_code", "from": "", "to": "A1"},
-            ],
-        }
+    assert [(item["name"], item["set_code"]) for item in plan["operations"]["packs"]] == [
+        ("Mewtwo", "A1"),
+        ("Deluxe Pack ex", "A4b"),
     ]
     assert plan["operations"]["cards"][0]["add_pack_names"] == [
         "Deluxe Pack ex",

@@ -3,10 +3,23 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlmodel import Session, SQLModel, create_engine
 
 from ptcgp_auto_v2.db.models import Card, CardPack, CardSet, Pack
 from ptcgp_auto_v2.db.repositories.card_repository import CardRepository
+
+
+def test_pack_name_alignment_migration_uses_localtime_timestamps():
+    migration_path = (
+        Path(__file__).resolve().parents[5]
+        / "scripts/migrations/2026_05_30_pack_name_alignment.sql"
+    )
+    sql = migration_path.read_text(encoding="utf-8")
+
+    assert "CURRENT_TIMESTAMP" not in sql
+    assert sql.count("datetime('now', 'localtime')") == 3
 
 
 def test_get_packs_by_set_reads_packs_table_not_card_links(tmp_path):

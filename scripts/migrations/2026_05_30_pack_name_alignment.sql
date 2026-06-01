@@ -133,7 +133,7 @@ SET
             )
         )
     END,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = datetime('now', 'localtime')
 WHERE EXISTS (
     SELECT 1
     FROM _pack_name_alignment AS mapping
@@ -148,7 +148,7 @@ SET
         FROM _pack_name_alignment AS mapping
         WHERE mapping.old_name = card_packs.pack_name
     ),
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = datetime('now', 'localtime')
 WHERE EXISTS (
     SELECT 1
     FROM _pack_name_alignment AS mapping
@@ -162,7 +162,7 @@ SET
         FROM _pack_name_alignment AS mapping
         WHERE mapping.old_name = account_pack_config.booster_name
     ),
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = datetime('now', 'localtime')
 WHERE EXISTS (
     SELECT 1
     FROM _pack_name_alignment AS mapping
