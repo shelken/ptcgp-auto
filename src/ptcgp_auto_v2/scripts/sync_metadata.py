@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""同步卡牌元数据到数据库（统一复用 FlibustierSyncService）。"""
+"""同步卡牌元数据到数据库（ptcgp-assets 主数据源）。"""
 
 from __future__ import annotations
 

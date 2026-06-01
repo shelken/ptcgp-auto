@@ -191,7 +191,7 @@ def _build_preview_items(
 
 
 def _build_flibustier_preview_items(operations: dict[str, Any]) -> list[dict[str, str]]:
-    """构建 flibustier 计划预览清单。"""
+    """构建 ptcgp-assets 计划预览清单。"""
     items: list[dict[str, str]] = []
     for set_item in _iter_operation_items(operations, "sets"):
         item = _build_set_operation_preview_item(set_item)

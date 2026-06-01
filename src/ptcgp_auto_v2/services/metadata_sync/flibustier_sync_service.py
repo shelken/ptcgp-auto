@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""flibustier 元数据同步服务。"""
+"""ptcgp-assets 元数据同步服务。
+
+历史类名仍保留 FlibustierSyncService，避免扩大 Web/API 调用方改动范围。
+"""
 
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ class PackMetadata:
 
 
 class FlibustierSyncService:
-    """负责构建 flibustier 同步预览计划并执行。"""
+    """负责构建 ptcgp-assets 同步预览计划并执行。"""
 
     def __init__(
         self,
@@ -331,9 +334,9 @@ class FlibustierSyncService:
         if not code:
             return None
         existing_set = self._repo.get_set_by_code(code)
-        print(f"[flibustier] set code={code}, existing={existing_set is not None}", flush=True)
+        print(f"[ptcgp-assets] set code={code}, existing={existing_set is not None}", flush=True)
         if mode == "supplement" and existing_set is not None:
-            print("[flibustier] supplement mode, set exists, skip", flush=True)
+            print("[ptcgp-assets] supplement mode, set exists, skip", flush=True)
             return None
 
         incoming_name = set_item.get("name", {})
@@ -533,7 +536,7 @@ class FlibustierSyncService:
         """构建卡包写入动作。"""
         pack_name = pack_metadata.name
         existing_pack = self._repo.get_pack_by_name(pack_name)
-        print(f"[flibustier] pack name={pack_name}, existing={existing_pack is not None}", flush=True)
+        print(f"[ptcgp-assets] pack name={pack_name}, existing={existing_pack is not None}", flush=True)
         missing_asset_fields = (
             existing_pack is not None
             and (
@@ -542,7 +545,7 @@ class FlibustierSyncService:
             )
         )
         if mode == "supplement" and existing_pack is not None and not missing_asset_fields:
-            print("[flibustier] supplement mode, pack exists, skip", flush=True)
+            print("[ptcgp-assets] supplement mode, pack exists, skip", flush=True)
             return None
         if (
             existing_pack is not None

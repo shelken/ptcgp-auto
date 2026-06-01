@@ -130,7 +130,7 @@ def build_metadata_context(
             selected_pack_name=selected_pack_name,
         )
 
-    # 进入页面默认不触发远端请求，避免仅打开管理页就访问 flibustier/52poke。
+    # 进入页面默认不触发远端请求，避免仅打开管理页就访问 ptcgp-assets/52poke。
     sync_check = build_default_check_context()
     snapshot_preview = _load_snapshot_preview(snapshot_id)
 
