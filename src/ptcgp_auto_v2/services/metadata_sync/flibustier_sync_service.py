@@ -49,12 +49,15 @@ class FlibustierSyncService:
             raise ValueError(f"不支持的同步范围: {scope_level}")
 
         all_sets = self._flatten_sets(sets_data)
+        pack_universe = self._build_pack_universe(all_sets)
         filtered_sets, filtered_cards = self._filter_scope(
             scope_level=scope_level,
             scope_value=scope_value,
             all_sets=all_sets,
             all_cards=cards_data,
+            pack_universe=pack_universe,
         )
+        filtered_pack_universe = self._build_pack_universe(filtered_sets)
 
         operations: dict[str, Any] = {"sets": [], "packs": [], "cards": []}
 
@@ -66,19 +69,24 @@ class FlibustierSyncService:
                 if op is not None:
                     operations["sets"].append(op)
 
-        detected_packs: dict[str, str] = {}
+        for pack_name, set_code in filtered_pack_universe.items():
+            pack_op = self._build_pack_operation(pack_name, set_code, mode)
+            if pack_op is not None:
+                operations["packs"].append(pack_op)
+
         for card_item in filtered_cards:
             card_op = self._build_card_operation(card_item, extra_map, mode)
             if card_op is None:
                 continue
+            # 变更原因：cards.extra 表示卡牌获取来源，不能反向创建 pack；pack universe 只能来自 sets.json.packs。
+            card_op["add_pack_names"] = [
+                pack_name
+                for pack_name in card_op["add_pack_names"]
+                if pack_name in filtered_pack_universe
+            ]
+            if not card_op["needs_upsert"] and not card_op["add_pack_names"]:
+                continue
             operations["cards"].append(card_op)
-            for pack_name in card_op["add_pack_names"]:
-                detected_packs[pack_name] = card_op["card"]["set_code"]
-
-        for pack_name, set_code in detected_packs.items():
-            pack_op = self._build_pack_operation(pack_name, set_code, mode)
-            if pack_op is not None:
-                operations["packs"].append(pack_op)
 
         summary = {
             "upsert_sets": len(operations["sets"]),
@@ -172,6 +180,11 @@ class FlibustierSyncService:
             self._repo.upsert_set(CardSet.model_validate(set_data))
             set_count += 1
 
+        for pack_data in operations.get("packs", []):
+            # 变更原因：card-pack link 只应指向已知 pack，先写 pack universe 再写 link。
+            self._repo.upsert_pack_safe(Pack.model_validate(pack_data))
+            pack_count += 1
+
         for card_item in operations.get("cards", []):
             card_model = Card.model_validate(card_item["card"])
             card_id: int | None = card_item.get("existing_card_id")
@@ -184,10 +197,6 @@ class FlibustierSyncService:
             for pack_name in card_item.get("add_pack_names", []):
                 self._repo.add_card_pack(card_id, pack_name)
                 link_count += 1
-
-        for pack_data in operations.get("packs", []):
-            self._repo.upsert_pack_safe(Pack.model_validate(pack_data))
-            pack_count += 1
 
         return {
             "upsert_sets": set_count,
@@ -212,6 +221,7 @@ class FlibustierSyncService:
         scope_value: str | None,
         all_sets: list[dict[str, Any]],
         all_cards: list[dict[str, Any]],
+        pack_universe: dict[str, str],
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """按范围过滤集合与卡牌。"""
         if scope_level == "all" or not scope_value:
@@ -226,13 +236,16 @@ class FlibustierSyncService:
 
         if scope_level == "pack":
             pack_name = scope_value
+            if pack_name not in pack_universe:
+                return [], []
+            # 变更原因：pack 所属 set 只能由 sets.json.packs 决定，不能由含该 pack 的卡牌所属系列反推。
+            set_code = pack_universe[pack_name]
             cards = [
                 item
                 for item in all_cards
                 if pack_name in [str(name) for name in item.get("packs", [])]
             ]
-            set_codes = {str(item.get("set")) for item in cards}
-            sets = [item for item in all_sets if str(item.get("code")) in set_codes]
+            sets = [item for item in all_sets if str(item.get("code")) == set_code]
             return sets, cards
 
         # card 范围: 格式 set_code-number，例如 A1-001
@@ -245,6 +258,28 @@ class FlibustierSyncService:
         ]
         sets = [item for item in all_sets if str(item.get("code")) == set_code]
         return sets, cards
+
+    def _build_pack_universe(self, sets: list[dict[str, Any]]) -> dict[str, str]:
+        """从 sets.json.packs 建立 pack 到 set 的唯一归属。"""
+        pack_universe: dict[str, str] = {}
+        for set_item in sets:
+            set_code = str(set_item.get("code") or "").strip()
+            if not set_code:
+                continue
+            for pack_name in set_item.get("packs") or []:
+                clean_pack_name = str(pack_name).strip()
+                if not clean_pack_name:
+                    continue
+                if (
+                    clean_pack_name in pack_universe
+                    and pack_universe[clean_pack_name] != set_code
+                ):
+                    raise ValueError(
+                        f"pack name belongs to multiple sets: {clean_pack_name} "
+                        f"({pack_universe[clean_pack_name]} vs {set_code})"
+                    )
+                pack_universe[clean_pack_name] = set_code
+        return pack_universe
 
     def _parse_card_scope(self, scope_value: str) -> tuple[str, int]:
         """解析 card 范围参数。"""
@@ -430,6 +465,10 @@ class FlibustierSyncService:
             op_type = "force"
         if not needs_upsert and add_pack_names:
             op_type = "link"
+            # 变更原因：supplement 不更新已有卡字段，link-only 预览不应混入字段变化噪音。
+            if mode == "supplement":
+                changed_fields = []
+                changed_values = []
 
         if mode == "force" and existing_card is not None and not changed_values:
             changed_values.append(

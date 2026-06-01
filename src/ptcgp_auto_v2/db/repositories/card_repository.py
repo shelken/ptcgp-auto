@@ -285,13 +285,9 @@ class CardRepository(BaseRepository):
         card_set = self.get_set_by_code(set_code)
         if not card_set:
             return {}
-        statement = (
-            select(CardPack.pack_name)
-            .join(Card, col(CardPack.card_id) == col(Card.id))
-            .where(Card.set_code == set_code)
-            .distinct()
-        )
-        boosters = sorted(self.session.exec(statement).all())
+        # 变更原因：pack 归属来自 packs 表，card_packs 只表示获取来源，不能反推系列子包列表。
+        statement = select(Pack.name).where(Pack.set_code == set_code).order_by(Pack.name)
+        boosters = list(self.session.exec(statement).all())
         return {set_code: {"name": card_set.name, "boosters": boosters}}
 
     def get_all_sets(self) -> List[CardSetData]:
