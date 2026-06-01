@@ -156,6 +156,120 @@ def test_build_plan_ignores_card_pack_links_outside_pack_universe():
     assert card_ops[0]["add_pack_names"] == ["Mythical Island"]
 
 
+def test_build_plan_set_scope_keeps_cross_set_card_pack_link_from_full_pack_universe():
+    sets_data = {
+        "A": [
+            {
+                "code": "A1",
+                "name": {"en": "Genetic Apex"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Mewtwo"],
+            },
+            {
+                "code": "A4b",
+                "name": {"en": "Deluxe Pack ex"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Deluxe Pack ex"],
+            },
+        ]
+    }
+    cards_data = [
+        {
+            "set": "A1",
+            "number": 1,
+            "name": "Bulbasaur",
+            "rarity": "C",
+            "image": "A1_001.webp",
+            "packs": ["Mewtwo", "Deluxe Pack ex"],
+        }
+    ]
+
+    plan = FlibustierSyncService(FakeRepo()).build_plan(  # type: ignore[arg-type]
+        mode="supplement",
+        scope_level="set",
+        scope_value="A1",
+        sets_data=sets_data,
+        cards_data=cards_data,
+        extra_map={("A1", 1): cards_data[0]},
+    )
+
+    assert plan["operations"]["packs"] == [
+        {
+            "name": "Mewtwo",
+            "set_code": "A1",
+            "label_data": '{"en": "Mewtwo"}',
+            "op_type": "create",
+            "changed_values": [
+                {"field": "name", "from": "", "to": "Mewtwo"},
+                {"field": "set_code", "from": "", "to": "A1"},
+            ],
+        }
+    ]
+    assert plan["operations"]["cards"][0]["add_pack_names"] == [
+        "Deluxe Pack ex",
+        "Mewtwo",
+    ]
+
+
+def test_build_plan_card_scope_keeps_cross_set_card_pack_link_from_full_pack_universe():
+    sets_data = {
+        "A": [
+            {
+                "code": "A1",
+                "name": {"en": "Genetic Apex"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Mewtwo"],
+            },
+            {
+                "code": "A4b",
+                "name": {"en": "Deluxe Pack ex"},
+                "count": 1,
+                "releaseDate": None,
+                "packs": ["Deluxe Pack ex"],
+            },
+        ]
+    }
+    cards_data = [
+        {
+            "set": "A1",
+            "number": 1,
+            "name": "Bulbasaur",
+            "rarity": "C",
+            "image": "A1_001.webp",
+            "packs": ["Mewtwo", "Deluxe Pack ex"],
+        }
+    ]
+
+    plan = FlibustierSyncService(FakeRepo()).build_plan(  # type: ignore[arg-type]
+        mode="supplement",
+        scope_level="card",
+        scope_value="A1-001",
+        sets_data=sets_data,
+        cards_data=cards_data,
+        extra_map={("A1", 1): cards_data[0]},
+    )
+
+    assert plan["operations"]["packs"] == [
+        {
+            "name": "Mewtwo",
+            "set_code": "A1",
+            "label_data": '{"en": "Mewtwo"}',
+            "op_type": "create",
+            "changed_values": [
+                {"field": "name", "from": "", "to": "Mewtwo"},
+                {"field": "set_code", "from": "", "to": "A1"},
+            ],
+        }
+    ]
+    assert plan["operations"]["cards"][0]["add_pack_names"] == [
+        "Deluxe Pack ex",
+        "Mewtwo",
+    ]
+
+
 def test_build_plan_pack_scope_uses_set_from_pack_universe():
     sets_data = {
         "A": [

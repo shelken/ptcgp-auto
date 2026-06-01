@@ -78,11 +78,11 @@ class FlibustierSyncService:
             card_op = self._build_card_operation(card_item, extra_map, mode)
             if card_op is None:
                 continue
-            # 变更原因：cards.extra 表示卡牌获取来源，不能反向创建 pack；pack universe 只能来自 sets.json.packs。
+            # 变更原因：scope 内 pack 操作只写当前范围，card-pack link 仍应保留 sets universe 中已知的跨 set 获取来源。
             card_op["add_pack_names"] = [
                 pack_name
                 for pack_name in card_op["add_pack_names"]
-                if pack_name in filtered_pack_universe
+                if pack_name in pack_universe
             ]
             if not card_op["needs_upsert"] and not card_op["add_pack_names"]:
                 continue

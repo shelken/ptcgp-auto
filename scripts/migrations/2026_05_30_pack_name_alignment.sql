@@ -1,5 +1,7 @@
 -- Pack name alignment for ptcgp-assets sets.json.packs display names.
 -- Run only after reviewing mapping and on a copied database first.
+-- 变更原因：sqlite3 默认遇错继续执行，guard 失败时必须立即停止以避免后续 UPDATE 写入。
+.bail on
 
 BEGIN IMMEDIATE;
 
