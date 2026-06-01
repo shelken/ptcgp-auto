@@ -9,13 +9,15 @@ import logging
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 from PIL import Image
 
+from ptcgp_auto_v2.config.assets import build_pack_image_url
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories.card_repository import CardRepository, PackData
+from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import SETS_URL
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,7 @@ class PackImageManager:
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
             }
         )
+        self._remote_pack_image_cache: dict[str, tuple[str, str]] | None = None
 
     def close(self):
         """关闭会话"""
@@ -92,14 +95,18 @@ class PackImageManager:
         logger.info(f"准备卡包图片资源: {booster_name}")
 
         pack_data = self.get_pack_metadata(booster_name)
-        if pack_data is None or not pack_data.image_url:
-            sku_id = pack_data.sku_id if pack_data else None
-            logger.error("准备卡包图片失败，缺少 sku/image_url: booster=%s sku_id=%s", booster_name, sku_id)
-            return False
+        image_url = pack_data.image_url if pack_data else None
+        sku_id = pack_data.sku_id if pack_data else None
+        if not image_url:
+            remote_metadata = self.resolve_remote_pack_image(booster_name)
+            if remote_metadata is None:
+                logger.error("准备卡包图片失败，缺少 sku/image_url: booster=%s sku_id=%s", booster_name, sku_id)
+                return False
+            sku_id, image_url = remote_metadata
 
-        image_data = self.download_pack_image(pack_data.image_url, booster_name, pack_data.sku_id)
+        image_data = self.download_pack_image(image_url, booster_name, sku_id)
         if image_data is None:
-            logger.error("准备卡包图片失败，下载未成功: booster=%s sku_id=%s", booster_name, pack_data.sku_id)
+            logger.error("准备卡包图片失败，下载未成功: booster=%s sku_id=%s", booster_name, sku_id)
             return False
 
         return self.process_and_save(booster_name, image_data)
@@ -108,6 +115,42 @@ class PackImageManager:
         """从数据库读取卡包图片元数据。"""
         with session_scope() as session:
             return CardRepository(session).get_pack_by_name(booster_name)
+
+    def resolve_remote_pack_image(self, booster_name: str) -> tuple[str, str] | None:
+        """从 ptcgp-assets sets.json 解析本次下载需要的包图 URL，不写回数据库。"""
+        if self._remote_pack_image_cache is None:
+            self._remote_pack_image_cache = self._load_remote_pack_image_cache()
+        return self._remote_pack_image_cache.get(booster_name)
+
+    def _load_remote_pack_image_cache(self) -> dict[str, tuple[str, str]]:
+        resp = self.session.get(SETS_URL, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
+        if resp.status_code != 200:
+            logger.warning("读取远端 sets.json 失败: HTTP %s", resp.status_code)
+            return {}
+
+        cache: dict[str, tuple[str, str]] = {}
+        sets_data = resp.json()
+        for set_item in self._iter_set_items(sets_data):
+            for raw_pack_entry in set_item.get("packs") or []:
+                if not isinstance(raw_pack_entry, dict):
+                    continue
+                pack_name = str(raw_pack_entry.get("name") or "").strip()
+                sku_id = str(raw_pack_entry.get("skuId") or "").strip()
+                if not pack_name or not sku_id:
+                    continue
+                # 变更原因：未同步 DB 时只能用远端 skuId 生成本次下载 URL，禁止写库自修复。
+                cache[pack_name] = (sku_id, build_pack_image_url(sku_id))
+        return cache
+
+    def _iter_set_items(self, sets_data: Any) -> list[dict[str, Any]]:
+        if isinstance(sets_data, dict):
+            raw_sets = sets_data.get("sets")
+            if isinstance(raw_sets, list):
+                return [item for item in raw_sets if isinstance(item, dict)]
+            return [item for value in sets_data.values() if isinstance(value, list) for item in value if isinstance(item, dict)]
+        if isinstance(sets_data, list):
+            return [item for item in sets_data if isinstance(item, dict)]
+        return []
 
     def is_pack_ready(self, booster_name: str) -> bool:
         """
