@@ -31,7 +31,10 @@ class FakeSession:
 
     def get(self, url: str, timeout: int) -> FakeResponse:
         self.urls.append(url)
-        return self.responses[url]
+        response = self.responses[url]
+        if isinstance(response, Exception):
+            raise response
+        return response
 
     def close(self) -> None:
         pass
@@ -123,4 +126,16 @@ def test_ensure_pack_ready_returns_false_when_remote_sets_missing_booster_name(t
 
     assert fake_session.urls == [SETS_URL]
     assert all("flibustier" not in url for url in fake_session.urls)
+    assert not manager.get_pack_path("Mega Altaria").exists()
+
+
+def test_ensure_pack_ready_returns_false_when_remote_sets_request_fails(tmp_path):
+    manager = PackImageManager(base_dir=str(tmp_path / "templates" / "packs_auto_assets"))
+    fake_session = FakeSession({SETS_URL: RuntimeError("network down")})
+    manager.session = fake_session  # type: ignore[assignment]
+    manager.get_pack_metadata = lambda _booster_name: None  # type: ignore[method-assign]
+
+    assert manager.ensure_pack_ready("Mega Altaria") is False
+
+    assert fake_session.urls == [SETS_URL]
     assert not manager.get_pack_path("Mega Altaria").exists()

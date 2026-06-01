@@ -123,13 +123,17 @@ class PackImageManager:
         return self._remote_pack_image_cache.get(booster_name)
 
     def _load_remote_pack_image_cache(self) -> dict[str, tuple[str, str]]:
-        resp = self.session.get(SETS_URL, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
-        if resp.status_code != 200:
-            logger.warning("读取远端 sets.json 失败: HTTP %s", resp.status_code)
+        try:
+            resp = self.session.get(SETS_URL, timeout=PACK_IMAGE_DOWNLOAD_TIMEOUT)
+            if resp.status_code != 200:
+                logger.warning("读取远端 sets.json 失败: HTTP %s", resp.status_code)
+                return {}
+            sets_data = resp.json()
+        except Exception:
+            logger.exception("读取远端 sets.json 异常")
             return {}
 
         cache: dict[str, tuple[str, str]] = {}
-        sets_data = resp.json()
         for set_item in self._iter_set_items(sets_data):
             for raw_pack_entry in set_item.get("packs") or []:
                 if not isinstance(raw_pack_entry, dict):
