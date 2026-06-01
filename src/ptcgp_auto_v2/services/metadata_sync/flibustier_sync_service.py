@@ -349,7 +349,13 @@ class FlibustierSyncService:
 
         # 计算字段变化
         changed_values: list[dict[str, str]] = []
-        new_release_date = set_item.get("releaseDate")
+        incoming_release_date = set_item.get("releaseDate")
+        # 变更原因：游戏导出的 sets.json 不提供发布日期，force 同步不能用 null 清空本地维护的日期。
+        new_release_date = (
+            existing_set.release_date
+            if existing_set is not None and incoming_release_date is None
+            else incoming_release_date
+        )
         new_total_cards = int(set_item.get("count") or 0)
         new_label_data = json.dumps(label_dict, ensure_ascii=False)
 

@@ -35,6 +35,17 @@ class FakeRepo:
         return None
 
 
+class ExistingSetRepo(FakeRepo):
+    def get_set_by_code(self, code: str):
+        return SimpleNamespace(
+            code=code,
+            name="Mega Rising",
+            release_date="2025-10-30",
+            total_cards=331,
+            label_data='{"en":"Mega Rising"}',
+        )
+
+
 def test_fetch_remote_metadata_uses_cards_extra_as_card_source(monkeypatch):
     requested_urls: list[str] = []
     sets_payload = {"A": [{"code": "A1", "name": {"en": "Genetic Apex"}, "count": 1, "packs": ["Mewtwo"]}]}
@@ -71,6 +82,33 @@ def test_fetch_remote_metadata_uses_cards_extra_as_card_source(monkeypatch):
     assert sets_data == sets_payload
     assert cards_data == extra_payload
     assert extra_map == {("A1", 1): extra_payload[0]}
+
+
+def test_build_plan_preserves_existing_release_date_when_remote_release_date_is_null():
+    sets_data = {
+        "B": [
+            {
+                "code": "B1",
+                "name": {"en": "Mega Rising"},
+                "count": 331,
+                "releaseDate": None,
+                "packs": ["Mega Blaziken"],
+            }
+        ]
+    }
+
+    plan = FlibustierSyncService(ExistingSetRepo()).build_plan(  # type: ignore[arg-type]
+        mode="force",
+        scope_level="all",
+        scope_value=None,
+        sets_data=sets_data,
+        cards_data=[],
+        extra_map={},
+    )
+
+    [set_op] = plan["operations"]["sets"]
+    assert set_op["release_date"] == "2025-10-30"
+    assert "release_date" not in {item["field"] for item in set_op["changed_values"]}
 
 
 def test_build_plan_uses_sets_packs_for_pack_operations():
