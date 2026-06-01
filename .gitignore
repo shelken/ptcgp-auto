@@ -37,3 +37,7 @@ gstack*
 !*/skills/add-task
 !*/skills/analyze-production-failures
 !*/skills/test-tasks
+!*/skills/ptcgp-knowledge
+!*/skills/ptcgp-knowledge/**
+*/skills/ptcgp-knowledge/**/__pycache__/
+*/skills/ptcgp-knowledge/**/*.pyc
