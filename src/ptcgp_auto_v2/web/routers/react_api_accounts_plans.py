@@ -96,18 +96,27 @@ async def get_management_accounts(
     )
 
 
+def _parse_account_ids_param(account_ids: str | None) -> list[int] | None:
+    """解析账号 ID 查询参数；变更原因：只有未传参数表示不限制账号。"""
+    if account_ids is None:
+        return None
+    return [int(item) for item in account_ids.split(",") if item.strip().isdigit()]
+
+
 @router.get("/management/accounts/packs")
 def get_management_accounts_packs(
-    account_ids: str = Query(default=""),
+    account_ids: str | None = Query(default=None),
     session: Session = Depends(get_fastapi_session),
 ):
     """获取自动选包映射，可选指定 account_ids（逗号分隔）限制只计算这些账号。"""
     config_stm = select(AccountPackConfig).where(AccountPackConfig.type == "daily")
     all_configs = session.exec(config_stm).all()
     pack_configs_map = {item.account_id: item.to_dict() for item in all_configs}
-    parsed_ids = [int(x) for x in account_ids.split(",") if x.strip().isdigit()] if account_ids else None
+    parsed_ids = _parse_account_ids_param(account_ids)
     packs = build_accounts_packs_context(
-        session=session, pack_configs_map=pack_configs_map, account_ids=parsed_ids,
+        session=session,
+        pack_configs_map=pack_configs_map,
+        account_ids=parsed_ids,
     )
     return json_response({"packs": packs, "pack_configs": pack_configs_map})
 

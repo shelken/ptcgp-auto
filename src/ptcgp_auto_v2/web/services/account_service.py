@@ -164,7 +164,7 @@ def build_accounts_packs_context(
 ) -> dict[int, dict[str, Any]]:
     """构建自动选包映射，指定 account_ids 时只计算这些账号。"""
     repo = AccountRepository(session)
-    if account_ids:
+    if account_ids is not None:
         accounts_map = repo.get_by_ids(account_ids)
         accounts = list(accounts_map.values())
     else:
