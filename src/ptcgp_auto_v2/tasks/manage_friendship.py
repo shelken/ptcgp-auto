@@ -25,6 +25,13 @@ from ptcgp_auto_v2.db.repositories.friend_request_repository import (
 )
 from ptcgp_auto_v2.db.repositories import FriendshipRepository
 from ptcgp_auto_v2.locales import get_text_patterns
+from ptcgp_auto_v2.tasks.utils.friend_status_icons import (
+    FRIEND_STATUS_GREEN_YES_TEMPLATE,
+    FRIEND_STATUS_TEMPLATE_SCALES,
+    FRIEND_STATUS_TEMPLATE_THRESHOLD,
+    FriendIconStatus,
+    friend_status_by_icons,
+)
 from ptcgp_auto_v2.tasks.utils.nickname_utils import extract_nickname_by_lv
 from ptcgp_auto_v2.utils.gesture import (
     clear_text,
@@ -397,44 +404,36 @@ class ManageFriendshipTask(StatefulTask):
                     to_nickname=nickname,
                 )
 
-    def _is_pending_reply_by_icons(self) -> bool:
+    def _friend_status_by_icons(self) -> FriendIconStatus:
+        """读取好友状态图标命中结果。"""
+        return friend_status_by_icons(self.page_detector)
+
+    def _is_pending_reply_by_icons(
+        self, status: FriendIconStatus | None = None
+    ) -> bool:
         """1.0 模板下同时有绿色勾和红色叉，判定为待回复状态。"""
-        green_1x = self.page_detector.find_template_with_scale(
-            "icon_green_yes", scale=1.0, threshold=0.8
-        )
-        red_1x = self.page_detector.find_template_with_scale(
-            "icon_red_no", scale=1.0, threshold=0.8
-        )
-        return green_1x is not None and red_1x is not None
+        if status is None:
+            status = self._friend_status_by_icons()
+        return status.is_pending_reply
 
-    def _is_already_friend_by_icons(self) -> bool:
+    def _is_already_friend_by_icons(
+        self, status: FriendIconStatus | None = None
+    ) -> bool:
         """0.8 模板下命中绿色勾，判定为已是好友状态。"""
-        green_08 = self.page_detector.find_template_with_scale(
-            "icon_green_yes", scale=0.8, threshold=0.8
-        )
-        return green_08 is not None
+        if status is None:
+            status = self._friend_status_by_icons()
+        return status.is_already_friend
 
-    def _is_friend_confirmed_by_icons(self, request_id: Optional[int] = None) -> bool:
+    def _is_friend_confirmed_by_icons(
+        self, request_id: Optional[int] = None, status: FriendIconStatus | None = None
+    ) -> bool:
         """仅当存在绿色勾且不存在红叉时，判定为已确认好友。"""
-        green_match = self.page_detector.find_template_with_scale(
-            "icon_green_yes", scale=1.0, threshold=0.8
-        )
-        if not green_match:
-            green_match = self.page_detector.find_template_with_scale(
-                "icon_green_yes", scale=0.8, threshold=0.8
-            )
-        red_match = self.page_detector.find_template_with_scale(
-            "icon_red_no", scale=1.0, threshold=0.8
-        )
-        if not red_match:
-            red_match = self.page_detector.find_template_with_scale(
-                "icon_red_no", scale=0.8, threshold=0.8
-            )
-
-        if green_match and not red_match:
+        if status is None:
+            status = self._friend_status_by_icons()
+        if status.is_friend_confirmed:
             return True
 
-        if green_match and red_match:
+        if status.has_green_and_red:
             if request_id is not None:
                 logger.debug(
                     "请求 %s 同时检测到绿色勾和红叉，判定为待处理状态",
@@ -448,18 +447,18 @@ class ManageFriendshipTask(StatefulTask):
         """点击绿色勾模板（优先 1.0，其次 0.8）。"""
         result = tap_template_with_scale(
             self.page_detector,
-            "icon_green_yes",
-            scale=1.0,
-            threshold=0.8,
+            FRIEND_STATUS_GREEN_YES_TEMPLATE,
+            scale=FRIEND_STATUS_TEMPLATE_SCALES[0],
+            threshold=FRIEND_STATUS_TEMPLATE_THRESHOLD,
             wait=wait,
         )
         if result:
             return result
         return tap_template_with_scale(
             self.page_detector,
-            "icon_green_yes",
-            scale=0.8,
-            threshold=0.8,
+            FRIEND_STATUS_GREEN_YES_TEMPLATE,
+            scale=FRIEND_STATUS_TEMPLATE_SCALES[1],
+            threshold=FRIEND_STATUS_TEMPLATE_THRESHOLD,
             wait=wait,
         )
 
@@ -654,7 +653,8 @@ class ManageFriendshipTask(StatefulTask):
             self._defer_current_request(req, "defer_add_sent")
             return self._close_modal(wait=0.8)
 
-        if self._is_pending_reply_by_icons():
+        icon_status = self._friend_status_by_icons()
+        if self._is_pending_reply_by_icons(icon_status):
             logger.warning(
                 "请求 %s 检测到待回复状态（1.0命中红叉+绿勾），当前先不自动处理",
                 req.id,
@@ -662,7 +662,7 @@ class ManageFriendshipTask(StatefulTask):
             self._defer_current_request(req, "defer_sending_pending_reply")
             return self._close_modal(wait=0.8)
 
-        if self._is_already_friend_by_icons():
+        if self._is_already_friend_by_icons(icon_status):
             logger.info("请求 %s 检测到已是好友状态（0.8绿色勾）", req.id)
             self._complete_add_already_friend_request(req)
             self._refresh_requests()
