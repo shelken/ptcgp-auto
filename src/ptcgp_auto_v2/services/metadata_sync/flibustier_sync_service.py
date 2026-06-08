@@ -72,6 +72,17 @@ class FlibustierSyncService:
         )
         filtered_pack_universe = self._build_pack_universe(filtered_sets)
 
+        # 变更原因：构建计划会遍历大量卡牌，先批量取数避免每张卡重复查库。
+        existing_cards = self._repo.get_cards_by_set_and_numbers(
+            self._collect_card_keys(filtered_cards)
+        )
+        existing_card_ids = [
+            card.id
+            for card in existing_cards.values()
+            if getattr(card, "id", None) is not None
+        ]
+        existing_pack_names_map = self._repo.get_card_pack_names_map(existing_card_ids)
+
         operations: dict[str, Any] = {"sets": [], "packs": [], "cards": []}
 
         # card / pack 级同步只关注目标对象，避免把系列更新混入预览结果。
@@ -90,7 +101,22 @@ class FlibustierSyncService:
                 operations["packs"].append(pack_op)
 
         for card_item in filtered_cards:
-            card_op = self._build_card_operation(card_item, extra_map, mode)
+            set_code = str(card_item.get("set") or "")
+            number = self._normalize_number(card_item.get("number"))
+            existing_card = existing_cards.get((set_code, number)) if number is not None else None
+            existing_card_id = getattr(existing_card, "id", None)
+            existing_pack_names = (
+                existing_pack_names_map.get(existing_card_id, [])
+                if existing_card_id is not None
+                else []
+            )
+            card_op = self._build_card_operation(
+                card_item,
+                extra_map,
+                mode,
+                existing_card,
+                existing_pack_names,
+            )
             if card_op is None:
                 continue
             # 变更原因：scope 内 pack 操作只写当前范围，card-pack link 仍应保留 sets universe 中已知的跨 set 获取来源。
@@ -334,9 +360,7 @@ class FlibustierSyncService:
         if not code:
             return None
         existing_set = self._repo.get_set_by_code(code)
-        print(f"[ptcgp-assets] set code={code}, existing={existing_set is not None}", flush=True)
         if mode == "supplement" and existing_set is not None:
-            print("[ptcgp-assets] supplement mode, set exists, skip", flush=True)
             return None
 
         incoming_name = set_item.get("name", {})
@@ -406,11 +430,25 @@ class FlibustierSyncService:
             "changed_values": changed_values,
         }
 
+    def _collect_card_keys(
+        self, cards_data: list[dict[str, Any]]
+    ) -> set[tuple[str, int]]:
+        """收集可批量查询的卡牌键。"""
+        keys: set[tuple[str, int]] = set()
+        for card_item in cards_data:
+            set_code = str(card_item.get("set") or "")
+            number = self._normalize_number(card_item.get("number"))
+            if set_code and number is not None:
+                keys.add((set_code, number))
+        return keys
+
     def _build_card_operation(
         self,
         card_item: dict[str, Any],
         extra_map: dict[tuple[str, int], dict[str, Any]],
         mode: str,
+        existing_card: Any | None,
+        existing_pack_names: list[str],
     ) -> dict[str, Any] | None:
         """构建卡牌写入动作。"""
         set_code = str(card_item.get("set") or "")
@@ -419,7 +457,6 @@ class FlibustierSyncService:
             return None
 
         extra = extra_map.get((set_code, number), {})
-        existing_card = self._repo.get_card_by_set_and_number(set_code, number)
 
         needs_upsert = existing_card is None or mode == "force"
         if mode == "supplement" and existing_card is not None:
@@ -491,11 +528,9 @@ class FlibustierSyncService:
                     )
 
         incoming_pack_names = sorted({str(item) for item in card_item.get("packs", [])})
-        existing_pack_names: list[str] = []
         existing_card_id: int | None = None
         if existing_card is not None and existing_card.id is not None:
             existing_card_id = existing_card.id
-            existing_pack_names = self._repo.get_card_pack_names(existing_card_id)
         add_pack_names = sorted(set(incoming_pack_names) - set(existing_pack_names))
 
         if not needs_upsert and not add_pack_names:
@@ -536,7 +571,6 @@ class FlibustierSyncService:
         """构建卡包写入动作。"""
         pack_name = pack_metadata.name
         existing_pack = self._repo.get_pack_by_name(pack_name)
-        print(f"[ptcgp-assets] pack name={pack_name}, existing={existing_pack is not None}", flush=True)
         missing_asset_fields = (
             existing_pack is not None
             and (
@@ -545,7 +579,6 @@ class FlibustierSyncService:
             )
         )
         if mode == "supplement" and existing_pack is not None and not missing_asset_fields:
-            print("[ptcgp-assets] supplement mode, pack exists, skip", flush=True)
             return None
         if (
             existing_pack is not None

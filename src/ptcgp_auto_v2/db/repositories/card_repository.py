@@ -2,9 +2,9 @@
 from dataclasses import dataclass
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
-from sqlalchemy import and_, distinct, func, or_
+from sqlalchemy import and_, distinct, func, or_, tuple_
 from sqlmodel import col, select
 
 from ptcgp_auto_v2.db.models import AccountCard, Card, CardPack, CardSet, Pack
@@ -231,6 +231,21 @@ class CardRepository(BaseRepository):
             return None
         return self._to_data(CardData, card)
 
+    def get_cards_by_set_and_numbers(
+        self, keys: Iterable[tuple[str, int]]
+    ) -> dict[tuple[str, int], CardData]:
+        """按系列和编号批量获取卡牌。"""
+        normalized_keys = sorted(set(keys))
+        if not normalized_keys:
+            return {}
+        statement = select(Card).where(
+            tuple_(Card.set_code, Card.number).in_(normalized_keys)
+        )
+        return {
+            (card.set_code, card.number): self._to_data(CardData, card)
+            for card in self.session.exec(statement).all()
+        }
+
     def upsert_card(self, card: Card) -> int | None:
         """更新或创建卡牌。"""
         statement = select(Card).where(
@@ -276,6 +291,23 @@ class CardRepository(BaseRepository):
             .order_by(CardPack.pack_name)
         )
         return list(self.session.exec(statement).all())
+
+    def get_card_pack_names_map(
+        self, card_ids: Iterable[int]
+    ) -> dict[int, list[str]]:
+        """按卡牌 ID 批量获取当前关联的卡包名称列表。"""
+        normalized_ids = sorted(set(card_ids))
+        if not normalized_ids:
+            return {}
+        statement = (
+            select(CardPack.card_id, CardPack.pack_name)
+            .where(col(CardPack.card_id).in_(normalized_ids))
+            .order_by(CardPack.card_id, CardPack.pack_name)
+        )
+        result: dict[int, list[str]] = {card_id: [] for card_id in normalized_ids}
+        for card_id, pack_name in self.session.exec(statement).all():
+            result[int(card_id)].append(str(pack_name))
+        return result
 
     def get_packs_by_set(self, set_code: str) -> dict:
         """
