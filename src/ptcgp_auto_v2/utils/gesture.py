@@ -22,6 +22,7 @@ from ptcgp_auto_v2.config.constants import (
     SWIPE_STEPS_MIN,
     SWIPE_STEPS_SCROLL,
 )
+from ptcgp_auto_v2.infra.ocr import match_ocr_text, normalize_ocr_text
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.utils.action_result import ActionResult
 
@@ -136,7 +137,7 @@ def press_back(adb: AdbController, wait: float = 1.0) -> ActionResult:
 
 def normalize_text(text: str) -> str:
     """Normalize text for OCR matching."""
-    return "".join(text.lower().split())
+    return normalize_ocr_text(text)[1]
 
 
 def is_text_visible(
@@ -146,14 +147,8 @@ def is_text_visible(
 ) -> bool:
     """Check if any pattern is visible in OCR results."""
     for pattern in patterns:
-        pattern_normalized = normalize_text(pattern)
         for item in ocr_results:
-            text = normalize_text(item["text"])
-            if exact:
-                matched = pattern_normalized == text
-            else:
-                matched = pattern_normalized in text
-            if matched:
+            if match_ocr_text(pattern, item["text"], exact_match=exact):
                 return True
     return False
 
@@ -203,14 +198,8 @@ def find_text_matches(
     """返回按 OCR 原始顺序排列的文本命中项。"""
     matches: list[dict] = []
     for pattern in patterns:
-        pattern_normalized = normalize_text(pattern)
         for item in ocr_results:
-            text = normalize_text(item["text"])
-            if exact:
-                matched = pattern_normalized == text
-            else:
-                matched = pattern_normalized in text
-            if matched:
+            if match_ocr_text(pattern, item["text"], exact_match=exact):
                 matches.append(item)
     return matches
 

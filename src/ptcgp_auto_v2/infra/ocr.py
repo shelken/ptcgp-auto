@@ -41,6 +41,40 @@ class OcrResult:
         }
 
 
+def normalize_ocr_text(text: str) -> tuple[str, str]:
+    text_lower = text.strip().lower()
+    text_normalized = "".join(text_lower.split())
+    return text_lower, text_normalized
+
+
+def _match_normalized_ocr_text(
+    target_lower: str,
+    target_normalized: str,
+    text_lower: str,
+    text_normalized: str,
+    exact_match: bool,
+) -> bool:
+    if exact_match:
+        return target_lower == text_lower
+    return (
+        target_lower == text_lower
+        or target_lower in text_lower
+        or target_normalized in text_normalized
+    )
+
+
+def match_ocr_text(target: str, text: str, exact_match: bool = False) -> bool:
+    target_lower, target_normalized = normalize_ocr_text(target)
+    text_lower, text_normalized = normalize_ocr_text(text)
+    return _match_normalized_ocr_text(
+        target_lower,
+        target_normalized,
+        text_lower,
+        text_normalized,
+        exact_match,
+    )
+
+
 class OcrEngine:
     """
     OCR 识别引擎
@@ -275,26 +309,23 @@ class OcrEngine:
         return [r.to_dict() for r in results]
 
     def _normalize_text(self, text: str) -> tuple[str, str]:
-        text_lower = text.strip().lower()
-        text_normalized = "".join(text_lower.split())
-        return text_lower, text_normalized
+        return normalize_ocr_text(text)
 
     def _matches(
         self, target_lower: str, target_normalized: str, text: str, exact_match: bool
     ) -> bool:
-        text_lower, text_normalized = self._normalize_text(text)
-        if exact_match:
-            return target_lower == text_lower
-        return (
-            target_lower == text_lower
-            or target_lower in text_lower
-            or target_normalized in text_normalized
+        text_lower, text_normalized = normalize_ocr_text(text)
+        return _match_normalized_ocr_text(
+            target_lower,
+            target_normalized,
+            text_lower,
+            text_normalized,
+            exact_match,
         )
 
     def match_text(self, target: str, text: str, exact_match: bool = False) -> bool:
         """判断文本是否匹配（公共接口）"""
-        target_lower, target_normalized = self._normalize_text(target)
-        return self._matches(target_lower, target_normalized, text, exact_match)
+        return match_ocr_text(target, text, exact_match)
 
     def find_text(
         self,
@@ -324,7 +355,7 @@ class OcrEngine:
             uses_language_correction=uses_language_correction,
             revision=revision,
         )
-        target_lower, target_normalized = self._normalize_text(target)
+        target_lower, target_normalized = normalize_ocr_text(target)
 
         for result in results:
             if self._matches(target_lower, target_normalized, result.text, exact_match):
