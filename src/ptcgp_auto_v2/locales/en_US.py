@@ -62,6 +62,9 @@ TEXT_PATTERNS = {
     "exchange_insufficient_points": ["閃亮沙子不足"],
     "exchange_locked_popup": ["開放條件", "距離開放還剩"],
     "popup_ok": ["OK", "ОК"],
+    # 变更原因：隐私政策更新页需要先点击同意按钮，不能被通用 OK 规则抢先处理。
+    "popup_privacy_policy_accept": ["同意隱私權政策", "隱私權政策"],
+    "privacy_policy_accept_button": ["同意隱私權政策"],
     "text_cancel": ["取消"],
     "text_x": ["x"],
     "continue_button": ["繼續"],

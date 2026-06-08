@@ -51,3 +51,25 @@ def test_android_anr_popup_has_priority_over_task_page():
     page_name, _ = detector.detect()
 
     assert page_name == "android_app_not_responding"
+
+
+def test_privacy_policy_accept_page_has_priority_over_popup_ok():
+    """隐私政策同意页必须优先于通用 OK，否则会反复点 OK 卡住。"""
+    detector = PageDetector(
+        adb=_Adb(),
+        ocr_engine=_OcrEngine(
+            [
+                "隱私權政策",
+                "需先同意隱私權政策。",
+                "同意隱私權政策",
+                "OK",
+            ]
+        ),
+        template_matcher=_TemplateMatcher(),
+        base_pages=COMMON_PAGES,
+    )
+
+    page_name, page_info = detector.detect()
+
+    assert page_name == "popup_privacy_policy_accept"
+    assert page_info["matched_text"]["matched_text"] == "同意隱私權政策"

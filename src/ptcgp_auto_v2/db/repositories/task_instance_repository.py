@@ -194,10 +194,18 @@ class TaskInstanceRepository(BaseRepository):
         if not instance_ids:
             return 0
         now = datetime.now()
+        values: dict[str, object] = {
+            "status": status,
+            "status_changed_at": now,
+            "updated_at": now,
+        }
+        if status == TaskStatus.RUNNING.value:
+            # 变更原因：任务重新进入 running 后，旧失败原因不再代表当前运行态。
+            values["error_message"] = None
         statement = (
             update(TaskInstance)
             .where(col(TaskInstance.id).in_(instance_ids))
-            .values(status=status, status_changed_at=now, updated_at=now)
+            .values(**values)
         )
         result = self.session.exec(statement)
         self._finish_write()

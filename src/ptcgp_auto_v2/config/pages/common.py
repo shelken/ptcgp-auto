@@ -15,7 +15,9 @@ COMMON_PAGES = [
         "identifiers": get_text_patterns("android_app_not_responding"),
         "match_all": True,
         "priority": 5,
-        "action": "restart_game",
+        # 变更原因：ANR 系统弹窗只需要先关闭 App，重启模拟器成本过高且会拖慢整批任务。
+        "action": "tap_text",
+        "patterns_key": "close_app_popup",
     },
     # TODO `清除快取 重新下載`
     {
@@ -62,6 +64,17 @@ COMMON_PAGES = [
         "templates": ["btn_close"],
         "priority": 145,
         "action": "tap_matched",
+    },
+    # 同意隱私權政策 / 隱私權政策
+    {
+        "name": "popup_privacy_policy_accept",
+        "identifiers": get_text_patterns("popup_privacy_policy_accept"),
+        "match_all": True,
+        "priority": 149,
+        "exact_match": True,
+        # 变更原因：隐私政策更新页必须先点同意按钮，通用 OK 会在该页反复点击无效。
+        "action": "tap_text",
+        "patterns_key": "privacy_policy_accept_button",
     },
     # 点 OK
     {
