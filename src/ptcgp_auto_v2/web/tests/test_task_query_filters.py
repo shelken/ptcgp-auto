@@ -152,7 +152,8 @@ def test_fetch_task_instances_sorts_next_run_empty_values_by_direction(session: 
 
 def test_tasks_context_sorts_by_displayed_next_run_at(session: Session) -> None:
     _seed_accounts_and_tasks(session)
-    base_time = datetime(2026, 4, 30, 8, 0, 0)
+    # 变更原因：固定历史日期会让 compute_next_run_at 返回 None，无法保护 displayed next_run_at 排序。
+    base_time = datetime.now() + timedelta(days=1)
     tasks = list(session.exec(select(TaskInstance).order_by(TaskInstance.id)))
     for index, task in enumerate(tasks, start=1):
         task.task_type = f"test_daily_task_{index}"
