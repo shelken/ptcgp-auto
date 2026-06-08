@@ -99,7 +99,7 @@ def test_build_friendship_context_applies_from_account_filter(session: Session) 
 
     assert [row["id"] for row in context["requests"]] == [1]
     assert context["request_total"] == 1
-    assert [row["id"] for row in context["friendships"]] == [1, 2]
+    assert [row["id"] for row in context["friendships"]] == [2, 1]
 
 
 def test_build_friendship_context_supports_independent_request_and_friendship_list_state(

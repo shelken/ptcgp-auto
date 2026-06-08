@@ -102,3 +102,111 @@ def test_build_records_list_context_filters_by_card_name_query(session: Session)
 
     assert [item["series"] for item in context["items"]] == ["A2"]
     assert [card["display_name"] for card in context["items"][0]["cards"]] == ["Squirtle"]
+
+
+def test_build_records_list_context_orders_same_time_ten_pack_batches_by_max_id(
+    session: Session,
+) -> None:
+    opened_at = datetime(2026, 4, 14, 12, 0, 0)
+    session.add(Account(id=1, game_id="game-ash", nickname="Ash", friend_id="1111", updated_at=opened_at))
+    session.add_all(
+        [
+            PackRecord(
+                id=301,
+                account_id=1,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="batch-a",
+                batch_index=1,
+                opened_at=opened_at,
+            ),
+            PackRecord(
+                id=302,
+                account_id=1,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="batch-a",
+                batch_index=2,
+                opened_at=opened_at,
+            ),
+            PackRecord(
+                id=401,
+                account_id=1,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="batch-b",
+                batch_index=1,
+                opened_at=opened_at,
+            ),
+            PackRecord(
+                id=402,
+                account_id=1,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="batch-b",
+                batch_index=2,
+                opened_at=opened_at,
+            ),
+        ]
+    )
+    session.commit()
+
+    first_page = build_records_list_context(session=session, page=0, page_size=1)
+    second_page = build_records_list_context(session=session, page=1, page_size=1)
+
+    assert [item["batch_id"] for item in first_page["items"]] == ["batch-b"]
+    assert [item["batch_id"] for item in second_page["items"]] == ["batch-a"]
+
+
+def test_build_records_list_context_keeps_same_batch_id_separate_by_account(
+    session: Session,
+) -> None:
+    opened_at = datetime(2026, 4, 14, 12, 0, 0)
+    session.add_all(
+        [
+            Account(id=1, game_id="game-ash", nickname="Ash", friend_id="1111", updated_at=opened_at),
+            Account(id=2, game_id="game-misty", nickname="Misty", friend_id="2222", updated_at=opened_at),
+        ]
+    )
+    session.add_all(
+        [
+            PackRecord(
+                id=501,
+                account_id=1,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="shared-batch",
+                batch_index=1,
+                opened_at=opened_at,
+            ),
+            PackRecord(
+                id=502,
+                account_id=1,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="shared-batch",
+                batch_index=2,
+                opened_at=opened_at,
+            ),
+            PackRecord(
+                id=601,
+                account_id=2,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="shared-batch",
+                batch_index=1,
+                opened_at=opened_at,
+            ),
+            PackRecord(
+                id=602,
+                account_id=2,
+                pack_type=PackRecordType.TEN_PACK,
+                batch_id="shared-batch",
+                batch_index=2,
+                opened_at=opened_at,
+            ),
+        ]
+    )
+    session.commit()
+
+    context = build_records_list_context(session=session, page=0, page_size=10)
+
+    assert [(item["record"].account_id, item["batch_id"]) for item in context["items"]] == [
+        (2, "shared-batch"),
+        (1, "shared-batch"),
+    ]
+    assert [item["account_name"] for item in context["items"]] == ["Misty", "Ash"]
+    assert [item["batch_key"] for item in context["items"]] == ["2:shared-batch", "1:shared-batch"]

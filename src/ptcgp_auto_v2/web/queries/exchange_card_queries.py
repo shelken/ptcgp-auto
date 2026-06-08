@@ -79,6 +79,7 @@ def _build_exchange_requests_statement(
         statement,
         sort_column=sort_column,
         sort_order=normalized_sort_order,
+        tie_breaker_column=col(ExchangeCardRequest.id),
     )
 
 

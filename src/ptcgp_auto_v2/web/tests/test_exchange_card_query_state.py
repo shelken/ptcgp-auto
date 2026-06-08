@@ -83,3 +83,42 @@ def test_build_exchange_card_context_returns_normalized_query_state(
     assert context["page"] == 0
     assert context["page_size"] == 100
     assert context["filter_options"]["status"] == context["status_options"]
+
+
+def test_exchange_card_created_at_pagination_uses_id_tie_breaker(
+    session: Session,
+) -> None:
+    created_at = datetime(2026, 4, 14, 12, 0, 0)
+    session.add_all(
+        [
+            ExchangeCardRequest(
+                id=10,
+                from_account_id=1,
+                to_account_id=2,
+                to_friend_id="1111000011110000",
+                target_card_id=101,
+                target_card_rarity="SR",
+                status="sending",
+                created_at=created_at,
+                updated_at=created_at,
+            ),
+            ExchangeCardRequest(
+                id=11,
+                from_account_id=3,
+                to_account_id=4,
+                to_friend_id="2222000022220000",
+                target_card_id=202,
+                target_card_rarity="AR",
+                status="completed",
+                created_at=created_at,
+                updated_at=created_at,
+            ),
+        ]
+    )
+    session.commit()
+
+    first_page = build_exchange_card_context(session=session, page=0, page_size=1)
+    second_page = build_exchange_card_context(session=session, page=1, page_size=1)
+
+    assert [row["id"] for row in first_page["requests"]] == [11]
+    assert [row["id"] for row in second_page["requests"]] == [10]

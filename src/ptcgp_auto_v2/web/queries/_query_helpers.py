@@ -56,11 +56,26 @@ def resolve_sort_column(
     return fields[default_field]
 
 
-def apply_sort(statement: Any, *, sort_column: Any, sort_order: str) -> Any:
+def apply_sort(
+    statement: Any,
+    *,
+    sort_column: Any,
+    sort_order: str,
+    tie_breaker_column: Any | None = None,
+) -> Any:
     """按方向应用排序列。"""
     if sort_order == "asc":
-        return statement.order_by(sort_column.asc())
-    return statement.order_by(sort_column.desc())
+        order_columns = [sort_column.asc()]
+        if tie_breaker_column is not None:
+            # 变更原因：普通列表分页需要稳定次序，避免相同排序值跨页重复或遗漏。
+            order_columns.append(tie_breaker_column.asc())
+        return statement.order_by(*order_columns)
+
+    order_columns = [sort_column.desc()]
+    if tie_breaker_column is not None:
+        # 变更原因：普通列表分页需要稳定次序，避免相同排序值跨页重复或遗漏。
+        order_columns.append(tie_breaker_column.desc())
+    return statement.order_by(*order_columns)
 
 
 def count_rows(session: Session, statement: Any) -> int:

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import tuple_
 from sqlmodel import Session, select, col
 
 from ptcgp_auto_v2.config.rarity_icons import RARITY_META
@@ -21,6 +22,8 @@ from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_page_size,
     normalize_query_text,
 )
+
+BatchKey = tuple[int, str]
 
 
 @dataclass(frozen=True)
@@ -86,29 +89,30 @@ def _build_record_card_view(pack_card: Any) -> dict[str, Any]:
 
 def _fetch_batch_records_map(
     session: Session,
-    batch_ids: list[str],
-) -> dict[str, list[PackRecord]]:
+    batch_keys: list[BatchKey],
+) -> dict[BatchKey, list[PackRecord]]:
     """批量查询批次记录映射。"""
-    if not batch_ids:
+    if not batch_keys:
         return {}
     from ptcgp_auto_v2.db.models.pack_card import PackCard
     from sqlalchemy.orm import selectinload
 
     stmt = (
         select(PackRecord)
-        .where(col(PackRecord.batch_id).in_(batch_ids))
+        .where(tuple_(col(PackRecord.account_id), col(PackRecord.batch_id)).in_(batch_keys))
         .options(
             selectinload(PackRecord.cards).selectinload(PackCard.card),
             selectinload(PackRecord.account),
         )
-        .order_by(col(PackRecord.batch_id), col(PackRecord.batch_index))
+        .order_by(col(PackRecord.account_id), col(PackRecord.batch_id), col(PackRecord.batch_index))
     )
     records = list(session.exec(stmt).all())
-    mapping: dict[str, list[PackRecord]] = {}
+    mapping: dict[BatchKey, list[PackRecord]] = {}
     for record in records:
         if not record.batch_id:
             continue
-        mapping.setdefault(record.batch_id, []).append(record)
+        # 变更原因：生产数据中不同账号可能生成相同 batch_id，批次明细必须按账号隔离。
+        mapping.setdefault((record.account_id, record.batch_id), []).append(record)
     return mapping
 
 
@@ -183,9 +187,14 @@ def _build_batch_item_view(
             packs_map[first_pack.pack_name], fallback=first_pack.pack_name
         )
 
+    batch_key = f"{first_pack.account_id}:{batch_id}"
+
     return {
         "is_batch": True,
+        # 变更原因：前端十连包展开状态必须区分不同账号下相同 batch_id。
+        "batch_key": batch_key,
         "batch_id": batch_id,
+        "account_id": first_pack.account_id,
         "batch_packs": batch_packs,
         "total_cards": total_cards,
         "record": first_pack,
@@ -293,7 +302,7 @@ def _build_single_item_view(
 def _build_record_items(
     *,
     results: list[PackRecord],
-    batch_record_map: dict[str, list[PackRecord]],
+    batch_record_map: dict[BatchKey, list[PackRecord]],
     points_map: dict[tuple[int, str], int],
     sets_map: dict[str, dict[str, Any]],
     packs_map: dict[str, dict[str, Any]],
@@ -301,15 +310,14 @@ def _build_record_items(
 ) -> list[dict[str, Any]]:
     """按展示规则构建记录列表项（十连聚合 + 单包）。"""
     items: list[dict[str, Any]] = []
-    processed_batches: set[str] = set()
+    processed_batches: set[BatchKey] = set()
     for record in results:
-        if (
-            record.pack_type == PackRecordType.TEN_PACK
-            and record.batch_id
-            and record.batch_id not in processed_batches
-        ):
-            processed_batches.add(record.batch_id)
-            batch_records = batch_record_map.get(record.batch_id, [])
+        if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
+            batch_key = (record.account_id, record.batch_id)
+            if batch_key in processed_batches:
+                continue
+            processed_batches.add(batch_key)
+            batch_records = batch_record_map.get(batch_key, [])
             items.append(
                 _build_batch_item_view(
                     batch_id=record.batch_id,
@@ -320,9 +328,6 @@ def _build_record_items(
                     translations=translations,
                 )
             )
-            continue
-
-        if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
             continue
 
         items.append(
@@ -373,7 +378,7 @@ def build_records_list_context(
     _, translations = get_current_i18n()
     batch_record_map = _fetch_batch_records_map(
         session,
-        sorted({record.batch_id for record in results if record.batch_id}),
+        sorted({(record.account_id, record.batch_id) for record in results if record.batch_id}),
     )
     items = _build_record_items(
         results=results,

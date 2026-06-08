@@ -1,7 +1,7 @@
 from typing import Iterable
 
 from sqlmodel import Session, select, desc, col
-from sqlalchemy import Integer, String, cast, func, literal, or_, union_all
+from sqlalchemy import String, cast, func, literal, or_, tuple_, union_all
 from sqlalchemy.orm import selectinload
 
 from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
@@ -65,9 +65,11 @@ def fetch_display_entity_records(
     ten_pack_stmt = (
         select(
             literal(DISPLAY_ENTITY_TYPE_TEN_PACK).label("entity_type"),
+            col(PackRecord.account_id).label("account_id"),
             cast(col(PackRecord.batch_id), String).label("entity_key"),
             func.max(col(PackRecord.opened_at)).label("sort_time"),
-            cast(literal(None), Integer).label("sort_id"),
+            # 变更原因：十连批次同 sort_time 时需要稳定批次代表 ID 做分页 tie-breaker。
+            func.max(col(PackRecord.id)).label("sort_id"),
         )
         .where(col(PackRecord.pack_type) == PackRecordType.TEN_PACK)
         .where(col(PackRecord.batch_id).is_not(None))
@@ -75,10 +77,11 @@ def fetch_display_entity_records(
     ten_pack_stmt = _apply_pack_record_filters(
         ten_pack_stmt, rarity, card_type, set_code, card_name_query
     )
-    ten_pack_stmt = ten_pack_stmt.group_by(col(PackRecord.batch_id))
+    ten_pack_stmt = ten_pack_stmt.group_by(col(PackRecord.account_id), col(PackRecord.batch_id))
 
     single_stmt = select(
         literal(DISPLAY_ENTITY_TYPE_SINGLE).label("entity_type"),
+        col(PackRecord.account_id).label("account_id"),
         cast(col(PackRecord.id), String).label("entity_key"),
         col(PackRecord.opened_at).label("sort_time"),
         col(PackRecord.id).label("sort_id"),
@@ -86,13 +89,16 @@ def fetch_display_entity_records(
     single_stmt = _apply_pack_record_filters(
         single_stmt, rarity, card_type, set_code, card_name_query
     )
-    single_stmt = single_stmt.group_by(col(PackRecord.id), col(PackRecord.opened_at))
+    single_stmt = single_stmt.group_by(
+        col(PackRecord.id), col(PackRecord.account_id), col(PackRecord.opened_at)
+    )
 
     entity_stmt = union_all(ten_pack_stmt, single_stmt).subquery()
 
     page_stmt = (
         select(
             entity_stmt.c.entity_type,
+            entity_stmt.c.account_id,
             entity_stmt.c.entity_key,
             entity_stmt.c.sort_time,
             entity_stmt.c.sort_id,
@@ -108,19 +114,20 @@ def fetch_display_entity_records(
     if not rows:
         return [], False
 
-    entity_order: list[tuple[str, str]] = [(row[0], row[1]) for row in rows]
-    single_ids = [int(row[1]) for row in rows if row[0] == DISPLAY_ENTITY_TYPE_SINGLE]
-    ten_batch_ids = [row[1] for row in rows if row[0] == DISPLAY_ENTITY_TYPE_TEN_PACK]
+    entity_order: list[tuple[str, int, str]] = [(row[0], row[1], row[2]) for row in rows]
+    single_ids = [int(row[2]) for row in rows if row[0] == DISPLAY_ENTITY_TYPE_SINGLE]
+    ten_batch_pairs = [(row[1], row[2]) for row in rows if row[0] == DISPLAY_ENTITY_TYPE_TEN_PACK]
     record_ids: list[int] = list(single_ids)
 
-    if ten_batch_ids:
+    if ten_batch_pairs:
         ten_records_stmt = (
             select(
                 col(PackRecord.id).label("record_id"),
+                col(PackRecord.account_id).label("account_id"),
                 col(PackRecord.batch_id).label("batch_id"),
                 func.row_number()
                 .over(
-                    partition_by=col(PackRecord.batch_id),
+                    partition_by=(col(PackRecord.account_id), col(PackRecord.batch_id)),
                     order_by=(
                         desc(col(PackRecord.opened_at)),
                         desc(col(PackRecord.id)),
@@ -129,7 +136,7 @@ def fetch_display_entity_records(
                 .label("row_num"),
             )
             .where(col(PackRecord.pack_type) == PackRecordType.TEN_PACK)
-            .where(col(PackRecord.batch_id).in_(ten_batch_ids))
+            .where(tuple_(col(PackRecord.account_id), col(PackRecord.batch_id)).in_(ten_batch_pairs))
         )
         ten_records_stmt = _apply_pack_record_filters(
             ten_records_stmt, rarity, card_type, set_code, card_name_query
@@ -153,12 +160,13 @@ def fetch_display_entity_records(
     )
     records = list(session.exec(records_stmt).all())
 
-    records_map: dict[tuple[str, str], PackRecord] = {}
+    records_map: dict[tuple[str, int, str], PackRecord] = {}
     for record in records:
         if record.pack_type == PackRecordType.TEN_PACK and record.batch_id:
-            key = (DISPLAY_ENTITY_TYPE_TEN_PACK, record.batch_id)
+            # 变更原因：同一 batch_id 可能出现在多个账号，展示实体必须按账号隔离。
+            key = (DISPLAY_ENTITY_TYPE_TEN_PACK, record.account_id, record.batch_id)
         else:
-            key = (DISPLAY_ENTITY_TYPE_SINGLE, str(record.id))
+            key = (DISPLAY_ENTITY_TYPE_SINGLE, record.account_id, str(record.id))
         records_map[key] = record
 
     ordered_records = [records_map[key] for key in entity_order if key in records_map]

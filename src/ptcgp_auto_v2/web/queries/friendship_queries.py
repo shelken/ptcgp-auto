@@ -83,6 +83,7 @@ def _build_friend_requests_statement(
         statement,
         sort_column=sort_column,
         sort_order=normalized_sort_order,
+        tie_breaker_column=col(AccountFriendRequest.id),
     )
 
 
@@ -125,6 +126,7 @@ def _build_friendships_statement(
         statement,
         sort_column=sort_column,
         sort_order=normalized_sort_order,
+        tie_breaker_column=col(AccountFriendship.id),
     )
 
 

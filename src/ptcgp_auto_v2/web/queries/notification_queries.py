@@ -81,6 +81,7 @@ def list_notifications(
         statement,
         sort_column=sort_column,
         sort_order=normalized_sort_order,
+        tie_breaker_column=col(Notification.id),
     )
     rows, total = fetch_page_rows_with_total(
         session=session,
@@ -159,6 +160,7 @@ def list_notification_selectable_cards(
         statement,
         sort_column=sort_column,
         sort_order=normalized_sort_order,
+        tie_breaker_column=col(Card.id),
     )
     rows, total = fetch_page_rows_with_total(
         session=session,
