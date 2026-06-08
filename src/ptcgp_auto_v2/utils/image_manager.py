@@ -22,6 +22,7 @@ from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import Card
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.db.repositories.card_repository import CardData
+from ptcgp_auto_v2.utils.image_write import write_bytes_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -212,11 +213,7 @@ class ImageResourceManager:
 
     def _write_card_image_atomic(self, save_path: Path, content: bytes) -> None:
         """原子写入卡图，避免其他进程读到半文件。"""
-        temp_path = save_path.with_name(
-            f".{save_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
-        )
-        temp_path.write_bytes(content)
-        temp_path.replace(save_path)
+        write_bytes_atomic(save_path, content)
 
     def download_cards_batch(
         self, set_code: str, card_numbers: List[int], max_workers: int = 5

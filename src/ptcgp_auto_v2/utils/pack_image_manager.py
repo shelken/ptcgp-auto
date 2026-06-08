@@ -19,6 +19,7 @@ from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories.card_repository import CardRepository, PackData
 from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import SETS_URL
 from ptcgp_auto_v2.utils.card_naming import normalize_name_str
+from ptcgp_auto_v2.utils.image_write import save_pil_image_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -255,7 +256,8 @@ class PackImageManager:
 
             # 2. 保存
             save_path = self.get_pack_path(booster_name)
-            processed_img.save(save_path, "PNG", optimize=True)
+            # 变更原因：包图会被缓存读取，原子替换可避免保存失败时留下半写入 PNG。
+            save_pil_image_atomic(processed_img, save_path, "PNG", optimize=True)
 
             logger.info(
                 f"卡包图片已保存: {save_path} ({processed_img.width}x{processed_img.height})"

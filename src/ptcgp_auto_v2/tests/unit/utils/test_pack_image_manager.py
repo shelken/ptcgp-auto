@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -139,3 +140,21 @@ def test_ensure_pack_ready_returns_false_when_remote_sets_request_fails(tmp_path
 
     assert fake_session.urls == [SETS_URL]
     assert not manager.get_pack_path("Mega Altaria").exists()
+
+
+def test_process_and_save_keeps_existing_pack_image_when_save_fails(tmp_path, monkeypatch):
+    manager = PackImageManager(base_dir=str(tmp_path / "templates" / "packs_auto_assets"))
+    save_path = manager.get_pack_path("Mega Altaria")
+    save_path.write_bytes(b"old-pack-image")
+    image_data = pack_image_bytes()
+
+    def fail_after_partial_write(self, fp, *args, **kwargs):
+        if isinstance(fp, str | Path):
+            Path(fp).write_bytes(b"partial-pack-image")
+        raise OSError("PNG 保存失败")
+
+    monkeypatch.setattr(Image.Image, "save", fail_after_partial_write)
+
+    assert manager.process_and_save("Mega Altaria", image_data) is False
+    assert save_path.read_bytes() == b"old-pack-image"
+    assert list(save_path.parent.glob(".Mega_Altaria.png.*.tmp")) == []
