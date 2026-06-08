@@ -14,10 +14,14 @@ from ptcgp_auto_v2.web.routers.react_api_common import (
     normalize_pagination_params,
 )
 from ptcgp_auto_v2.web.services.owned_card_service import (
+    OWNERSHIP_SCOPES,
     build_owned_card_exchange_accounts_context,
     build_owned_card_modal_context,
     build_owned_cards_list_context,
     build_owned_cards_progress_context,
+    normalize_exchange_account_sort,
+    normalize_owned_card_sort,
+    normalize_query_values,
 )
 from ptcgp_auto_v2.web.utils.filter_utils import (
     normalize_choice,
@@ -30,29 +34,6 @@ from ptcgp_auto_v2.web.utils.form_utils import parse_optional_int
 
 router = APIRouter()
 
-OWNERSHIP_SCOPES = {"owned", "missing", "all"}
-OWNED_CARD_SORT_FIELDS = {"acquired", "rarity", "count"}
-EXCHANGE_ACCOUNT_SORT_FIELDS = {
-    "account_id",
-    "friend_id",
-    "nickname",
-    "count",
-    "exchange_points",
-}
-
-
-def _normalize_query_list(raw: object) -> list[str]:
-    """统一归一化多选查询参数。"""
-    if not isinstance(raw, list):
-        return []
-    values: list[str] = []
-    for item in raw:
-        text = str(item).strip()
-        if text:
-            values.append(text)
-    return values
-
-
 def _build_owned_cards_common_filter_query_params(
     raw: Mapping[str, object],
 ) -> dict[str, object]:
@@ -60,11 +41,11 @@ def _build_owned_cards_common_filter_query_params(
     account_id = normalize_query_text(str(raw.get("account_id") or ""))
     return {
         "account_id": account_id or None,
-        "rarity": _normalize_query_list(raw.get("rarity")),
-        "card_type": _normalize_query_list(raw.get("card_type")),
-        "set_code": _normalize_query_list(raw.get("set_code")),
-        "pack_name": _normalize_query_list(raw.get("pack_name")),
-        "element": _normalize_query_list(raw.get("element")),
+        "rarity": normalize_query_values(raw.get("rarity")),
+        "card_type": normalize_query_values(raw.get("card_type")),
+        "set_code": normalize_query_values(raw.get("set_code")),
+        "pack_name": normalize_query_values(raw.get("pack_name")),
+        "element": normalize_query_values(raw.get("element")),
         "card_name_query": normalize_query_text(str(raw.get("q") or "")),
         "ownership_scope": normalize_choice(
             str(raw.get("ownership_scope") or ""),
@@ -83,9 +64,7 @@ def _build_owned_cards_list_query_params(raw: Mapping[str, object]) -> dict[str,
         page_size=page_size if page_size is not None else 60,
     )
     sort_by = str(raw.get("sort_by") or "acquired")
-    normalized_sort_by = (
-        sort_by if sort_by in OWNED_CARD_SORT_FIELDS else "acquired"
-    )
+    normalized_sort_by = normalize_owned_card_sort(sort_by)
     return {
         **_build_owned_cards_common_filter_query_params(raw),
         "page": normalized_page,
@@ -132,9 +111,7 @@ def _build_owned_card_exchange_accounts_query_params(
         max_size=50,
     )
     sort_by = str(raw.get("sort_by") or "account_id")
-    normalized_sort_by = (
-        sort_by if sort_by in EXCHANGE_ACCOUNT_SORT_FIELDS else "account_id"
-    )
+    normalized_sort_by = normalize_exchange_account_sort(sort_by)
     return {
         "page": normalized_page,
         "page_size": normalized_page_size,

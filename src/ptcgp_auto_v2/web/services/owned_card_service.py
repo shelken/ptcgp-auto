@@ -30,6 +30,28 @@ EXCHANGE_ACCOUNT_SORT_FIELDS = {
 }
 
 
+def normalize_query_values(raw: object) -> list[str]:
+    """归一化多选查询参数，统一去空白与空字符串。"""
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def normalize_owned_card_sort(sort_by: str) -> str:
+    """归一化拥有卡牌主列表排序字段。"""
+    return sort_by if sort_by in OWNED_CARD_SORT_FIELDS else "acquired"
+
+
+def normalize_exchange_account_sort(sort_by: str) -> str:
+    """归一化交换账号表排序字段。"""
+    return sort_by if sort_by in EXCHANGE_ACCOUNT_SORT_FIELDS else "account_id"
+
+
 def _normalize_ownership_scope(value: str | None) -> str:
     """归一化卡牌拥有状态筛选值。"""
     return normalize_choice(value, allowed=OWNERSHIP_SCOPES, default="owned")
@@ -47,23 +69,13 @@ def _build_owned_card_filters(
     ownership_scope: str,
 ) -> dict[str, Any]:
     """构建仓储查询参数。"""
-    def _normalize_values(values: list[str] | None) -> list[str]:
-        if not values:
-            return []
-        result: list[str] = []
-        for item in values:
-            text = str(item).strip()
-            if text:
-                result.append(text)
-        return result
-
     return {
         "account_query": normalize_query_text(account_id or ""),
-        "rarities": _normalize_values(rarity),
-        "card_types": _normalize_values(card_type),
-        "set_codes": _normalize_values(set_code),
-        "pack_names": _normalize_values(pack_name),
-        "elements": _normalize_values(element),
+        "rarities": normalize_query_values(rarity),
+        "card_types": normalize_query_values(card_type),
+        "set_codes": normalize_query_values(set_code),
+        "pack_names": normalize_query_values(pack_name),
+        "elements": normalize_query_values(element),
         "card_name_query": normalize_query_text(card_name_query),
         "ownership_scope": ownership_scope,
     }
@@ -78,11 +90,6 @@ def _attach_card_display_names(items: list[dict[str, Any]]) -> None:
                 card.data,
                 fallback=card.name,
             )
-
-
-def _normalize_owned_card_sort(sort_by: str) -> str:
-    """归一化拥有卡牌主列表排序字段。"""
-    return sort_by if sort_by in OWNED_CARD_SORT_FIELDS else "acquired"
 
 
 def _matches_exchange_account_keyword(item: dict[str, Any], keyword: str) -> bool:
@@ -151,7 +158,7 @@ def build_owned_cards_list_context(
     """
     list_state = build_list_query_state(
         q="",
-        sort_by=_normalize_owned_card_sort(sort_by),
+        sort_by=normalize_owned_card_sort(sort_by),
         sort_order="asc",
         page=page,
         page_size=page_size,

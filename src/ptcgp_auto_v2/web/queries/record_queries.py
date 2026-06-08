@@ -179,15 +179,21 @@ def fetch_pack_points_map(
     """批量查询账号包点数并构建映射。"""
     target_combinations: set[tuple[int, str]] = set()
     for record in records:
-        if record.account_id and record.set_code:
-            target_combinations.add((record.account_id, record.set_code))
+        series_code = record.set_code
+        if not series_code and record.pack_type and "/" in record.pack_type:
+            # 变更原因：旧格式记录只把系列写在 pack_type 前缀，包点查询必须与展示解析一致。
+            series_code = record.pack_type.split("/", 1)[0]
+        if record.account_id and series_code:
+            target_combinations.add((record.account_id, series_code))
 
     if not target_combinations:
         return {}
 
-    account_ids = {combo[0] for combo in target_combinations}
     points_stmt = select(AccountPackPoint).where(
-        col(AccountPackPoint.account_id).in_(account_ids)
+        # 变更原因：当前页只需要这些账号-系列组合，避免把同账号其它系列包点混入结果。
+        tuple_(col(AccountPackPoint.account_id), col(AccountPackPoint.series)).in_(
+            target_combinations
+        )
     )
     points_records = session.exec(points_stmt).all()
     points_map: dict[tuple[int, str], int] = {}

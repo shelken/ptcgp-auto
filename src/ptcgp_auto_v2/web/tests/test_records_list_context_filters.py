@@ -11,9 +11,11 @@ from sqlmodel import SQLModel, Session, create_engine
 
 import ptcgp_auto_v2.db.models  # noqa: F401
 from ptcgp_auto_v2.db.models.account import Account
+from ptcgp_auto_v2.db.models.account_pack_point import AccountPackPoint
 from ptcgp_auto_v2.db.models.card import Card
 from ptcgp_auto_v2.db.models.pack_card import PackCard
 from ptcgp_auto_v2.db.models.pack_record import PackRecord, PackRecordType
+from ptcgp_auto_v2.web.queries.record_queries import fetch_pack_points_map
 from ptcgp_auto_v2.web.services.record_service import build_records_list_context
 
 
@@ -84,6 +86,49 @@ def _seed_records(session: Session) -> None:
         ]
     )
     session.commit()
+
+
+def test_fetch_pack_points_map_only_returns_current_page_series(session: Session) -> None:
+    now = datetime(2026, 4, 14, 12, 0, 0)
+    session.add(Account(id=1, game_id="game-ash", nickname="Ash", friend_id="1111", updated_at=now))
+    current_record = PackRecord(
+        id=301,
+        account_id=1,
+        pack_type=PackRecordType.DAILY_FREE,
+        pack_code="A1",
+        opened_at=now,
+    )
+    session.add(current_record)
+    session.add_all(
+        [
+            AccountPackPoint(account_id=1, series="A1", points=10, updated_at=now),
+            AccountPackPoint(account_id=1, series="A2", points=999, updated_at=now),
+        ]
+    )
+    session.commit()
+
+    points_map = fetch_pack_points_map(session, [current_record])
+
+    assert points_map == {(1, "A1"): 10}
+
+
+def test_fetch_pack_points_map_uses_legacy_pack_type_series(session: Session) -> None:
+    now = datetime(2026, 4, 14, 12, 0, 0)
+    session.add(Account(id=1, game_id="game-ash", nickname="Ash", friend_id="1111", updated_at=now))
+    current_record = PackRecord(
+        id=302,
+        account_id=1,
+        pack_code=None,
+        pack_type="A1/Pikachu",
+        opened_at=now,
+    )
+    session.add(current_record)
+    session.add(AccountPackPoint(account_id=1, series="A1", points=10, updated_at=now))
+    session.commit()
+
+    points_map = fetch_pack_points_map(session, [current_record])
+
+    assert points_map == {(1, "A1"): 10}
 
 
 def test_build_records_list_context_filters_by_set_code(session: Session) -> None:

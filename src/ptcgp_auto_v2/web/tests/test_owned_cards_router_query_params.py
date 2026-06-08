@@ -2,12 +2,25 @@
 """拥有卡牌路由参数解析回归测试。"""
 
 from ptcgp_auto_v2.web.routers import react_api_owned_cards
+from ptcgp_auto_v2.web.services.owned_card_service import (
+    normalize_exchange_account_sort,
+    normalize_owned_card_sort,
+    normalize_query_values,
+)
 from ptcgp_auto_v2.web.routers.react_api_owned_cards import (
     _build_owned_card_detail_query_params,
     _build_owned_card_exchange_accounts_query_params,
     _build_owned_cards_list_query_params,
     _build_owned_cards_stats_query_params,
 )
+
+
+def test_service_query_helpers_normalize_shared_router_values() -> None:
+    assert normalize_query_values([" SR ", "", "AR", None]) == ["SR", "AR", "None"]
+    assert normalize_owned_card_sort("count") == "count"
+    assert normalize_owned_card_sort("invalid_field") == "acquired"
+    assert normalize_exchange_account_sort("exchange_points") == "exchange_points"
+    assert normalize_exchange_account_sort("invalid_field") == "account_id"
 
 
 def test_build_owned_cards_list_query_params_normalizes_main_list_state() -> None:

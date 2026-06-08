@@ -1,5 +1,7 @@
 import { FastAverageColor } from 'fast-average-color'
 
+import { readStorageValue, writeStorageValue } from './storage'
+
 type CardThemeColorEngine = 'fast-average-color' | 'node-vibrant' | 'key-hash'
 
 interface CardColorCacheEntry {
@@ -59,34 +61,12 @@ function nowTimestamp(): string {
   return new Date().toISOString()
 }
 
-function readStorageItem(key: string): string | null {
-  if (typeof window === 'undefined') {
-    return null
-  }
-  try {
-    return window.localStorage.getItem(key)
-  } catch {
-    return null
-  }
-}
-
-function writeStorageItem(key: string, value: string): void {
-  if (typeof window === 'undefined') {
-    return
-  }
-  try {
-    window.localStorage.setItem(key, value)
-  } catch {
-    // 忽略 localStorage 异常，继续使用内存缓存
-  }
-}
-
 function resolveColorCacheStorage(): CardColorCacheStorage {
   if (colorCacheStorage) {
     return colorCacheStorage
   }
 
-  const raw = readStorageItem(COLOR_CACHE_STORAGE_KEY)
+  const raw = readStorageValue(COLOR_CACHE_STORAGE_KEY)
   if (!raw) {
     colorCacheStorage = { entries: {} }
     return colorCacheStorage
@@ -103,7 +83,7 @@ function resolveColorCacheStorage(): CardColorCacheStorage {
 }
 
 function persistColorCacheStorage(): void {
-  writeStorageItem(COLOR_CACHE_STORAGE_KEY, JSON.stringify(resolveColorCacheStorage()))
+  writeStorageValue(COLOR_CACHE_STORAGE_KEY, JSON.stringify(resolveColorCacheStorage()))
 }
 
 function trimColorCacheIfNeeded(): void {
@@ -165,7 +145,7 @@ function deriveColorFromKey(cacheKey: string): [number, number, number] {
 }
 
 function resolvePreferredEngine(): Extract<CardThemeColorEngine, 'fast-average-color' | 'node-vibrant'> {
-  const raw = readStorageItem(THEME_COLOR_ENGINE_STORAGE_KEY)
+  const raw = readStorageValue(THEME_COLOR_ENGINE_STORAGE_KEY)
   if (raw === 'fast-average-color' || raw === 'node-vibrant') {
     return raw
   }
@@ -173,7 +153,7 @@ function resolvePreferredEngine(): Extract<CardThemeColorEngine, 'fast-average-c
 }
 
 function persistPreferredEngine(engine: Extract<CardThemeColorEngine, 'fast-average-color' | 'node-vibrant'>): void {
-  writeStorageItem(THEME_COLOR_ENGINE_STORAGE_KEY, engine)
+  writeStorageValue(THEME_COLOR_ENGINE_STORAGE_KEY, engine)
 }
 
 function getFastAverageColorInstance(): FastAverageColor {

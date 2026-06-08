@@ -2,6 +2,10 @@
  * 读取 localStorage 字符串值，缺失返回 null。
  */
 export function readStorageValue(storageKey: string): string | null {
+  if (typeof window === 'undefined') {
+    // 变更原因：SSR 与 node 测试环境没有浏览器存储，读取应按未持久化处理。
+    return null
+  }
   try {
     return window.localStorage.getItem(storageKey)
   } catch (error) {
@@ -17,6 +21,10 @@ export function readStorageValue(storageKey: string): string | null {
  * 写入 localStorage 字符串值。
  */
 export function writeStorageValue(storageKey: string, value: string): void {
+  if (typeof window === 'undefined') {
+    // 变更原因：SSR 与 node 测试环境没有浏览器存储，写入只能跳过。
+    return
+  }
   try {
     window.localStorage.setItem(storageKey, value)
   } catch (error) {
