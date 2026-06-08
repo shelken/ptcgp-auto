@@ -2,14 +2,30 @@
  * 读取 localStorage 字符串值，缺失返回 null。
  */
 export function readStorageValue(storageKey: string): string | null {
-  return window.localStorage.getItem(storageKey)
+  try {
+    return window.localStorage.getItem(storageKey)
+  } catch (error) {
+    if (error instanceof DOMException) {
+      // 变更原因：受限浏览器可能禁止 localStorage 读取，持久化缺失不应中断页面渲染。
+      return null
+    }
+    throw error
+  }
 }
 
 /**
  * 写入 localStorage 字符串值。
  */
 export function writeStorageValue(storageKey: string, value: string): void {
-  window.localStorage.setItem(storageKey, value)
+  try {
+    window.localStorage.setItem(storageKey, value)
+  } catch (error) {
+    if (error instanceof DOMException) {
+      // 变更原因：存储配额或权限失败只影响持久化能力，不应打断当前交互。
+      return
+    }
+    throw error
+  }
 }
 
 /**

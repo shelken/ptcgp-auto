@@ -13,11 +13,13 @@ import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
 import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
+import { readStorageValue, writeStorageValue } from '@/lib/storage'
 import { toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 import type { BootstrapOptions } from '@/types/api'
 
 import {
+  areRecordsSearchStatesEqual,
   buildRecordsApiQueryParams,
   buildRecordsSearchParams,
   parseRecordsSearchState,
@@ -60,7 +62,9 @@ interface BatchPackView {
 
 interface RecordListItem {
   is_batch: boolean
+  batch_key?: string
   batch_id?: string
+  account_id?: number
   account_name: string
   opened_at: string
   set_name_display: string
@@ -93,8 +97,8 @@ interface PreviewState {
 const RECORDS_PAGE_SIZE = 10
 const RECORDS_VIEW_MODE_KEY = 'ptcgp_view_mode'
 
-function resolveStoredViewMode(): RecordsViewMode {
-  const stored = window.localStorage.getItem(RECORDS_VIEW_MODE_KEY)
+export function resolveStoredViewMode(): RecordsViewMode {
+  const stored = readStorageValue(RECORDS_VIEW_MODE_KEY)
   return stored === 'list' ? 'list' : 'grid'
 }
 
@@ -134,6 +138,21 @@ function resolveCardImageMeta(card: {
   const setCode = card.set_code ?? card.card?.set_code ?? ''
   const cardNumber = Number(card.card_number ?? card.card?.number ?? 0)
   return { setCode, cardNumber, hasImage: setCode.length > 0 && cardNumber > 0 }
+}
+
+export function resolveRecordBatchKey(
+  item: { batch_key?: string; account_id?: number; batch_id?: string; opened_at: string },
+  index: number
+): string {
+  const stableKey = item.batch_key?.trim()
+  if (stableKey) {
+    return stableKey
+  }
+  if (item.account_id !== undefined && item.batch_id) {
+    return `${item.account_id}:${item.batch_id}`
+  }
+  // 变更原因：旧数据或异常响应缺少批次身份时仍需保留 React 列表和局部状态键。
+  return `${item.opened_at}-${index}`
 }
 
 function RecordCardTile({
@@ -252,6 +271,7 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
   const previewOriginRef = useRef<HTMLElement | null>(null)
   const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
   const previewAnimatedKeyRef = useRef('')
+  const syncingSearchParamsRef = useRef(false)
   const { hiddenOriginRef: hiddenPreviewOriginRef, hideOrigin: hidePreviewOrigin, restoreOrigin: restorePreviewOrigin } = usePreviewOriginVisibility()
   const {
     cardRef: previewCardRef,
@@ -267,24 +287,46 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
     resetPreviewTransform(false)
   }, [resetPreviewTransform, stopPreviewDrag])
 
+  const currentSearchState = useMemo(
+    () => ({
+      selectedRarity,
+      selectedTypes,
+      selectedSetCodes,
+      cardNameQuery,
+      viewMode
+    }),
+    [cardNameQuery, selectedRarity, selectedSetCodes, selectedTypes, viewMode]
+  )
+
   useEffect(() => {
-    const next = buildRecordsSearchParams(
-      {
-        selectedRarity,
-        selectedTypes,
-        selectedSetCodes,
-        cardNameQuery,
-        viewMode
-      },
-      searchParams
-    )
+    const nextState = parseRecordsSearchState(searchParams, { fallbackView: resolveStoredViewMode() })
+    if (areRecordsSearchStatesEqual(nextState, currentSearchState)) {
+      syncingSearchParamsRef.current = false
+      return
+    }
+    syncingSearchParamsRef.current = true
+    // 变更原因：浏览器 Back/Forward 会直接改变 URL，需要先让本地筛选状态跟随 URL，避免旧 state 写回覆盖目标 URL。
+    setSelectedRarity(nextState.selectedRarity)
+    setSelectedTypes(nextState.selectedTypes)
+    setSelectedSetCodes(nextState.selectedSetCodes)
+    setCardNameQuery(nextState.cardNameQuery)
+    setViewMode(nextState.viewMode)
+  }, [searchParams])
+
+  useEffect(() => {
+    const parsedSearchState = parseRecordsSearchState(searchParams, { fallbackView: resolveStoredViewMode() })
+    if (syncingSearchParamsRef.current && !areRecordsSearchStatesEqual(parsedSearchState, currentSearchState)) {
+      return
+    }
+    syncingSearchParamsRef.current = false
+    const next = buildRecordsSearchParams(currentSearchState, searchParams)
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true, preventScrollReset: true })
     }
-  }, [cardNameQuery, searchParams, selectedRarity, selectedSetCodes, selectedTypes, setSearchParams, viewMode])
+  }, [currentSearchState, searchParams, setSearchParams])
 
   useEffect(() => {
-    window.localStorage.setItem(RECORDS_VIEW_MODE_KEY, viewMode)
+    writeStorageValue(RECORDS_VIEW_MODE_KEY, viewMode)
   }, [viewMode])
 
   const closePreview = useCallback(() => {
@@ -593,7 +635,8 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
               const isBatchRecord = item.is_batch || batchPacks.length > 0
               const cardCount = isBatchRecord ? Number(item.total_cards ?? 0) : Number(item.cards?.length ?? 0)
               const layoutClass = item.layout || resolveLayoutByCount(isBatchRecord ? 3 : cardCount)
-              const batchKey = item.batch_id || `${item.opened_at}-${index}`
+              const batchKey = resolveRecordBatchKey(item, index)
+              const articleKey = isBatchRecord ? batchKey : `${item.opened_at}-${index}`
               const selectedPackIndex = activeBatchPack[batchKey] ?? null
               const selectedPack = selectedPackIndex === null
                 ? null
@@ -601,7 +644,7 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
               const setCode = resolveRecordSetCode(item)
 
               return (
-                <article key={`${item.opened_at}-${index}`} className="records-entry">
+                <article key={articleKey} className="records-entry">
                   <aside className="records-meta-rail">
                     <div className="records-meta-top">
                       {setCode ? <span className="records-set-badge">{setCode}</span> : null}

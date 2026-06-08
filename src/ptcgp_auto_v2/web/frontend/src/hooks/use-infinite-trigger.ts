@@ -1,4 +1,32 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
+
+export function createInfiniteTriggerObserver({
+  target,
+  rootRef,
+  rootMargin,
+  onLoadMore
+}: {
+  target: Element
+  rootRef?: RefObject<Element | null>
+  rootMargin: string
+  onLoadMore: () => void
+}) {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        onLoadMore()
+      }
+    },
+    {
+      // 变更原因：root 必须在 ref 挂载后读取，否则首帧 null 会让 observer 退回 viewport。
+      root: rootRef?.current ?? null,
+      rootMargin,
+      threshold: 0.01
+    }
+  )
+  observer.observe(target)
+  return observer
+}
 
 /**
  * 无限滚动触发器：当占位元素进入视口时触发加载下一页。
@@ -6,12 +34,12 @@ import { useEffect, useRef } from 'react'
 export function useInfiniteTrigger({
   enabled,
   onLoadMore,
-  root = null,
+  rootRef,
   rootMargin = '160px 0px 160px 0px'
 }: {
   enabled: boolean
   onLoadMore: () => void
-  root?: HTMLElement | null
+  rootRef?: RefObject<Element | null>
   rootMargin?: string
 }) {
   const triggerRef = useRef<HTMLDivElement | null>(null)
@@ -24,21 +52,14 @@ export function useInfiniteTrigger({
     if (!target) {
       return
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          onLoadMore()
-        }
-      },
-      {
-        root,
-        rootMargin,
-        threshold: 0.01
-      }
-    )
-    observer.observe(target)
+    const observer = createInfiniteTriggerObserver({
+      target,
+      rootRef,
+      rootMargin,
+      onLoadMore
+    })
     return () => observer.disconnect()
-  }, [enabled, onLoadMore, root, rootMargin])
+  }, [enabled, onLoadMore, rootRef, rootMargin])
 
   return triggerRef
 }

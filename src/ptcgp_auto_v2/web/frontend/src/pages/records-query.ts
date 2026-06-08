@@ -57,6 +57,21 @@ export function parseRecordsSearchState(
   }
 }
 
+function areStringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index])
+}
+
+export function areRecordsSearchStatesEqual(
+  left: RecordsSearchState,
+  right: RecordsSearchState
+): boolean {
+  return areStringArraysEqual(left.selectedRarity, right.selectedRarity)
+    && areStringArraysEqual(left.selectedTypes, right.selectedTypes)
+    && areStringArraysEqual(left.selectedSetCodes, right.selectedSetCodes)
+    && left.cardNameQuery === right.cardNameQuery
+    && left.viewMode === right.viewMode
+}
+
 export function buildRecordsSearchParams(
   state: RecordsSearchState,
   baseParams: URLSearchParams

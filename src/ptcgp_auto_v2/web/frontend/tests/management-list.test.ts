@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 
 describe('管理页统一列表状态', () => {
   test('非法持久化值应收敛到 spec 默认值与锁定排序方向', async () => {

@@ -432,7 +432,7 @@ export function NotificationsSection({
   const cardPickerSentinelRef = useInfiniteTrigger({
     enabled: cardPickerOpen && cardPickerHasNext && !cardPickerQuery.isFetching,
     onLoadMore: cardPickerLoadMore,
-    root: cardPickerGridRef.current
+    rootRef: cardPickerGridRef
   })
 
   function parseIdList(value: unknown): number[] {

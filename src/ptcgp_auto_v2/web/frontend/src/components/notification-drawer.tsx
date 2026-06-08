@@ -138,7 +138,7 @@ export function NotificationDrawer({
   const sentinelRef = useInfiniteTrigger({
     enabled: open && hasNextPage && !query.isFetchingNextPage,
     onLoadMore: loadMore,
-    root: listRef.current
+    rootRef: listRef
   })
 
   const markReadMutation = useMutation({

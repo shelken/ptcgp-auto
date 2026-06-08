@@ -1,3 +1,5 @@
+import { readStorageValue, writeStorageValue } from './storage'
+
 export type ThemeMode = 'auto' | 'light' | 'dark'
 type ThemeScheme = 'light' | 'dark'
 export type ThemeAvailability = 'light' | 'dark' | 'both'
@@ -149,10 +151,10 @@ function normalizeMode(mode: string | null): ThemeMode {
 
 function rememberThemeByScheme(theme: ThemeName, scheme: ThemeScheme) {
   if (scheme === 'light') {
-    window.localStorage.setItem(STORAGE_KEY_LAST_LIGHT, theme)
+    writeStorageValue(STORAGE_KEY_LAST_LIGHT, theme)
     return
   }
-  window.localStorage.setItem(STORAGE_KEY_LAST_DARK, theme)
+  writeStorageValue(STORAGE_KEY_LAST_DARK, theme)
 }
 
 function rememberThemeByAvailability(theme: ThemeName) {
@@ -210,20 +212,20 @@ function resolveThemeByMode(mode: ThemeMode, theme: ThemeName): ThemeName {
 }
 
 export function loadThemePreference(): ThemePreference {
-  if (!window.localStorage.getItem(STORAGE_KEY_THEME_INITIALIZED)) {
+  if (!readStorageValue(STORAGE_KEY_THEME_INITIALIZED)) {
     const initial: ThemePreference = { mode: 'light', theme: DEFAULT_LIGHT_THEME }
     saveThemePreference(initial)
-    window.localStorage.setItem(STORAGE_KEY_THEME_INITIALIZED, '1')
+    writeStorageValue(STORAGE_KEY_THEME_INITIALIZED, '1')
     return initial
   }
-  const mode = normalizeMode(window.localStorage.getItem(STORAGE_KEY_THEME_MODE))
-  const theme = normalizeTheme(window.localStorage.getItem(STORAGE_KEY_THEME))
+  const mode = normalizeMode(readStorageValue(STORAGE_KEY_THEME_MODE))
+  const theme = normalizeTheme(readStorageValue(STORAGE_KEY_THEME))
   return { mode, theme: alignThemeToMode(mode, theme) }
 }
 
 export function saveThemePreference(preference: ThemePreference) {
-  window.localStorage.setItem(STORAGE_KEY_THEME_MODE, preference.mode)
-  window.localStorage.setItem(STORAGE_KEY_THEME, preference.theme)
+  writeStorageValue(STORAGE_KEY_THEME_MODE, preference.mode)
+  writeStorageValue(STORAGE_KEY_THEME, preference.theme)
   rememberThemeByAvailability(preference.theme)
 }
 

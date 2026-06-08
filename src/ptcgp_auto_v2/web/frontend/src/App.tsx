@@ -40,6 +40,16 @@ function setLangParam(nextLang: string, searchParams: URLSearchParams, setSearch
   setSearchParams(next, { replace: true, preventScrollReset: true })
 }
 
+export function buildNavTo(path: string, lang: string) {
+  // 变更原因：HashRouter 顶部导航不会自动继承当前 search，必须显式保留 lang。
+  return `${path}?lang=${lang}`
+}
+
+export function buildRootRedirectTo(search: string) {
+  // 变更原因：根路由重定向默认不会继承 HashRouter 当前 search，避免丢失 lang 与筛选参数。
+  return { pathname: '/records', search }
+}
+
 function ThemeModeIcon({ mode }: { mode: ThemeMode }) {
   if (mode === 'light') {
     return <Sun size={15} aria-hidden="true" />
@@ -277,21 +287,21 @@ export default function App() {
       </header>
 
       <nav className="surface-card tab-nav">
-        <NavLink to="/records">
+        <NavLink to={buildNavTo('/records', lang)}>
           {({ isActive }) => (
             <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
               {t.tab_records ?? 'RECORDS'}
             </Button>
           )}
         </NavLink>
-        <NavLink to="/owned-cards">
+        <NavLink to={buildNavTo('/owned-cards', lang)}>
           {({ isActive }) => (
             <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
               {t.tab_owned_cards ?? 'OWNED CARDS'}
             </Button>
           )}
         </NavLink>
-        <NavLink to="/management">
+        <NavLink to={buildNavTo('/management', lang)}>
           {({ isActive }) => (
             <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
               {t.tab_management ?? 'MANAGEMENT'}
@@ -308,7 +318,7 @@ export default function App() {
         )}
       >
         <Routes>
-          <Route path="/" element={<Navigate to="/records" replace />} />
+          <Route path="/" element={<Navigate to={buildRootRedirectTo(location.search)} replace />} />
           <Route path="/records" element={<RecordsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
           <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
           <Route path="/management/*" element={<ManagementPage lang={lang} t={t} assets={assets} />} />

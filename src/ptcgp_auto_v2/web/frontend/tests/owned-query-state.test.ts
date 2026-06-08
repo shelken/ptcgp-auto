@@ -1,12 +1,12 @@
-import { describe, expect, mock, test } from 'bun:test'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
-mock.module('@/components/ui/button', () => ({
+vi.mock('@/components/ui/button', () => ({
   Button: () => null
 }))
-mock.module('@/components/ui/badge', () => ({
+vi.mock('@/components/ui/badge', () => ({
   Badge: () => null
 }))
-mock.module('@/components/ui/select', () => ({
+vi.mock('@/components/ui/select', () => ({
   Select: () => null,
   SelectContent: () => null,
   SelectItem: () => null,
@@ -15,10 +15,10 @@ mock.module('@/components/ui/select', () => ({
   decodeSelectValue: (value: string) => value,
   encodeSelectValue: (value: string) => value
 }))
-mock.module('@/components/ui/tooltip', () => ({
+vi.mock('@/components/ui/tooltip', () => ({
   Tooltip: () => null
 }))
-mock.module('@/hooks/use-card-preview-drag', () => ({
+vi.mock('@/hooks/use-card-preview-drag', () => ({
   useCardPreviewDrag: () => ({
     cardRef: { current: null },
     shineRef: { current: null },
@@ -29,7 +29,7 @@ mock.module('@/hooks/use-card-preview-drag', () => ({
     resetTransform: () => undefined
   })
 }))
-mock.module('@/hooks/use-card-preview-visual', () => ({
+vi.mock('@/hooks/use-card-preview-visual', () => ({
   useCardPreviewVisual: () => ({
     imageUrls: { png: '' },
     cardBackImageUrl: '',
@@ -37,57 +37,66 @@ mock.module('@/hooks/use-card-preview-visual', () => ({
     visualStyle: {}
   })
 }))
-mock.module('@/hooks/use-infinite-trigger', () => ({
+vi.mock('@/hooks/use-infinite-trigger', () => ({
   useInfiniteTrigger: () => ({ current: null })
 }))
-mock.module('@/hooks/use-persisted-search-params', () => ({
+vi.mock('@/hooks/use-persisted-search-params', () => ({
   usePersistedSearchParams: () => [new URLSearchParams(), () => undefined]
 }))
-mock.module('@/hooks/use-preview-origin-visibility', () => ({
+vi.mock('@/hooks/use-preview-origin-visibility', () => ({
   usePreviewOriginVisibility: () => ({
     hiddenOriginRef: { current: null },
     hideOrigin: () => undefined,
     restoreOrigin: () => undefined
   })
 }))
-mock.module('@/lib/api', () => ({
+vi.mock('@/lib/api', () => ({
   buildQuery: () => '',
   fetchJson: async () => ({}),
   requestJson: async () => ({})
 }))
-mock.module('@/lib/card-image-fallback', () => ({
+vi.mock('@/lib/card-image-fallback', () => ({
   applyCardListImageFallback: () => undefined,
   applyCardPreviewImageFallback: () => undefined
 }))
-mock.module('@/lib/card-image', () => ({
+vi.mock('@/lib/card-image', () => ({
   getCardImageUrls: () => ({ png: '' })
 }))
-mock.module('@/lib/card-preview-assets', () => ({
+vi.mock('@/lib/card-preview-assets', () => ({
   hideBrokenCardBackImage: () => undefined
 }))
-mock.module('@/lib/flip-transition', () => ({
+vi.mock('@/lib/flip-transition', () => ({
   clearCardFlipExitGhosts: () => undefined,
   playCardFlipEntrance: async () => undefined,
   playCardFlipExitGhost: async () => undefined,
   snapshotElementRect: () => null
 }))
-mock.module('@/lib/i18n', () => ({
+vi.mock('@/lib/i18n', () => ({
   tr: (_: Record<string, string>, __: string, fallback: string) => fallback
 }))
-mock.module('@/lib/list-utils', () => ({
+vi.mock('@/lib/list-utils', () => ({
   parseSearchList: () => [],
   reasonTitle: () => '',
   toggleListItem: (current: string[], value: string) => [...current, value]
 }))
-mock.module('@/lib/time-display', () => ({
+vi.mock('@/lib/time-display', () => ({
   formatAbsoluteDateTime: () => '',
   formatRelativeDateTime: () => ''
 }))
-mock.module('./management/shared', () => ({
+vi.mock('./management/shared', () => ({
   AccountIdentityCell: () => null
 }))
 
 describe('owned-cards 页面 query state', () => {
+  const originalWindow = globalThis.window
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: originalWindow
+    })
+  })
+
   test('主列表与统计应复用同一筛选协议并统一字段命名', async () => {
     const {
       buildOwnedCardsListQueryParams,
@@ -102,6 +111,7 @@ describe('owned-cards 页面 query state', () => {
       setCode: ['A1'],
       packName: [' Mewtwo '],
       element: [' fire '],
+      cardNameQuery: ' Pikachu ',
       sortBy: 'count',
       page: 2,
       pageSize: 40
@@ -115,6 +125,7 @@ describe('owned-cards 页面 query state', () => {
       set_code: ['A1'],
       pack_name: ['Mewtwo'],
       element: ['fire'],
+      q: 'Pikachu',
       sort_by: 'count',
       page: 2,
       page_size: 40
@@ -127,8 +138,39 @@ describe('owned-cards 页面 query state', () => {
       card_type: ['pokemon'],
       set_code: ['A1'],
       pack_name: ['Mewtwo'],
-      element: ['fire']
+      element: ['fire'],
+      q: 'Pikachu'
     })
+  })
+
+  test('主列表 URL 清空筛选后应解析为空筛选且写回时不保留旧筛选', async () => {
+    const {
+      buildOwnedCardsSearchParams,
+      parseOwnedCardsSearchState
+    } = await import('../src/pages/owned-cards-query')
+
+    const emptyState = parseOwnedCardsSearchState(new URLSearchParams('lang=zh-CN'))
+
+    expect(emptyState).toEqual({
+      accountQuery: '',
+      cardNameQuery: '',
+      selectedRarity: [],
+      selectedTypes: [],
+      selectedElements: [],
+      selectedSetCodes: [],
+      selectedPackNames: [],
+      sortBy: 'acquired',
+      ownershipScope: 'owned',
+      viewMode: 'grid',
+      showCounts: true,
+      listPage: 0
+    })
+    expect(
+      buildOwnedCardsSearchParams(
+        emptyState,
+        new URLSearchParams('lang=zh-CN&owned_account=10001&owned_q=Pikachu&owned_rarity=SR&owned_type=pokemon&owned_element=fire&owned_set=A1&owned_pack=Mewtwo&owned_sort=count&owned_scope=missing&owned_view=list&owned_counts=hide&owned_page=3')
+      ).toString()
+    ).toBe('lang=zh-CN&owned_account=&owned_sort=acquired&owned_scope=owned&owned_view=grid&owned_counts=show')
   })
 
   test('详情弹窗账号表应复用统一搜索/排序/分页协议', async () => {
@@ -166,5 +208,24 @@ describe('owned-cards 页面 query state', () => {
       page: 3,
       page_size: 12
     })
+  })
+
+  test('本地详情分页和网格列数读取受限时使用默认计算值', async () => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        innerHeight: 910,
+        localStorage: {
+          getItem: () => {
+            throw new DOMException('blocked', 'SecurityError')
+          }
+        }
+      }
+    })
+
+    const { restoreDetailPageSize, restoreOwnedGridCols } = await import('../src/pages/owned-cards-page')
+
+    expect(restoreDetailPageSize()).toBe(10)
+    expect(restoreOwnedGridCols()).toBe(5)
   })
 })

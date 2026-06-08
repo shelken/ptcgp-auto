@@ -15,18 +15,23 @@ import { getCardImageUrls, type CardImageAssets } from '@/lib/card-image'
 import { hideBrokenCardBackImage } from '@/lib/card-preview-assets'
 import { clearCardFlipExitGhosts, playCardFlipEntrance, playCardFlipExitGhost, snapshotElementRect, type PreviewRectLike } from '@/lib/flip-transition'
 import { tr } from '@/lib/i18n'
-import { parseSearchList, reasonTitle, toggleListItem } from '@/lib/list-utils'
+import { readStorageValue, writeStorageValue } from '@/lib/storage'
+import { reasonTitle, toggleListItem } from '@/lib/list-utils'
 import { formatAbsoluteDateTime, formatRelativeDateTime } from '@/lib/time-display'
 import type { BootstrapOptions } from '@/types/api'
 
 import { AccountIdentityCell } from './management/shared'
 import {
+  areOwnedCardsSearchStatesEqual,
   buildOwnedCardDetailQueryParams,
   buildOwnedCardExchangeAccountsQueryParams,
   buildOwnedCardsListQueryParams,
+  buildOwnedCardsSearchParams,
   buildOwnedCardsStatsQueryParams,
+  parseOwnedCardsSearchState,
   type OwnedCardExchangeAccountsQueryState,
-  type OwnedCardsMainQueryState
+  type OwnedCardsMainQueryState,
+  type OwnedCardsViewMode
 } from './owned-cards-query'
 
 interface OwnedCardsPageProps {
@@ -114,7 +119,6 @@ const OWNED_GRID_COLS_MAX = 7
 const OWNED_GRID_COLS_DEFAULT = 5
 type DetailSortField = 'account_id' | 'friend_id' | 'nickname' | 'count' | 'exchange_points'
 type DetailNoticeLevel = 'success' | 'error'
-type OwnedCardsViewMode = 'grid' | 'list'
 
 interface DetailNoticeState {
   level: DetailNoticeLevel
@@ -127,8 +131,9 @@ function calculateDetailPageSize(): number {
   return Math.min(Math.max(computed, DETAIL_PAGE_SIZE_MIN), DETAIL_PAGE_SIZE_MAX)
 }
 
-function restoreDetailPageSize(): number {
-  const value = Number(window.localStorage.getItem(OWNED_DETAIL_PAGE_SIZE_KEY) ?? 0)
+export function restoreDetailPageSize(): number {
+  const stored = readStorageValue(OWNED_DETAIL_PAGE_SIZE_KEY)
+  const value = Number(stored ?? 0)
   if (!Number.isFinite(value) || value <= 0) {
     return calculateDetailPageSize()
   }
@@ -149,8 +154,9 @@ function normalizeOwnedGridCols(value: number): number {
   return integerValue
 }
 
-function restoreOwnedGridCols(): number {
-  const value = Number(window.localStorage.getItem(OWNED_GRID_COLS_KEY) ?? OWNED_GRID_COLS_DEFAULT)
+export function restoreOwnedGridCols(): number {
+  const stored = readStorageValue(OWNED_GRID_COLS_KEY)
+  const value = Number(stored ?? OWNED_GRID_COLS_DEFAULT)
   return normalizeOwnedGridCols(value)
 }
 
@@ -263,23 +269,20 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = usePersistedSearchParams()
 
-  const [accountQuery, setAccountQuery] = useState(() => searchParams.get('owned_account') ?? '')
-  const [cardNameQuery, setCardNameQuery] = useState(() => searchParams.get('owned_q') ?? '')
+  const [accountQuery, setAccountQuery] = useState(() => parseOwnedCardsSearchState(searchParams).accountQuery)
+  const [cardNameQuery, setCardNameQuery] = useState(() => parseOwnedCardsSearchState(searchParams).cardNameQuery)
   const deferredCardNameQuery = useDeferredValue(cardNameQuery)
-  const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseSearchList(searchParams, 'owned_rarity'))
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseSearchList(searchParams, 'owned_type'))
-  const [selectedElements, setSelectedElements] = useState<string[]>(() => parseSearchList(searchParams, 'owned_element'))
-  const [selectedSetCodes, setSelectedSetCodes] = useState<string[]>(() => parseSearchList(searchParams, 'owned_set'))
-  const [selectedPackNames, setSelectedPackNames] = useState<string[]>(() => parseSearchList(searchParams, 'owned_pack'))
-  const [sortBy, setSortBy] = useState(() => searchParams.get('owned_sort') ?? 'acquired')
-  const [ownershipScope, setOwnershipScope] = useState(() => searchParams.get('owned_scope') ?? 'owned')
-  const [viewMode, setViewMode] = useState<OwnedCardsViewMode>(() => (searchParams.get('owned_view') === 'list' ? 'list' : 'grid'))
+  const [selectedRarity, setSelectedRarity] = useState<string[]>(() => parseOwnedCardsSearchState(searchParams).selectedRarity)
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => parseOwnedCardsSearchState(searchParams).selectedTypes)
+  const [selectedElements, setSelectedElements] = useState<string[]>(() => parseOwnedCardsSearchState(searchParams).selectedElements)
+  const [selectedSetCodes, setSelectedSetCodes] = useState<string[]>(() => parseOwnedCardsSearchState(searchParams).selectedSetCodes)
+  const [selectedPackNames, setSelectedPackNames] = useState<string[]>(() => parseOwnedCardsSearchState(searchParams).selectedPackNames)
+  const [sortBy, setSortBy] = useState(() => parseOwnedCardsSearchState(searchParams).sortBy)
+  const [ownershipScope, setOwnershipScope] = useState(() => parseOwnedCardsSearchState(searchParams).ownershipScope)
+  const [viewMode, setViewMode] = useState<OwnedCardsViewMode>(() => parseOwnedCardsSearchState(searchParams).viewMode)
   const [gridCols, setGridCols] = useState(() => restoreOwnedGridCols())
-  const [showCounts, setShowCounts] = useState(() => searchParams.get('owned_counts') !== 'hide')
-  const [listPage, setListPage] = useState(() => {
-    const value = Number(searchParams.get('owned_page') ?? 0)
-    return Number.isFinite(value) && value >= 0 ? value : 0
-  })
+  const [showCounts, setShowCounts] = useState(() => parseOwnedCardsSearchState(searchParams).showCounts)
+  const [listPage, setListPage] = useState(() => parseOwnedCardsSearchState(searchParams).listPage)
 
   const [detailCardId, setDetailCardId] = useState<number | null>(null)
   const [selectedExchangeAccountId, setSelectedExchangeAccountId] = useState<number | null>(null)
@@ -292,6 +295,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   const [detailNotice, setDetailNotice] = useState<DetailNoticeState | null>(null)
   const [detailPreviewOriginRect, setDetailPreviewOriginRect] = useState<PreviewRectLike | null>(null)
   const detailPreviewAnimatedKeyRef = useRef('')
+  const syncingSearchParamsRef = useRef(false)
   const detailPreviewMotionRef = useRef<HTMLDivElement | null>(null)
   const detailPreviewOriginRef = useRef<HTMLElement | null>(null)
   const exitRestoringOriginRef = useRef<HTMLElement | null>(null)
@@ -339,55 +343,70 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     [options.card_sets, options.card_types, options.elements, options.packs, options.rarities, t]
   )
 
+  const currentSearchState = useMemo(
+    () => ({
+      accountQuery,
+      cardNameQuery,
+      selectedRarity,
+      selectedTypes,
+      selectedElements,
+      selectedSetCodes,
+      selectedPackNames,
+      sortBy,
+      ownershipScope,
+      viewMode,
+      showCounts,
+      listPage
+    }),
+    [
+      accountQuery,
+      cardNameQuery,
+      ownershipScope,
+      viewMode,
+      showCounts,
+      listPage,
+      selectedElements,
+      selectedPackNames,
+      selectedRarity,
+      selectedSetCodes,
+      selectedTypes,
+      sortBy
+    ]
+  )
+
   useEffect(() => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('owned_rarity')
-    next.delete('owned_type')
-    next.delete('owned_element')
-    next.delete('owned_set')
-    next.delete('owned_pack')
-    next.delete('owned_account')
-    next.delete('owned_q')
-    next.delete('owned_sort')
-    next.delete('owned_scope')
-    next.delete('owned_view')
-    next.delete('owned_counts')
-    next.delete('owned_page')
-    selectedRarity.forEach((item) => next.append('owned_rarity', item))
-    selectedTypes.forEach((item) => next.append('owned_type', item))
-    selectedElements.forEach((item) => next.append('owned_element', item))
-    selectedSetCodes.forEach((item) => next.append('owned_set', item))
-    selectedPackNames.forEach((item) => next.append('owned_pack', item))
-    next.set('owned_account', accountQuery)
-    if (cardNameQuery.trim()) {
-      next.set('owned_q', cardNameQuery.trim())
+    const nextState = parseOwnedCardsSearchState(searchParams)
+    if (areOwnedCardsSearchStatesEqual(nextState, currentSearchState)) {
+      syncingSearchParamsRef.current = false
+      return
     }
-    next.set('owned_sort', sortBy)
-    next.set('owned_scope', ownershipScope)
-    next.set('owned_view', viewMode)
-    next.set('owned_counts', showCounts ? 'show' : 'hide')
-    if (viewMode === 'list') {
-      next.set('owned_page', String(listPage))
+    syncingSearchParamsRef.current = true
+    // 变更原因：浏览器 Back/Forward 或外部 replace 会直接改变 URL，主列表筛选必须反向同步，避免旧 state 写回覆盖目标 URL。
+    setAccountQuery(nextState.accountQuery)
+    setCardNameQuery(nextState.cardNameQuery)
+    setSelectedRarity(nextState.selectedRarity)
+    setSelectedTypes(nextState.selectedTypes)
+    setSelectedElements(nextState.selectedElements)
+    setSelectedSetCodes(nextState.selectedSetCodes)
+    setSelectedPackNames(nextState.selectedPackNames)
+    setSortBy(nextState.sortBy)
+    setOwnershipScope(nextState.ownershipScope)
+    setViewMode(nextState.viewMode)
+    setShowCounts(nextState.showCounts)
+    setListPage(nextState.listPage)
+  }, [searchParams])
+
+  useEffect(() => {
+    const parsedSearchState = parseOwnedCardsSearchState(searchParams)
+    if (syncingSearchParamsRef.current && !areOwnedCardsSearchStatesEqual(parsedSearchState, currentSearchState)) {
+      return
     }
+    syncingSearchParamsRef.current = false
+    const next = buildOwnedCardsSearchParams(currentSearchState, searchParams)
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true, preventScrollReset: true })
     }
-  }, [
-    accountQuery,
-    cardNameQuery,
-    ownershipScope,
-    viewMode,
-    showCounts,
-    listPage,
-    searchParams,
-    selectedElements,
-    selectedPackNames,
-    selectedRarity,
-    selectedSetCodes,
-    selectedTypes,
-    setSearchParams,
-    sortBy
-  ])
+  }, [currentSearchState, searchParams, setSearchParams])
 
   const mainQueryState = useMemo<OwnedCardsMainQueryState>(
     () => ({
@@ -643,7 +662,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
     const syncPageSize = () => {
       const nextSize = calculateDetailPageSize()
       setDetailPageSize(nextSize)
-      window.localStorage.setItem(OWNED_DETAIL_PAGE_SIZE_KEY, String(nextSize))
+      writeStorageValue(OWNED_DETAIL_PAGE_SIZE_KEY, String(nextSize))
     }
     syncPageSize()
     window.addEventListener('resize', syncPageSize)
@@ -695,7 +714,7 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
   }, [detailTableQuery.data?.accounts, selectedExchangeAccountId])
 
   useEffect(() => {
-    window.localStorage.setItem(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
+    writeStorageValue(OWNED_GRID_COLS_KEY, String(normalizeOwnedGridCols(gridCols)))
   }, [gridCols])
   const detailData = detailQuery.data?.card.id === detailCardId ? detailQuery.data : null
   const detailPreviewCacheKey = detailData

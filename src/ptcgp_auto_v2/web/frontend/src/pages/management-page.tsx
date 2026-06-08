@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -94,6 +94,16 @@ const sections = [
   { key: 'exchange-cards', labelKey: 'menu_exchange_cards', fallback: 'Exchange Cards' },
   { key: 'notifications', labelKey: 'menu_notifications', fallback: 'Notifications' }
 ] as const
+
+export function buildManagementSectionTo(sectionKey: string, search: string) {
+  const params = new URLSearchParams(search)
+  const lang = params.get('lang')
+  return {
+    pathname: `/management/${sectionKey}`,
+    // 变更原因：管理子页筛选和分页属于当前子页，侧边栏切换只应保留全局语言。
+    search: lang ? `?lang=${lang}` : ''
+  }
+}
 
 function stringKey(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -3152,15 +3162,21 @@ function ManagementSectionRouter({
   return <JsonSection endpoint={sectionKey} title={sectionKey} lang={lang} t={t} />
 }
 
+export function buildManagementDefaultRedirectTo(search: string) {
+  // 变更原因：默认子路由重定向不继承当前 search，会导致 lang 丢失并回到旧缓存语言。
+  return { pathname: '/management/accounts', search }
+}
+
 export function ManagementPage({ lang, t, assets }: ManagementPageProps) {
   usePersistedSearchParams()
+  const location = useLocation()
 
   return (
     <section className="management-shell">
       <aside className="surface-card management-sidebar">
         <nav className="management-sidebar-nav">
           {sections.map((section) => (
-            <NavLink key={section.key} to={`/management/${section.key}`}>
+            <NavLink key={section.key} to={buildManagementSectionTo(section.key, location.search)}>
               {({ isActive }) => (
                 <Button
                   variant={isActive ? 'default' : 'outline'}
@@ -3178,7 +3194,7 @@ export function ManagementPage({ lang, t, assets }: ManagementPageProps) {
 
       <div className="management-main section-stack">
         <Routes>
-          <Route path="/" element={<Navigate to="/management/accounts" replace />} />
+          <Route path="/" element={<Navigate to={buildManagementDefaultRedirectTo(location.search)} replace />} />
           {sections.map((section) => (
             <Route
               key={section.key}
