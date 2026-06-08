@@ -31,11 +31,11 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import GiftPairingService, GiftRecordService
-from ptcgp_auto_v2.tasks.utils.constants import (
-    BASE_CARD_SCROLL_DISTANCE_Y,
-    MAX_CARD_STABLE_ROUNDS,
+from ptcgp_auto_v2.tasks.utils.friend_card_flow import (
+    CardScanScrollState,
+    advance_card_scan_scroll_state,
+    scroll_card_list,
 )
-from ptcgp_auto_v2.tasks.utils.friend_card_flow import build_detect_signature
 from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
     FriendSelectionFlow,
     FriendSelectionHelper,
@@ -47,8 +47,6 @@ from ptcgp_auto_v2.utils.gesture import (
     input_text,
     is_text_visible,
     quick_tap,
-    scroll_points,
-    swipe,
     tap,
     tap_box,
     tap_community_icon,
@@ -559,29 +557,28 @@ class SendCardDailyTask(StatefulTask):
                 GiftRecordService.update_status(record_id, status="card_selected")
             return scan_tap_result
 
-        signature = build_detect_signature(detected)
-        last_card_signature = cast(Optional[str], self.state_get("last_card_signature"))
-        card_stable_rounds = int(self.state_get("card_stable_rounds", 0))
-        if signature == last_card_signature:
-            card_stable_rounds += 1
-        else:
-            card_stable_rounds = 0
-            self.state_set("last_card_signature", signature)
-        self.state_set("card_stable_rounds", card_stable_rounds)
+        scan_state, reached_limit = advance_card_scan_scroll_state(
+            detected,
+            CardScanScrollState(
+                last_signature=cast(Optional[str], self.state_get("last_card_signature")),
+                stable_rounds=int(self.state_get("card_stable_rounds", 0)),
+            ),
+        )
+        self.state_set("last_card_signature", scan_state.last_signature)
+        self.state_set("card_stable_rounds", scan_state.stable_rounds)
 
-        if card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
+        if reached_limit:
             return self._skip_without_send(
                 skip_reason="扫描多次未找到目标卡 A1-153，结束本次送卡任务",
                 record_status="completed_no_card",
                 error_code="CARD_NOT_FOUND_BY_SCAN",
             )
 
-        start, end = scroll_points(
+        return scroll_card_list(
             self.adb,
-            base_distance_y=BASE_CARD_SCROLL_DISTANCE_Y,
-            direction="up",
+            wait_scroll=1.4,
+            return_swipe_result=True,
         )
-        return swipe(self.adb, start, end, wait=1.4)
 
     def _tap_target_card_by_scan(self, detected) -> Optional[ActionResult]:
         """通过 YOLO+Hash 扫描定位目标卡牌并点击。"""

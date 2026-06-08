@@ -33,11 +33,11 @@ from ptcgp_auto_v2.infra.model_manager import get_model_manager
 from ptcgp_auto_v2.infra.yolo_card_recognizer import YoloCardRecognizer
 from ptcgp_auto_v2.locales import get_text_patterns
 from ptcgp_auto_v2.services import ExchangeCardService
-from ptcgp_auto_v2.tasks.utils.constants import (
-    BASE_CARD_SCROLL_DISTANCE_Y,
-    MAX_CARD_STABLE_ROUNDS,
+from ptcgp_auto_v2.tasks.utils.friend_card_flow import (
+    CardScanScrollState,
+    advance_card_scan_scroll_state,
+    scroll_card_list,
 )
-from ptcgp_auto_v2.tasks.utils.friend_card_flow import build_detect_signature
 from ptcgp_auto_v2.tasks.utils.friend_selection_flow import (
     FriendSelectionFlow,
     FriendSelectionHelper,
@@ -53,8 +53,6 @@ from ptcgp_auto_v2.utils.account_cooldown import (
 )
 from ptcgp_auto_v2.utils.gesture import (
     is_text_visible,
-    scroll_points,
-    swipe,
     tap,
     tap_box,
     tap_community_icon,
@@ -600,21 +598,20 @@ class ExchangeCardsTask(StatefulTask):
             logger.info("点击目标卡牌: set_code=%s", set_code)
             return tap_result
 
-        sig = build_detect_signature(detected)
-        if sig == self._last_card_signature:
-            self._card_stable_rounds += 1
-        else:
-            self._card_stable_rounds = 0
-            self._last_card_signature = sig
+        scan_state, reached_limit = advance_card_scan_scroll_state(
+            detected,
+            CardScanScrollState(
+                last_signature=self._last_card_signature,
+                stable_rounds=self._card_stable_rounds,
+            ),
+        )
+        self._last_card_signature = scan_state.last_signature
+        self._card_stable_rounds = scan_state.stable_rounds
 
-        if self._card_stable_rounds >= MAX_CARD_STABLE_ROUNDS:
+        if reached_limit:
             return self._fail("连续三次扫描未找到目标卡牌")
 
-        start, end = scroll_points(
-            self.adb, base_distance_y=BASE_CARD_SCROLL_DISTANCE_Y, direction="up"
-        )
-        swipe(self.adb, start, end, wait=0.8)
-        return ActionResult.ok(wait=0.6)
+        return scroll_card_list(self.adb, wait_scroll=0.8, wait_after=0.6)
 
     def _handle_exchange_filter_modal(self, page_info: dict) -> ActionResult:
         """筛选弹窗按目标稀有度执行筛选。"""

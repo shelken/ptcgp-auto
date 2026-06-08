@@ -5,11 +5,14 @@
 供 send_card_daily 和 exchange_cards 共用。
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from ptcgp_auto_v2.core.task_base import ActionResult
 from ptcgp_auto_v2.tasks.utils.constants import (
+    BASE_CARD_SCROLL_DISTANCE_Y,
     BASE_FRIEND_SCROLL_DISTANCE_Y,
+    MAX_CARD_STABLE_ROUNDS,
 )
 from ptcgp_auto_v2.utils.gesture import scroll_points, swipe
 
@@ -40,6 +43,14 @@ def build_ocr_signature(ocr_results: list[dict]) -> str:
     return "|".join(sorted(texts))
 
 
+@dataclass(frozen=True)
+class CardScanScrollState:
+    """选卡扫描滚动状态。"""
+
+    last_signature: Optional[str] = None
+    stable_rounds: int = 0
+
+
 def build_detect_signature(detected) -> str:
     """构建识别结果签名，用于判断列表是否变化。"""
     if not detected:
@@ -52,6 +63,25 @@ def build_detect_signature(detected) -> str:
     if not items:
         return "__EMPTY__"
     return "|".join(sorted(items))
+
+
+def advance_card_scan_scroll_state(
+    detected,
+    state: CardScanScrollState,
+    max_stable_rounds: int = MAX_CARD_STABLE_ROUNDS,
+) -> tuple[CardScanScrollState, bool]:
+    """推进选卡扫描状态，返回新状态和是否达到稳定上限。"""
+    signature = build_detect_signature(detected)
+    if signature == state.last_signature:
+        stable_rounds = state.stable_rounds + 1
+    else:
+        stable_rounds = 0
+
+    next_state = CardScanScrollState(
+        last_signature=signature,
+        stable_rounds=stable_rounds,
+    )
+    return next_state, stable_rounds >= max_stable_rounds
 
 
 def find_target_search_plus_box(
@@ -117,6 +147,24 @@ def find_send_box_near_anchor(
         return None
     candidates.sort(key=lambda item: item[0])
     return candidates[0][1]
+
+
+def scroll_card_list(
+    adb,
+    direction: str = "up",
+    base_distance_y: int = BASE_CARD_SCROLL_DISTANCE_Y,
+    wait_scroll: float = 0.8,
+    wait_after: float = 0.6,
+    return_swipe_result: bool = False,
+) -> ActionResult:
+    """通用选卡列表滑动。"""
+    start, end = scroll_points(
+        adb, base_distance_y=base_distance_y, direction=direction
+    )
+    result = swipe(adb, start, end, wait=wait_scroll)
+    if return_swipe_result:
+        return result
+    return ActionResult.ok(wait=wait_after)
 
 
 def scroll_friend_list(
