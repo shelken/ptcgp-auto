@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy import and_, or_
 from sqlmodel import col, select
 
 from ptcgp_auto_v2.db.models import AccountFriendRequest
@@ -66,19 +67,6 @@ class FriendRequestRepository(BaseRepository):
         self._finish_write(request)
         return request
 
-    def get_by_from_account_and_status_data(
-        self, from_account_id: int, status: str
-    ) -> List[FriendRequestSnapshot]:
-        """获取发送方的指定状态请求快照。"""
-        statement = select(AccountFriendRequest).where(
-            AccountFriendRequest.from_account_id == from_account_id,
-            AccountFriendRequest.status == status,
-        )
-        return [
-            self._to_data(FriendRequestSnapshot, row)
-            for row in self.session.exec(statement).all()
-            if row.id is not None
-        ]
 
     def get_by_id(self, request_id: int) -> Optional[AccountFriendRequest]:
         """按主键查询请求记录。"""
@@ -89,35 +77,6 @@ class FriendRequestRepository(BaseRepository):
         row = self.session.get(AccountFriendRequest, request_id)
         return None if row is None else self._to_data(FriendRequestSnapshot, row)
 
-    def get_add_requests_by_to_account_and_status_data(
-        self, to_account_id: int, status: str
-    ) -> List[FriendRequestSnapshot]:
-        """获取接收方的指定状态 add 类型请求快照。"""
-        statement = select(AccountFriendRequest).where(
-            AccountFriendRequest.to_account_id == to_account_id,
-            AccountFriendRequest.status == status,
-            AccountFriendRequest.request_type == "add",
-        )
-        return [
-            self._to_data(FriendRequestSnapshot, row)
-            for row in self.session.exec(statement).all()
-            if row.id is not None
-        ]
-
-    def get_by_from_account_and_type_data(
-        self, from_account_id: int, request_type: str, status: str
-    ) -> List[FriendRequestSnapshot]:
-        """获取发送方的指定类型和状态的请求快照。"""
-        statement = select(AccountFriendRequest).where(
-            AccountFriendRequest.from_account_id == from_account_id,
-            AccountFriendRequest.request_type == request_type,
-            AccountFriendRequest.status == status,
-        )
-        return [
-            self._to_data(FriendRequestSnapshot, row)
-            for row in self.session.exec(statement).all()
-            if row.id is not None
-        ]
 
     def get_pending_request(
         self, from_account_id: int, to_friend_id: str
@@ -171,15 +130,39 @@ class FriendRequestRepository(BaseRepository):
         self._finish_write()
         return True
 
-    def get_external_sended_requests_data(
-        self, from_account_id: int
+
+    def list_manage_friendship_pending_data(
+        self, account_id: int
     ) -> List[FriendRequestSnapshot]:
-        """获取发送方的外部好友 sended 请求快照。"""
+        """获取 manage_friendship 当前账号待处理请求快照。"""
         statement = select(AccountFriendRequest).where(
-            AccountFriendRequest.from_account_id == from_account_id,
-            col(AccountFriendRequest.to_account_id).is_(None),
-            AccountFriendRequest.status == "sended",
-            AccountFriendRequest.request_type == "add",
+            or_(
+                and_(
+                    AccountFriendRequest.from_account_id == account_id,
+                    AccountFriendRequest.status == "sending",
+                ),
+                and_(
+                    AccountFriendRequest.to_account_id == account_id,
+                    AccountFriendRequest.request_type == "add",
+                    AccountFriendRequest.status == "sended",
+                ),
+                and_(
+                    AccountFriendRequest.from_account_id == account_id,
+                    col(AccountFriendRequest.to_account_id).is_(None),
+                    AccountFriendRequest.request_type == "add",
+                    AccountFriendRequest.status == "sended",
+                ),
+                and_(
+                    AccountFriendRequest.from_account_id == account_id,
+                    AccountFriendRequest.request_type == "add",
+                    AccountFriendRequest.status == "canceling",
+                ),
+                and_(
+                    AccountFriendRequest.from_account_id == account_id,
+                    AccountFriendRequest.request_type == "delete",
+                    AccountFriendRequest.status == "deleting",
+                ),
+            )
         )
         return [
             self._to_data(FriendRequestSnapshot, row)

@@ -246,18 +246,7 @@ class ManageFriendshipTask(StatefulTask):
             return []
         with session_scope() as session:
             repo = FriendRequestRepository(session)
-            sending = repo.get_by_from_account_and_status_data(self.account.id, "sending")
-            sended = repo.get_add_requests_by_to_account_and_status_data(
-                self.account.id, "sended"
-            )
-            external_sended = repo.get_external_sended_requests_data(self.account.id)
-            canceling = repo.get_by_from_account_and_type_data(
-                self.account.id, "add", "canceling"
-            )
-            deleting = repo.get_by_from_account_and_type_data(
-                self.account.id, "delete", "deleting"
-            )
-        pending_requests = sending + sended + external_sended + canceling + deleting
+            pending_requests = repo.list_manage_friendship_pending_data(self.account.id)
         pending_requests.sort(key=self._request_order_key)
         return pending_requests
 

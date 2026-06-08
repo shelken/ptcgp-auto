@@ -221,23 +221,41 @@ class TaskInstanceRepository(BaseRepository):
         if not instances:
             return 0
 
+        incoming_by_id = {
+            instance.id: instance for instance in instances if instance.id is not None
+        }
+        if not incoming_by_id:
+            return 0
+
+        statement = select(
+            TaskInstance.id,
+            TaskInstance.reset_type,
+            TaskInstance.next_run_at,
+        ).where(col(TaskInstance.id).in_(incoming_by_id))
+        with self.session.no_autoflush:
+            # 变更原因：真实调度路径会传入同 Session 托管对象，autoflush/identity map 会把新旧值抹平。
+            db_values_by_id = {
+                instance_id: (reset_type, next_run_at)
+                for instance_id, reset_type, next_run_at in self.session.exec(
+                    statement
+                ).all()
+            }
+
         now = datetime.now()
         count = 0
-        for instance in instances:
-            if instance.id is None:
-                continue
-            db_instance = self.session.get(TaskInstance, instance.id)
-            if db_instance is None:
-                continue
-            changed = False
-            if db_instance.reset_type != instance.reset_type:
-                db_instance.reset_type = instance.reset_type
-                changed = True
-            if db_instance.next_run_at != instance.next_run_at:
-                db_instance.next_run_at = instance.next_run_at
-                changed = True
+        for instance_id, (db_reset_type, db_next_run_at) in db_values_by_id.items():
+            incoming = incoming_by_id[instance_id]
+            changed = db_reset_type != incoming.reset_type
+            changed = changed or db_next_run_at != incoming.next_run_at
             if not changed:
                 continue
+
+            with self.session.no_autoflush:
+                db_instance = self.session.get(TaskInstance, instance_id)
+            if db_instance is None:
+                continue
+            db_instance.reset_type = incoming.reset_type
+            db_instance.next_run_at = incoming.next_run_at
             db_instance.updated_at = now
             self.session.add(db_instance)
             count += 1

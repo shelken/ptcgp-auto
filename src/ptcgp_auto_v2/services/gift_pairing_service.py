@@ -10,9 +10,9 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import case
-from sqlmodel import col, func, select
+from sqlmodel import Session, col, func, select
 
-from ptcgp_auto_v2.db.engine import get_session, session_scope
+from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.models import Account, AccountCard, AccountGiftPair, Card
 from ptcgp_auto_v2.db.repositories.factory import RepositoryFactory
 from ptcgp_auto_v2.utils.account_cooldown import is_account_past_days
@@ -55,7 +55,7 @@ class GiftPairingService:
                 )
                 return cls._pair_to_data(pair)
 
-            ranked_accounts = cls._load_ranked_accounts()
+            ranked_accounts = cls._load_ranked_accounts(session)
             friend_map = {
                 item["account_id"]: item["friend_id"]
                 for item in ranked_accounts
@@ -209,7 +209,7 @@ class GiftPairingService:
         return pair_map
 
     @staticmethod
-    def _load_ranked_accounts() -> list[dict]:
+    def _load_ranked_accounts(session: Session) -> list[dict]:
         """加载可参与送卡的账号并按 SR/SAR 总量排序。"""
         rarity_score = func.coalesce(
             func.sum(
@@ -221,24 +221,23 @@ class GiftPairingService:
             0,
         )
 
-        with get_session() as session:
-            statement = (
-                select(
-                    col(Account.id),
-                    col(Account.friend_id),
-                    rarity_score.label("rarity_score"),
-                )
-                .select_from(Account)
-                .outerjoin(AccountCard, col(Account.id) == col(AccountCard.account_id))
-                .outerjoin(Card, col(AccountCard.card_id) == col(Card.id))
-                .where(
-                    col(Account.friend_id).is_not(None),
-                    col(Account.friend_id) != "",
-                )
-                .group_by(col(Account.id), col(Account.friend_id))
-                .order_by(rarity_score.desc(), col(Account.id).asc())
+        statement = (
+            select(
+                col(Account.id),
+                col(Account.friend_id),
+                rarity_score.label("rarity_score"),
             )
-            rows = session.exec(statement).all()
+            .select_from(Account)
+            .outerjoin(AccountCard, col(Account.id) == col(AccountCard.account_id))
+            .outerjoin(Card, col(AccountCard.card_id) == col(Card.id))
+            .where(
+                col(Account.friend_id).is_not(None),
+                col(Account.friend_id) != "",
+            )
+            .group_by(col(Account.id), col(Account.friend_id))
+            .order_by(rarity_score.desc(), col(Account.id).asc())
+        )
+        rows = session.exec(statement).all()
 
         return [
             {
