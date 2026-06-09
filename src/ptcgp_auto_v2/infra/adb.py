@@ -5,6 +5,7 @@ ADB 控制器模块
 封装 uiautomator2 操作（截图、点击、滑动等）。
 """
 
+from http.client import RemoteDisconnected
 import logging
 import time
 from enum import StrEnum
@@ -410,6 +411,26 @@ class AdbController:
         except (RuntimeError, OSError, AdbError):
             return False
 
+    @staticmethod
+    def _is_screenshot_transient_error(exc: Exception) -> bool:
+        """识别 uiautomator2 截图 HTTP/RPC 瞬断。"""
+        if isinstance(exc, RemoteDisconnected):
+            return True
+        message = str(exc)
+        return "Remote end closed connection without response" in message
+
+    def _capture_screenshot(self, screenshot_mode: ScreenshotMode) -> Image.Image:
+        """按指定来源截图。"""
+        if screenshot_mode == ScreenshotMode.DISPLAY_RAW:
+            return self._call_device(
+                "screenshot.display_raw",
+                lambda: self._require_device().screenshot(display_id=0),
+            )
+        return self._call_device(
+            "screenshot.rpc_jpeg",
+            lambda: self._require_device().screenshot(),
+        )
+
     def screenshot(
         self,
         mode: ScreenshotMode | str | None = None,
@@ -426,16 +447,20 @@ class AdbController:
             PIL Image 对象，失败返回 None
         """
         screenshot_mode = self._resolve_screenshot_mode(mode, lossless)
-        if screenshot_mode == ScreenshotMode.DISPLAY_RAW:
-            result = self._call_device(
-                "screenshot.display_raw",
-                lambda: self._require_device().screenshot(display_id=0),
+        try:
+            result = self._capture_screenshot(screenshot_mode)
+        except Exception as exc:
+            if not self._is_screenshot_transient_error(exc):
+                raise
+            # 变更原因：BlueStacks/uiautomator2 截图 HTTP 连接偶发瞬断，重连后重试一次可避免任务被单次外部 IO 抖动误杀。
+            logger.warning(
+                "截图链路瞬断，重连后重试一次: %s mode=%s err=%s",
+                self.address,
+                screenshot_mode.value,
+                exc,
             )
-        else:
-            result = self._call_device(
-                "screenshot.rpc_jpeg",
-                lambda: self._require_device().screenshot(),
-            )
+            self.device = self._connect_device(f"screenshot.{screenshot_mode.value}.retry")
+            result = self._capture_screenshot(screenshot_mode)
         if not isinstance(result, Image.Image):
             logger.error("截图返回类型异常: type=%s", type(result).__name__)
             raise RuntimeError(f"截图返回类型异常: {type(result).__name__}")

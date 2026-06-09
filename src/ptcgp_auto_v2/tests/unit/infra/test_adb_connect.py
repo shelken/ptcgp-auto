@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+from http.client import RemoteDisconnected
 import threading
 
+from PIL import Image
 import uiautomator2 as u2
 
 from ptcgp_auto_v2.config.constants import ADB_CONNECT_FAIL_RESTART_THRESHOLD
@@ -48,6 +50,38 @@ def test_call_device_runs_callback_on_current_thread():
 
     assert result == "ok"
     assert captured["thread"] is current_thread
+
+
+class _FlakyScreenshotDevice:
+    def __init__(self):
+        self.calls = 0
+
+    def screenshot(self, **_kwargs):
+        self.calls += 1
+        if self.calls == 1:
+            raise RemoteDisconnected("Remote end closed connection without response")
+        return Image.new("RGB", (10, 20), "black")
+
+
+def test_screenshot_reconnects_once_after_remote_disconnect(monkeypatch):
+    """截图 HTTP 连接瞬断时应重连并重试一次，不把可恢复的 uiautomator2 抖动误判为任务失败。"""
+    controller = AdbController("127.0.0.1:5555")
+    device = _FlakyScreenshotDevice()
+    reconnects: list[str] = []
+    controller.device = device
+
+    def fake_connect(operation: str):
+        reconnects.append(operation)
+        return device
+
+    monkeypatch.setattr(controller, "_connect_device", fake_connect)
+
+    image = controller.screenshot()
+
+    assert image is not None
+    assert image.size == (10, 20)
+    assert device.calls == 2
+    assert reconnects == ["screenshot.rpc_jpeg.retry"]
 
 
 def test_connect_device_retries_when_accessibility_service_is_already_registered(
