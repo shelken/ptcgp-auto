@@ -9,8 +9,22 @@ from __future__ import annotations
 
 import threading
 
+from ptcgp_auto_v2.config.settings import get_settings
 from ptcgp_auto_v2.core.scheduler import SchedulerConfig
 from ptcgp_auto_v2.core.task_status import TaskStatus
+from ptcgp_auto_v2.infra.adb import AdbController
+
+
+def _restart_app_for_scenario(device_address: str) -> None:
+    """让场景从游戏内开始，而不是继承模拟器桌面/广告页状态。"""
+    controller = AdbController(device_address)
+    if not controller.connect():
+        raise RuntimeError(f"无法连接设备: {device_address}")
+    try:
+        # 变更原因：实机 E2E 要验证 claim_rewards 流程，不应被 BlueStacks 桌面/广告页初始状态污染。
+        controller.restart_app(get_settings().app_package)
+    finally:
+        controller.disconnect()
 
 
 def run(ctx):
@@ -19,6 +33,7 @@ def run(ctx):
     device_config = ctx.require_device_config()
     join_timeout = int(ctx.config.params["join_timeout_seconds"])
     lease_timeout = int(ctx.config.params["lease_timeout_seconds"])
+    _restart_app_for_scenario(device_config.device_address)
     harness = ctx.harness
     harness.mute_other_accounts(device_config.account_id)
     harness.mute_other_tasks_for_account(device_config.account_id, ctx.config.task_type)
