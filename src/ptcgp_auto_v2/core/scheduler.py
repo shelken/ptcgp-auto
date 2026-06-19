@@ -750,7 +750,7 @@ class Scheduler:
         调度器退出后，关闭所有自动创建的模拟器实例，
         避免长时间运行后进程堆积。
         """
-        instances = list_manageable_instances(prefix="auto-")
+        instances = list_manageable_instances(prefix=self._settings.auto_scale_instance_prefix)
         if not instances:
             return
 

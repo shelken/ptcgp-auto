@@ -11,6 +11,8 @@ import subprocess
 import time
 from typing import List, Optional, Tuple
 
+from ptcgp_auto_v2.config.settings import get_settings
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BLUESTACKS_BIN = "/Applications/BlueStacks.app/Contents/MacOS/BlueStacks"
@@ -220,8 +222,10 @@ def discover_bluestacks_devices() -> List[str]:
 
 def list_manageable_instances(
     conf_path: str = DEFAULT_BLUESTACKS_CONF,
-    prefix: str = "auto-",
+    prefix: Optional[str] = None,
 ) -> dict[int, tuple[str, str]]:
+    if prefix is None:
+        prefix = get_settings().auto_scale_instance_prefix
     """
     从配置文件中解析可管理的实例名、显示名与端口映射
 

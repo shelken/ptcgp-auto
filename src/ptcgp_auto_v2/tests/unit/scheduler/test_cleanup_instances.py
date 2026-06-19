@@ -22,7 +22,11 @@ def _build_scheduler() -> Scheduler:
             stale_task_check_interval=3600,
         ),
     )
-    scheduler._settings = SimpleNamespace(auto_create_accounts=False, max_accounts=0)
+    scheduler._settings = SimpleNamespace(
+        auto_create_accounts=False,
+        max_accounts=0,
+        auto_scale_instance_prefix="auto-",
+    )
     scheduler.device_pool = SimpleNamespace(available_count=1, total_count=2)
     scheduler._generate_pending_tasks = lambda: None
     scheduler._check_and_reset_stale_tasks = lambda: None
