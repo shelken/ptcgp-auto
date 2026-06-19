@@ -5,7 +5,7 @@
 - 用 uv/bun；Python 命令统一用 uv
 - 工作目录出错后用`direnv exec . [cmd]`；目录不能执行时先`direnv allow`；不需要每条命令都执行`direnv exec`
 - 禁止python命令使用在前面`PYTHONPATH=src`
-- worker/leader 编写(edit)代码前,必须先看`test-driven-development`skill,使用tdd
+- worker/leader 编写(edit)代码前,先看`tdd`skill(如果有)
 
 ## 子代理使用原则
 
