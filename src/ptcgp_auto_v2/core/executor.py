@@ -935,7 +935,7 @@ class AccountExecutor(BaseExecutor):
                     except Exception as e:
                         from ptcgp_auto_v2.infra.adb import AdbController
 
-                        AdbController.register_offline_failure(self.device.address, e)
+                        AdbController(self.device.address).register_offline_failure(e)
                         logger.exception(f"账号执行器异常: {e}")
                         self._fail_tasks(str(e), only_running=True)
                         self._persist_prepare_failures(prepare_failure_logs, str(e))
@@ -946,7 +946,7 @@ class AccountExecutor(BaseExecutor):
             except Exception as e:
                 from ptcgp_auto_v2.infra.adb import AdbController
 
-                AdbController.register_offline_failure(self.device.address, e)
+                AdbController(self.device.address).register_offline_failure(e)
                 logger.exception(f"账号执行器异常: {e}")
                 self._fail_tasks(str(e), only_running=True)
                 self._persist_prepare_failures(prepare_failure_logs, str(e))

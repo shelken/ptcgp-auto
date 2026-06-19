@@ -744,6 +744,24 @@ class Scheduler:
 
         logger.info("调度器已停止")
 
+    def _cleanup_auto_instances(self):
+        """清理 auto- 前缀的 BlueStacks 实例。
+
+        调度器退出后，关闭所有自动创建的模拟器实例，
+        避免长时间运行后进程堆积。
+        """
+        instances = list_manageable_instances(prefix="auto-")
+        if not instances:
+            return
+
+        names = [v[0] for v in instances.values()]
+        logger.info("清理自动创建的实例: %s", names)
+        for instance_name in names:
+            try:
+                stop_bluestacks_instance(instance_name)
+            except Exception:
+                logger.exception("关闭实例失败: %s", instance_name)
+
     def run(self):
         """
         运行调度器（阻塞模式）
@@ -767,6 +785,7 @@ class Scheduler:
             logger.info("收到中断信号")
         finally:
             self.stop(wait=True)
+            self._cleanup_auto_instances()
 
     def run_single_task(
         self,

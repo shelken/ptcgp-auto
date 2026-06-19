@@ -152,27 +152,31 @@ class AdbController:
         )
         return any(marker in message for marker in offline_markers)
 
-    @classmethod
-    def register_offline_failure(cls, address: str, exc: Exception) -> bool:
-        """记录同设备离线错误，达到阈值后直接强制重启对应模拟器。"""
-        if not cls.is_offline_error(exc):
+    def register_offline_failure(self, exc: Exception) -> bool:
+        """记录同设备离线错误，达到阈值后先做健康检查再决定是否重启。"""
+        if not self.is_offline_error(exc):
             return False
 
-        failures = cls._offline_failures.get(address, 0) + 1
-        cls._offline_failures[address] = failures
+        failures = AdbController._offline_failures.get(self.address, 0) + 1
+        AdbController._offline_failures[self.address] = failures
         logger.warning(
             "ADB 离线错误连续次数: %s/%s (%s) err=%s",
             failures,
             ADB_CONNECT_FAIL_RESTART_THRESHOLD,
-            address,
+            self.address,
             exc,
         )
         if failures < ADB_CONNECT_FAIL_RESTART_THRESHOLD:
             return False
 
-        logger.warning("离线错误达到阈值，强制重启模拟器: %s", address)
-        restart_bluestacks_instance_for_device(address)
-        cls._offline_failures[address] = 0
+        if not self._should_restart_emulator():
+            logger.warning("设备健康检查通过，跳过模拟器重启: %s", self.address)
+            AdbController._offline_failures[self.address] = 0
+            return False
+
+        logger.warning("离线错误达到阈值，强制重启模拟器: %s", self.address)
+        restart_bluestacks_instance_for_device(self.address)
+        AdbController._offline_failures[self.address] = 0
         return True
 
     def _refresh_adb_transport(self, operation: str):
@@ -283,7 +287,7 @@ class AdbController:
 
         except (RuntimeError, ConnectionError, OSError, AdbError) as e:
             logger.error(f"u2 连接失败: {e}")
-            if self.register_offline_failure(self.address, e):
+            if self.register_offline_failure(e):
                 return self._retry_connect_after_restart()
             if self._register_connect_failure():
                 return self._retry_connect_after_restart()

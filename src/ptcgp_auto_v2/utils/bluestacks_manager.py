@@ -107,10 +107,11 @@ def restart_bluestacks_instance_for_device(
     pid, instance = resolved
     logger.info("准备重启 BlueStacks 实例: %s (PID=%s)", instance, pid)
 
-    subprocess.run(["kill", str(pid)], check=False)
+    subprocess.run(["pkill", "-f", f"BlueStacks.*--instance {instance}"], check=False)
     time.sleep(1.0)
-    subprocess.run(["kill", "-9", str(pid)], check=False)
-    _wait_for_port_closed(device_address, timeout_seconds=10, interval_seconds=1.0)
+    if not _wait_for_port_closed(device_address, timeout_seconds=10, interval_seconds=1.0):
+        logger.error("旧实例未关闭，放弃重启: %s", instance)
+        return False
     time.sleep(1.0)
 
     subprocess.Popen(

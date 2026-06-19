@@ -130,28 +130,66 @@ def test_connect_device_retries_when_uiautomator_server_quits_during_start(
     assert calls == ["127.0.0.1:5555", "127.0.0.1:5555"]
 
 
-def test_offline_error_reaches_threshold_then_force_restarts_emulator(monkeypatch):
-    """同设备连续离线错误达到阈值后必须直接强制重启模拟器。"""
+def test_offline_failure_skips_restart_when_emulator_healthy(monkeypatch):
+    """同设备连续离线错误达到阈值后，若实例健康检查通过则跳过重启并重置计数。"""
     address = "127.0.0.1:5675"
     restarts: list[str] = []
     AdbController._offline_failures.clear()
+    controller = AdbController(address)
 
+    monkeypatch.setattr(
+        controller,
+        "_should_restart_emulator",
+        lambda: False,
+    )
     monkeypatch.setattr(
         "ptcgp_auto_v2.infra.adb.restart_bluestacks_instance_for_device",
         lambda device_address: restarts.append(device_address) or True,
     )
 
     for attempt in range(ADB_CONNECT_FAIL_RESTART_THRESHOLD - 1):
-        should_retry = AdbController.register_offline_failure(
-            address,
+        should_retry = controller.register_offline_failure(
             RuntimeError(f"device {address} not online"),
         )
         assert should_retry is False
         assert restarts == []
         assert AdbController._offline_failures[address] == attempt + 1
 
-    should_retry = AdbController.register_offline_failure(
-        address,
+    # 达阈值但健康检查通过
+    should_retry = controller.register_offline_failure(
+        RuntimeError(f"device {address} not online"),
+    )
+
+    assert should_retry is False
+    assert restarts == [], "实例健康时不应重启"
+    assert AdbController._offline_failures[address] == 0, "健康时应重置计数"
+
+
+def test_offline_failure_restarts_when_emulator_dead(monkeypatch):
+    """同设备连续离线错误达到阈值后，若实例失活则强制重启模拟器。"""
+    address = "127.0.0.1:5675"
+    restarts: list[str] = []
+    AdbController._offline_failures.clear()
+    controller = AdbController(address)
+
+    monkeypatch.setattr(
+        controller,
+        "_should_restart_emulator",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.infra.adb.restart_bluestacks_instance_for_device",
+        lambda device_address: restarts.append(device_address) or True,
+    )
+
+    # 填到阈值 - 1
+    for _ in range(ADB_CONNECT_FAIL_RESTART_THRESHOLD - 1):
+        controller.register_offline_failure(
+            RuntimeError(f"device {address} not online"),
+        )
+
+    # 达阈值 + 实例失活
+    should_retry = controller.register_offline_failure(
         RuntimeError(f"device {address} not online"),
     )
 
