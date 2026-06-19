@@ -89,6 +89,16 @@ def find_bluestacks_instance_by_port(port: int) -> Optional[Tuple[int, str]]:
     return pid, instance
 
 
+def _kill_instance(instance_name: str) -> subprocess.CompletedProcess:
+    """通过 pkill 杀掉指定 BlueStacks 实例的全部进程。"""
+    return subprocess.run(
+        ["pkill", "-f", f"BlueStacks.*--instance {instance_name}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def restart_bluestacks_instance_for_device(
     device_address: str,
     bin_path: str = DEFAULT_BLUESTACKS_BIN,
@@ -107,7 +117,7 @@ def restart_bluestacks_instance_for_device(
     pid, instance = resolved
     logger.info("准备重启 BlueStacks 实例: %s (PID=%s)", instance, pid)
 
-    subprocess.run(["pkill", "-f", f"BlueStacks.*--instance {instance}"], check=False)
+    _kill_instance(instance)
     time.sleep(1.0)
     if not _wait_for_port_closed(device_address, timeout_seconds=10, interval_seconds=1.0):
         logger.error("旧实例未关闭，放弃重启: %s", instance)
@@ -283,12 +293,7 @@ def stop_bluestacks_instance(instance_name: str) -> bool:
     if not instance_name:
         logger.warning("实例名为空，无法关闭")
         return False
-    result = subprocess.run(
-        ["pkill", "-f", f"BlueStacks.*--instance {instance_name}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = _kill_instance(instance_name)
     if result.returncode != 0:
         logger.warning("关闭 BlueStacks 实例失败或未找到: %s", instance_name)
         return False
