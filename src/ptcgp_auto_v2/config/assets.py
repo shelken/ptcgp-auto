@@ -8,6 +8,14 @@ CARD_IMAGE_REPO_BASE_URL = (
 CARD_IMAGE_WSRV_BASE_URL = "https://wsrv.nl/?url="
 CARD_IMAGE_CDN_ROOT_URL = "https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/images"
 
+# 预计算感知哈希 JSON 的 CDN 根地址（避免用户下载全量卡图本地算哈希）
+CARD_HASH_CDN_ROOT_URL = (
+    "https://cdn.jsdelivr.net/gh/shelken/ptcgp-assets@main/hashes"
+)
+# 哈希 JSON 算法版本；与 ptcgp-assets 仓库 scripts/generate_hashes.py 的 ALGO_VERSION 对齐
+# 不一致时游戏端忽略该 JSON，回退到下载卡图本地算哈希
+CARD_HASH_ALGO_VERSION = "v1"
+
 
 def resolve_card_image_locale(lang: str) -> str:
     """根据语言解析图片资源 locale。"""
@@ -59,3 +67,12 @@ def build_card_cdn_image_url(
     """构造指定语言下的卡牌 CDN URL。"""
     cdn_base_url = build_card_image_bases(lang)["cdn_base_url"]
     return f"{cdn_base_url}/{set_code}/{card_number}.{ext}"
+
+
+def build_card_hash_json_url(set_code: str, lang: str = "zh_CN") -> str:
+    """构造指定系列预计算哈希 JSON 的 CDN URL。
+
+    locale 与卡图同源（zh_CN -> zh-TW），保证哈希来自与扫描下载相同的卡图。
+    """
+    image_locale = resolve_card_image_locale(lang)
+    return f"{CARD_HASH_CDN_ROOT_URL}/{image_locale}/{set_code}.json"

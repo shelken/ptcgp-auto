@@ -10,13 +10,19 @@ import threading
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
+import requests
 from PIL import Image
 
+from ptcgp_auto_v2.config.assets import (
+    CARD_HASH_ALGO_VERSION,
+    build_card_hash_json_url,
+)
 from ptcgp_auto_v2.config.constants import (
     CARD_IMAGE_DOWNLOAD_MAX_WORKERS,
     HASH_SIMILARITY_TIE_THRESHOLD,
     TOPK_CANDIDATES,
 )
+from ptcgp_auto_v2.config.lang import DEFAULT_LOCALE, TASK_LOCALE_TO_WEB_LANG
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import CardRepository
 from ptcgp_auto_v2.utils.image_manager import ImageResourceManager
@@ -45,6 +51,13 @@ class CardHashManager:
         self._failed_downloads: Set[str] = set()  # 格式: "{set_code}/{number:03d}"
         self._downloader = ImageResourceManager() if enable_download else None
         self._enable_download = enable_download
+        # 复用 HTTP 会话拉取预计算哈希 JSON
+        self._http_session = requests.Session()
+        self._http_session.headers.update(
+            {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+        )
+        # 已尝试拉取哈希 JSON 失败的系列，本次运行不再重试
+        self._hash_json_failed_sets: Set[str] = set()
 
     def ensure_series_ready(self, set_code: str, exclude_promo: bool = False) -> bool:
         """确保某系列所有卡牌都有Hash值（下载缺失卡牌并计算）
@@ -67,17 +80,25 @@ class CardHashManager:
 
         # 1. 查询缺失Hash的卡牌
         logger.debug("[HashManager] 查询缺失 Hash: set_code=%s", set_code)
-        with session_scope() as session:
-            all_missing = [
-                (card.id, card.number)
-                for card in CardRepository(session).get_cards_without_hash(set_code)
-                if card.id is not None
-            ]
+        all_missing = self._query_missing_cards(set_code)
         logger.debug(
             "[HashManager] 查询缺失 Hash 完成: set_code=%s all_missing=%s",
             set_code,
             len(all_missing),
         )
+
+        # 1.1 优先拉取预计算哈希 JSON 批量入库，避免下载全量卡图本地算哈希
+        # JSON 由 ptcgp-assets 仓库预生成；缺失或版本不匹配时静默回退到卡图下载
+        if all_missing and self._enable_download:
+            loaded = self._try_load_hash_from_json(set_code)
+            if loaded > 0:
+                # JSON 入库后重新查询真正还缺的卡牌
+                all_missing = self._query_missing_cards(set_code)
+                logger.debug(
+                    "[HashManager] JSON 入库 %s 张后剩余缺失: %s",
+                    loaded,
+                    len(all_missing),
+                )
 
         # 2. 过滤掉已下载失败的卡牌（内存缓存，避免重复尝试）
         missing_cards = [
@@ -140,6 +161,75 @@ class CardHashManager:
         self._load_series_hash(set_code)
 
         return True
+
+    def _query_missing_cards(self, set_code: str) -> List[Tuple[int, int]]:
+        """查询某系列缺失 Hash 的卡牌 (card_id, number)"""
+        with session_scope() as session:
+            return [
+                (card.id, card.number)
+                for card in CardRepository(session).get_cards_without_hash(set_code)
+                if card.id is not None
+            ]
+
+    def _try_load_hash_from_json(self, set_code: str) -> int:
+        """拉取预计算哈希 JSON 并批量入库。
+
+        JSON 来自 ptcgp-assets 仓库的 hashes/{locale}/{set_code}.json。
+        下载失败或算法版本不匹配时静默返回 0，由调用方回退到卡图下载。
+
+        Returns:
+            成功入库的卡牌数量
+        """
+        if set_code in self._hash_json_failed_sets:
+            return 0
+
+        web_lang = TASK_LOCALE_TO_WEB_LANG.get(DEFAULT_LOCALE, "zh_CN")
+        url = build_card_hash_json_url(set_code, web_lang)
+        try:
+            response = self._http_session.get(url, timeout=30)
+            if response.status_code == 404:
+                # 该系列尚未预生成哈希 JSON，标记后不再重试
+                self._hash_json_failed_sets.add(set_code)
+                logger.debug(f"[HashManager] 系列 {set_code} 无预计算哈希 JSON (404)")
+                return 0
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as e:
+            self._hash_json_failed_sets.add(set_code)
+            logger.warning(f"[HashManager] 拉取哈希 JSON 失败: {set_code} - {e}")
+            return 0
+
+        algo_version = payload.get("_algo_version")
+        if algo_version != CARD_HASH_ALGO_VERSION:
+            # 算法版本不匹配，忽略 JSON 避免写入错误哈希
+            self._hash_json_failed_sets.add(set_code)
+            logger.warning(
+                f"[HashManager] 系列 {set_code} 哈希 JSON 算法版本不匹配 "
+                f"(期望 {CARD_HASH_ALGO_VERSION}, 实际 {algo_version})，回退卡图下载"
+            )
+            return 0
+
+        cards_map = payload.get("cards")
+        if not isinstance(cards_map, dict):
+            self._hash_json_failed_sets.add(set_code)
+            logger.warning(f"[HashManager] 系列 {set_code} 哈希 JSON 格式异常")
+            return 0
+
+        # 仅对当前缺失 hash 的卡牌写入，避免无谓更新
+        missing = self._query_missing_cards(set_code)
+
+        loaded = 0
+        with session_scope() as session:
+            repo = CardRepository(session)
+            for card_id, number in missing:
+                hash_str = cards_map.get(str(number))
+                if hash_str and repo.update_card_hash(card_id, hash_str):
+                    loaded += 1
+
+        logger.info(
+            f"[HashManager] 系列 {set_code} 从哈希 JSON 入库 {loaded}/{len(missing)} 张"
+        )
+        return loaded
 
     def _compute_and_save_hash(self, card_id: int, image_path) -> bool:
         """计算图片Hash并保存到数据库"""

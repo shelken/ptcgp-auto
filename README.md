@@ -74,16 +74,19 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 
 ### 1. 环境准备
 
-推荐使用 [mise](https://mise.jdx.dev/) 管理环境（可选）：
+推荐使用 [mise](https://mise.jdx.dev/) 管理环境（可选，但能省掉手动装 Python/uv/bun 的麻烦）。
+
+> **clone 后第一次 `cd` 进目录会报 `not trusted`，这是 mise 的安全机制，不是出错。**
+> 先在项目根目录执行 `mise trust` 即可；之后 shell integration 会在每次进入目录时自动加载 `mise.toml` 声明的工具版本与 `.venv`。
 
 ```bash
-mise trust          # 首次信任配置
+mise trust          # 信任 mise.toml（首次必做，之后无需重复）
 mise run setup      # 装工具 + 同步依赖 + 安装 git hook
 ```
 
-配置好 shell integration 后，进入项目目录会自动加载 `mise.toml` 声明的工具版本与 `.venv`。
+`mise trust` 会顺带创建一个**空** `.venv`，此时依赖还没装；必须再跑 `mise run setup`（内部执行 `uv sync` + `pre-commit install`）才算完成。
 
-手动安装依赖：
+不用 mise 的话，自行准备 Python ≥3.12、uv、bun，然后手动装依赖：
 ```bash
 uv sync
 ```
@@ -154,6 +157,12 @@ uv run python main_v2.py --web --notify-key "xxxx"
 - **其他平台**: PyTorch 格式模型 (`best.pt`)
 
 模型文件保存在 `data/models/` 目录，下载完成后自动加载到内存。
+
+## 🃏 卡牌哈希自动加载
+
+卡牌识别依赖感知哈希匹配。首次扫描某系列时，会优先从 `shelken/ptcgp-assets` 仓库拉取预计算的哈希 JSON (`hashes/zh-TW/<set>.json`，全量仅约 200KB) 批量入库，无需下载全量卡图本地算哈希。
+
+仅当哈希 JSON 未覆盖某张卡牌时，才回退到下载该卡图片本地计算。这一机制让新用户首次识别从下载几个 G 卡图降为下载几百 KB 哈希文件。
 
 ## 🏗️ 架构说明
 

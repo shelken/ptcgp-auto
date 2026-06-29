@@ -35,16 +35,19 @@ Pokemon TCG Pocket automation assistant based on ADB and image recognition.
 
 ### 1. Environment
 
-Recommended: manage environment with [mise](https://mise.jdx.dev/) (optional):
+Recommended: manage environment with [mise](https://mise.jdx.dev/) (optional, but saves you from manually installing Python/uv/bun).
+
+> **The first `cd` after clone will fail with `not trusted` — this is mise's security mechanism, not an error.**
+> Run `mise trust` in the project root; after that, shell integration auto-loads the tool versions and `.venv` declared in `mise.toml` on every entry.
 
 ```bash
-mise trust          # trust config on first run
+mise trust          # trust mise.toml (required once, no need to repeat)
 mise run setup      # install tools + sync deps + install git hook
 ```
 
-With shell integration configured, entering the project directory auto-loads the tool versions and `.venv` declared in `mise.toml`.
+`mise trust` also creates an **empty** `.venv`; dependencies aren't installed yet — you must run `mise run setup` (which runs `uv sync` + `pre-commit install`) to complete setup.
 
-Manual dependencies:
+If not using mise, prepare Python ≥3.12, uv, and bun yourself, then install deps manually:
 ```bash
 uv sync
 ```
@@ -115,6 +118,12 @@ uv run python main_v2.py --sync-account
 uv run python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx"
 uv run python main_v2.py --web --notify-key "xxxx"
 ```
+
+## 🃏 Card Hash Auto-Load
+
+Card recognition relies on perceptual-hash matching. On first scan of a set, precomputed hash JSON (`hashes/zh-TW/<set>.json`, ~200KB total) is fetched from `shelken/ptcgp-assets` and bulk-inserted — no need to download all card images to compute hashes locally.
+
+Only cards not covered by the hash JSON fall back to downloading that single image and computing locally. This reduces first-time recognition from downloading gigabytes of images to a few hundred KB of hash files.
 
 ## 🏗️ Architecture
 
