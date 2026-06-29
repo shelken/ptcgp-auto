@@ -621,6 +621,51 @@ def _start_manageable_instances(
     return device_addresses
 
 
+def _ensure_card_metadata_if_empty(debug: bool = False) -> None:
+    """卡牌元数据空库时自动从 ptcgp-assets 全量同步。
+
+    新用户首次启动时 cards 表为空, 卡牌识别无 hash 字典可匹配。
+    此处用 force+all 非交互式拉取全量系列/卡包/卡牌元数据入库,
+    hash 值仍由后续 CardHashManager.ensure_series_ready 按 JSON 预加载补齐。
+    """
+    from ptcgp_auto_v2.db.repositories import CardRepository
+    from ptcgp_auto_v2.services.metadata_sync.flibustier_sync_service import (
+        FlibustierSyncService,
+    )
+
+    with session_scope() as session:
+        if CardRepository(session).get_all_sets():
+            return
+
+    logger.info("检测到卡牌元数据为空, 开始从 ptcgp-assets 自动同步...")
+    try:
+        with session_scope() as session:
+            service = FlibustierSyncService(CardRepository(session))
+            sets_data, cards_data, extra_map = service.fetch_remote_metadata()
+            plan = service.build_plan(
+                mode="force",
+                scope_level="all",
+                scope_value=None,
+                sets_data=sets_data,
+                cards_data=cards_data,
+                extra_map=extra_map,
+            )
+            result = service.execute_plan(plan.get("operations", {}))
+
+        logger.info(
+            "卡牌元数据自动同步完成: 系列=%s 卡包=%s 卡牌=%s 关联=%s",
+            result.get("upsert_sets", 0),
+            result.get("upsert_packs", 0),
+            result.get("card_updates", 0),
+            result.get("card_pack_links_to_add", 0),
+        )
+    except Exception as e:
+        logger.error(f"卡牌元数据自动同步失败: {e}")
+        logger.error(
+            "可手动执行 `uv run python -m ptcgp_auto_v2.scripts.sync_metadata` 重试"
+        )
+
+
 def main():
     """主入口函数"""
     args = parse_args()
@@ -684,6 +729,11 @@ def main():
             PackRecordRepository(session).migrate_legacy_data()
     except Exception as e:
         logger.warning(f"数据迁移失败: {e}")
+
+    # 守护/单任务路径: 卡牌元数据空库时自动从 ptcgp-assets 拉取全量入库,
+    # 否则卡牌识别无 hash 字典可匹配 (init_account 扫卡全部失败的根因)
+    if args.daemon or args.task:
+        _ensure_card_metadata_if_empty(args.debug)
 
     # 异步加载YOLO模型（后台线程，不阻塞主流程）
     from ptcgp_auto_v2.infra.model_manager import get_model_manager
