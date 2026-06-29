@@ -127,7 +127,47 @@ uv run python main_v2.py --daemon
 uv run python main_v2.py --daemon -d 127.0.0.1:5555
 ```
 
-### 3. 常用命令
+### 3. 账号准备
+
+调度器需要数据库里有账号才能分配任务。新用户推荐直接批量造号，无需手动登录。
+
+**前置要求**（任一不满足，账号相关操作都会失败）：
+
+- 模拟器必须 **Root**：账号 XML 提取、环境重置都依赖 root 权限
+- BlueStacks 实例的 `display_name` 以 **`auto-`** 开头才会被自动管理/扩缩容（在 BlueStacks 设置里改名）
+
+**批量造号（推荐）**：
+
+```bash
+uv run python main_v2.py --daemon --auto-create-accounts --max-accounts 2 --debug
+```
+
+参数说明：
+
+| 参数 | 作用 |
+|------|------|
+| `--daemon` | 守护模式运行，调度器主循环会持续检查并触发造号 |
+| `--auto-create-accounts` | 启用自动造号：重置空闲设备环境 → 重启游戏进入新账号创建流程 → 自动提取账号信息入库 |
+| `--max-accounts 2` | 账号数量上限，达到后停止造号（先用小数字验证流程，确认无误再调大） |
+| `--debug` | 调试模式，输出详细日志便于排查 |
+
+造号流程无需手动登录：调度器重置设备游戏环境后，游戏会自动走新账号创建流程，调度器循环提取账号信息写入 `accounts` 表。每个新账号会自动生成 `init_account` 任务完成初始化。
+
+**补充场景**：
+
+- 已有账号需要手动入库（如从别的设备迁移）：在模拟器里登录该账号后执行
+
+```bash
+uv run python main_v2.py --sync-account
+```
+
+- 手动重置某个设备的游戏环境（备份当前账号 + 清理登录态）：
+
+```bash
+uv run python main_v2.py --init-account
+```
+
+### 4. 常用命令
 
 ```bash
 # 查看帮助

@@ -96,7 +96,47 @@ On first launch, models are downloaded from `shelken/ptcgp-assets`:
 
 Models are stored under `data/models/` and loaded into memory automatically.
 
-### 3. Common Commands
+### 3. Account Setup
+
+The scheduler needs accounts in the database before it can assign tasks. For new users, bulk account creation is recommended — no manual login required.
+
+**Prerequisites** (account operations will fail if any is missing):
+
+- The emulator must be **rooted**: account XML extraction and environment reset both require root
+- BlueStacks instances are auto-managed/scaled only when their `display_name` starts with **`auto-`** (rename in BlueStacks settings)
+
+**Bulk account creation (recommended)**:
+
+```bash
+uv run python main_v2.py --daemon --auto-create-accounts --max-accounts 2 --debug
+```
+
+Parameter reference:
+
+| Flag | Purpose |
+|------|---------|
+| `--daemon` | Run in daemon mode; the scheduler loop continuously checks and triggers creation |
+| `--auto-create-accounts` | Enable auto-creation: reset an idle device's environment → restart the game into the new-account flow → extract account info and insert into DB automatically |
+| `--max-accounts 2` | Account count cap; creation stops when reached (start with a small number to verify the flow, then increase) |
+| `--debug` | Debug mode with verbose logs for troubleshooting |
+
+No manual login is needed: after the scheduler resets the device's game environment, the game enters the new-account creation flow automatically, and the scheduler repeatedly extracts account info into the `accounts` table. Each new account gets an `init_account` task to complete initialization.
+
+**Supplementary scenarios**:
+
+- Importing an existing account manually (e.g., migrated from another device): log into it in the emulator, then run
+
+```bash
+uv run python main_v2.py --sync-account
+```
+
+- Manually reset a device's game environment (backs up the current account + clears login state):
+
+```bash
+uv run python main_v2.py --init-account
+```
+
+### 4. Common Commands
 
 ```bash
 # Help
