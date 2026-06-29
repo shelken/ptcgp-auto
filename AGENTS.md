@@ -1,11 +1,11 @@
-## 运行
+## 约束
 
-- 当前默认`主工作区`在`~/Code/active/ptcgp-auto`
-- 语法检查用`uv run ruff check`
-- 用 uv/bun；Python 命令统一用 uv
+- 用 uv/bun；Python 命令统一用 uv; 不使用pip
 - 开发环境由 mise 管理(`mise.toml`),shell integration 自动按目录加载工具与 `.venv`；首次进入执行 `mise trust && mise run setup`
 - 禁止python命令使用在前面`PYTHONPATH=src`
-- worker/leader 编写(edit)代码前,先看`tdd`skill(如果有)
+- 编写(edit)代码前, 先看`tdd`skill(如果有), 测试驱动开发
+- 多worktree开发时先确定主main所在位置
+- 代码提交前, 检查关键文档 AGENTS.md/README.md 和 `专题文档`(如果涉及), 修正过时的地方/错误的地方; 新增部分应该用户允许
 
 ## 子代理使用原则
 
