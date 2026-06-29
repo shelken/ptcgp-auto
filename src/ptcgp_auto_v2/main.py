@@ -29,12 +29,19 @@ from ptcgp_auto_v2.db.repositories import AccountRepository
 from ptcgp_auto_v2.infra.account_switcher import AccountSwitcher
 from ptcgp_auto_v2.infra.account_syncer import AccountSnapshot, AccountSyncer
 from ptcgp_auto_v2.infra.adb import AdbController
+from ptcgp_auto_v2.utils.bluestacks_manager import (
+    list_manageable_instances,
+    start_bluestacks_instance,
+    wait_for_bluestacks_port,
+)
 from ptcgp_auto_v2.utils.device_discovery import discover_devices
 
 logger = logging.getLogger(__name__)
 
 
 DEFAULT_WORKERS = 4  # 默认并发工作线程数
+AUTO_START_PORT_TIMEOUT_SECONDS = 120
+AUTO_START_PORT_INTERVAL_SECONDS = 3
 
 
 def normalize_device_addresses(devices: list[str]) -> list[str]:
@@ -591,6 +598,29 @@ def run_daemon(settings: Settings, args: argparse.Namespace):
     return 0
 
 
+def _start_manageable_instances(
+    auto_instances: dict[int, tuple[str, str]],
+) -> list[str]:
+    """启动可管理实例并返回端口已就绪的设备地址。"""
+    print(f"未发现运行中的模拟器，自动启动 {len(auto_instances)} 个 auto- 实例...")
+    for instance_name, _ in auto_instances.values():
+        start_bluestacks_instance(instance_name)
+
+    device_addresses: list[str] = []
+    for port, (instance_name, _) in auto_instances.items():
+        addr = f"127.0.0.1:{port}"
+        if wait_for_bluestacks_port(
+            addr,
+            timeout_seconds=AUTO_START_PORT_TIMEOUT_SECONDS,
+            interval_seconds=AUTO_START_PORT_INTERVAL_SECONDS,
+        ):
+            print(f"实例 {instance_name} 已就绪 ({addr})")
+            device_addresses.append(addr)
+        else:
+            print(f"实例 {instance_name} 启动超时，跳过 ({addr})")
+    return device_addresses
+
+
 def main():
     """主入口函数"""
     args = parse_args()
@@ -601,6 +631,10 @@ def main():
     if not device_addresses:
         device_addresses = discover_devices()
         discovered_devices = True
+        if not device_addresses:
+            auto_instances = list_manageable_instances()
+            if auto_instances:
+                device_addresses = _start_manageable_instances(auto_instances)
         if not device_addresses:
             print("错误: 未发现 BlueStacks 设备，请通过 --devices 指定")
             return 1
