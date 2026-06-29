@@ -38,3 +38,6 @@ gstack*
 !*/skills/ptcgp-knowledge/**
 */skills/ptcgp-knowledge/**/__pycache__/
 */skills/ptcgp-knowledge/**/*.pyc
+
+.DS_Store
+.ruff_cache
