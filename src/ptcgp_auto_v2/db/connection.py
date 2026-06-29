@@ -330,20 +330,29 @@ class Database:
             #   collect_account_cards: 604800s (7天)
             #   send_card_daily: daily (自然日重置)
             #
-            # 使用原生 SQL 以避免 Model 依赖复杂性
-            sql = """
-            INSERT OR IGNORE INTO task_plans
-                (name, description, task_types, configuration, is_global, created_at)
-            VALUES (
-                'base',
-                '基础任务计划',
-                '["fetch_account_info", "open_pack", "collect_account_cards"]',
-                '{"fetch_account_info": {"reset_type": "interval", "interval_seconds": 86400}, "open_pack": {"reset_type": "interval", "interval_seconds": 86400}, "collect_account_cards": {"reset_type": "interval", "interval_seconds": 604800}}',
-                0,
-                datetime('now', 'localtime')
-            )
-            """
-            conn.execute(text(sql))
+            # 不用 INSERT OR IGNORE: 它会吞掉 NOT NULL 等约束错误, 导致 seed
+            # 静默失败 (曾因缺 is_global 字段导致 base plan 未写入且无任何报错)。
+            # 改为先查后插, 仅跳过已存在, 约束错误显式抛出 (FAILFAST)。
+            exists = conn.execute(
+                text("SELECT 1 FROM task_plans WHERE name = 'base' LIMIT 1")
+            ).first()
+            if exists is None:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO task_plans
+                            (name, description, task_types, configuration, is_global, created_at)
+                        VALUES (
+                            'base',
+                            '基础任务计划',
+                            '["fetch_account_info", "open_pack", "collect_account_cards"]',
+                            '{"fetch_account_info": {"reset_type": "interval", "interval_seconds": 86400}, "open_pack": {"reset_type": "interval", "interval_seconds": 86400}, "collect_account_cards": {"reset_type": "interval", "interval_seconds": 604800}}',
+                            0,
+                            datetime('now', 'localtime')
+                        )
+                        """
+                    )
+                )
 
             # 迁移历史账号资源字段：accounts.exchange_points -> account_stats.exchange_points
             # 说明：部分历史库已删除旧列；只有旧列仍存在时才执行回填。

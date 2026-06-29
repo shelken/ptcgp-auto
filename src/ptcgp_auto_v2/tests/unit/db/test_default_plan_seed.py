@@ -81,3 +81,29 @@ def test_init_is_idempotent(tmp_path):
 
     assert count is not None
     assert count[0] == 1, "重复 init 后 base 计划应为 1 行"
+
+
+def test_init_seed_data_is_orm_readable(tmp_path):
+    """seed 写入的 base 计划必须能被 ORM 完整读回。
+
+    回归防线: 早期用 INSERT OR IGNORE 做 seed, 它会吞掉 NOT NULL 等约束错误,
+    导致 base plan 静默失败 (字段缺失不报错, 行数 0, 程序继续跑空数据)。
+    改为先查后插后, 任何约束违例都会显式抛 IntegrityError。
+    此测试确保 seed 数据结构完整, 字段不缺失。
+    """
+    db = Database(db_path=tmp_path / "orm_check.db")
+
+    from ptcgp_auto_v2.db.models import TaskPlan
+    from sqlmodel import select
+
+    engine = create_engine(f"sqlite:///{db.db_path}")
+    with Session(engine) as session:
+        plan = session.exec(
+            select(TaskPlan).where(TaskPlan.name == "base")
+        ).first()
+
+    assert plan is not None, "base 计划未写入"
+    # ORM 完整读回, 说明所有 NOT NULL 字段都有值
+    assert plan.task_types is not None
+    assert plan.configuration is not None
+    assert plan.is_global is False
