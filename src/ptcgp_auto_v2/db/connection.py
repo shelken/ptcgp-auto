@@ -310,11 +310,38 @@ class Database:
         from sqlmodel import text
 
         with engine.connect() as conn:
-            # 插入默认任务计划 (如果不存在)
+            # 插入默认任务计划 base (如果不存在)
+            #
+            # 默认只开 3 个低风险日常任务, 让新用户开箱即用:
+            #   fetch_account_info -> open_pack -> collect_account_cards
+            #
+            # 任务推荐顺序 (新用户增配任务时参考):
+            #   1. fetch_account_info   打头, 先同步账号资源/等级
+            #   2. open_pack            开包
+            #   3. wonder_pick          得卡挑战 (与开包同属抽卡)
+            #   4. claim_rewards        领任务奖励, 放在开包/得卡之后
+            #      (开包/得卡会触发任务进度, 先开再领才不漏)
+            #   5. collect_account_cards 扫卡, 放在 send_card_daily 之前
+            #      (先扫到当前持有卡牌, 送卡判断才准)
+            #   6. send_card_daily      每日送卡, 收尾
+            #
+            # 推荐间隔 (与生产环境一致):
+            #   fetch_account_info / open_pack / wonder_pick / claim_rewards: 86400s (24h)
+            #   collect_account_cards: 604800s (7天)
+            #   send_card_daily: daily (自然日重置)
+            #
             # 使用原生 SQL 以避免 Model 依赖复杂性
             sql = """
-            INSERT OR IGNORE INTO task_plans (name, description, task_types, created_at)
-            VALUES ('base', '基础任务计划', '[]', datetime('now', 'localtime'))
+            INSERT OR IGNORE INTO task_plans
+                (name, description, task_types, configuration, is_global, created_at)
+            VALUES (
+                'base',
+                '基础任务计划',
+                '["fetch_account_info", "open_pack", "collect_account_cards"]',
+                '{"fetch_account_info": {"reset_type": "interval", "interval_seconds": 86400}, "open_pack": {"reset_type": "interval", "interval_seconds": 86400}, "collect_account_cards": {"reset_type": "interval", "interval_seconds": 604800}}',
+                0,
+                datetime('now', 'localtime')
+            )
             """
             conn.execute(text(sql))
 
