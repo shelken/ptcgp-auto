@@ -74,13 +74,14 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 
 ### 1. 环境准备
 
-推荐使用 [Nix](https://nixos.org/) 管理环境（可选）：
+推荐使用 [mise](https://mise.jdx.dev/) 管理环境（可选）：
 
 ```bash
-nix develop
-# 或
-direnv allow
+mise trust          # 首次信任配置
+mise run setup      # 装工具 + 同步依赖 + 安装 git hook
 ```
+
+配置好 shell integration 后，进入项目目录会自动加载 `mise.toml` 声明的工具版本与 `.venv`。
 
 手动安装依赖：
 ```bash

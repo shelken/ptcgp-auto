@@ -35,13 +35,14 @@ Pokemon TCG Pocket automation assistant based on ADB and image recognition.
 
 ### 1. Environment
 
-Recommended: manage environment with [Nix](https://nixos.org/) (optional):
+Recommended: manage environment with [mise](https://mise.jdx.dev/) (optional):
 
 ```bash
-nix develop
-# or
-direnv allow
+mise trust          # trust config on first run
+mise run setup      # install tools + sync deps + install git hook
 ```
+
+With shell integration configured, entering the project directory auto-loads the tool versions and `.venv` declared in `mise.toml`.
 
 Manual dependencies:
 ```bash
