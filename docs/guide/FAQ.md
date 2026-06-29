@@ -35,6 +35,89 @@ mise run setup      # ② 装依赖 + 装 git hook
 
 退出 daemon（Ctrl+C）时，这些由守护进程**本次启动起来的** `auto-` 实例会被自动关闭，这是正常清理逻辑，不是崩溃。
 
+### Q: BlueStacks Air 怎么装？怎么 Root？实例怎么命名才会被自动管理？
+
+本项目的账号 XML 提取、环境重置都依赖安卓 Root，所以 BlueStacks Air 必须 Root。下面是完整的环境准备步骤。
+
+#### 1. 安装 BlueStacks Air
+
+从官网下载 macOS 版（仅支持 Apple Silicon，需 macOS 11+ / 8GB 内存 / 12GB 存储）：
+
+```
+https://www.bluestacks.com/mac
+```
+
+装好后**先启动一次**完成初始化，然后退出。
+
+#### 2. Root（基于 Kitsune Magisk）
+
+使用开源项目 [hanreev/root-bluestacks-air](https://github.com/hanreev/root-bluestacks-air)，配合 [Kitsune Magisk](https://github.com/1q23lyc45/KitsuneMagisk/releases)（已测版本 v27.2-kitsune-4）。
+
+步骤：
+
+1. 下载并解压 `root-bluestacks-air` 仓库
+2. 把下载的 Kitsune Mask apk 重命名为 `magisk.apk` 放进项目目录
+3. 确认 SIP 状态（`csrutil status`），按情况选一种：
+
+   **SIP 开启（默认）**——生成补丁镜像后手动替换：
+
+   ```bash
+   cd ~/Downloads/root-bluestacks-air
+   bash root.sh -o files/initrd_hvf.img -b files/backup
+   # 把生成的 files/initrd_hvf.img 复制替换 /Applications/BlueStacks.app/Contents/img/initrd_hvf.img
+   ```
+
+   **SIP 已关闭**——一键执行（会自动替换并启动）：
+
+   ```bash
+   sudo bash root.sh
+   ```
+
+4. 启动 BlueStacks Air，安装 `magisk.apk`
+5. 打开 Kitsune Mask，弹出「Requires Additional Setup」时点 **OK**，BlueStacks 会重启
+6. 重启后即完成 Root；需要 Zygisk 可在 Kitsune Mask 设置里开启再重启
+
+> 想还原：SIP 开启时把 `files/backup` 里的原始 `initrd_hvf.img` 拷回原路径即可。
+
+#### 3. 安装游戏 APK
+
+游戏包名固定为 `jp.pokemon.pokemontcgp`，任意来源的 APK 都行。加速版仅用于跳过动画提速，本项目的自动化流程**不依赖**加速功能：
+
+- 官方版：Google Play / QooApp
+- 加速版（可选）：[9mod.com - Pokémon TCG Pocket](https://9mod.com/pokemon-tcg-pocket.html) 等第三方站
+
+#### 4. 命名实例为 `auto-` 前缀
+
+只有 `display_name` 以 `auto-` 开头的实例才会被守护进程自动启动/关闭和扩缩容。
+
+在 BlueStacks 多实例管理器（Multi-Instance Manager）里新建或选中实例 → 改名为 `auto-1`、`auto-2` 等。改完后配置文件 `bluestacks.conf` 里的 `bst.instance.<name>.display_name` 会同步更新。
+
+> 实例的内部 name（配置里的 key）和 display_name 是两个字段，自动管理只看 display_name 前缀。
+
+#### 5. 推荐实例参数
+
+在 BlueStacks 多实例管理器里编辑实例设置，按以下参数配置（平衡资源占用与识别准确率）：
+
+| 参数 | 推荐值 | 说明 |
+|------|--------|------|
+| 分辨率 | 720×1280 | 比基准 1080×1920 省资源；代码会按分辨率自动缩放坐标（`当前/基准` 比例） |
+| DPI | **320（不要改）** | 模板图片是在 320 DPI 下截取的。改 DPI 会改变游戏 UI 元素在截图中的像素占比，导致模板匹配命中率下降 |
+| FPS | 30 | 截图采样足够，更高 FPS 纯耗资源 |
+| CPU 核心 | 4 | |
+| 内存 | 2 GB | |
+
+> **DPI 为什么不能改？** 代码本身不读取 DPI，但截图的内容受 DPI 影响：Android 按 dp 渲染 UI，DPI 决定 dp→px 换算。模板图片是在 320 DPI 下截取的基准尺寸，改了 DPI，同一个按钮/图标在截图里占的像素数就变了，和模板对不上。这是实测过的坑，不是理论推测。
+
+#### 6. 验证
+
+Root 成功后，`adb shell su -c 'id'` 应返回 `uid=0`。本项目用 `--debug` 启动时会打印设备 Root 状态。
+
+```bash
+uv run python main_v2.py --daemon --debug
+```
+
+日志里看到「自动发现设备」并出现 `auto-` 实例端口，说明环境就绪。
+
 ---
 
 ## 运行时自动行为

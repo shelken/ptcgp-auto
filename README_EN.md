@@ -114,6 +114,8 @@ The scheduler needs accounts in the database before it can assign tasks. For new
 - The emulator must be **rooted**: account XML extraction and environment reset both require root
 - BlueStacks instances are auto-managed/scaled only when their `display_name` starts with **`auto-`** (rename in BlueStacks settings)
 
+> Full steps for installing BlueStacks Air, rooting it (Kitsune Magisk), and naming instances: see [FAQ - How to install/root BlueStacks Air?](docs/guide/FAQ.md#q-bluestacks-air-怎么装怎么-root实例怎么命名才会被自动管理)
+
 **Bulk account creation (recommended)**:
 
 ```bash

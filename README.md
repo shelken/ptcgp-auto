@@ -136,6 +136,8 @@ uv run python main_v2.py --daemon -d 127.0.0.1:5555
 - 模拟器必须 **Root**：账号 XML 提取、环境重置都依赖 root 权限
 - BlueStacks 实例的 `display_name` 以 **`auto-`** 开头才会被自动管理/扩缩容（在 BlueStacks 设置里改名）
 
+> BlueStacks Air 的安装、Root（Kitsune Magisk）、实例命名完整步骤见 [FAQ - BlueStacks Air 怎么装？怎么 Root？](docs/guide/FAQ.md#q-bluestacks-air-怎么装怎么-root实例怎么命名才会被自动管理)
+
 **批量造号（推荐）**：
 
 ```bash
