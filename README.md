@@ -190,6 +190,15 @@ uv run python main_v2.py --web --webhook-url "https://qyapi.weixin.qq.com/cgi-bi
 uv run python main_v2.py --web --notify-key "xxxx"
 ```
 
+## ❓ 常见问题
+
+首次使用遇到日志看不懂、行为不符合预期？这些大多是**预期的自动行为**，详见 [FAQ](docs/guide/FAQ.md)：
+
+- daemon 启动时「同步卡牌元数据」—— 空库自动拉取卡牌元数据，一次性
+- 新账号不用手动建任务计划 —— 已自动种入 `base` 默认计划（3 个日常任务）
+- 首次扫描卡牌只下几百 KB JSON —— 预计算哈希替代全量卡图下载
+- `init_account` 失败的账号不再派任务 —— 调度保护，避免空转
+
 ## 📦 模型自动下载
 
 首次启动时会自动从 `shelken/ptcgp-assets` 仓库下载：

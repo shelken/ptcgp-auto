@@ -88,6 +88,15 @@ uv run python main_v2.py --daemon
 uv run python main_v2.py --daemon -d 127.0.0.1:5555
 ```
 
+## ❓ FAQ
+
+Confused by startup logs or unexpected behavior? Most are **expected automatic behaviors** — see [FAQ](docs/guide/FAQ.md):
+
+- "Syncing card metadata" on daemon start — one-time pull into an empty DB
+- New accounts need no manual task plan — a `base` plan (3 daily tasks) is auto-seeded
+- First card scan downloads only a few hundred KB of JSON — precomputed hashes replace full card-image download
+- Accounts with failed `init_account` stop receiving tasks — scheduler protection against idle spinning
+
 ## 📦 Model Auto-Download
 
 On first launch, models are downloaded from `shelken/ptcgp-assets`:
