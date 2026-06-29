@@ -3,7 +3,7 @@
 - 当前默认`主工作区`在`~/Code/active/ptcgp-auto`
 - 语法检查用`uv run ruff check`
 - 用 uv/bun；Python 命令统一用 uv
-- 工作目录出错后用`direnv exec . [cmd]`；目录不能执行时先`direnv allow`；不需要每条命令都执行`direnv exec`
+- 开发环境由 mise 管理(`mise.toml`),shell integration 自动按目录加载工具与 `.venv`；首次进入执行 `mise trust && mise run setup`
 - 禁止python命令使用在前面`PYTHONPATH=src`
 - worker/leader 编写(edit)代码前,先看`tdd`skill(如果有)
 

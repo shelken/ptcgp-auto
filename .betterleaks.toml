@@ -1,0 +1,95 @@
+title = "PTCGP Auto betterleaks config"
+
+# 继承内置默认规则（含 generic-api-key 等，可识别本项目唯一的真实密钥类型：
+# 企业微信 webhook key,即 .env 里的 NOTIFY_KEY,UUID 形态会被 generic-api-key 命中）
+[extend]
+useDefault = true
+
+# 注意: 经实测 betterleaks v1.6.0 在 [extend] useDefault=true 模式下,
+# 新版 prefilter/filter(Expr) 全局字段会被默认配置覆盖而失效,
+# 但旧的 [[allowlists]] paths 仍与默认规则协同生效,故路径忽略沿用此语法。
+# paths 为 Go 正则,匹配 repo-relative 路径;与 .gitignore 保持一致。
+
+# ---------- Python 编译产物与打包元数据 ----------
+[[allowlists]]
+description = "ignored by .gitignore: python build artifacts"
+paths = [
+  '''\.venv/.*''',
+  '''__pycache__/.*''',
+  '''(?i)\.pyc$''',
+  '''(?i)\.pyo$''',
+  '''(?i)\.egg-info/.*''',
+  '''\.direnv/.*''',
+]
+
+# ---------- 运行时数据与缓存 ----------
+# data/ 含账号、日志、SQLite 库;runs/output/debug_output 为运行产物
+[[allowlists]]
+description = "ignored by .gitignore: runtime data and cache"
+paths = [
+  '''data/.*''',
+  '''data\.backup.*/.*''',
+  '''debug_output/.*''',
+  '''runs/.*''',
+  '''output/.*''',
+  '''_out/.*''',
+  '''\.playwright-cli/.*''',
+  '''\.e2e-logs/.*''',
+  '''\.alma-snapshots/.*''',
+  '''\.worktrees/.*''',
+]
+
+# ---------- 本地环境与密钥文件 ----------
+# .env 含真实 NOTIFY_KEY(企微 webhook key),.envrc.local 为本地 direnv 覆盖,
+# .claude/settings.local.json 为本地 IDE 设置,均不应进入版本库
+[[allowlists]]
+description = "ignored by .gitignore: local env and secret files"
+paths = [
+  '''(^|/)\.env$''',
+  '''(^|/)\.env\.local$''',
+  '''(^|/)\.envrc\.local$''',
+  '''\.claude/settings\.local\.json$''',
+  '''gstack.*''',
+  '''(^|/)\.pre-commit-config\.yaml$''',
+]
+
+# ---------- 模板资源(图像/二进制,非源码) ----------
+[[allowlists]]
+description = "ignored by .gitignore: generated card/pack templates"
+paths = [
+  '''templates/cards/.*''',
+  '''templates/packs/.*''',
+  '''templates/packs_auto/.*''',
+  '''templates/packs_auto_assets/.*''',
+]
+
+# ---------- 前端生成文件 ----------
+# 这些 .js/.css 为构建产物或 nix 生成的配置,非手写源码,扫描无意义
+[[allowlists]]
+description = "ignored by .gitignore: frontend generated artifacts"
+paths = [
+  '''src/ptcgp_auto_v2/web/frontend/src/.*\.js$''',
+  '''src/ptcgp_auto_v2/web/frontend/.*\.tsbuildinfo$''',
+  '''src/ptcgp_auto_v2/web/frontend/vite\.config\.(js|d\.ts)$''',
+  '''src/ptcgp_auto_v2/web/static/css/tailwind\.generated\.css$''',
+]
+
+# ---------- 大体积二进制资源 ----------
+# 图像/字体/模型/数据库文件,内容非文本,正则扫描无意义且拖慢速度
+[[allowlists]]
+description = "ignored by .gitignore: large binary assets"
+paths = [
+  '''(?i)\.(png|jpg|jpeg|gif|ico|svg|webp)$''',
+  '''(?i)\.(woff2?|eot|ttf|otf)$''',
+  '''(?i)\.(bin|mlmodel|mlpackage)$''',
+  '''(?i)\.(db|db-wal|db-shm|sqlite3?)$''',
+]
+
+# ---------- 依赖与构建目录 ----------
+[[allowlists]]
+description = "ignored by .gitignore: dependencies and build dirs"
+paths = [
+  '''node_modules/.*''',
+  '''dist/.*''',
+  '''build/.*''',
+]

@@ -3,8 +3,6 @@ __pycache__/
 *.pyc
 *.pyo
 debug_output/
-.direnv/
-.envrc.local
 *.egg-info/
 dist/
 build/
@@ -30,7 +28,6 @@ src/ptcgp_auto_v2/web/static/css/tailwind.generated.css
 .playwright-cli/
 .e2e-logs/
 gstack*
-.pre-commit-config.yaml
 
 # skills in skills-lock.json
 */skills/*

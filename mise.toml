@@ -1,0 +1,38 @@
+# PTCGP Auto 开发环境工具与环境变量配置
+# 替代原 flake.nix,由 mise shell integration 自动加载
+
+min_version = "2024.9.5"
+
+[tools]
+# Python: 项目要求 >=3.12 (pyproject.toml requires-python)
+python = "3.12.13"
+# uv: Python 依赖管理
+uv = "0.11.25"
+# bun: 前端工具链 (tsc/knip)
+bun = "1.3.14"
+# betterleaks: 密钥扫描 (pre-commit hook)
+betterleaks = "1.6.0"
+# pre-commit: git hook 管理器
+pre-commit = "4.6.0"
+
+[env]
+# 告诉 uv 不要自己下载 python,使用 mise 提供的
+UV_PYTHON_DOWNLOADS = "never"
+
+# 自动创建并激活 .venv (替代原 flake shellHook 的 uv sync + source)
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.setup]
+description = "首次环境初始化: 同步 Python 依赖 + 安装 pre-commit git hook"
+run = [
+  "uv sync",
+  "pre-commit install",
+]
+
+[tasks.sync]
+description = "同步 Python 依赖到 .venv"
+run = "uv sync"
+
+[tasks.hooks]
+description = "安装 pre-commit git hook 到 .git/hooks/"
+run = "pre-commit install"

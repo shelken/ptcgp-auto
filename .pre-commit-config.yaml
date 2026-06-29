@@ -1,0 +1,47 @@
+# 手写 pre-commit 配置,替代原 git-hooks.nix 生成物
+# 所有 hook 均为 language: system,依赖 mise/direnv 提供的工具链
+repos:
+  - repo: local
+    hooks:
+      # Python: 局部 lint
+      - id: ruff
+        name: ruff
+        entry: uv run ruff check src main.py main_v2.py debug_tool.py scripts yolo-card-training/scripts
+        language: system
+        files: \.py$
+        types: [python]
+        pass_filenames: false
+
+      # Python: 全局未引用函数/类
+      - id: vulture
+        name: vulture
+        entry: uv run vulture
+        language: system
+        files: \.py$
+        types: [python]
+        pass_filenames: false
+
+      # TS: 类型检查 + 局部 unused
+      - id: tsc
+        name: tsc
+        entry: bash -c 'cd src/ptcgp_auto_v2/web/frontend && bun run typecheck'
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
+
+      # TS: 未被引用的 export 函数/文件
+      - id: knip
+        name: knip
+        entry: bash -c 'cd src/ptcgp_auto_v2/web/frontend && bun run knip'
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
+
+      # 密钥泄露扫描: 拦截暂存区改动中的密钥
+      # --staged 读 git index,不接收文件名参数,故 pass_filenames=false
+      - id: betterleaks
+        name: betterleaks
+        entry: betterleaks git --staged
+        language: system
+        files: .*
+        pass_filenames: false
