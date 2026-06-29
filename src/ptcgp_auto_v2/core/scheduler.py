@@ -449,12 +449,19 @@ class Scheduler:
             running_account_ids = task_instance_repo.get_running_account_ids(
                 account_ids
             )
+            # init_account 失败且从未完成的账号：游戏仍停在初始化页面，
+            # 派发其他任务只会失败并污染设备状态，跳过
+            failed_init_account_ids = task_instance_repo.get_failed_init_account_ids(
+                account_ids
+            )
             accounts_map = account_repo.get_by_ids(account_ids)
 
             for account_id in account_ids:
                 if self._is_account_active(account_id):
                     continue
                 if account_id in running_account_ids:
+                    continue
+                if account_id in failed_init_account_ids:
                     continue
 
                 account = accounts_map.get(account_id)

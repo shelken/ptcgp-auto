@@ -141,6 +141,33 @@ class TaskInstanceRepository(BaseRepository):
         )
         return {account_id for account_id in self.session.exec(statement).all()}
 
+    def get_failed_init_account_ids(self, account_ids: list[int]) -> set[int]:
+        """批量获取 init_account 失败且从未完成的账号 ID 集合。
+
+        这些账号的游戏环境停留在初始化页面，派发其他任务只会失败并污染设备状态，
+        调度时应跳过，等 init_account 重新派发或账号被清理。
+        """
+        if not account_ids:
+            return set()
+        statement = select(TaskInstance.account_id).where(
+            col(TaskInstance.account_id).in_(account_ids),
+            TaskInstance.task_type == "init_account",
+            TaskInstance.status == TaskStatus.FAILED.value,
+        )
+        failed_ids = {
+            account_id for account_id in self.session.exec(statement).all()
+        }
+        if not failed_ids:
+            return set()
+        # 排除已有 completed init_account 的账号（同一账号历史上有成功记录）
+        completed_statement = select(TaskInstance.account_id).where(
+            col(TaskInstance.account_id).in_(failed_ids),
+            TaskInstance.task_type == "init_account",
+            TaskInstance.status == TaskStatus.COMPLETED.value,
+        )
+        completed_ids = set(self.session.exec(completed_statement).all())
+        return failed_ids - completed_ids
+
     def create(self, instance: TaskInstance) -> TaskInstance:
         """创建任务实例"""
         self.session.add(instance)
