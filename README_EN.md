@@ -87,29 +87,25 @@ uv sync
 
 `uv sync` now installs the current project into `.venv` too. Do not use `PYTHONPATH=src`, and do not patch `sys.path` just to import packages from `src/`.
 
-### 1.1 Use `.env` for v2
+### 1.1 Environment Variables (v2)
 
-v2 now supports loading `.env` from project root (same behavior as v1, and existing environment variables are not overridden).
+v2 is configured via environment variables — `export` them in your shell or inline before the command. Common variables:
 
-Example:
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `PTCGP_DEBUG` | Debug mode (save screenshots & logs) | `false` |
+| `PTCGP_DEVICES` | ADB device addresses (comma-separated) | auto-discover |
+| `PTCGP_MAX_WORKERS` | Max concurrent executors | `4` |
+| `PTCGP_WEB_HOST` | Web service bind address | `0.0.0.0` |
+| `PTCGP_WEB_PORT` | Web service port | `8000` |
+| `PTCGP_WEBHOOK_URL` | WeCom webhook full URL | none |
+| `PTCGP_NOTIFY_KEY` / `NOTIFY_KEY` | WeCom webhook key (either one) | none |
+| `PTCGP_PACK_AUTO_STRATEGY` | Pack auto-selection strategy | code default |
+| `PTCGP_LOG_FILE` | Log file path | no file |
 
-```bash
-PTCGP_WEB_PORT=8000
-PTCGP_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
-PTCGP_DEBUG=true
-```
+Priority: **CLI Args > Environment Variables > Code Defaults**.
 
-Webhook also supports key-only mode (v1 compatible):
-
-```bash
-NOTIFY_KEY=xxxx
-# or
-PTCGP_NOTIFY_KEY=xxxx
-```
-
-Priority: **CLI Args > Environment Variables > `.env` > Default Values**.
-
-Webhook resolution priority: **Explicit URL arg > `PTCGP_WEBHOOK_URL` > `PTCGP_NOTIFY_KEY`/`NOTIFY_KEY` > disabled**.
+Webhook resolution priority: **`--webhook-url` / `--notify-key` CLI args > `PTCGP_WEBHOOK_URL` > `PTCGP_NOTIFY_KEY` / `NOTIFY_KEY` > disabled**.
 
 ### 2. Start v2 daemon
 

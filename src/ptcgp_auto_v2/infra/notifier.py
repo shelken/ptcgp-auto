@@ -27,7 +27,6 @@ from ptcgp_auto_v2.config.notification import (
 from ptcgp_auto_v2.config.rarity_icons import get_rarity_display
 from ptcgp_auto_v2.config.settings import (
     build_wecom_webhook_url_from_key,
-    load_dotenv,
 )
 from ptcgp_auto_v2.db.engine import session_scope
 from ptcgp_auto_v2.db.repositories import (
@@ -64,8 +63,7 @@ class Notifier:
         self.webhook_url = self._resolve_webhook_url(webhook_url)
 
     def _resolve_webhook_url(self, explicit_url: Optional[str] = None) -> Optional[str]:
-        """解析企业微信 Webhook URL（优先级：显式参数 > 环境变量 > .env > 默认空）。"""
-        load_dotenv()
+        """解析企业微信 Webhook URL（优先级：显式参数 > 环境变量 > 默认空）。"""
         if explicit_url:
             return explicit_url
         webhook_url = os.environ.get("PTCGP_WEBHOOK_URL")

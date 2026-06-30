@@ -135,7 +135,7 @@ def parse_args(argv: list[str] | None = None):
         "-w",
         "--workers",
         type=int,
-        default=DEFAULT_WORKERS,
+        default=None,
         help=f"最大并发执行器数（默认: {DEFAULT_WORKERS}）",
     )
 
@@ -690,13 +690,15 @@ def main():
             print(f"错误: {exc}")
             return 1
 
-    # 配置设置
-    settings = Settings(
-        device_addresses=device_addresses,
-        max_workers=args.workers,
-        debug=args.debug,
-        log_level="DEBUG" if args.debug else "INFO",
-    )
+    # 配置设置：优先读环境变量（from_env），再用 CLI 参数覆盖（CLI > 环境变量 > 默认）
+    settings = Settings.from_env()
+    # device_addresses 由 main 的发现逻辑决定，覆盖 from_env 的读取
+    settings.device_addresses = device_addresses
+    if args.workers is not None:
+        settings.max_workers = args.workers
+    # debug：CLI --debug 或环境变量 PTCGP_DEBUG 任一为真即启用
+    settings.debug = args.debug or settings.debug
+    settings.log_level = "DEBUG" if settings.debug else "INFO"
     if args.auto_create_accounts:
         settings.auto_create_accounts = True
     settings.max_accounts = args.max_accounts

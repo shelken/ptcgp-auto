@@ -93,29 +93,25 @@ uv sync
 
 `uv sync` 现在会把当前项目一并装进 `.venv`。不要再使用 `PYTHONPATH=src`，也不要为了导入 `src/` 下项目包去手动补 `sys.path`。
 
-### 1.1 使用 `.env` 配置（v2）
+### 1.1 环境变量配置（v2）
 
-v2 现已支持读取项目根目录 `.env`（与 v1 一致，且不覆盖已存在的环境变量）。
+v2 通过环境变量配置，可在 shell 中 `export` 或在命令前内联。常用变量：
 
-示例：
+| 变量 | 作用 | 默认 |
+|------|------|------|
+| `PTCGP_DEBUG` | 调试模式（保存截图与日志） | `false` |
+| `PTCGP_DEVICES` | ADB 设备地址（逗号分隔） | 自动发现 |
+| `PTCGP_MAX_WORKERS` | 最大并发执行器数 | `4` |
+| `PTCGP_WEB_HOST` | Web 服务监听地址 | `0.0.0.0` |
+| `PTCGP_WEB_PORT` | Web 服务端口 | `8000` |
+| `PTCGP_WEBHOOK_URL` | 企业微信 Webhook 完整 URL | 无 |
+| `PTCGP_NOTIFY_KEY` / `NOTIFY_KEY` | 企业微信 Webhook Key（二选一） | 无 |
+| `PTCGP_PACK_AUTO_STRATEGY` | 开包自动选择策略 | 代码默认 |
+| `PTCGP_LOG_FILE` | 日志落盘文件路径 | 不落盘 |
 
-```bash
-PTCGP_WEB_PORT=8000
-PTCGP_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxx
-PTCGP_DEBUG=true
-```
+配置优先级：**CLI 参数 > 环境变量 > 代码默认值**。
 
-Webhook 也支持仅配置 key（兼容 v1）：
-
-```bash
-NOTIFY_KEY=xxxx
-# 或
-PTCGP_NOTIFY_KEY=xxxx
-```
-
-配置优先级：**CLI 参数 > 环境变量 > `.env` > 代码默认值**。
-
-Webhook 解析优先级：**显式 URL 参数 > `PTCGP_WEBHOOK_URL` > `PTCGP_NOTIFY_KEY`/`NOTIFY_KEY` > 不发送**。
+Webhook 解析优先级：**`--webhook-url` / `--notify-key` CLI 参数 > `PTCGP_WEBHOOK_URL` > `PTCGP_NOTIFY_KEY` / `NOTIFY_KEY` > 不发送**。
 
 ### 2. 启动守护进程
 
