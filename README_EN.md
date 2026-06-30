@@ -38,14 +38,31 @@ Pokemon TCG Pocket automation assistant based on ADB and image recognition.
 
 ## ✨ Core Features (v2)
 
-- **Multi-account management**: auto-rotate accounts, supports dozens of accounts
-- **Task queue architecture**: atomic tasks like `daily pack`, `claim rewards`, `claim gifts`, `wonder pick`
-- **Smart scheduling**: dispatches tasks by priority and device availability
-- **Data persistence**: SQLite stores account info, task status, and pack history
-- **Web UI**: modern Web UI with pack history, advanced filters (rarity/type), multiple views, and mobile support
-- **Resume on failure**: auto retry and resume after process restarts
-- **YOLO + perceptual-hash card recognition**: replaces template matching for pack results
-- **Account card collection**: filters high-rarity cards on list pages and writes to account-card table
+### Automation Tasks
+
+- **Daily pack opening**: auto open free packs
+- **Claim mission rewards**: auto claim mission rewards
+- **Claim gift boxes**: auto claim friend gifts
+- **Wonder Pick**: auto Wonder Pick draws
+- **Daily card gifting**: accounts send cards to each other
+- **Card exchange**: initiate and complete card exchanges
+- **Card collection**: auto scan and record high-rarity cards
+
+### Account Management
+
+- **Multi-account hosting**: auto-rotate, manage many accounts at once
+- **Batch creation**: `--auto-create-accounts` creates new accounts concurrently across devices
+- **Auto onboarding**: auto extract account info and initialize
+
+### Web UI
+
+Built-in Web UI (FastAPI + React) to view accounts, tasks, card collection, pack/exchange records, resource status, with task plan management and manual reset.
+
+### Runtime
+
+- **Smart scheduling**: dispatch tasks by priority and device availability
+- **Resume on failure**: auto retry on failure, resume after restart
+- **Emulator auto-scaling**: auto start / stop `auto-` prefixed BlueStacks instances based on task backlog
 
 ## 🚀 Quick Start
 
