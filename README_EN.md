@@ -1,19 +1,35 @@
 <h3 align="center">
-<img src="https://wsrv.nl?url=https://avatars.githubusercontent.com/u/33972006?fit=cover&mask=circle&maxage=7d" width="100" alt="Logo"/><br/>
-PTCGP Auto
+  <img src="https://wsrv.nl?url=https://avatars.githubusercontent.com/u/33972006?fit=cover&mask=circle&maxage=7d" width="100" alt="Logo"/><br/>
+  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/misc/transparent.png" height="30" width="0px"/>
+  <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/pokemon.svg" height="15"/> Pokémon TCG Pocket Auto
+  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/misc/transparent.png" height="30" width="0px"/>
 </h3>
 
+<h6 align="center">
+  <a href="#-core-features-v2">Features</a>
+  ·
+  <a href="#-quick-start">Quick Start</a>
+  ·
+  <a href="#-architecture">Architecture</a>
+  ·
+  <a href="#-faq">FAQ</a>
+</h6>
+
 <p align="center">
-  <a href="README.md">🇨🇳 中文</a> | 🇺🇸 English
+  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/palette/macchiato.png" width="400" />
 </p>
 
-<div align="center">
+<p align="center">
+  <a href="README.md">🇨🇳 中文</a>
+</p>
 
-[![Python](https://img.shields.io/badge/Python-3.10+-8AADF4?style=for-the-badge&logo=python&logoColor=white&labelColor=363a4f)]()
-[![macOS](https://img.shields.io/badge/macOS-only-CAD3F5?style=for-the-badge&logo=apple&logoColor=white&labelColor=363a4f)]()
-[![License](https://img.shields.io/badge/License-MIT-A6DA95?style=for-the-badge&labelColor=363a4f)]()
-
-</div>
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-8AADF4?style=for-the-badge&logo=python&logoColor=CAD3F5&labelColor=363A4F"></a>
+  <a href="https://www.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-only-91D7E3?style=for-the-badge&logo=apple&logoColor=CAD3F5&labelColor=363A4F"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0--only-A6DA95?style=for-the-badge&labelColor=363A4F"></a>
+  <a href="https://github.com/shelken/ptcgp-auto"><img src="https://img.shields.io/github/repo-size/shelken/ptcgp-auto?style=for-the-badge&logo=github&labelColor=363A4F&color=C6A0F6"></a>
+  <a href="https://github.com/shelken/ptcgp-auto/commits"><img src="https://img.shields.io/github/last-commit/shelken/ptcgp-auto?style=for-the-badge&logo=git&labelColor=363A4F&color=F5A97F"></a>
+</p>
 
 ---
 
@@ -234,4 +250,5 @@ See [AGENTS.md](AGENTS.md) for detailed development and coding guidelines.
 
 ## License
 
-MIT
+This project is licensed under [AGPL-3.0-only](LICENSE).
+Anyone is free to use it (including commercially), but any derivative work that is distributed or provided as a network service must be open-sourced under the same license.

@@ -1,19 +1,35 @@
 <h3 align="center">
-<img src="https://wsrv.nl?url=https://avatars.githubusercontent.com/u/33972006?fit=cover&mask=circle&maxage=7d" width="100" alt="Logo"/><br/>
-PTCGP Auto
+  <img src="https://wsrv.nl?url=https://avatars.githubusercontent.com/u/33972006?fit=cover&mask=circle&maxage=7d" width="100" alt="Logo"/><br/>
+  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/misc/transparent.png" height="30" width="0px"/>
+  <img src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/pokemon.svg" height="15"/> Pokémon TCG Pocket Auto
+  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/misc/transparent.png" height="30" width="0px"/>
 </h3>
 
+<h6 align="center">
+  <a href="#-核心功能-v2">功能</a>
+  ·
+  <a href="#-快速开始">快速开始</a>
+  ·
+  <a href="#-架构说明">架构</a>
+  ·
+  <a href="#-常见问题">FAQ</a>
+</h6>
+
 <p align="center">
-  🇨🇳 中文 | <a href="README_EN.md">🇺🇸 English</a>
+  <img src="https://raw.githubusercontent.com/catppuccin/catppuccin/main/assets/palette/macchiato.png" width="400" />
 </p>
 
-<div align="center">
+<p align="center">
+  <a href="README_EN.md">🇺🇸 English</a>
+</p>
 
-[![Python](https://img.shields.io/badge/Python-3.10+-8AADF4?style=for-the-badge&logo=python&logoColor=white&labelColor=363a4f)]()
-[![macOS](https://img.shields.io/badge/macOS-only-CAD3F5?style=for-the-badge&logo=apple&logoColor=white&labelColor=363a4f)]()
-[![License](https://img.shields.io/badge/License-MIT-A6DA95?style=for-the-badge&labelColor=363a4f)]()
-
-</div>
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-8AADF4?style=for-the-badge&logo=python&logoColor=CAD3F5&labelColor=363A4F"></a>
+  <a href="https://www.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-only-91D7E3?style=for-the-badge&logo=apple&logoColor=CAD3F5&labelColor=363A4F"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0--only-A6DA95?style=for-the-badge&labelColor=363A4F"></a>
+  <a href="https://github.com/shelken/ptcgp-auto"><img src="https://img.shields.io/github/repo-size/shelken/ptcgp-auto?style=for-the-badge&logo=github&labelColor=363A4F&color=C6A0F6"></a>
+  <a href="https://github.com/shelken/ptcgp-auto/commits"><img src="https://img.shields.io/github/last-commit/shelken/ptcgp-auto?style=for-the-badge&logo=git&labelColor=363A4F&color=F5A97F"></a>
+</p>
 
 ---
 
@@ -315,4 +331,5 @@ npx skills add {repo-name} -p -y -a claude-code codex --skill {skill-name}
 
 ## License
 
-MIT
+本项目采用 [AGPL-3.0-only](LICENSE) 协议。
+任何人可自由使用（含商业用途），但任何基于本项目的衍生作品分发或提供网络服务时，必须以相同协议开源。

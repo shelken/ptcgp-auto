@@ -4,6 +4,8 @@ version = "2.0.0"
 description = "自动连接 bluestack air虚拟机 自动对战/领取礼物、奖励/管理账号/自动开免费包"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
 dependencies = [
   "coremltools>=9.0",
   "fastapi>=0.135.2",
