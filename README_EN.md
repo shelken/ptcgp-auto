@@ -75,10 +75,10 @@ Recommended: manage environment with [mise](https://mise.jdx.dev/) (optional, bu
 
 ```bash
 mise trust          # trust mise.toml (required once, no need to repeat)
-mise run setup      # install tools + sync deps + install git hook
+mise run setup      # sync deps + install git hook (tools are auto-installed by shell integration after `mise trust`)
 ```
 
-`mise trust` also creates an **empty** `.venv`; dependencies aren't installed yet — you must run `mise run setup` (which runs `uv sync` + `pre-commit install`) to complete setup.
+After `mise trust`, shell integration auto-loads the Python/uv/bun declared in `mise.toml` `[tools]` and creates an **empty** `.venv` on every directory entry; dependencies aren't installed yet — you must run `mise run setup` (which runs `uv sync` + `pre-commit install`) to complete setup.
 
 If not using mise, prepare Python ≥3.12, uv, and bun yourself, then install deps manually:
 ```bash
@@ -125,8 +125,8 @@ uv run python main_v2.py --daemon -d 127.0.0.1:5555
 
 Confused by startup logs or unexpected behavior? Most are **expected automatic behaviors** — see [FAQ](docs/guide/FAQ.md):
 
-- "Syncing card metadata" on daemon start — one-time pull into an empty DB
-- New accounts need no manual task plan — a `base` plan (3 daily tasks) is auto-seeded
+- "Syncing card metadata" on app startup — one-time pull into an empty DB (triggered by daemon or single-task mode)
+- New accounts need no manual task plan — a `base` plan (3 default tasks: 2 daily + 1 weekly) is auto-seeded
 - First card scan downloads only a few hundred KB of JSON — precomputed hashes replace full card-image download
 - Accounts with failed `init_account` stop receiving tasks — scheduler protection against idle spinning
 
@@ -213,7 +213,8 @@ Only cards not covered by the hash JSON fall back to downloading that single ima
 
 v2 uses a `Scheduler` + `Executor` architecture:
 
-- **Scheduler**: generates tasks, monitors devices, dispatches work.
+- **Scheduler**: generates tasks, picks account batches, allocates devices and orchestrates execution; no longer holds scheduling-rule details like plan aggregation, task order, or prerequisites.
+- **Scheduling Service**: `core/scheduling_service.py` is the single source of scheduling rules — plan aggregation, task order, reset/next_run calculation, scheduling summary, task-list dispatch order, and scheduling-field writeback.
 - **Executor**: runs inside device threads, executes atomic task logic (OCR, taps).
 - **Database**: SQLite (`data/ptcgp_v2.db`) for durable state.
 
@@ -221,33 +222,30 @@ v2 uses a `Scheduler` + `Executor` architecture:
 
 ```
 ptcgp-auto/
-├── main_v2.py                  # v2 entry (recommended)
-├── main.py                     # v1 entry (legacy battles, migrating to v2)
-├── debug_tool.py               # Debug tool
+├── main_v2.py                  # v2 entry
+├── main.py                     # v1 legacy entry
+├── debug_tool.py               # debug tool
 ├── src/
 │   ├── ptcgp_auto_v2/          # v2 core
-│   │   ├── core/               # scheduler core (Scheduler, Executor, TaskSchedule)
-│   │   ├── tasks/              # task implementations (OpenPack, CollectAccountCards...)
-│   │   ├── db/                 # database layer (SQLAlchemy/SQLite)
-│   │   ├── infra/              # infra layer
-│   │   │   ├── adb.py          # ADB controller wrapper
-│   │   │   ├── ocr.py          # OCR wrapper
-│   │   │   ├── model_manager.py    # [new] YOLO model manager
-│   │   │   ├── card_hash_manager.py # [new] hash index manager
-│   │   │   ├── yolo_card_recognizer.py # [new] YOLO+hash recognizer
-│   │   │   └── icon_group_detector.py # rarity icon grouping
-│   │   │   ├── page_detector.py  # page detector
-│   │   │   └── account_switcher.py # account switching
-│   │   ├── web/                # Web UI (FastAPI/HTMX)
-│   │   │   ├── app.py           # Web entry (init + routes)
-│   │   │   ├── routers/         # routes
-│   │   │   ├── services/        # services
-│   │   │   ├── queries/         # queries
-│   │   │   ├── utils/           # i18n/templates/view helpers
-│   │   │   └── static/js/       # frontend entry
-│   │   ├── config/             # config files
+│   │   ├── core/               # core framework (Scheduler, Executor, task base)
+│   │   │   ├── scheduling_service.py  # single source of scheduling rules (aggregation/order/reset/next_run/summary/writeback)
+│   │   ├── tasks/              # task implementations (open pack, send card, exchange, etc.)
+│   │   │   ├── pack_opening_task_base.py  # unified pack-opening base
+│   │   │   └── utils/          # task-level shared logic
+│   │   ├── hooks/              # hook implementations
+│   │   ├── services/           # business service layer
+│   │   ├── infra/              # infrastructure (ADB, OCR, YOLO recognition, etc.)
+│   │   ├── db/                 # database layer (models, repositories)
+│   │   ├── web/                # Web UI (FastAPI + React/TypeScript)
+│   │   │   ├── routers/        # routes
+│   │   │   ├── services/       # services
+│   │   │   ├── queries/        # queries
+│   │   │   ├── frontend/       # React + TypeScript + Bun frontend
+│   │   │   ├── static/         # static assets (CSS)
+│   │   │   └── locales/        # i18n config
+│   │   ├── config/             # config management
+│   │   ├── locales/            # task i18n config
 │   │   └── utils/              # utilities
-│   │       └── action_result.py # action result struct
 │   └── ptcgp_auto/             # v1 legacy
 └── docs/                       # docs
 ```

@@ -69,8 +69,6 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 - **智能调度**：按优先级与设备空闲自动分配任务
 - **断点续传**：失败自动重试，重启后恢复进度
 - **模拟器自动扩缩容**：按任务积压自动启动 / 关闭 `auto-` 前缀的 BlueStacks 实例
-- **开箱即用**：空库自动同步卡牌元数据，新账号自动种入基础任务计划
-- **通知推送**：关键操作通过站内通知 + 企业微信 Webhook 推送
 
 ## 🚀 快速开始
 
@@ -83,10 +81,10 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 
 ```bash
 mise trust          # 信任 mise.toml（首次必做，之后无需重复）
-mise run setup      # 装工具 + 同步依赖 + 安装 git hook
+mise run setup      # 同步依赖 + 安装 git hook（工具由 mise trust 后 shell integration 自动装）
 ```
 
-`mise trust` 会顺带创建一个**空** `.venv`，此时依赖还没装；必须再跑 `mise run setup`（内部执行 `uv sync` + `pre-commit install`）才算完成。
+`mise trust` 后，shell integration 会在进入目录时自动加载 `mise.toml` 的 `[tools]` 声明的 Python/uv/bun 并创建一个**空** `.venv`；此时依赖还没装，必须再跑 `mise run setup`（内部执行 `uv sync` + `pre-commit install`）才算完成。
 
 不用 mise 的话，自行准备 Python ≥3.12、uv、bun，然后手动装依赖：
 ```bash
@@ -198,8 +196,8 @@ uv run python main_v2.py --web --notify-key "xxxx"
 
 首次使用遇到日志看不懂、行为不符合预期？这些大多是**预期的自动行为**，详见 [FAQ](docs/guide/FAQ.md)：
 
-- daemon 启动时「同步卡牌元数据」—— 空库自动拉取卡牌元数据，一次性
-- 新账号不用手动建任务计划 —— 已自动种入 `base` 默认计划（3 个日常任务）
+- 应用启动时「同步卡牌元数据」—— 空库自动拉取卡牌元数据，一次性（daemon 或单次任务模式均触发）
+- 新账号不用手动建任务计划 —— 已自动种入 `base` 默认计划（3 个默认任务：2 个日常 + 1 个每周）
 - 首次扫描卡牌只下几百 KB JSON —— 预计算哈希替代全量卡图下载
 - `init_account` 失败的账号不再派任务 —— 调度保护，避免空转
 
@@ -249,13 +247,13 @@ Scheduler (Loop)
 可在 Settings 中配置：
 
 ```bash
-auto_scale_emulators = False
+auto_scale_emulators = True
 auto_scale_instance_prefix = "auto-"
 auto_scale_min_idle_devices = 1
 auto_scale_max_devices = 3
 auto_scale_pending_step = 10
 auto_scale_eval_interval_seconds = 60
-auto_scale_idle_seconds = 180
+auto_scale_idle_seconds = 60
 ```
 
 ## 📂 文件结构
@@ -281,7 +279,7 @@ ptcgp-auto/
 │   │   │   ├── services/       # 业务层
 │   │   │   ├── queries/        # 查询层
 │   │   │   ├── frontend/       # React + TypeScript + Bun 前端工程
-│   │   │   ├── static/         # 静态资源 (CSS/JS)
+│   │   │   ├── static/         # 静态资源 (CSS)
 │   │   │   └── locales/        # 多语言配置
 │   │   ├── config/             # 配置管理
 │   │   ├── locales/            # 任务用多语言配置
