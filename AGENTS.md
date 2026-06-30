@@ -38,6 +38,23 @@
 - 提交前检查所有函数/常量/变量，清理未使用代码；Python 用 vulture/ruff(uv)，TS/JS 用 knip/ESLint(bun)；必须`pre-commit run`
 - `Conventional Commits`; 执行commit命令时**必须**使用`Heredoc`语法
 
+## Agents Remind
+
+### 配置优先级
+
+- 配置统一走环境变量与 CLI 参数，**不再支持 `.env`**（已彻底移除自实现的 load_dotenv）
+- 优先级固定为 **CLI 参数 > 环境变量 > 代码默认值**
+- `main.py` 构造 Settings 必须用 `Settings.from_env()` 先读环境变量，再用 CLI 参数覆盖；禁止回退到裸 `Settings()`，否则环境变量不生效
+- argparse 中可被环境变量覆盖的参数（如 `-w/--workers`）default 设为 `None` 以区分「未传」，避免默认值反向覆盖环境变量
+- 新增可配置项时，同步在 `Settings.from_env()` 注册环境变量读取，并在 README 配置表登记
+
+### 卡牌哈希跨仓库一致性
+
+- 感知哈希算法在两个仓库各有一份独立拷贝：`ptcgp-assets/scripts/generate_hashes.py`（生成端）与 `ptcgp-auto/src/ptcgp_auto_v2/utils/perceptual_hash.py`（使用端）
+- 两端通过 JSON 里的 `_algo_version` 版本号对齐；ptcgp-auto 加载时版本不匹配则忽略 JSON，回退卡图下载
+- **修改算法必须同步两端并升级 `_algo_version`**，否则会写入错误哈希导致识别全错
+- ptcgp-assets 侧有 `tests/test_hashes.py` 做一致性回归，改算法后必须跑通
+
 ## **代码质量原则**
 
 **写代码前重读一次代码质量原则**
