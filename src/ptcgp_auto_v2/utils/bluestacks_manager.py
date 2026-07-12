@@ -91,14 +91,35 @@ def find_bluestacks_instance_by_port(port: int) -> Optional[Tuple[int, str]]:
     return pid, instance
 
 
-def _kill_instance(instance_name: str) -> subprocess.CompletedProcess:
+def _kill_instance(
+    instance_name: str, *,
+    force: bool = False,
+) -> subprocess.CompletedProcess:
     """通过 pkill 杀掉指定 BlueStacks 实例的全部进程。"""
+    cmd = ["pkill"]
+    if force:
+        cmd.append("-9")
+    cmd.extend(["-f", f"BlueStacks.*--instance {instance_name}"])
     return subprocess.run(
-        ["pkill", "-f", f"BlueStacks.*--instance {instance_name}"],
+        cmd,
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+def _force_kill_instance(instance_name: str, port: int) -> None:
+    """SIGTERM 无效时升级到 SIGKILL（实例进程树 + 仍占端口的 PID）。"""
+    logger.warning("SIGTERM 未关闭端口，升级 SIGKILL: %s", instance_name)
+    _kill_instance(instance_name, force=True)
+    pid = find_bluestacks_pid_by_port(port)
+    if pid is not None:
+        subprocess.run(
+            ["kill", "-9", str(pid)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
 
 def restart_bluestacks_instance_for_device(
@@ -122,8 +143,13 @@ def restart_bluestacks_instance_for_device(
     _kill_instance(instance)
     time.sleep(1.0)
     if not _wait_for_port_closed(device_address, timeout_seconds=10, interval_seconds=1.0):
-        logger.error("旧实例未关闭，放弃重启: %s", instance)
-        return False
+        _force_kill_instance(instance, port)
+        time.sleep(1.0)
+        if not _wait_for_port_closed(
+            device_address, timeout_seconds=10, interval_seconds=1.0
+        ):
+            logger.error("旧实例未关闭，放弃重启: %s", instance)
+            return False
     time.sleep(1.0)
 
     subprocess.Popen(

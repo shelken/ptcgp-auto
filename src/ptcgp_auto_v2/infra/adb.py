@@ -47,6 +47,8 @@ class AdbController:
 
     _connect_failures: dict[str, int] = {}
     _offline_failures: dict[str, int] = {}
+    # 强制重启失败后挂起，防止调度继续往死设备派账号
+    _unhealthy_devices: set[str] = set()
 
     def __init__(self, address: str):
         """
@@ -152,8 +154,17 @@ class AdbController:
         )
         return any(marker in message for marker in offline_markers)
 
+    @classmethod
+    def is_marked_unhealthy(cls, address: str) -> bool:
+        """设备是否因强制重启失败被挂起。"""
+        return address in cls._unhealthy_devices
+
     def register_offline_failure(self, exc: Exception) -> bool:
-        """记录同设备离线错误，达到阈值后先做健康检查再决定是否重启。"""
+        """记录同设备离线错误，达到阈值后先做健康检查再决定是否重启。
+
+        Returns:
+            True 仅表示强制重启成功，调用方可重试连接。
+        """
         if not self.is_offline_error(exc):
             return False
 
@@ -175,9 +186,16 @@ class AdbController:
             return False
 
         logger.warning("离线错误达到阈值，强制重启模拟器: %s", self.address)
-        restart_bluestacks_instance_for_device(self.address)
-        AdbController._offline_failures[self.address] = 0
-        return True
+        restarted = restart_bluestacks_instance_for_device(self.address)
+        if restarted:
+            AdbController._offline_failures[self.address] = 0
+            AdbController._unhealthy_devices.discard(self.address)
+            return True
+
+        # 重启失败：保留计数并挂起，避免下一账号继续撞死设备
+        AdbController._unhealthy_devices.add(self.address)
+        logger.error("强制重启失败，设备挂起停止派发: %s", self.address)
+        return False
 
     def _refresh_adb_transport(self, operation: str):
         """之前连接重试不会修复旧 transport。现在会先断开再重连当前地址。这样 `adbutils.errors.AdbError: closed` 这类断链能在下一次 u2.connect 前收敛。"""
@@ -315,9 +333,14 @@ class AdbController:
                 self._connect_failures[self.address] = 0
                 return False
             logger.warning("超过连接失败阈值，尝试重启模拟器: %s", self.address)
-            restart_bluestacks_instance_for_device(self.address)
-            self._connect_failures[self.address] = 0
-            return True
+            restarted = restart_bluestacks_instance_for_device(self.address)
+            if restarted:
+                self._connect_failures[self.address] = 0
+                AdbController._unhealthy_devices.discard(self.address)
+                return True
+            AdbController._unhealthy_devices.add(self.address)
+            logger.error("强制重启失败，设备挂起停止派发: %s", self.address)
+            return False
         return False
 
     def _should_restart_emulator(self) -> bool:
@@ -357,11 +380,12 @@ class AdbController:
         return False
 
     def _reset_connect_failures(self):
-        """重置连接失败计数。"""
+        """重置连接失败计数与挂起标记。"""
         if self.address in self._connect_failures:
             self._connect_failures[self.address] = 0
         if self.address in self._offline_failures:
             self._offline_failures[self.address] = 0
+        AdbController._unhealthy_devices.discard(self.address)
 
     def _update_screen_size(self):
         """获取并更新屏幕分辨率"""

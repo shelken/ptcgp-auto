@@ -190,8 +190,14 @@ class BaseExecutor(ABC):
         self._sync_account_on_finish()
         if self._adb:
             self._adb.disconnect()
-        self.device_pool.release(self.device)
-        logger.debug(f"设备已归还: {self.device.address}")
+        from ptcgp_auto_v2.infra.adb import AdbController
+
+        unhealthy = AdbController.is_marked_unhealthy(self.device.address)
+        self.device_pool.release(self.device, unhealthy=unhealthy)
+        if unhealthy:
+            logger.error(f"设备已挂起不再分发: {self.device.address}")
+        else:
+            logger.debug(f"设备已归还: {self.device.address}")
 
     def _restart_app(self):
         """重启游戏应用"""

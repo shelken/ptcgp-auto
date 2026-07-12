@@ -170,4 +170,7 @@ def check_and_trigger_account_creation(scheduler: "Scheduler") -> bool:
         logger.exception(f"触发新账号创建失败: {e}")
         return False
     finally:
-        scheduler.device_pool.release(device)
+        from ptcgp_auto_v2.infra.adb import AdbController
+
+        unhealthy = AdbController.is_marked_unhealthy(device.address)
+        scheduler.device_pool.release(device, unhealthy=unhealthy)

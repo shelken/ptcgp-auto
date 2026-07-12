@@ -198,6 +198,33 @@ def test_offline_failure_restarts_when_emulator_dead(monkeypatch):
     assert AdbController._offline_failures[address] == 0
 
 
+def test_offline_failure_keeps_count_when_restart_fails(monkeypatch):
+    """强制重启失败时不得清零离线计数，避免下一账号立刻重新撞墙。"""
+    address = "127.0.0.1:5785"
+    restarts: list[str] = []
+    AdbController._offline_failures.clear()
+    controller = AdbController(address)
+
+    monkeypatch.setattr(controller, "_should_restart_emulator", lambda: True)
+    monkeypatch.setattr(
+        "ptcgp_auto_v2.infra.adb.restart_bluestacks_instance_for_device",
+        lambda device_address: restarts.append(device_address) or False,
+    )
+
+    for _ in range(ADB_CONNECT_FAIL_RESTART_THRESHOLD - 1):
+        controller.register_offline_failure(
+            RuntimeError(f"device {address} not online"),
+        )
+
+    should_retry = controller.register_offline_failure(
+        RuntimeError(f"device {address} not online"),
+    )
+
+    assert should_retry is False
+    assert restarts == [address]
+    assert AdbController._offline_failures[address] == ADB_CONNECT_FAIL_RESTART_THRESHOLD
+
+
 def test_successful_connection_resets_offline_failure_count():
     """设备恢复连接后必须清理离线错误计数。"""
     address = "127.0.0.1:5675"

@@ -144,16 +144,24 @@ class DevicePool:
 
             return None
 
-    def release(self, device: Device):
+    def release(self, device: Device, *, unhealthy: bool = False):
         """
         归还设备
 
         Args:
             device: 要归还的设备
+            unhealthy: True 时标记不健康，后续 acquire 不再分发
         """
         with self._lock:
-            if device.address in self._devices:
-                self._devices[device.address].mark_available()
+            if device.address not in self._devices:
+                return
+            target = self._devices[device.address]
+            if unhealthy:
+                target.mark_unhealthy()
+                target.current_account_id = None
+                target.became_idle_at = None
+            else:
+                target.mark_available()
 
     def mark_unhealthy(self, device: Device):
         """
