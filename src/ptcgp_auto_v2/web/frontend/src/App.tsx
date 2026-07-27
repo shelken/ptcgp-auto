@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Bell, MonitorCog, Moon, Palette, Sun } from 'lucide-react'
+import { Bell, Desktop, Moon, Sun } from '@phosphor-icons/react'
 import { Navigate, NavLink, Route, Routes, useLocation, type SetURLSearchParams } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -9,18 +9,13 @@ import { useBootstrap } from '@/hooks/use-bootstrap'
 import { usePersistedSearchParams } from '@/hooks/use-persisted-search-params'
 import { fetchJson } from '@/lib/api'
 import {
-  alignThemeToMode,
-  applyThemePreference,
+  applyThemeMode,
   cycleThemeMode,
-  listThemesByAvailability,
-  THEME_MODES,
-  loadThemePreference,
-  mapThemeToMode,
-  type ThemeAvailability,
-  type ThemeMode,
-  saveThemePreference,
-  type ThemePreference
+  loadThemeMode,
+  saveThemeMode,
+  type ThemeMode
 } from '@/lib/theme'
+
 const RecordsPage = lazy(async () => {
   const mod = await import('@/pages/records-page')
   return { default: mod.RecordsPage }
@@ -41,12 +36,10 @@ function setLangParam(nextLang: string, searchParams: URLSearchParams, setSearch
 }
 
 export function buildNavTo(path: string, lang: string) {
-  // 变更原因：HashRouter 顶部导航不会自动继承当前 search，必须显式保留 lang。
   return `${path}?lang=${lang}`
 }
 
 export function buildRootRedirectTo(search: string) {
-  // 变更原因：根路由重定向默认不会继承 HashRouter 当前 search，避免丢失 lang 与筛选参数。
   return { pathname: '/records', search }
 }
 
@@ -57,7 +50,16 @@ function ThemeModeIcon({ mode }: { mode: ThemeMode }) {
   if (mode === 'dark') {
     return <Moon size={15} aria-hidden="true" />
   }
-  return <MonitorCog size={15} aria-hidden="true" />
+  return <Desktop size={15} aria-hidden="true" />
+}
+
+function titleCaseLabel(value: string) {
+  return value
+    .toLowerCase()
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 export default function App() {
@@ -65,25 +67,16 @@ export default function App() {
   const location = useLocation()
   const lang = searchParams.get('lang') ?? 'zh_CN'
   const [notificationOpen, setNotificationOpen] = useState(false)
-  const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference())
-  const [themePickerOpen, setThemePickerOpen] = useState(false)
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => loadThemeMode())
   const notificationTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const bootstrap = useBootstrap(lang)
   const t = bootstrap.data?.t ?? {}
-  const rawTranslations = (bootstrap.data?.t ?? {}) as unknown as Record<string, unknown>
-  const themeLabels = (rawTranslations.themes ?? {}) as Record<string, string>
   const themeModeLabels: Record<ThemeMode, string> = {
     auto: t.theme_mode_auto ?? 'Auto',
     light: t.theme_mode_light ?? 'Light',
     dark: t.theme_mode_dark ?? 'Dark'
   }
-  const allThemeGroups = [
-    { availability: 'light', label: t.theme_group_light ?? 'Light Themes', themes: listThemesByAvailability('light') },
-    { availability: 'dark', label: t.theme_group_dark ?? 'Dark Themes', themes: listThemesByAvailability('dark') },
-    { availability: 'both', label: t.theme_group_dual ?? 'Dual Themes', themes: listThemesByAvailability('both') }
-  ] satisfies Array<{ availability: ThemeAvailability; label: string; themes: ReturnType<typeof listThemesByAvailability> }>
-  const themeGroups = allThemeGroups.filter((group) => group.themes.length > 0)
 
   const notificationCountQuery = useQuery({
     queryKey: ['notification-count', lang],
@@ -92,58 +85,28 @@ export default function App() {
   })
 
   useEffect(() => {
-    applyThemePreference(themePreference)
-    saveThemePreference(themePreference)
-  }, [themePreference])
+    applyThemeMode(themeMode)
+    saveThemeMode(themeMode)
+  }, [themeMode])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const onModeChange = () => {
-      if (themePreference.mode === 'auto') {
-        applyThemePreference(themePreference)
+      if (themeMode === 'auto') {
+        applyThemeMode(themeMode)
       }
     }
     media.addEventListener('change', onModeChange)
     return () => media.removeEventListener('change', onModeChange)
-  }, [themePreference])
-
-  useEffect(() => {
-    if (!themePickerOpen) {
-      return
-    }
-    const onClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
-      if (target.closest('[data-theme-picker-root="1"]')) {
-        return
-      }
-      setThemePickerOpen(false)
-    }
-    window.addEventListener('click', onClickOutside)
-    return () => window.removeEventListener('click', onClickOutside)
-  }, [themePickerOpen])
-
-  useEffect(() => {
-    setNotificationOpen(false)
-    setThemePickerOpen(false)
-  }, [location.pathname])
-
-  useEffect(() => {
-    if (!themePickerOpen) {
-      return
-    }
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setThemePickerOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onEscape)
-    return () => window.removeEventListener('keydown', onEscape)
-  }, [themePickerOpen])
+  }, [themeMode])
 
   if (bootstrap.isLoading) {
     return (
       <main className="app-shell app-shell--center">
-        <div className="surface-card text-sm text-muted">{t.label_loading ?? 'Loading...'}</div>
+        <div className="surface-card state-block">
+          <div className="state-skeleton" aria-hidden="true" />
+          <p className="state-copy">{t.label_loading ?? '加载中'}</p>
+        </div>
       </main>
     )
   }
@@ -151,31 +114,35 @@ export default function App() {
   if (bootstrap.isError || !bootstrap.data) {
     return (
       <main className="app-shell app-shell--center">
-        <div className="surface-card text-sm text-danger">{(bootstrap.error as Error).message}</div>
+        <div className="surface-card state-block state-block--error">
+          <p className="state-copy">{(bootstrap.error as Error).message}</p>
+        </div>
       </main>
     )
   }
 
   const assets = bootstrap.data.assets
+  const options = bootstrap.data.options
   const appBrand = (t.app_title ?? 'PTCGP Auto').split('|').at(-1)?.trim() || 'PTCGP Auto'
   const pageTitle = (() => {
     const pathname = location.pathname
     if (pathname.startsWith('/owned-cards')) {
-      return t.header_owned_cards ?? t.tab_owned_cards ?? 'OWNED CARDS'
+      return titleCaseLabel(t.header_owned_cards ?? t.tab_owned_cards ?? 'Owned cards')
     }
     if (pathname.startsWith('/management')) {
-      return t.tab_management ?? 'MANAGEMENT'
+      return titleCaseLabel(t.tab_management ?? 'Management')
     }
-    return t.header_title ?? t.tab_records ?? 'RECORDS'
+    return titleCaseLabel(t.header_title ?? t.tab_records ?? 'Records')
   })()
 
   return (
     <main className="app-shell">
       <header className="surface-card app-header">
-        <div>
-          <h1 className="app-title">{pageTitle} | {appBrand}</h1>
+        <div className="app-brand-block">
+          <p className="app-brand">{appBrand}</p>
+          <h1 className="app-title">{pageTitle}</h1>
         </div>
-        <div className="header-actions" data-theme-picker-root="1">
+        <div className="header-actions">
           <div className="header-icon-group">
             <button
               ref={notificationTriggerRef}
@@ -193,88 +160,13 @@ export default function App() {
             <button
               type="button"
               className="icon-button"
-              aria-label={`${t.theme_mode_label ?? 'Theme Mode'}: ${themeModeLabels[themePreference.mode]}`}
-              title={`${t.theme_mode_label ?? 'Theme Mode'}: ${themeModeLabels[themePreference.mode]}`}
-              onClick={() =>
-                setThemePreference((prev) => {
-                  const nextMode = cycleThemeMode(prev.mode)
-                  return {
-                    mode: nextMode,
-                    theme: alignThemeToMode(nextMode, prev.theme)
-                  }
-                })
-              }
+              aria-label={`${t.theme_mode_label ?? 'Theme Mode'}: ${themeModeLabels[themeMode]}`}
+              title={`${t.theme_mode_label ?? 'Theme Mode'}: ${themeModeLabels[themeMode]}`}
+              onClick={() => setThemeMode((prev) => cycleThemeMode(prev))}
             >
-              <ThemeModeIcon mode={themePreference.mode} />
-            </button>
-            <button
-              type="button"
-              className={`icon-button ${themePickerOpen ? 'is-active' : ''}`}
-              aria-label={t.theme_label ?? 'Theme'}
-              title={t.theme_label ?? 'Theme'}
-              aria-expanded={themePickerOpen}
-              aria-haspopup="dialog"
-              onClick={() => setThemePickerOpen((prev) => !prev)}
-            >
-              <Palette size={16} aria-hidden="true" />
+              <ThemeModeIcon mode={themeMode} />
             </button>
           </div>
-          {themePickerOpen && (
-            <div className="theme-popover-react" role="dialog" aria-label={t.theme_label ?? 'Theme'}>
-              <div className="theme-popover-head">
-                <div className="theme-section-title">{t.theme_label ?? 'Theme'}</div>
-                <div className="text-xs text-muted">
-                  {t.theme_mode_label ?? 'Mode'}: {themeModeLabels[themePreference.mode]}
-                </div>
-              </div>
-              <div className="theme-mode-grid" role="radiogroup" aria-label={t.theme_mode_label ?? 'Theme Mode'}>
-                {THEME_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    className={`theme-mode-pill ${themePreference.mode === mode ? 'is-active' : ''}`}
-                    role="radio"
-                    aria-checked={themePreference.mode === mode}
-                    onClick={() =>
-                      setThemePreference((prev) => ({
-                        mode,
-                        theme: alignThemeToMode(mode, prev.theme)
-                      }))
-                    }
-                  >
-                    <ThemeModeIcon mode={mode} />
-                    <span>{themeModeLabels[mode]}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="theme-popover-grid">
-                {themeGroups.map((group) => (
-                  <div className="theme-section" key={group.availability}>
-                    <div className="theme-section-title">{group.label}</div>
-                    <div className="theme-options">
-                      {group.themes.map((theme) => (
-                        <Button
-                          key={theme}
-                          type="button"
-                          size="sm"
-                          className="theme-option-button"
-                          variant={themePreference.theme === theme ? 'default' : 'outline'}
-                          onClick={() =>
-                            setThemePreference((prev) => ({
-                              mode: mapThemeToMode(theme, prev.mode),
-                              theme
-                            }))
-                          }
-                        >
-                          {themeLabels[theme] ?? theme}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           <div className="header-lang-group">
             <Button type="button" size="sm" variant={lang === 'en' ? 'default' : 'outline'} onClick={() => setLangParam('en', searchParams, setSearchParams)}>
               {t.lang_en ?? 'EN'}
@@ -286,41 +178,30 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="surface-card tab-nav">
-        <NavLink to={buildNavTo('/records', lang)}>
-          {({ isActive }) => (
-            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
-              {t.tab_records ?? 'RECORDS'}
-            </Button>
-          )}
+      <nav className="surface-card tab-nav" aria-label={t.nav_label ?? 'Main'}>
+        <NavLink to={buildNavTo('/records', lang)} className={({ isActive }) => `tab-link${isActive ? ' is-active' : ''}`}>
+          {titleCaseLabel(t.tab_records ?? 'Records')}
         </NavLink>
-        <NavLink to={buildNavTo('/owned-cards', lang)}>
-          {({ isActive }) => (
-            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
-              {t.tab_owned_cards ?? 'OWNED CARDS'}
-            </Button>
-          )}
+        <NavLink to={buildNavTo('/owned-cards', lang)} className={({ isActive }) => `tab-link${isActive ? ' is-active' : ''}`}>
+          {titleCaseLabel(t.tab_owned_cards ?? 'Owned cards')}
         </NavLink>
-        <NavLink to={buildNavTo('/management', lang)}>
-          {({ isActive }) => (
-            <Button size="sm" variant={isActive ? 'default' : 'outline'} type="button" className="min-w-28">
-              {t.tab_management ?? 'MANAGEMENT'}
-            </Button>
-          )}
+        <NavLink to={buildNavTo('/management', lang)} className={({ isActive }) => `tab-link${isActive ? ' is-active' : ''}`}>
+          {titleCaseLabel(t.tab_management ?? 'Management')}
         </NavLink>
       </nav>
 
       <Suspense
         fallback={(
-          <div className="surface-card text-sm text-muted">
-            {t.label_loading ?? 'Loading...'}
+          <div className="surface-card state-block">
+            <div className="state-skeleton" aria-hidden="true" />
+            <p className="state-copy">{t.label_loading ?? '加载中'}</p>
           </div>
         )}
       >
         <Routes>
           <Route path="/" element={<Navigate to={buildRootRedirectTo(location.search)} replace />} />
-          <Route path="/records" element={<RecordsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
-          <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={bootstrap.data.options} assets={assets} t={t} />} />
+          <Route path="/records" element={<RecordsPage lang={lang} options={options} assets={assets} t={t} />} />
+          <Route path="/owned-cards" element={<OwnedCardsPage lang={lang} options={options} assets={assets} t={t} />} />
           <Route path="/management/*" element={<ManagementPage lang={lang} t={t} assets={assets} />} />
         </Routes>
       </Suspense>

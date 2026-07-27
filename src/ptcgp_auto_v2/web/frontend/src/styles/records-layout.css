@@ -42,7 +42,7 @@
 .records-filter-label,
 .records-filter-group-title {
   font-size: 0.72rem;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.08em;
   color: var(--muted);
   font-weight: 700;
@@ -70,9 +70,9 @@
 }
 
 .records-entry {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper);
-  box-shadow: 4px 4px 0 rgba(20, 15, 10, 0.85);
+  box-shadow: var(--shadow);
   padding: 1.25rem;
   display: flex;
   gap: 1.2rem;
@@ -98,7 +98,7 @@
 .records-set-badge {
   display: inline-flex;
   align-items: center;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   min-height: 1.55rem;
   padding: 0 0.45rem;
   font-size: 0.68rem;
@@ -111,7 +111,7 @@
 .records-pack-type {
   font-size: 0.68rem;
   letter-spacing: 0.12em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
   font-weight: 800;
 }
@@ -120,7 +120,7 @@
   margin: 0;
   font-size: 1.12rem;
   line-height: 1.1;
-  text-transform: uppercase;
+  text-transform: none;
   font-weight: 900;
   word-break: break-word;
 }
@@ -157,7 +157,7 @@
   display: inline-flex;
   align-items: center;
   min-height: 1.5rem;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper-soft);
   padding: 0 0.45rem;
   font-size: 0.65rem;
@@ -239,7 +239,7 @@
 
 .record-card-tile {
   position: relative;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper);
   padding: 0;
   overflow: hidden;
@@ -257,7 +257,7 @@
 .record-card-fallback {
   width: 100%;
   aspect-ratio: 2 / 3;
-  border: 2px dashed var(--line);
+  border: 1px dashed var(--line);
   background: var(--paper-soft);
   color: var(--muted);
   display: flex;
@@ -269,7 +269,7 @@
 
 .record-batch-pack {
   position: relative;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper);
   padding: 0.15rem;
   cursor: pointer;
@@ -576,8 +576,8 @@
   color: var(--ink);
   background-color: var(--paper);
   padding: 0.75rem 1.1rem;
-  border: 2px solid var(--line);
-  box-shadow: 4px 4px 0 rgba(15, 13, 10, 0.85);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
   max-width: 420px;
 }
 
@@ -599,7 +599,7 @@
 .card-preview-rarity,
 .card-preview-set,
 .card-preview-number {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background-color: var(--paper-soft);
   padding: 0.1rem 0.4rem;
   font-family: var(--font-mono);

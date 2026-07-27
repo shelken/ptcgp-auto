@@ -622,12 +622,25 @@ export function RecordsPage({ lang, options, assets, t }: RecordsPageProps) {
         </div>
       </div>
 
-      {query.isLoading && <div className="surface-card text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
-      {query.isError && <div className="surface-card text-sm text-danger">{(query.error as Error).message}</div>}
+      {query.isLoading && (
+        <div className="surface-card state-block">
+          <div className="state-skeleton" aria-hidden="true" />
+          <p className="state-copy">{tr(t, 'label_loading', 'Loading...')}</p>
+        </div>
+      )}
+      {query.isError && (
+        <div className="surface-card state-block state-block--error">
+          <p className="state-copy">{(query.error as Error).message}</p>
+        </div>
+      )}
 
       {pages.length > 0 && (
         <>
-          {records.length === 0 && <div className="surface-card text-sm text-muted">{tr(t, 'end_of_records', 'No records')}</div>}
+          {records.length === 0 && (
+            <div className="surface-card state-block">
+              <p className="state-copy">{tr(t, 'end_of_records', 'No records')}</p>
+            </div>
+          )}
 
           <div className={`records-list ${viewMode === 'list' ? 'records-list--list' : 'records-list--grid'}`}>
             {records.map((item, index) => {

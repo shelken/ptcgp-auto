@@ -76,32 +76,6 @@
   min-height: 2rem;
 }
 
-.task-account-filter-item {
-  min-width: min(100%, 18rem);
-}
-
-.notification-toolbar-react {
-  align-items: flex-start;
-}
-
-.notification-toolbar-react-left {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.6fr);
-  gap: var(--table-toolbar-gap);
-  align-items: end;
-}
-
-.notification-toolbar-react-left .table-filter-item {
-  min-width: 0;
-}
-
-.notification-toolbar-react-right {
-  flex: 1 1 100%;
-  justify-content: flex-end;
-}
-
 .notification-row-content {
   display: flex;
   align-items: flex-start;
@@ -173,13 +147,5 @@
   .management-query-controls .table-control {
     width: 100%;
     min-width: 0;
-  }
-
-  .notification-toolbar-react-left {
-    grid-template-columns: 1fr;
-  }
-
-  .notification-toolbar-react-right {
-    justify-content: flex-start;
   }
 }

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
-import { Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { CaretDown, CaretUp, Check } from '@phosphor-icons/react'
 
 import { decodeSelectValue, encodeSelectValue } from '@/lib/select-value'
 import { cn } from '@/lib/utils'
@@ -17,14 +17,14 @@ const SelectTrigger = React.forwardRef<
     ref={ref}
     data-empty-value={encodeSelectValue('')}
     className={cn(
-      'select-trigger inline-flex h-9 w-full items-center justify-between gap-2 border-2 border-[color:var(--line)] bg-[color:var(--paper)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+      'select-trigger inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-[color:var(--line)] bg-[color:var(--paper)] px-3 py-2 text-sm text-[color:var(--ink)] transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--accent)]',
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-70" />
+      <CaretDown className="h-4 w-4 opacity-70" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
@@ -39,7 +39,7 @@ const SelectScrollUpButton = React.forwardRef<
     className={cn('select-scroll-button flex cursor-default items-center justify-center py-1', className)}
     {...props}
   >
-    <ChevronUp className="h-4 w-4" />
+    <CaretUp className="h-4 w-4" />
   </SelectPrimitive.ScrollUpButton>
 ))
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
@@ -53,7 +53,7 @@ const SelectScrollDownButton = React.forwardRef<
     className={cn('select-scroll-button flex cursor-default items-center justify-center py-1', className)}
     {...props}
   >
-    <ChevronDown className="h-4 w-4" />
+    <CaretDown className="h-4 w-4" />
   </SelectPrimitive.ScrollDownButton>
 ))
 SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayName
@@ -66,7 +66,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        'select-content relative z-[120] max-h-80 min-w-[var(--radix-select-trigger-width)] overflow-hidden border-2 border-[color:var(--line)] bg-[color:var(--paper)] text-[color:var(--ink)] shadow-lg',
+        'select-content relative z-[120] max-h-80 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-[color:var(--line)] bg-[color:var(--paper)] text-[color:var(--ink)] shadow-[var(--shadow)]',
         className
       )}
       position={position}

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'vitest'
 
 import { readStorageValue, writeStorageValue } from '../src/lib/storage'
-import { loadThemePreference } from '../src/lib/theme'
+import { loadThemeMode } from '../src/lib/theme'
 
 describe('storage localStorage 边界', () => {
   const originalWindow = globalThis.window
@@ -43,7 +43,7 @@ describe('storage localStorage 边界', () => {
     expect(() => writeStorageValue('management-state', '{}')).not.toThrow()
   })
 
-  test('主题偏好读写受限时使用默认浅色主题', () => {
+  test('主题偏好读写受限时使用默认浅色模式', () => {
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       value: {
@@ -58,6 +58,6 @@ describe('storage localStorage 边界', () => {
       }
     })
 
-    expect(loadThemePreference()).toEqual({ mode: 'light', theme: 'brutalist' })
+    expect(loadThemeMode()).toBe('light')
   })
 })

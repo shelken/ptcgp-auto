@@ -36,7 +36,7 @@
 
 .owned-card {
   position: relative;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper);
   padding: 0;
   cursor: pointer;
@@ -144,7 +144,7 @@
 }
 
 .owned-filter-group {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper);
   overflow: hidden;
 }
@@ -162,7 +162,7 @@
   color: var(--ink);
   font-size: 0.75rem;
   font-weight: 800;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.08em;
   display: flex;
   align-items: center;
@@ -180,7 +180,7 @@
   padding: 0 0.55rem;
   font-size: 0.66rem;
   font-weight: 800;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.06em;
   cursor: pointer;
 }
@@ -233,7 +233,7 @@
 .owned-scope-segmented {
   display: inline-flex;
   align-items: stretch;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 0.62rem;
   background: var(--paper);
   overflow: hidden;
@@ -253,7 +253,7 @@
   font-size: 0.7rem;
   line-height: 1.2;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   font-weight: 800;
   cursor: pointer;
 }
@@ -271,7 +271,7 @@
 .owned-cols-segmented {
   display: inline-flex;
   align-items: center;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: 0.62rem;
   background: var(--paper);
   overflow: hidden;
@@ -305,57 +305,6 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-ink) 26%, transparent);
 }
 
-:root[data-theme='clay_vibrant'] .owned-scope-segmented,
-:root[data-theme='clay_vibrant'] .owned-cols-segmented {
-  box-shadow: none;
-}
-
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-toggle {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-clear {
-  border: 0;
-  border-left: var(--clay-border-width) solid var(--line);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-content .filter-row > button[class*='font-semibold'][class*='border-[color:var(--line)]'] {
-  box-shadow: none;
-}
-
-:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn,
-:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn {
-  border: 0;
-  border-right: var(--clay-border-width) solid var(--line);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn:last-child,
-:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn:last-child {
-  border-right: 0;
-}
-
-:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn:hover,
-:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn:hover,
-:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn:active,
-:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn:active,
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-toggle:hover,
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-toggle:active,
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-clear:hover,
-:root[data-theme='clay_vibrant'] .owned-filter-group .owned-filter-clear:active {
-  transform: none;
-}
-
-:root[data-theme='clay_vibrant'] .owned-scope-segmented .owned-scope-btn.is-active,
-:root[data-theme='clay_vibrant'] .owned-cols-segmented .owned-cols-btn.is-active {
-  box-shadow: none;
-}
-
 .owned-stats-bar {
   display: flex;
   flex-wrap: wrap;
@@ -367,7 +316,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper-soft);
   min-height: 1.9rem;
   padding: 0.2rem 0.5rem;
@@ -380,7 +329,7 @@
 .owned-stat-label {
   font-size: 0.64rem;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
   font-weight: 700;
 }
@@ -434,7 +383,7 @@
 }
 
 .owned-card-modal-close {
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
   background: var(--paper);
   color: var(--ink);
   min-width: 2rem;
@@ -490,7 +439,7 @@
   overflow-x: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border: 2px solid var(--line);
+  border: 1px solid var(--line);
 }
 
 .owned-card-exchange-table-frame .grid-table {

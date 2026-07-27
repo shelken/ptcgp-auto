@@ -1038,8 +1038,17 @@ export function OwnedCardsPage({ lang, options, assets, t }: OwnedCardsPageProps
             </div>
           )}
 
-      {isListLoading && <div className="surface-card text-sm text-muted">{tr(t, 'label_loading', 'Loading...')}</div>}
-      {isListError && <div className="surface-card text-sm text-danger">{listError?.message}</div>}
+      {isListLoading && (
+        <div className="surface-card state-block">
+          <div className="state-skeleton" aria-hidden="true" />
+          <p className="state-copy">{tr(t, 'label_loading', 'Loading...')}</p>
+        </div>
+      )}
+      {isListError && (
+        <div className="surface-card state-block state-block--error">
+          <p className="state-copy">{listError?.message}</p>
+        </div>
+      )}
 
       {(viewMode === 'grid' ? gridQuery.data : listQuery.data) && (
         <>
