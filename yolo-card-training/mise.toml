@@ -1,0 +1,17 @@
+min_version = "2024.9.5"
+
+[tools]
+python = "3.12.14"
+uv = "0.12.19"
+
+[env]
+UV_PYTHON_DOWNLOADS = "never"
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.sync]
+description = "同步依赖（uv sync）"
+run = "uv sync"
+
+[tasks.setup]
+description = "首次环境初始化"
+run = "uv sync"
