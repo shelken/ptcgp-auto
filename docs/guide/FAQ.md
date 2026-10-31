@@ -22,7 +22,7 @@ mise trust
 
 `mise trust` 会顺带创建一个**空** `.venv`（只是个干净的虚拟环境），此时 Python 依赖还没装。直接运行程序会因找不到依赖报错。
 
-`mise run setup` 内部执行 `uv sync` + `pre-commit install`，才算把依赖装进 `.venv`。两者缺一不可：
+`mise run setup` 内部执行 `uv sync` + `prek install`，才算把依赖装进 `.venv`。两者缺一不可：
 
 ```bash
 mise trust          # ① 信任配置 + 建空 venv

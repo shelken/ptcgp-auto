@@ -68,7 +68,7 @@ Built-in Web UI (FastAPI + React) to view accounts, tasks, card collection, pack
 
 ### 1. Environment
 
-Recommended: manage environment with [mise](https://mise.jdx.dev/) (optional, but saves you from manually installing Python/uv/bun).
+Recommended: manage environment with [mise](https://mise.jdx.dev/) (optional, but saves you from manually installing Python/uv; bun uses the system version and is not in the project `[tools]`).
 
 > **The first `cd` after clone will fail with `not trusted` — this is mise's security mechanism, not an error.**
 > Run `mise trust` in the project root; after that, shell integration auto-loads the tool versions and `.venv` declared in `mise.toml` on every entry.
@@ -78,7 +78,7 @@ mise trust          # trust mise.toml (required once, no need to repeat)
 mise run setup      # sync deps + install git hook (tools are auto-installed by shell integration after `mise trust`)
 ```
 
-After `mise trust`, shell integration auto-loads the Python/uv/bun declared in `mise.toml` `[tools]` and creates an **empty** `.venv` on every directory entry; dependencies aren't installed yet — you must run `mise run setup` (which runs `uv sync` + `pre-commit install`) to complete setup.
+After `mise trust`, shell integration auto-loads the Python/uv declared in `mise.toml` `[tools]` (bun uses the system version, not declared there) and creates an **empty** `.venv` on every directory entry; dependencies aren't installed yet — you must run `mise run setup` (which runs `uv sync` + `prek install`) to complete setup.
 
 If not using mise, prepare Python ≥3.12, uv, and bun yourself, then install deps manually:
 ```bash

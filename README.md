@@ -74,7 +74,7 @@ Pokemon TCG Pocket 自动化助手，基于 ADB 和 图像识别技术。
 
 ### 1. 环境准备
 
-推荐使用 [mise](https://mise.jdx.dev/) 管理环境（可选，但能省掉手动装 Python/uv/bun 的麻烦）。
+推荐使用 [mise](https://mise.jdx.dev/) 管理环境（可选，但能省掉手动装 Python/uv 的麻烦；bun 使用系统版本，不在项目 `[tools]` 内）。
 
 > **clone 后第一次 `cd` 进目录会报 `not trusted`，这是 mise 的安全机制，不是出错。**
 > 先在项目根目录执行 `mise trust` 即可；之后 shell integration 会在每次进入目录时自动加载 `mise.toml` 声明的工具版本与 `.venv`。
@@ -84,7 +84,7 @@ mise trust          # 信任 mise.toml（首次必做，之后无需重复）
 mise run setup      # 同步依赖 + 安装 git hook（工具由 mise trust 后 shell integration 自动装）
 ```
 
-`mise trust` 后，shell integration 会在进入目录时自动加载 `mise.toml` 的 `[tools]` 声明的 Python/uv/bun 并创建一个**空** `.venv`；此时依赖还没装，必须再跑 `mise run setup`（内部执行 `uv sync` + `pre-commit install`）才算完成。
+`mise trust` 后，shell integration 会在进入目录时自动加载 `mise.toml` 的 `[tools]` 声明的 Python/uv（bun 使用系统版本，不在此列）并创建一个**空** `.venv`；此时依赖还没装，必须再跑 `mise run setup`（内部执行 `uv sync` + `prek install`）才算完成。
 
 不用 mise 的话，自行准备 Python ≥3.12、uv、bun，然后手动装依赖：
 ```bash

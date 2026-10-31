@@ -35,7 +35,7 @@
 ## Git 工作流
 
 - 每次代码变更前必须回看相关 `git log` / `git blame` / `git show` 历史，确认现有实现的设计理由；看不懂原意或历史证据不足时，先问用户再改
-- 提交前检查所有函数/常量/变量，清理未使用代码；Python 用 vulture/ruff(uv)，TS/JS 用 knip/ESLint(bun)；必须`pre-commit run`
+- 提交前检查所有函数/常量/变量，清理未使用代码；Python 用 vulture/ruff(uv)，TS/JS 用 knip/ESLint(bun)；必须`prek run`
 - `Conventional Commits`; 执行commit命令时**必须**使用`Heredoc`语法
 
 ## Agents Remind

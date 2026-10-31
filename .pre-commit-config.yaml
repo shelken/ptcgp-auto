@@ -1,5 +1,5 @@
-# 手写 pre-commit 配置,替代原 git-hooks.nix 生成物
-# 所有 hook 均为 language: system,依赖 mise/direnv 提供的工具链
+# 手写 pre-commit 配置,替代原 git-hooks.nix 生成物,由 prek 执行
+# 所有 hook 均为 repo: local + language: system,复用 mise.toml 提供的项目工具链
 repos:
   - repo: local
     hooks:

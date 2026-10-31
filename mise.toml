@@ -8,12 +8,10 @@ min_version = "2024.9.5"
 python = "3.12.13"
 # uv: Python 依赖管理
 uv = "0.11.25"
-# bun: 前端工具链 (tsc/knip)
-bun = "1.3.14"
-# betterleaks: 密钥扫描 (pre-commit hook)
+# bun: 前端工具链 (tsc/knip)；不入项目 [tools]，使用系统版本
+# (CI 由 setup-bun 提供，与本文件无关)
+# betterleaks: 密钥扫描 (git hook)
 betterleaks = "1.6.0"
-# pre-commit: git hook 管理器
-pre-commit = "4.6.0"
 
 [env]
 # 告诉 uv 不要自己下载 python,使用 mise 提供的
@@ -23,10 +21,10 @@ UV_PYTHON_DOWNLOADS = "never"
 _.python.venv = { path = ".venv", create = true }
 
 [tasks.setup]
-description = "首次环境初始化: 同步 Python 依赖 + 安装 pre-commit git hook"
+description = "首次环境初始化: 同步 Python 依赖 + 安装 prek git hook"
 run = [
   "uv sync",
-  "pre-commit install",
+  "prek install",
 ]
 
 [tasks.sync]
@@ -34,5 +32,5 @@ description = "同步 Python 依赖到 .venv"
 run = "uv sync"
 
 [tasks.hooks]
-description = "安装 pre-commit git hook 到 .git/hooks/"
-run = "pre-commit install"
+description = "安装 prek git hook 到 .git/hooks/"
+run = "prek install"
